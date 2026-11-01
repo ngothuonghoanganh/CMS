@@ -257,6 +257,8 @@ export function approvalRequestEmail(input: ApprovalRequestEmailInput): EmailCon
 export interface ApprovalPublishedEmailInput {
   pageTitle: string;
   publisherName: string;
+  /** The publisher decides requests: they approved it. A Biên tập only published it. */
+  approved: boolean;
   version: number;
   liveUrl: string;
 }
@@ -264,7 +266,7 @@ export interface ApprovalPublishedEmailInput {
 /** Tells the sender their page went live (ADR-023). */
 export function approvalPublishedEmail(input: ApprovalPublishedEmailInput): EmailContent {
   const title = `"${input.pageTitle}" đã được xuất bản`;
-  const body = `${input.publisherName} đã duyệt và xuất bản phiên bản v${input.version}. Khách truy cập đang thấy phiên bản mới.`;
+  const body = `${input.publisherName} đã ${input.approved ? 'duyệt và xuất bản' : 'xuất bản'} phiên bản v${input.version}. Khách truy cập đang thấy phiên bản mới.`;
   return {
     subject: title,
     text: [body, '', input.liveUrl].join('\n'),

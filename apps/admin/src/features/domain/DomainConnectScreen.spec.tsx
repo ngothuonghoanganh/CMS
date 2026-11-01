@@ -84,6 +84,9 @@ describe('DomainConnectScreen', () => {
     const user = userEvent.setup();
     renderScreen();
     expect(screen.getByRole('status')).toHaveTextContent('Đang chờ bản ghi DNS có hiệu lực');
+    // Said beside the status, not in it: the time changes every minute.
+    expect(screen.getByRole('status')).not.toHaveTextContent('Kiểm tra lần cuối');
+    expect(screen.getByText(/^Kiểm tra lần cuối/)).toBeInTheDocument();
     const table = screen.getByRole('table');
     expect(
       within(table)

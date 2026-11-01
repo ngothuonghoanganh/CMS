@@ -167,7 +167,7 @@ export function Sidebar({
   const logout = useLogout();
   const workspace = membership.workspace;
   const allowed = <Key extends string>(items: NavItem<Key>[]) =>
-    items.filter((item) => can(membership.role, item.permission));
+    items.filter((item) => item.permissions.some((permission) => can(membership.role, permission)));
   const workspaceItems = allowed(workspaceNavItems(workspace.id));
   const canCreateSite = can(membership.role, 'sites.manage');
   // Roles that cannot change roles ask Chủ sở hữu instead (ADR-021).

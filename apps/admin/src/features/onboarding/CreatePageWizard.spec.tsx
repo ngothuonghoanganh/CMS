@@ -253,6 +253,28 @@ describe('CreatePageWizard', () => {
     });
   });
 
+  it('keeps "Bắt đầu trống" open while the page is being created', async () => {
+    const user = userEvent.setup();
+    let refuse: (error: unknown) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.createPage
+        ? new Promise((_, reject) => {
+            refuse = reject;
+          })
+        : new Promise(() => undefined),
+    );
+    renderWizard();
+    await user.click(screen.getByRole('button', { name: 'Bắt đầu trống' }));
+    const dialog = screen.getByRole('dialog', { name: 'Bắt đầu trống' });
+    await user.type(within(dialog).getByRole('textbox', { name: /Tên trang/ }), 'Bảng giá');
+    await user.click(within(dialog).getByRole('button', { name: 'Tạo trang trống' }));
+
+    await user.keyboard('{Escape}');
+    refuse(apiError(503, 'internal', 'Máy chủ đang bận'));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Máy chủ đang bận');
+    expect(screen.getByRole('dialog', { name: 'Bắt đầu trống' })).toBeInTheDocument();
+  });
+
   it('sends a blank page slug still being typed and checked, and shows why the server refused it', async () => {
     const user = userEvent.setup();
     apiMock.mockImplementation((endpoint) =>

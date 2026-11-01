@@ -526,6 +526,7 @@ export function LeadInbox({
             // picked leads, the cache holds newer data.
             initialDetail={!picked && initialDetail?.id === selectedId ? initialDetail : undefined}
             loadedAt={loadedAt}
+            canHandle={can(role, 'leads.handle')}
             canManage={can(role, 'personalData.manage')}
             // A lead opened by its link (the notification email's "Mở lead trong hộp thư") takes the
             // focus too: on a phone its detail sits below the whole list, and focus brings it into

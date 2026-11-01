@@ -121,7 +121,10 @@ export class ApprovalsRepository {
       .exec();
   }
 
-  /** The latest request of each page, keyed by page id: one aggregation for a whole list. */
+  /**
+   * The latest request of each page, keyed by page id: one aggregation for a whole list. A pending
+   * request comes first whatever its `createdAt`, an instance's clock that may run ahead of others.
+   */
   async latestOf(
     scope: WorkspaceScope,
     pageIds: readonly ObjectId[],
@@ -132,7 +135,9 @@ export class ApprovalsRepository {
     const rows = await this.approvals
       .aggregate<{ latest: ApprovalRecord }>([
         { $match: { workspaceId: scope.workspaceId, pageId: { $in: pageIds } } },
-        { $sort: { pageId: 1, createdAt: -1, _id: -1 } },
+        { $addFields: { pendingFirst: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } } },
+        { $sort: { pageId: 1, pendingFirst: -1, createdAt: -1, _id: -1 } },
+        { $unset: 'pendingFirst' },
         { $group: { _id: '$pageId', latest: { $first: '$$ROOT' } } },
       ])
       .exec();

@@ -137,19 +137,28 @@ export class InvitationsRepository {
     return this.invitations.findOne({ tokenHash }).lean<InvitationRecord>().exec();
   }
 
-  /** A new link for a pending invitation; the old one stops working. Null when not pending. */
+  /**
+   * A new link for a pending invitation, sent by the scope's user; the old one stops working. Null
+   * when not pending.
+   */
   renew(
     scope: WorkspaceScope,
     id: ObjectId,
     link: { tokenHash: string; expiresAt: Date },
+    tx: Tx,
   ): Promise<InvitationRecord | null> {
     return this.invitations
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, status: 'pending' },
         {
-          $set: { ...link, sentAt: null, purgeAt: purgeAfter(link.expiresAt) },
+          $set: {
+            ...link,
+            invitedBy: scope.userId,
+            sentAt: null,
+            purgeAt: purgeAfter(link.expiresAt),
+          },
         },
-        { new: true },
+        { new: true, session: tx },
       )
       .lean<InvitationRecord>()
       .exec();
@@ -165,6 +174,17 @@ export class InvitationsRepository {
   /** Revokes a pending invitation; false when it was not pending. */
   revoke(scope: WorkspaceScope, id: ObjectId, now: Date): Promise<boolean> {
     return this.close({ _id: id, workspaceId: scope.workspaceId }, 'revoked', now);
+  }
+
+  /** Revokes the pending invitations a member sent, once they may no longer invite (ADR-021). */
+  async revokeSentBy(scope: WorkspaceScope, invitedBy: ObjectId, now: Date, tx: Tx): Promise<void> {
+    await this.invitations
+      .updateMany(
+        { workspaceId: scope.workspaceId, invitedBy, status: 'pending' },
+        { $set: { status: 'revoked', closedAt: now, purgeAt: purgeAfter(now) } },
+        { session: tx },
+      )
+      .exec();
   }
 
   /**

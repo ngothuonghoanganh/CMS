@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture } from '../dashboard/test-fixtures';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { DomainsScreen } from './DomainsScreen';
 import { domainFixture, domainList } from './test-fixtures';
 
@@ -109,6 +109,27 @@ describe('DomainsScreen', () => {
     expect(lastCallTo(apiMock, endpoints.setPrimaryDomain).options).toEqual({
       body: { domainId: null },
     });
+  });
+
+  it('says when the default address could not be used, and opens the next dialog without it', async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      domainList(
+        [
+          { ...primary, status: 'lost', lostSince: '2026-11-01T01:12:00.000Z' },
+          { ...apex, primary: false },
+        ],
+        primary.id,
+      ),
+    );
+    apiMock.mockRejectedValueOnce(apiError(409, 'conflict', 'Địa chỉ chính vừa đổi'));
+    await user.click(screen.getByRole('button', { name: 'Tạm dùng địa chỉ mặc định' }));
+    expect(await screen.findByText('Chưa đổi được địa chỉ chính')).toBeInTheDocument();
+    expect(screen.getByText('Địa chỉ chính vừa đổi')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Đặt smilecare.vn làm địa chỉ chính' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Đặt smilecare.vn làm địa chỉ chính?' });
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('disconnects a domain that is not primary', async () => {

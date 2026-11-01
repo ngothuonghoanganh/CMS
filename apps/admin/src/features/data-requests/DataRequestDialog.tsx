@@ -403,8 +403,9 @@ export function DataRequestDialog({
     );
   }
 
-  // A step that changes the request finishes before the dialog closes, like ConfirmDialog.
-  const busy = respond.isPending || complete.isPending;
+  // A step that changes the request, or an export, finishes before the dialog closes, like
+  // ConfirmDialog: its failure shows here.
+  const busy = respond.isPending || complete.isPending || exportFile.isPending;
 
   /** Every way out (Escape, ✕, "Đóng"): an armed confirmation or an old result does not stay. */
   function close() {

@@ -108,6 +108,13 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
     },
   });
 
+  /** Opens a confirmation without the error of an earlier one. */
+  function ask(next: Pending) {
+    setPrimary.reset();
+    remove.reset();
+    setPending(next);
+  }
+
   const primary = list.items.find((item) => item.primary) ?? null;
   const lostPrimary = primary !== null && primary.status === 'lost' ? primary : null;
   const latestCheck = list.items
@@ -156,7 +163,17 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                 size="sm"
                 loading={setPrimary.isPending}
                 onClick={() => {
-                  setPrimary.mutate(null);
+                  setPrimary.reset();
+                  // No dialog holds this one's error: it is said in a toast.
+                  setPrimary.mutate(null, {
+                    onError: (error) => {
+                      toast({
+                        tone: 'danger',
+                        title: 'Chưa đổi được địa chỉ chính',
+                        description: problemMessage(error),
+                      });
+                    },
+                  });
                 }}
               >
                 Tạm dùng địa chỉ mặc định
@@ -228,7 +245,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                       size="sm"
                       aria-label={`Đặt ${domain.hostname} làm địa chỉ chính`}
                       onClick={() => {
-                        setPending({ kind: 'primary', domain, host: domain.hostname });
+                        ask({ kind: 'primary', domain, host: domain.hostname });
                       }}
                     >
                       Đặt làm chính
@@ -241,7 +258,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                       variant="ghost"
                       icon={<TrashIcon size={18} />}
                       onClick={() => {
-                        setPending({ kind: 'remove', domain });
+                        ask({ kind: 'remove', domain });
                       }}
                     />
                   )}
@@ -280,7 +297,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                     size="sm"
                     aria-label={`Đặt ${list.defaultHost} làm địa chỉ chính`}
                     onClick={() => {
-                      setPending({ kind: 'primary', domain: null, host: list.defaultHost });
+                      ask({ kind: 'primary', domain: null, host: list.defaultHost });
                     }}
                   >
                     Đặt làm chính

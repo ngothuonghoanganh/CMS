@@ -1,5 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import type { ActivityItem, activityListQuerySchema, ActivityListResponse } from '@plp/contracts';
+import {
+  type ActivityItem,
+  type activityListQuerySchema,
+  type ActivityListResponse,
+  type ActivityType,
+  activityTypes,
+  can,
+  type Permission,
+} from '@plp/contracts';
 import type { z } from 'zod';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { UsersRepository } from '../auth/users.repository.js';
@@ -10,6 +18,18 @@ import type { ActivityRecord } from './activity.schema.js';
 import { isUndoable } from './pointer-events.js';
 
 export type ActivityListQueryValues = z.output<typeof activityListQuerySchema>;
+
+/**
+ * Events about leads and the people who sent forms carry counts and names: they show to the roles
+ * that see those, not to every role that opens the site (ADR-020).
+ */
+const seenWith: Partial<Record<ActivityType, Permission>> = {
+  'lead.exported': 'leads.view',
+  'lead.person_deleted': 'leads.view',
+  'lead.recipients_changed': 'leads.view',
+  'data_request.created': 'personalData.manage',
+  'data_request.completed': 'personalData.manage',
+};
 
 @Injectable()
 export class ActivityService {
@@ -23,13 +43,11 @@ export class ActivityService {
     siteId: ObjectId,
     query: ActivityListQueryValues,
   ): Promise<ActivityListResponse> {
-    const page = await this.activity.listForSite(
-      scope,
-      siteId,
-      query.cursor,
-      query.limit,
-      query.types,
-    );
+    const types = (query.types ?? activityTypes).filter((type) => {
+      const permission = seenWith[type];
+      return permission === undefined || can(scope.access, permission);
+    });
+    const page = await this.activity.listForSite(scope, siteId, query.cursor, query.limit, types);
     return { items: await this.toItems(scope, page.items), nextCursor: page.nextCursor };
   }
 

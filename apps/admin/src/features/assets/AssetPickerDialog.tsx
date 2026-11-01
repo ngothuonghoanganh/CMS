@@ -12,7 +12,7 @@ import {
   Input,
   Skeleton,
 } from '@plp/ui';
-import { useMutation } from '@tanstack/react-query';
+import { useIsMutating, useMutation } from '@tanstack/react-query';
 import Image from 'next/image';
 import { type RefObject, useId, useRef, useState } from 'react';
 import { ApiError, uploadAsset } from '../../lib/api';
@@ -64,11 +64,21 @@ function uploadErrorMessage(error: unknown): { alt?: string; general: string | n
   return { general: 'Tải ảnh lên không thành công. Kiểm tra kết nối rồi thử lại.' };
 }
 
+/**
+ * An upload from one picker, which keeps it open meanwhile: once done, the image is chosen. Each
+ * picker has its own: an image field never waits for another field's upload.
+ */
+function uploadingKey(siteId: string, picker: string) {
+  return ['asset-upload', siteId, picker] as const;
+}
+
 function UploadForm({
   siteId,
+  picker,
   onUploaded,
 }: {
   siteId: string;
+  picker: string;
   onUploaded: (asset: Asset) => void;
 }) {
   const fileInputId = useId();
@@ -80,6 +90,7 @@ function UploadForm({
   const [errors, setErrors] = useState<UploadErrors>({});
   const prepend = usePrependAsset(siteId);
   const upload = useMutation({
+    mutationKey: uploadingKey(siteId, picker),
     mutationFn: (input: { file: File; alt: string; decorative: boolean }) =>
       uploadAsset(siteId, input.file, { alt: input.alt, decorative: input.decorative }),
     onSuccess: (asset) => {
@@ -312,19 +323,28 @@ export function AssetPickerDialog({
   fallbackFocusRef,
 }: AssetPickerDialogProps) {
   const [selected, setSelected] = useState<Asset | null>(null);
+  const picker = useId();
+  const uploading = useIsMutating({ mutationKey: uploadingKey(siteId, picker) }) > 0;
 
   // The field that opens the picker keeps it mounted: every way of closing ("Hủy", ✕, Escape, a
   // choice) drops the highlighted image, so the next opening starts without one.
+  function close() {
+    setSelected(null);
+    onOpenChange(false);
+  }
+
   function changeOpen(next: boolean) {
-    if (!next) {
-      setSelected(null);
+    if (next) {
+      onOpenChange(true);
+    } else if (!uploading) {
+      // An image being uploaded is chosen once it is in: closing now would choose it anyway.
+      close();
     }
-    onOpenChange(next);
   }
 
   function choose(asset: Asset) {
     onSelect(selectionOf(asset), asset);
-    changeOpen(false);
+    close();
   }
 
   return (
@@ -339,6 +359,7 @@ export function AssetPickerDialog({
         <>
           <Button
             variant="secondary"
+            disabled={uploading}
             onClick={() => {
               changeOpen(false);
             }}
@@ -346,7 +367,8 @@ export function AssetPickerDialog({
             Hủy
           </Button>
           <Button
-            disabled={selected === null}
+            // The image being uploaded is chosen once it is in: it would replace this choice.
+            disabled={selected === null || uploading}
             onClick={() => {
               if (selected) {
                 choose(selected);
@@ -359,7 +381,7 @@ export function AssetPickerDialog({
       }
     >
       <div className={styles.picker}>
-        <UploadForm siteId={siteId} onUploaded={choose} />
+        <UploadForm siteId={siteId} picker={picker} onUploaded={choose} />
         <section aria-labelledby="asset-library-title" className={styles.library}>
           <h3 id="asset-library-title" className={styles.sectionTitle}>
             Thư viện ảnh của site

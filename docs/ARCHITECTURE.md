@@ -1276,6 +1276,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Integration test cho mọi endpoint mới với sáu vai trò, người ngoài workspace và trường hợp chạy song song (hai lần nhận cùng một link, hai lời mời cùng email).
   - E2E: mời qua Mailpit, đăng ký từ link, đổi quyền, yêu cầu và duyệt, chuyển quyền sở hữu, thu hồi.
+- **Amended 2026-11-01 (vòng test sau Phase 1):**
+  - Không ai tự đổi quyền hay tự gỡ mình (409), vì đó là "tự rời workspace", vẫn ngoài phạm vi. Màn 15 không có "Đổi quyền" trên dòng của chính mình.
+  - Lời mời không sống lâu hơn quyền mời.
+    - Gỡ một thành viên, đổi họ sang vai trò không có `members.manage`, hoặc chấp nhận một yêu cầu làm việc đó: các lời mời họ gửi còn chờ bị thu hồi, trong cùng transaction.
+    - Mời và "Gửi lại" ghi lên membership của người mời (`inviteSeq`), chỉ khi họ còn `members.manage`. Một lần đổi quyền cùng lúc vì thế xung đột với đợt mời, và đợt mời thấy vai trò mới.
+    - "Gửi lại" ghi người gửi lại làm người mời.
+  - Đổi một thành viên thành Quản trị, hoặc chuyển quyền sở hữu cho họ, thì đóng yêu cầu đổi quyền đang chờ của họ. Họ tự đổi được quyền, và Chủ sở hữu không duyệt yêu cầu của chính mình.
+  - Nhận lời mời khi đã là thành viên thì đóng lời mời và giữ vai trò cũ.
+    - Membership được đọc trong transaction.
+    - Không bắt lỗi khóa trùng bên trong transaction. MongoDB đã hủy transaction đó, nên lần commit sau sẽ được thử lại tới 120 giây.
+  - Việc đọc thông tin để gửi email (Chủ sở hữu, workspace) là một phần của việc gửi. Lỗi ở bước này chỉ được log; yêu cầu đã lưu thì không trả 500.
+  - `/workspaces/:id` chuyển tới "Thành viên", hoặc trang chủ với vai trò không quản lý thành viên. Đây là nơi người dùng quay về khi đăng nhập lại từ một màn workspace.
+  - Trang bắt đầu (`/`) mở workspace đã chọn (cookie `plp_ws`, đặt bởi bộ chuyển workspace và trang nhận lời mời), kể cả khi workspace đó chưa có site. Chưa chọn workspace nào (lần đăng nhập đầu) mà workspace đầu tiên không có site và người dùng không tạo được site ở đó, thì trang mở site đầu tiên của một workspace khác, hoặc trang tạo site ở workspace mà họ được tạo. Cookie trỏ tới một workspace họ đã rời không tính là đã chọn. Không còn nơi nào như vậy thì trang tạo site của workspace đầu tiên giải thích rằng chỉ Chủ sở hữu và Quản trị tạo được site.
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1342,6 +1355,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Integration test cho chuẩn hóa tên miền, giới hạn, chuyển chủ (kể cả hai lần xác minh song song), trạng thái, tự kiểm tra trên nhiều instance, `tls/allowed`, phân giải host và quyền.
   - E2E: kết nối một tên miền `*.e2e.test` (Chromium ánh xạ về máy, DNS từ zone file), đặt làm địa chỉ chính, trang mở ở tên miền riêng và địa chỉ mặc định chuyển hướng 301.
+- **Amended 2026-11-01 (vòng test sau Phase 1):**
+  - Email trạng thái tên miền gửi người đã thêm tên miền nếu họ còn `domains.manage` trên site. Nếu không còn, email gửi Chủ sở hữu: người đã bị gỡ không nhận gì, nhưng tin vẫn tới một người phụ trách. Việc đọc người nhận cũng là một phần của email: lỗi ở đó chỉ được log, kết quả kiểm tra vẫn được lưu.
+  - Giới hạn 5 tên miền mỗi site được kiểm tra trong transaction tăng `domainSeq` của site, như `pageSeq` (ADR-014). Hai lần thêm cùng lúc không vượt giới hạn.
 
 ### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
 
@@ -1409,6 +1425,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - từ chối, rút, và từ chối song song với xuất bản;
     - ma trận quyền.
   - E2E: Cộng tác viên được mời qua Mailpit và gửi yêu cầu. Chủ sở hữu nhận email, duyệt và xuất bản; Cộng tác viên nhận email. Thêm một lần từ chối kèm lý do.
+- **Amended 2026-11-01 (vòng test sau Phase 1):**
+  - Email kết quả chỉ gửi người gửi yêu cầu khi họ còn mở được site của trang. Email nói "đã duyệt và xuất bản" khi người xuất bản có `publishApprovals.decide`, và "đã xuất bản" khi đó là một Biên tập.
+  - `PageSummary.approval` lấy yêu cầu đang chờ trước, rồi mới tới yêu cầu mới nhất theo `createdAt`, vì đồng hồ của các instance có thể lệch nhau.
 
 ### ADR-024 — Vai trò tùy chỉnh
 
@@ -1464,6 +1483,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - phạm vi toàn workspace;
     - người giữ vai trò tùy chỉnh đi qua ma trận endpoint đúng theo quyền của nó.
   - E2E: Chủ sở hữu tạo vai trò từ Biên tập (xuất bản đổi thành "Yêu cầu", thêm xem lead) rồi mời một người. Người đó thấy Leads và nút "Gửi duyệt".
+- **Amended 2026-11-01 (vòng test sau Phase 1):** giao diện hiện từng thao tác theo đúng quyền của nó, không theo vai trò hệ thống:
+  - Không có `leads.handle` thì lead chỉ để xem: có trạng thái và ghi chú, không có spam và "Gửi lại".
+  - Có `personalData.manage` thì thấy "Dữ liệu & đồng ý", nơi có yêu cầu dữ liệu.
+  - "Khôi phục v{n}" sau khi xuất bản cần `pages.manageLive`.
+  - Cột "LEAD 7 NGÀY" chỉ có với `leads.view`; API trả `leadsLast7Days: null` cho các vai trò khác, như thẻ "Lead 7 ngày qua". "Hiệu quả" vẫn theo `pages.view` (ADR-019).
+  - Nhật ký hoạt động của site chỉ trả sự kiện `lead.*` cho vai trò có `leads.view`, và `data_request.*` cho vai trò có `personalData.manage`: chúng mang số lead và việc xử lý dữ liệu cá nhân.
+  - Thông báo từ chối (`holdersOf`) vẫn chỉ nêu vai trò hệ thống, kể cả với quyền chọn được cho vai trò tùy chỉnh.
 
 ---
 

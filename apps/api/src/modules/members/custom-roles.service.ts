@@ -6,11 +6,16 @@ import {
   type CustomRoleListResponse,
 } from '@plp/contracts';
 import { AppError, notFound } from '../../shared/errors.js';
+import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { AccessService } from '../workspaces/access.service.js';
-import { type CustomRoleRecord, customRoleNameKey } from '../workspaces/custom-role.schema.js';
+import {
+  CUSTOM_ROLE_NAME_INDEX,
+  type CustomRoleRecord,
+  customRoleNameKey,
+} from '../workspaces/custom-role.schema.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
@@ -18,10 +23,22 @@ import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 
 export const CUSTOM_ROLE_NOT_FOUND = 'Không tìm thấy vai trò';
 
-function nameTaken(): AppError {
-  return new AppError(409, 'conflict', 'Đã có vai trò tên này', {
-    detail: 'Workspace đã có một vai trò tên này. Chọn một tên khác.',
-  });
+/**
+ * Runs a write of a role's name; the workspace having the name already is answered once its
+ * transaction has ended (a write error aborts it).
+ */
+async function namingRole<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (isDuplicateKeyError(error, CUSTOM_ROLE_NAME_INDEX)) {
+      throw new AppError(409, 'conflict', 'Đã có vai trò tên này', {
+        detail: 'Workspace đã có một vai trò tên này. Chọn một tên khác.',
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }
 
 function toCustomRoleDto(
@@ -91,22 +108,22 @@ export class CustomRolesService {
       createdAt: now,
       updatedAt: now,
     };
-    await this.transactions.run(async (tx) => {
-      await this.workspaces.recordCustomRole(scope, tx);
-      if ((await this.roles.countForWorkspace(scope, tx)) >= CUSTOM_ROLES_MAX) {
-        throw new AppError(
-          409,
-          'custom_role_limit_reached',
-          `Mỗi workspace có tối đa ${CUSTOM_ROLES_MAX} vai trò tùy chỉnh`,
-          {
-            detail: `Mỗi workspace có tối đa ${CUSTOM_ROLES_MAX} vai trò tùy chỉnh. Xóa một vai trò không còn dùng rồi tạo lại.`,
-          },
-        );
-      }
-      if (!(await this.roles.insert(scope, role, tx))) {
-        throw nameTaken();
-      }
-    });
+    await namingRole(() =>
+      this.transactions.run(async (tx) => {
+        await this.workspaces.recordCustomRole(scope, tx);
+        if ((await this.roles.countForWorkspace(scope, tx)) >= CUSTOM_ROLES_MAX) {
+          throw new AppError(
+            409,
+            'custom_role_limit_reached',
+            `Mỗi workspace có tối đa ${CUSTOM_ROLES_MAX} vai trò tùy chỉnh`,
+            {
+              detail: `Mỗi workspace có tối đa ${CUSTOM_ROLES_MAX} vai trò tùy chỉnh. Xóa một vai trò không còn dùng rồi tạo lại.`,
+            },
+          );
+        }
+        await this.roles.insert(scope, role, tx);
+      }),
+    );
     return toCustomRoleDto(role, 0, 0);
   }
 
@@ -124,47 +141,55 @@ export class CustomRolesService {
     const scope = await this.manager(user, workspaceId);
     const id = toObjectId(roleId, CUSTOM_ROLE_NOT_FOUND);
     // One transaction with the check: a grant at the same moment holds the role and conflicts.
-    const updated = await this.transactions.run(async (tx) => {
-      const current = await this.roles.findById(scope, id, tx);
-      if (current === null) {
-        throw notFound(CUSTOM_ROLE_NOT_FOUND);
-      }
-      if (input.wholeWorkspace && !current.wholeWorkspace) {
-        const limited =
-          (await this.workspaces.countCustomRoleHolders(scope, id, { withSites: true }, tx)) +
-          (await this.invitations.countPendingWithCustomRole(scope, id, { withSites: true }, tx));
-        if (limited > 0) {
-          throw new AppError(
-            409,
-            'conflict',
-            `${limited} người đang giữ vai trò này trên một số site`,
-            {
-              detail: `${limited} người đang giữ vai trò này trên một số site. Đổi phạm vi của họ thành toàn workspace ở màn Thành viên trước.`,
-            },
-          );
+    const updated = await namingRole(() =>
+      this.transactions.run(async (tx) => {
+        const current = await this.roles.findById(scope, id, tx);
+        if (current === null) {
+          throw notFound(CUSTOM_ROLE_NOT_FOUND);
         }
-      }
-      const result = await this.roles.update(
-        scope,
-        id,
-        {
-          name: input.name,
-          nameKey: customRoleNameKey(input.name),
-          basedOn: input.basedOn,
-          permissions: input.permissions,
-          wholeWorkspace: input.wholeWorkspace,
-          updatedAt: new Date(),
-        },
-        tx,
-      );
-      if (result === 'name_taken') {
-        throw nameTaken();
-      }
-      if (result === null) {
-        throw notFound(CUSTOM_ROLE_NOT_FOUND);
-      }
-      return result;
-    });
+        if (input.wholeWorkspace && !current.wholeWorkspace) {
+          const members = await this.workspaces.countCustomRoleHolders(
+            scope,
+            id,
+            { withSites: true },
+            tx,
+          );
+          const invited = await this.invitations.countPendingWithCustomRole(
+            scope,
+            id,
+            { withSites: true },
+            tx,
+          );
+          if (members + invited > 0) {
+            // An invitation's sites cannot be changed: it is revoked and sent again.
+            const steps = [
+              members > 0 ? `đổi phạm vi của ${members} người đang giữ thành toàn workspace` : null,
+              invited > 0 ? `thu hồi ${invited} lời mời đang chờ rồi mời lại` : null,
+            ].filter((step) => step !== null);
+            throw new AppError(409, 'conflict', 'Vai trò đang được giao trên một số site', {
+              detail: `Ở màn Thành viên, ${steps.join(' và ')} trước.`,
+            });
+          }
+        }
+        const result = await this.roles.update(
+          scope,
+          id,
+          {
+            name: input.name,
+            nameKey: customRoleNameKey(input.name),
+            basedOn: input.basedOn,
+            permissions: input.permissions,
+            wholeWorkspace: input.wholeWorkspace,
+            updatedAt: new Date(),
+          },
+          tx,
+        );
+        if (result === null) {
+          throw notFound(CUSTOM_ROLE_NOT_FOUND);
+        }
+        return result;
+      }),
+    );
     return this.dto(scope, updated);
   }
 

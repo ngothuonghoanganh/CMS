@@ -85,7 +85,8 @@ export function SignupForm({ next }: SignupFormProps) {
   }
 
   return (
-    <form noValidate className={styles.form} onSubmit={handleSubmit}>
+    // POST: sent before the page is interactive, the browser must not put the password in the URL.
+    <form method="post" noValidate className={styles.form} onSubmit={handleSubmit}>
       <Field label="Họ và tên" id={fieldIds.name} required error={form.errors.name}>
         <Input autoComplete="name" placeholder="Nguyễn Ngọc Anh" {...bind('name')} />
       </Field>

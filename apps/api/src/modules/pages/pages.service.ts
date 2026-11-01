@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  can,
   type Composition,
   type createPageRequestSchema,
   EMPTY_SEO,
@@ -98,9 +99,13 @@ export class PagesService {
           ]
         : [],
     );
+    // Lead counts are for the roles that see leads (ADR-020).
+    const seesLeads = can(scope.access, 'leads.view');
     const [evaluated, recentLeads] = await Promise.all([
       this.evaluator.evaluateMany(scope, site, pages, livePages),
-      this.leads.countRecentByPage(scope, site._id, recentDaysWindow(new Date(), 7).from),
+      seesLeads
+        ? this.leads.countRecentByPage(scope, site._id, recentDaysWindow(new Date(), 7).from)
+        : null,
     ]);
     const listed = evaluated.map(({ summary, checks }) => ({
       summary,
@@ -114,7 +119,7 @@ export class PagesService {
     return {
       items: page.items.map(({ summary }) => ({
         ...summary,
-        leadsLast7Days: recentLeads.get(summary.id) ?? 0,
+        leadsLast7Days: recentLeads === null ? null : (recentLeads.get(summary.id) ?? 0),
       })),
       nextCursor: page.nextCursor,
       counts: countPages(listed),

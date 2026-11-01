@@ -266,6 +266,28 @@ describe('DataRequestsSection', () => {
       expect(await screen.findByText('Đã ghi nhận yêu cầu', { exact: true })).toBeInTheDocument();
     });
 
+    it('stays open while recording, so a refusal is seen', async () => {
+      const user = userEvent.setup();
+      let refuse: (error: unknown) => void = () => undefined;
+      apiMock.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            refuse = reject;
+          }),
+      );
+      renderSection([]);
+      await user.click(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }));
+      const dialog = screen.getByRole('dialog', { name: 'Ghi nhận yêu cầu' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Số điện thoại' }), '0987106223');
+      await user.click(within(dialog).getByRole('radio', { name: /Xóa toàn bộ dữ liệu/ }));
+      await user.click(within(dialog).getByRole('button', { name: 'Ghi nhận' }));
+
+      expect(within(dialog).getByRole('button', { name: 'Hủy' })).toBeDisabled();
+      await user.keyboard('{Escape}');
+      refuse(apiError(503, 'internal', 'Máy chủ đang bận'));
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Máy chủ đang bận');
+    });
+
     it('needs a phone number or an email, and the kind of request', async () => {
       const user = userEvent.setup();
       renderSection([]);
@@ -472,6 +494,28 @@ describe('DataRequestsSection', () => {
       // Sending the copy completes the request, with no extra confirmation.
       await user.click(within(dialog).getByRole('button', { name: 'Đã gửi bản sao' }));
       expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([REQUEST_ID]);
+    });
+
+    it('stays open while exporting, so a failed export is seen', async () => {
+      const user = userEvent.setup();
+      serve(dataRequestDetail({ type: 'access' }));
+      let refuse: (error: unknown) => void = () => undefined;
+      downloadMock.mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            refuse = reject;
+          }),
+      );
+      renderSection([dataRequest({ type: 'access' })]);
+      await user.click(screen.getByRole('button', { name: 'Xử lý yêu cầu của Lê Mai Anh' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Xem dữ liệu đang lưu' });
+      await user.click(await within(dialog).findByRole('button', { name: 'Xuất dữ liệu' }));
+      await user.click(screen.getByRole('menuitem', { name: 'File CSV (Excel)' }));
+
+      expect(within(dialog).getByText('Đóng', { selector: 'button' })).toBeDisabled();
+      await user.keyboard('{Escape}');
+      refuse(apiError(409, 'conflict', 'Yêu cầu này đã hoàn tất'));
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Yêu cầu này đã hoàn tất');
     });
 
     it('shows the log of a completed request, with nothing left to do', async () => {

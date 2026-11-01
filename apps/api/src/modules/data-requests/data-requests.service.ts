@@ -107,17 +107,21 @@ export class DataRequestsService {
       throw validationFailed([{ path: ['receivedAt'], code: 'custom', message: problem }]);
     }
     const contact = { name: values.name, phone: values.phone, email: values.email };
+    // The schema already stored the email in lowercase, as `leadSearchKeys` does.
+    const search = {
+      phone: contact.phone === null ? null : phoneSearchKey(contact.phone),
+      email: contact.email,
+    };
+    // Read before the request is stored: a failure afterwards would answer 500 for a request
+    // already recorded, and "Ghi nhận" pressed again would record it twice.
+    const found = await this.leadsOf(scope, site, personOfRequest({ search }));
     const record = await this.transactions.run(async (tx) => {
       const created = await this.requests.insert(
         scope,
         site._id,
         {
           contact,
-          // The schema already stored the email in lowercase, as `leadSearchKeys` does.
-          search: {
-            phone: contact.phone === null ? null : phoneSearchKey(contact.phone),
-            email: contact.email,
-          },
+          search,
           type: values.type,
           receivedAt,
           ...dataRequestDeadlines(receivedAt),
@@ -128,7 +132,15 @@ export class DataRequestsService {
       await this.activity.record(scope, { siteId: site._id, type: 'data_request.created' }, tx);
       return created;
     });
-    return this.detail(scope, site, record);
+    // Its log has one entry, by the user who recorded it.
+    const recorder = { id: user.id.toHexString(), name: user.name };
+    return toDataRequestDetail(
+      record,
+      found.counted,
+      found.matches,
+      found.titles,
+      new Map([[recorder.id, recorder]]),
+    );
   }
 
   async get(user: AuthenticatedUser, requestId: string): Promise<DataRequestDetail> {
@@ -259,24 +271,25 @@ export class DataRequestsService {
     site: SiteRecord,
     request: DataRequestRecord,
   ): Promise<DataRequestDetail> {
-    const person = personOfRequest(request);
-    const [counted, matches, users] = await Promise.all([
+    const [found, users] = await Promise.all([
+      this.leadsOf(scope, site, personOfRequest(request)),
+      this.users.findRefs(request.log.map((entry) => entry.actorId)),
+    ]);
+    return toDataRequestDetail(request, found.counted, found.matches, found.titles, users);
+  }
+
+  /** The leads of the person a request is about, with the titles of their pages. */
+  private async leadsOf(scope: WorkspaceScope, site: SiteRecord, person: LeadPerson | null) {
+    const [counted, matches] = await Promise.all([
       person === null ? null : this.leads.countPerson(scope, site._id, person, CAPPED_COUNT_LIMIT),
       person === null
         ? []
         : this.leads.listPerson(scope, site._id, person, DATA_REQUEST_MATCHES_MAX),
-      this.users.findRefs(request.log.map((entry) => entry.actorId)),
     ]);
     const titles = await this.pages.findTitles(
       scope,
       matches.map((lead) => lead.pageId),
     );
-    return toDataRequestDetail(
-      request,
-      counted === null ? null : toCappedCount(counted),
-      matches,
-      titles,
-      users,
-    );
+    return { counted: counted === null ? null : toCappedCount(counted), matches, titles };
   }
 }

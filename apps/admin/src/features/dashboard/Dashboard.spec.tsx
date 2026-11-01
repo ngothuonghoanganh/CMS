@@ -235,6 +235,16 @@ describe('Dashboard', () => {
     expect(within(draftRow).getAllByRole('cell')[4]).toHaveTextContent('—');
   });
 
+  it('leaves lead counts out for roles that do not see leads (ADR-020)', () => {
+    renderDashboard({
+      role: 'editor',
+      leadCounts: null,
+      pages: pageListFixture([pageFixture({ leadsLast7Days: null })]),
+    });
+    expect(screen.queryByRole('columnheader', { name: 'LEAD 7 NGÀY' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Lead 7 ngày qua')).not.toBeInTheDocument();
+  });
+
   it('marks a page waiting for approval in its status (ADR-023)', () => {
     renderDashboard({
       pages: pageListFixture([

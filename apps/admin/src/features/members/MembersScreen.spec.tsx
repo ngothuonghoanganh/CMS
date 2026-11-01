@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { MembersScreen, type MembersScreenProps } from './MembersScreen';
 
 const { router } = vi.hoisted(() => ({
@@ -156,6 +156,23 @@ describe('MembersScreen', () => {
     expect(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' })).toBeInTheDocument();
   });
 
+  it('opens "Mời thành viên" after "Đổi quyền" without two dialogs sharing a key', async () => {
+    const user = userEvent.setup();
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      renderScreen();
+      await user.click(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' }));
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Hủy' }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+      expect(await screen.findByRole('dialog', { name: 'Mời thành viên' })).toBeInTheDocument();
+      expect(logged.mock.calls.flat().join(' ')).not.toContain('same key');
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it('starts "Đổi quyền" from the member as they are, whatever was left last time', async () => {
     const user = userEvent.setup();
     renderScreen();
@@ -168,6 +185,67 @@ describe('MembersScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' }));
     dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Vai trò')).toHaveValue('editor');
+  });
+
+  it('keeps "Đổi quyền" open while saving, so its answer is seen', async () => {
+    const user = userEvent.setup();
+    const served = apiMock.getMockImplementation();
+    let refuse: (error: unknown) => void = () => undefined;
+    apiMock.mockImplementation((endpoint, ...rest) =>
+      endpoint === endpoints.updateMember
+        ? new Promise((_, reject) => {
+            refuse = reject;
+          })
+        : (served?.(endpoint, ...rest) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByLabelText('Vai trò'), 'viewer');
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu quyền' }));
+    await user.keyboard('{Escape}');
+    refuse(apiError(422, 'validation_failed', 'Vai trò này không còn trong workspace'));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Vai trò này không còn trong workspace',
+    );
+  });
+
+  it('keeps "Mời thành viên" and the transfer open while they run, so a refusal is seen', async () => {
+    const user = userEvent.setup();
+    const served = apiMock.getMockImplementation();
+    const refusals: Array<(error: unknown) => void> = [];
+    apiMock.mockImplementation((endpoint, ...rest) =>
+      endpoint === endpoints.createInvitations || endpoint === endpoints.transferOwnership
+        ? new Promise((_, reject) => {
+            refusals.push(reject);
+          })
+        : (served?.(endpoint, ...rest) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+    const invite = await screen.findByRole('dialog', { name: 'Mời thành viên' });
+    await user.type(within(invite).getByLabelText('Email'), 'thuy@smilecare.vn');
+    await user.click(within(invite).getByRole('radio', { name: /Chăm sóc khách hàng/ }));
+    await user.click(within(invite).getByRole('checkbox', { name: 'Nha khoa Smile Care' }));
+    await user.click(within(invite).getByRole('button', { name: 'Gửi 1 lời mời' }));
+    await user.keyboard('{Escape}');
+    refusals.shift()?.(apiError(429, 'rate_limited', 'Đã gửi quá nhiều lời mời'));
+    expect(await within(invite).findByRole('alert')).toHaveTextContent('Đã gửi quá nhiều lời mời');
+    await user.click(within(invite).getByRole('button', { name: 'Hủy' }));
+
+    await user.click(screen.getByRole('button', { name: 'Chuyển quyền sở hữu' }));
+    const transfer = await screen.findByRole('dialog', { name: 'Chuyển quyền sở hữu workspace' });
+    await user.type(
+      within(transfer).getByRole('textbox', { name: 'Nhập tên workspace để xác nhận' }),
+      'Mây Xanh Agency',
+    );
+    await user.click(within(transfer).getByRole('button', { name: 'Chuyển quyền sở hữu' }));
+    await user.keyboard('{Escape}');
+    refusals.shift()?.(apiError(409, 'conflict', 'Vai trò đã đổi trong lúc chuyển'));
+    expect(await within(transfer).findByRole('alert')).toHaveTextContent(
+      'Vai trò đã đổi trong lúc chuyển',
+    );
   });
 
   it('asks for a role, never shows another, when the member’s role is not in the list', async () => {
@@ -343,5 +421,40 @@ describe('MembersScreen', () => {
     expect(
       within(row).getByRole('button', { name: 'Thu hồi lời mời tới an.tran@bepnhamay.vn' }),
     ).toBeInTheDocument();
+  });
+
+  it('never offers a Quản trị to change or remove themselves (ADR-021)', () => {
+    renderScreen({ viewer: { userId: admin.userId, role: 'admin' }, initialRequests: null });
+    expect(screen.getByRole('row', { name: /Quốc Bảo \(bạn\)/ })).not.toHaveTextContent(
+      'Đổi quyền',
+    );
+    expect(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' })).toBeInTheDocument();
+  });
+
+  it('opens the next "Thu hồi" without the error of the last one, and reloads the list', async () => {
+    const user = userEvent.setup();
+    const other = { ...invitation, id: '64b0000000000000000000d2', email: 'binh@bepnhamay.vn' };
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.revokeInvitation
+        ? Promise.reject(apiError(409, 'invitation_unavailable', 'Lời mời không còn hiệu lực'))
+        : endpoint === endpoints.listInvitations
+          ? Promise.resolve({ items: [invitation, other] })
+          : Promise.reject(new Error('unexpected call')),
+    );
+    renderScreen({ initialInvitations: { items: [invitation, other] } });
+    await user.click(screen.getByRole('button', { name: /Lời mời đang chờ · 2/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Thu hồi lời mời tới an.tran@bepnhamay.vn' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Thu hồi' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Lời mời không còn hiệu lực');
+    await vi.waitFor(() => {
+      expect(lastCallTo(apiMock, endpoints.listInvitations).args).toEqual([WORKSPACE_ID]);
+    });
+    await user.click(screen.getByRole('button', { name: 'Hủy' }));
+
+    await user.click(screen.getByRole('button', { name: 'Thu hồi lời mời tới binh@bepnhamay.vn' }));
+    const dialog = await screen.findByRole('alertdialog', { name: /binh@bepnhamay.vn/ });
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   });
 });

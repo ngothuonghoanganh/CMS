@@ -22,7 +22,9 @@ export function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: { retry: shouldRetry, refetchOnWindowFocus: false, staleTime: 15_000 },
-          mutations: { retry: false },
+          // Offline, a change fails at once with its message instead of waiting paused: a dialog
+          // waiting for its answer could not be closed meanwhile.
+          mutations: { retry: false, networkMode: 'always' },
         },
       }),
   );

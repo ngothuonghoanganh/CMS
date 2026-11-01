@@ -32,6 +32,14 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('SignupForm', () => {
+  it('posts, so a submit before the page is interactive keeps the password out of the URL', () => {
+    renderWithProviders(<SignupForm next="/" />);
+    expect(screen.getByRole('button', { name: 'Tạo tài khoản' }).closest('form')).toHaveAttribute(
+      'method',
+      'post',
+    );
+  });
+
   it('shows every missing field before sending', async () => {
     const user = userEvent.setup();
     renderWithProviders(<SignupForm next="/" />);

@@ -37,8 +37,11 @@ export function PrivacyScreen({
       </Callout>
       {canEdit ? null : (
         <Callout tone="info">
-          Chỉ {holdersOf('privacy.manage')} được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu
-          cầu từ người gửi form.
+          Chỉ {holdersOf('privacy.manage')} được thay đổi dữ liệu cá nhân và đồng ý.
+          {/* Who handles data requests here sees them below (ADR-024). */}
+          {dataRequests === null
+            ? ` Yêu cầu từ người gửi form do ${holdersOf('personalData.manage')} xử lý.`
+            : null}
         </Callout>
       )}
       <div className={styles.columns}>

@@ -136,10 +136,21 @@ describe('approval emails (ADR-023)', () => {
       approvalPublishedEmail({
         pageTitle: 'Ưu đãi',
         publisherName: 'Ngọc Anh',
+        approved: true,
         version: 3,
         liveUrl: 'https://go.smilecare.vn/uu-dai',
       }).text,
     ).toContain('Ngọc Anh đã duyệt và xuất bản phiên bản v3.');
+    // A Biên tập publishes without approving.
+    expect(
+      approvalPublishedEmail({
+        pageTitle: 'Ưu đãi',
+        publisherName: 'Minh Khoa',
+        approved: false,
+        version: 3,
+        liveUrl: 'https://go.smilecare.vn/uu-dai',
+      }).text,
+    ).toContain('Minh Khoa đã xuất bản phiên bản v3.');
     const rejected = approvalRejectedEmail({
       pageTitle: 'Ưu đãi',
       rejecterName: 'Ngọc Anh',

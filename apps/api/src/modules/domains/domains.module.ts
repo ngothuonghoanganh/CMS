@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import { EmailModule } from '../notifications/email.module.js';
 import { RevalidationModule } from '../revalidation/revalidation.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
+import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import { DomainChecker } from './domain-checker.service.js';
 import { DomainDns, NetworkDomainDns, ZoneFileDomainDns } from './domain-dns.js';
 import { DomainMonitor } from './domain-monitor.service.js';
@@ -17,7 +18,14 @@ import { PublicDomainsService } from './public-domains.service.js';
 
 /** Custom domains (ADR-022): the admin's endpoints, the edge's and renderer's, the checks. */
 @Module({
-  imports: [AuthModule, DomainsCoreModule, EmailModule, RevalidationModule, SitesCoreModule],
+  imports: [
+    AuthModule,
+    DomainsCoreModule,
+    EmailModule,
+    RevalidationModule,
+    SitesCoreModule,
+    WorkspacesModule,
+  ],
   controllers: [DomainsController, PublicDomainsController],
   providers: [
     {

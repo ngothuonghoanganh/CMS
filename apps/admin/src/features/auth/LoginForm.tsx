@@ -57,7 +57,8 @@ export function LoginForm({ next }: LoginFormProps) {
   }
 
   return (
-    <form noValidate className={styles.form} onSubmit={handleSubmit}>
+    // POST: sent before the page is interactive, the browser must not put the password in the URL.
+    <form method="post" noValidate className={styles.form} onSubmit={handleSubmit}>
       <Field label="Email" id={fieldIds.email} required error={form.errors.email}>
         <Input
           type="email"

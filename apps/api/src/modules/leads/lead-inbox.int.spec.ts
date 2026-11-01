@@ -423,6 +423,11 @@ describe('lead inbox', () => {
     const rows = new Map(pages.items.map((page) => [page.id, page.leadsLast7Days]));
     expect(rows.get(pageId)).toBe(2);
     expect(rows.get(quiet.pageId)).toBe(0);
+
+    // Lead counts belong to `leads.view` (ADR-020): Biên tập sees the pages without them.
+    const editor = (await addMember(t, workspaceId, 'editor')).client;
+    const unseen = await listPages(editor, site.id);
+    expect(unseen.items.map((page) => page.leadsLast7Days)).toEqual(unseen.items.map(() => null));
   });
 
   it('lists the pages of the site by title for the page filter', async () => {

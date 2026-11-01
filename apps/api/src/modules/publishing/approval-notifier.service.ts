@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { can } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
-import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { EmailSender, EmailSendError, type EmailMessage } from '../notifications/email-sender.js';
 import {
@@ -81,7 +80,7 @@ export class ApprovalNotifier {
     release: { version: number; publisherName: string; liveUrl: string },
   ): Promise<void> {
     await this.send(scope, approval, async () => {
-      const email = await this.requesterEmail(scope, approval.requestedBy);
+      const email = await this.requesterEmail(scope, approval);
       return email === null
         ? null
         : {
@@ -89,6 +88,7 @@ export class ApprovalNotifier {
             ...approvalPublishedEmail({
               pageTitle: page.title,
               publisherName: release.publisherName,
+              approved: can(scope.access, 'publishApprovals.decide'),
               version: release.version,
               liveUrl: release.liveUrl,
             }),
@@ -103,7 +103,7 @@ export class ApprovalNotifier {
     rejecterName: string,
   ): Promise<void> {
     await this.send(scope, approval, async () => {
-      const email = await this.requesterEmail(scope, approval.requestedBy);
+      const email = await this.requesterEmail(scope, approval);
       return email === null || approval.reason === null
         ? null
         : {
@@ -122,13 +122,22 @@ export class ApprovalNotifier {
     return `${this.env.ADMIN_ORIGIN}/sites/${page.siteId.toHexString()}/pages/${page._id.toHexString()}/edit`;
   }
 
-  /** The sender's address while they are still a member: someone removed hears nothing. */
-  private async requesterEmail(scope: WorkspaceScope, userId: ObjectId): Promise<string | null> {
+  /**
+   * The sender's address while they still open the page's site: someone removed, or kept to other
+   * sites since, hears nothing.
+   */
+  private async requesterEmail(
+    scope: WorkspaceScope,
+    approval: ApprovalRecord,
+  ): Promise<string | null> {
     const [membership, [contact]] = await Promise.all([
-      this.workspaces.findMember(scope, userId),
-      this.users.findContacts([userId]),
+      this.workspaces.findMember(scope, approval.requestedBy),
+      this.users.findContacts([approval.requestedBy]),
     ]);
-    return membership && contact ? contact.email : null;
+    // A membership without `siteIds` covers the whole workspace (ADR-020).
+    const siteIds = membership?.siteIds ?? null;
+    const covers = siteIds === null || siteIds.some((id) => id.equals(approval.siteId));
+    return membership && contact && covers ? contact.email : null;
   }
 
   /**

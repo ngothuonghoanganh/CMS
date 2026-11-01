@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { AccessRequestDialog } from './AccessRequestDialog';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
@@ -56,6 +56,62 @@ describe('AccessRequestDialog', () => {
       args: [WORKSPACE_ID],
       options: { body: { role: 'editor', wholeWorkspace: true, note: 'Cần sửa trang' } },
     });
+  });
+
+  it('says to choose a role instead of sending nothing, and stays open while sending', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    let answer: (value: { request: typeof pending }) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.myAccessRequest
+        ? Promise.resolve({ request: null })
+        : new Promise((resolve) => {
+            answer = resolve;
+          }),
+    );
+    renderWithProviders(
+      <AccessRequestDialog
+        workspaceId={WORKSPACE_ID}
+        role="viewer"
+        siteLimited={false}
+        open
+        onOpenChange={onOpenChange}
+      />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Gửi yêu cầu' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Chọn vai trò bạn cần.');
+    const editor = screen.getByRole('radio', { name: /Biên tập/ });
+    expect(editor).toBeInvalid();
+    expect(editor).toHaveAccessibleDescription(expect.stringContaining('Chọn vai trò bạn cần.'));
+
+    await user.click(editor);
+    expect(screen.queryByRole('alert')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Gửi yêu cầu' }));
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    answer({ request: pending });
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+
+  it('says when the pending request could not be read, and reads it again', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValueOnce(apiError(503, 'internal', 'Máy chủ đang bận'));
+    renderWithProviders(
+      <AccessRequestDialog
+        workspaceId={WORKSPACE_ID}
+        role="viewer"
+        siteLimited={false}
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Chưa tải được yêu cầu của bạn');
+    expect(screen.getByRole('button', { name: 'Gửi yêu cầu' })).toBeDisabled();
+    apiMock.mockResolvedValueOnce({ request: pending });
+    await user.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Bạn đang có một yêu cầu chờ duyệt')).toBeInTheDocument();
   });
 
   it('lets a member kept to some sites ask for their role on the whole workspace', async () => {

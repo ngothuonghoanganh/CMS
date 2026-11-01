@@ -11,12 +11,13 @@ import {
   type InvitationLookupResponse,
   type InvitationOutcome,
   MEMBERS_MAX,
+  onlyHoldersMessage,
 } from '@plp/contracts';
 import type { z } from 'zod';
 import type { createInvitationsRequestSchema } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
-import { AppError, notFound } from '../../shared/errors.js';
+import { AppError, forbidden, notFound } from '../../shared/errors.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -164,6 +165,10 @@ export class InvitationsService {
       // The member limit and the new invitations in one transaction that writes the workspace:
       // two batches at once cannot both fit under the limit (ADR-021).
       created = await this.transactions.run(async (tx) => {
+        // The inviter may still invite: being demoted or removed meanwhile conflicts with this.
+        if (!(await this.workspaces.holdInviter(scope, tx))) {
+          throw forbidden(onlyHoldersMessage('members.manage'));
+        }
         await this.workspaces.recordInvitations(scope, tx);
         await this.grants.holdGrant(scope, grant, tx);
         const pending = await this.invitations.pendingEmails(scope, fresh, tx);
@@ -245,34 +250,47 @@ export class InvitationsService {
     if (!existing || existing.status !== 'pending') {
       throw notFound(INVITATION_NOT_FOUND);
     }
+    // Read before anything is counted or stored: the email needs them once the link is renewed.
+    // The renewal changes neither the role nor the sites.
+    const access = accessOf(existing, await this.customRoles.mapForWorkspace(scope));
+    const workspaceName = (await this.workspaces.findWorkspace(scope))?.name ?? '';
+    const scopeLine = await this.grants.scopeLine(
+      scope,
+      existing.siteIds?.map((siteId) => siteId.toHexString()) ?? null,
+    );
     const now = new Date();
     const hits = await this.quota.take(this.limitsOf(scope, existing.email), INVITATIONS, now);
     const { token, tokenHash } = newInvitationToken();
+    // Who sends it again invites from now on, in the same hold as a new batch (ADR-021).
     const renewed = await this.quota.giveBackOnError(hits, INVITATIONS, () =>
-      this.invitations.renew(scope, id, { tokenHash, expiresAt: invitationExpiry(now) }),
+      this.transactions.run(async (tx) => {
+        if (!(await this.workspaces.holdInviter(scope, tx))) {
+          throw forbidden(onlyHoldersMessage('members.manage'));
+        }
+        return this.invitations.renew(
+          scope,
+          id,
+          { tokenHash, expiresAt: invitationExpiry(now) },
+          tx,
+        );
+      }),
     );
     if (!renewed) {
       // Accepted or revoked since it was read.
       await this.quota.giveBack(hits, INVITATIONS);
       throw notFound(INVITATION_NOT_FOUND);
     }
-    const access = accessOf(renewed, await this.customRoles.mapForWorkspace(scope));
     const { sent, sentAt } = await this.send(scope, renewed, token, {
-      workspaceName: (await this.workspaces.findWorkspace(scope))?.name ?? '',
+      workspaceName,
       invitedBy: user.name,
-      scope: await this.grants.scopeLine(
-        scope,
-        renewed.siteIds?.map((siteId) => siteId.toHexString()) ?? null,
-      ),
+      scope: scopeLine,
       roleLabel: accessLabel(access),
     });
     if (!sent) {
       await this.quota.giveBack(hits, INVITATIONS);
     }
-    const inviter = (await this.users.findRefs([renewed.invitedBy])).get(
-      renewed.invitedBy.toHexString(),
-    );
-    return toInvitationDto({ ...renewed, sentAt }, inviter?.name ?? '', access);
+    // Who sent it again is its inviter now.
+    return toInvitationDto({ ...renewed, sentAt }, user.name, access);
   }
 
   async revoke(user: AuthenticatedUser, workspaceId: string, invitationId: string): Promise<void> {

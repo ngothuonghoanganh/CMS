@@ -13,7 +13,7 @@ import {
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
-import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { type UserContact, UsersRepository } from '../auth/users.repository.js';
@@ -170,6 +170,15 @@ export class AccessRequestsService {
     this.access.require(scope, 'accessRequests.decide');
     const request = await this.findPending(scope, requestId);
     const resolved = await this.grants.resolveGrant(scope, grant);
+    // Read before the decision is stored: a failure afterwards would answer 500 for a request
+    // already decided, which a retry then cannot find.
+    const [[contact], roles] = await Promise.all([
+      this.users.findContacts([request.userId]),
+      this.customRoles.mapForWorkspace(scope),
+    ]);
+    if (!contact) {
+      throw new Error(`Member ${request.userId.toHexString()} has no account`);
+    }
     const now = new Date();
     const updated = await this.transactions.run(async (tx) => {
       if (!(await this.requests.decide(scope, request._id, 'accepted', now, tx))) {
@@ -181,20 +190,14 @@ export class AccessRequestsService {
         // The requester left, or became Chủ sở hữu, meanwhile.
         throw notFound(MEMBER_NOT_FOUND);
       }
+      await this.grants.settle(scope, request.userId, resolved, tx);
       return membership;
     });
-    const [[contact], roles] = await Promise.all([
-      this.users.findContacts([request.userId]),
-      this.customRoles.mapForWorkspace(scope),
-    ]);
-    if (!contact) {
-      throw new Error(`Member ${request.userId.toHexString()} has no account`);
-    }
     const access = accessOf(updated, roles);
-    await this.notifyRequester(scope, contact, {
+    await this.notifyRequester(scope, request.userId, {
       accepted: true,
       roleLabel: accessLabel(access),
-      scope: await this.grants.scopeLine(scope, grant.siteIds),
+      siteIds: grant.siteIds,
     });
     return toMemberDto(updated, contact, access);
   }
@@ -206,10 +209,7 @@ export class AccessRequestsService {
     if (!(await this.requests.decide(scope, request._id, 'declined', new Date()))) {
       throw notFound(ACCESS_REQUEST_NOT_FOUND);
     }
-    const [contact] = await this.users.findContacts([request.userId]);
-    if (contact) {
-      await this.notifyRequester(scope, contact, { accepted: false, roleLabel: '', scope: '' });
-    }
+    await this.notifyRequester(scope, request.userId, { accepted: false });
   }
 
   private async findPending(scope: WorkspaceScope, requestId: string) {
@@ -236,61 +236,83 @@ export class AccessRequestsService {
   }
 
   /** Emails Chủ sở hữu; true when it went out. The request stays on "Thành viên" either way. */
-  private async notifyOwner(
+  private notifyOwner(
     scope: WorkspaceScope,
     request: AccessRequestRecord,
     requester: AuthenticatedUser,
   ): Promise<boolean> {
-    const [owner, workspace] = await Promise.all([
-      this.workspaces.findOwner(scope),
-      this.workspaces.findWorkspace(scope),
-    ]);
-    const [ownerContact] = owner ? await this.users.findContacts([owner.userId]) : [];
-    if (!ownerContact || !workspace) {
-      throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no owner to ask`);
-    }
-    const reviewUrl = `${this.env.ADMIN_ORIGIN}/workspaces/${scope.workspaceId.toHexString()}/members?request=${request._id.toHexString()}`;
-    return this.sendTo(scope, {
-      to: [ownerContact.email],
-      ...accessRequestEmail({
-        workspaceName: workspace.name,
-        requesterName: requester.name,
-        requesterEmail: requester.email,
-        currentRole: accessLabel(scope.access),
-        requestedRole: roleLabels[request.role],
-        scope: request.wholeWorkspace ? 'toàn workspace' : 'các site hiện tại',
-        note: request.note,
-        reviewUrl,
-      }),
+    return this.sendTo(scope, async () => {
+      const [owner, workspace] = await Promise.all([
+        this.workspaces.findOwner(scope),
+        this.workspaces.findWorkspace(scope),
+      ]);
+      const [ownerContact] = owner ? await this.users.findContacts([owner.userId]) : [];
+      if (!ownerContact || !workspace) {
+        throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no owner to ask`);
+      }
+      const reviewUrl = `${this.env.ADMIN_ORIGIN}/workspaces/${scope.workspaceId.toHexString()}/members?request=${request._id.toHexString()}`;
+      return {
+        to: [ownerContact.email],
+        ...accessRequestEmail({
+          workspaceName: workspace.name,
+          requesterName: requester.name,
+          requesterEmail: requester.email,
+          currentRole: accessLabel(scope.access),
+          requestedRole: roleLabels[request.role],
+          scope: request.wholeWorkspace ? 'toàn workspace' : 'các site hiện tại',
+          note: request.note,
+          reviewUrl,
+        }),
+      };
     });
   }
 
   private async notifyRequester(
     scope: WorkspaceScope,
-    requester: UserContact,
-    decision: { accepted: boolean; roleLabel: string; scope: string },
+    requesterId: ObjectId,
+    decision:
+      | { accepted: true; roleLabel: string; siteIds: readonly string[] | null }
+      | { accepted: false },
   ): Promise<void> {
-    const workspace = await this.workspaces.findWorkspace(scope);
-    await this.sendTo(scope, {
-      to: [requester.email],
-      ...accessDecisionEmail({
-        workspaceName: workspace?.name ?? '',
-        ...decision,
-        openUrl: `${this.env.ADMIN_ORIGIN}/`,
-      }),
+    await this.sendTo(scope, async () => {
+      const [[requester], workspace, scopeLine] = await Promise.all([
+        this.users.findContacts([requesterId]),
+        this.workspaces.findWorkspace(scope),
+        decision.accepted ? this.grants.scopeLine(scope, decision.siteIds) : '',
+      ]);
+      if (!requester) {
+        throw new Error(`Member ${requesterId.toHexString()} has no account`);
+      }
+      return {
+        to: [requester.email],
+        ...accessDecisionEmail({
+          workspaceName: workspace?.name ?? '',
+          accepted: decision.accepted,
+          roleLabel: decision.accepted ? decision.roleLabel : '',
+          scope: scopeLine,
+          openUrl: `${this.env.ADMIN_ORIGIN}/`,
+        }),
+      };
     });
   }
 
-  /** A failed email is logged, not raised: the decision or request is stored already. */
-  private async sendTo(scope: WorkspaceScope, message: EmailMessage): Promise<boolean> {
+  /**
+   * Builds the email and sends it. Reading what it needs is part of it: a failure is logged, not
+   * raised, since the decision or request is stored already.
+   */
+  private async sendTo(
+    scope: WorkspaceScope,
+    build: () => Promise<EmailMessage>,
+  ): Promise<boolean> {
     try {
-      await this.sender.send(message);
+      await this.sender.send(await build());
       return true;
     } catch (error) {
       this.logger.warn(
         {
           workspaceId: scope.workspaceId.toHexString(),
           code: error instanceof EmailSendError ? error.code : 'unknown',
+          err: error instanceof EmailSendError ? undefined : error,
         },
         'Access request email not sent',
       );

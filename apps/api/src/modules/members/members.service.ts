@@ -7,13 +7,14 @@ import {
   type TransferOwnershipRequest,
 } from '@plp/contracts';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
-import { toObjectId } from '../../shared/persistence/object-id.js';
+import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { AccessRequestsRepository } from '../workspaces/access-requests.repository.js';
 import { AccessService, WORKSPACE_NOT_FOUND } from '../workspaces/access.service.js';
 import { compareMembers } from '../workspaces/domain/member-rules.js';
+import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
@@ -22,6 +23,15 @@ import { MEMBER_NOT_FOUND, MemberGrants, toMemberDto } from './member-grants.js'
 
 const OWNER_PROTECTED = 'Không đổi được quyền của Chủ sở hữu';
 
+/** Nobody changes or removes themselves: leaving a workspace is not offered (ADR-021). */
+function refuseSelf(scope: WorkspaceScope, userId: ObjectId): void {
+  if (userId.equals(scope.userId)) {
+    throw new AppError(409, 'conflict', 'Không tự đổi quyền của mình được', {
+      detail: 'Nhờ Chủ sở hữu hoặc một Quản trị khác đổi quyền hoặc gỡ bạn khỏi workspace.',
+    });
+  }
+}
+
 /** The people of a workspace and their roles (boards 15, 16; ADR-020, ADR-021). */
 @Injectable()
 export class MembersService {
@@ -29,6 +39,7 @@ export class MembersService {
     private readonly access: AccessService,
     private readonly workspaces: WorkspacesRepository,
     private readonly requests: AccessRequestsRepository,
+    private readonly invitations: InvitationsRepository,
     private readonly users: UsersRepository,
     private readonly grants: MemberGrants,
     private readonly customRoles: CustomRolesRepository,
@@ -67,10 +78,15 @@ export class MembersService {
         detail: 'Chủ sở hữu chỉ đổi khi chuyển quyền sở hữu cho một Quản trị.',
       });
     }
+    refuseSelf(scope, id);
     const resolved = await this.grants.resolveGrant(scope, grant);
     const updated = await this.transactions.run(async (tx) => {
       await this.grants.holdGrant(scope, resolved, tx);
-      return this.workspaces.updateGrant(scope, id, resolved, tx);
+      const membership = await this.workspaces.updateGrant(scope, id, resolved, tx);
+      if (membership) {
+        await this.grants.settle(scope, id, resolved, tx);
+      }
+      return membership;
     });
     if (!updated) {
       throw notFound(MEMBER_NOT_FOUND);
@@ -78,7 +94,7 @@ export class MembersService {
     return this.dto(scope, updated);
   }
 
-  /** Removes a member and their pending access request; never Chủ sở hữu. */
+  /** Removes a member with their pending access request and invitations; never Chủ sở hữu. */
   async remove(user: AuthenticatedUser, workspaceId: string, userId: string): Promise<void> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'members.manage');
@@ -92,11 +108,13 @@ export class MembersService {
         detail: 'Workspace cần một Chủ sở hữu. Hãy chuyển quyền sở hữu cho một Quản trị trước.',
       });
     }
+    refuseSelf(scope, id);
     await this.transactions.run(async (tx) => {
       if (!(await this.workspaces.removeMember(scope, id, tx))) {
         throw notFound(MEMBER_NOT_FOUND);
       }
       await this.requests.deletePendingOf(scope, id, tx);
+      await this.invitations.revokeSentBy(scope, id, new Date(), tx);
     });
   }
 
@@ -136,6 +154,8 @@ export class MembersService {
           detail: 'Tải lại danh sách thành viên rồi thử lại.',
         });
       }
+      // Chủ sở hữu decides requests: one of their own could never be.
+      await this.requests.deletePendingOf(scope, to, tx);
     });
     return this.members(scope);
   }

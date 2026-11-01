@@ -321,12 +321,13 @@ export function DomainConnectScreen({
                   }
                 >
                   {box.body}
-                  {domain.checkedAt === null ? null : (
-                    <span className={styles.checked}>
-                      Kiểm tra lần cuối {formatRelativeTime(domain.checkedAt, now)}
-                    </span>
-                  )}
                 </Callout>
+              )}
+              {/* Outside the status above: the time changes every minute, which is not news. */}
+              {box === null || domain.checkedAt === null ? null : (
+                <p className={styles.checked}>
+                  Kiểm tra lần cuối {formatRelativeTime(domain.checkedAt, now)}
+                </p>
               )}
               {check.isError ? (
                 <Callout tone="danger" role="alert">

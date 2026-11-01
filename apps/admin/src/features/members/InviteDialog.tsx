@@ -87,7 +87,13 @@ export function InviteDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A running save cannot be dismissed half-way: its answer shows here.
+        if (!next && send.isPending) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       size="lg"
       title="Mời thành viên"
       description={`Mỗi người nhận một link riêng qua email, dùng được một lần trong ${INVITATION_VALID_DAYS} ngày.`}

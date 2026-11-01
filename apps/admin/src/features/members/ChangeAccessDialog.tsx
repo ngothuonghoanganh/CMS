@@ -133,7 +133,13 @@ export function ChangeAccessDialog({
     <>
       <Dialog
         open={open}
-        onOpenChange={onOpenChange}
+        onOpenChange={(next) => {
+          // A running save cannot be dismissed half-way: its answer shows here.
+          if (!next && busy) {
+            return;
+          }
+          onOpenChange(next);
+        }}
         size="lg"
         title={`Quyền của ${member.name}`}
         description={member.email}

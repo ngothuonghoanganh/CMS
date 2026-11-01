@@ -47,6 +47,8 @@ export interface PageTableProps {
   canEdit: boolean;
   /** The user takes pages off the live site: rows offer "Gỡ xuất bản". */
   canManageLive: boolean;
+  /** The user sees leads, and so "LEAD 7 NGÀY" (ADR-020). */
+  canViewLeads: boolean;
   /** Opens the unpublish dialog; focus returns to the row's menu button when it closes. */
   onUnpublish: (page: UnpublishablePage) => void;
 }
@@ -128,8 +130,11 @@ function RowActions({
 }
 
 /** "LEAD 7 NGÀY": a number for a live page or one with recent leads, "—" otherwise (board 01). */
-function leadsCell(page: PageListItem): string {
-  return page.leadsLast7Days > 0 || page.liveRelease !== null ? String(page.leadsLast7Days) : '—';
+function leadsCell({ leadsLast7Days: leads, liveRelease }: PageListItem): string {
+  if (leads === null) {
+    return '—';
+  }
+  return leads > 0 || liveRelease !== null ? String(leads) : '—';
 }
 
 /** The page list of screen 01: page, status, live version, checks, recent leads and actions. */
@@ -140,6 +145,7 @@ export function PageTable({
   thumbnailColor,
   canEdit,
   canManageLive,
+  canViewLeads,
   onUnpublish,
 }: PageTableProps) {
   return (
@@ -152,9 +158,11 @@ export function PageTable({
             PHIÊN BẢN LIVE
           </th>
           <th scope="col">KIỂM TRA</th>
-          <th scope="col" className={styles.leads}>
-            LEAD 7 NGÀY
-          </th>
+          {canViewLeads ? (
+            <th scope="col" className={styles.leads}>
+              LEAD 7 NGÀY
+            </th>
+          ) : null}
           <th scope="col">
             <VisuallyHidden>Thao tác</VisuallyHidden>
           </th>
@@ -218,7 +226,7 @@ export function PageTable({
                   {view.checks.label}
                 </span>
               </td>
-              <td className={styles.leads}>{leadsCell(page)}</td>
+              {canViewLeads ? <td className={styles.leads}>{leadsCell(page)}</td> : null}
               <td>
                 <RowActions
                   siteId={siteId}

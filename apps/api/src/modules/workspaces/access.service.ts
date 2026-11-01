@@ -26,9 +26,24 @@ export class AccessService {
     workspaceId: ObjectId,
     notFoundTitle?: string,
   ): Promise<WorkspaceScope> {
-    const membership = await this.workspaces.findMembership(workspaceId, user.id);
-    if (!membership) {
+    const member = await this.memberAccess(workspaceId, user.id);
+    if (!member) {
       throw notFound(notFoundTitle);
+    }
+    return { workspaceId, userId: user.id, ...member } as WorkspaceScope;
+  }
+
+  /**
+   * What a member may do now, for a job that acts for nobody (the domain monitor's emails); null
+   * when they are no longer a member.
+   */
+  async memberAccess(
+    workspaceId: ObjectId,
+    userId: ObjectId,
+  ): Promise<Pick<WorkspaceScope, 'access' | 'siteIds'> | null> {
+    const membership = await this.workspaces.findMembership(workspaceId, userId);
+    if (!membership) {
+      return null;
     }
     // A custom role is read on every request: a change to it applies at once (ADR-024).
     const custom =
@@ -36,11 +51,9 @@ export class AccessService {
         ? await this.customRoles.findOfMembership(workspaceId, membership.customRoleId)
         : null;
     return {
-      workspaceId,
-      userId: user.id,
       access: accessOf(membership, new Map(custom ? [[custom._id.toHexString(), custom]] : [])),
       siteIds: membership.siteIds ?? null,
-    } as WorkspaceScope;
+    };
   }
 
   /** Scope of a workspace from the URL; non-members get 404. */
@@ -49,7 +62,7 @@ export class AccessService {
   }
 
   /** Whether the member may open the site; a site outside their scope is answered as foreign. */
-  coversSite(scope: WorkspaceScope, siteId: ObjectId): boolean {
+  coversSite(scope: Pick<WorkspaceScope, 'siteIds'>, siteId: ObjectId): boolean {
     return scope.siteIds === null || scope.siteIds.some((id) => id.equals(siteId));
   }
 
