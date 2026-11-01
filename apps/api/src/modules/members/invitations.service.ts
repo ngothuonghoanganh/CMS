@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   type AcceptInvitationResponse,
+  type Access,
+  accessLabel,
   type CreateInvitationsResponse,
   INVITATION_PATH,
   INVITATION_VALID_DAYS,
@@ -9,7 +11,6 @@ import {
   type InvitationLookupResponse,
   type InvitationOutcome,
   MEMBERS_MAX,
-  roleLabels,
 } from '@plp/contracts';
 import type { z } from 'zod';
 import type { createInvitationsRequestSchema } from '@plp/contracts';
@@ -39,7 +40,9 @@ import type { InvitationRecord } from '../workspaces/invitation.schema.js';
 import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-join.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { storedGrant, WorkspacesRepository } from '../workspaces/workspaces.repository.js';
+import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
+import { accessOf } from '../workspaces/domain/member-access.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MemberGrants } from './member-grants.js';
 
 type CreateInvitationsValues = z.output<typeof createInvitationsRequestSchema>;
@@ -55,11 +58,15 @@ const INVITATIONS: QuotaUse = {
     }),
 };
 
-function toInvitationDto(invitation: InvitationRecord, inviterName: string): Invitation {
+function toInvitationDto(
+  invitation: InvitationRecord,
+  inviterName: string,
+  access: Access,
+): Invitation {
   return {
     id: invitation._id.toHexString(),
     email: invitation.email,
-    role: invitation.role,
+    role: access,
     siteIds: invitation.siteIds?.map((id) => id.toHexString()) ?? null,
     invitedBy: { id: invitation.invitedBy.toHexString(), name: inviterName },
     createdAt: invitation.createdAt.toISOString(),
@@ -84,6 +91,7 @@ export class InvitationsService {
     private readonly users: UsersRepository,
     private readonly sites: SitesRepository,
     private readonly grants: MemberGrants,
+    private readonly customRoles: CustomRolesRepository,
     private readonly join: WorkspaceJoin,
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
@@ -93,11 +101,18 @@ export class InvitationsService {
   async list(user: AuthenticatedUser, workspaceId: string): Promise<InvitationListResponse> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'members.manage');
-    const invitations = await this.invitations.listPending(scope);
+    const [invitations, roles] = await Promise.all([
+      this.invitations.listPending(scope),
+      this.customRoles.mapForWorkspace(scope),
+    ]);
     const inviters = await this.users.findRefs(invitations.map((item) => item.invitedBy));
     return {
       items: invitations.map((item) =>
-        toInvitationDto(item, inviters.get(item.invitedBy.toHexString())?.name ?? ''),
+        toInvitationDto(
+          item,
+          inviters.get(item.invitedBy.toHexString())?.name ?? '',
+          accessOf(item, roles),
+        ),
       ),
     };
   }
@@ -115,7 +130,8 @@ export class InvitationsService {
   ): Promise<CreateInvitationsResponse> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'members.manage');
-    await this.grants.assertOwnSites(scope, input);
+    const grant = await this.grants.resolveGrant(scope, input);
+    const roleLabel = accessLabel(accessOf(grant, await this.customRoles.mapForWorkspace(scope)));
     const emails = [...new Set(input.emails)];
     const outcomes = new Map<string, InvitationOutcome>();
     const members = new Set(
@@ -149,6 +165,7 @@ export class InvitationsService {
       // two batches at once cannot both fit under the limit (ADR-021).
       created = await this.transactions.run(async (tx) => {
         await this.workspaces.recordInvitations(scope, tx);
+        await this.grants.holdGrant(scope, grant, tx);
         const pending = await this.invitations.pendingEmails(scope, fresh, tx);
         const toInvite = fresh.filter((email) => !pending.has(email));
         const taken =
@@ -171,7 +188,7 @@ export class InvitationsService {
             _id: newObjectId(),
             workspaceId: scope.workspaceId,
             email,
-            ...storedGrant(input),
+            ...grant,
             tokenHash,
             expiresAt,
             invitedBy: scope.userId,
@@ -205,6 +222,7 @@ export class InvitationsService {
         workspaceName,
         invitedBy: user.name,
         scope: scopeLine,
+        roleLabel,
       });
       if (!sent) {
         await this.quota.giveBack(counted.get(invitation.email) ?? [], INVITATIONS);
@@ -238,6 +256,7 @@ export class InvitationsService {
       await this.quota.giveBack(hits, INVITATIONS);
       throw notFound(INVITATION_NOT_FOUND);
     }
+    const access = accessOf(renewed, await this.customRoles.mapForWorkspace(scope));
     const { sent, sentAt } = await this.send(scope, renewed, token, {
       workspaceName: (await this.workspaces.findWorkspace(scope))?.name ?? '',
       invitedBy: user.name,
@@ -245,6 +264,7 @@ export class InvitationsService {
         scope,
         renewed.siteIds?.map((siteId) => siteId.toHexString()) ?? null,
       ),
+      roleLabel: accessLabel(access),
     });
     if (!sent) {
       await this.quota.giveBack(hits, INVITATIONS);
@@ -252,7 +272,7 @@ export class InvitationsService {
     const inviter = (await this.users.findRefs([renewed.invitedBy])).get(
       renewed.invitedBy.toHexString(),
     );
-    return toInvitationDto({ ...renewed, sentAt }, inviter?.name ?? '');
+    return toInvitationDto({ ...renewed, sentAt }, inviter?.name ?? '', access);
   }
 
   async revoke(user: AuthenticatedUser, workspaceId: string, invitationId: string): Promise<void> {
@@ -267,13 +287,16 @@ export class InvitationsService {
   /** What the invitation page shows to whoever holds the link; no session (board 15b). */
   async lookup(token: string): Promise<InvitationLookupResponse> {
     const invitation = await this.byToken(token);
-    const [workspace, inviter, account, siteNames] = await Promise.all([
+    const [workspace, inviter, account, siteNames, custom] = await Promise.all([
       this.workspaces.findWorkspaceForInvitation(invitation.workspaceId),
       this.users.findRefs([invitation.invitedBy]),
       this.users.findContactsByEmail([invitation.email]),
       invitation.siteIds === null
         ? null
         : this.sites.findNamesForInvitation(invitation.workspaceId, invitation.siteIds),
+      invitation.customRoleId
+        ? this.customRoles.findOfMembership(invitation.workspaceId, invitation.customRoleId)
+        : null,
     ]);
     if (!workspace) {
       throw notFound(LINK_INVALID);
@@ -283,7 +306,7 @@ export class InvitationsService {
       workspaceName: workspace.name,
       invitedByName: inviter.get(invitation.invitedBy.toHexString())?.name ?? '',
       email: invitation.email,
-      role: invitation.role,
+      role: accessOf(invitation, new Map(custom ? [[custom._id.toHexString(), custom]] : [])),
       siteNames,
       expiresAt: invitation.expiresAt.toISOString(),
       accountExists: account.length > 0,
@@ -333,13 +356,12 @@ export class InvitationsService {
   /** Emails the link; `sent` when it went out. A failure keeps the invitation, unsent. */
   private async send(
     scope: WorkspaceScope,
-    invitation: Pick<InvitationRecord, '_id' | 'email' | 'role' | 'tokenHash'>,
+    invitation: Pick<InvitationRecord, '_id' | 'email' | 'tokenHash'>,
     token: string,
-    context: { workspaceName: string; invitedBy: string; scope: string },
+    context: { workspaceName: string; invitedBy: string; scope: string; roleLabel: string },
   ): Promise<{ sent: boolean; sentAt: Date | null }> {
     const email = memberInvitationEmail({
       ...context,
-      roleLabel: roleLabels[invitation.role],
       acceptUrl: `${this.env.ADMIN_ORIGIN}${INVITATION_PATH}#token=${token}`,
       validDays: INVITATION_VALID_DAYS,
     });

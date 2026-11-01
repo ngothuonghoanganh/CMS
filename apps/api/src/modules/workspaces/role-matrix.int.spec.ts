@@ -1,5 +1,8 @@
 import {
   approvalResponseSchema,
+  can,
+  customRolePermissions,
+  customRoleSchema,
   leadRecipientListResponseSchema,
   meResponseSchema,
   type MeResponse,
@@ -65,6 +68,8 @@ interface Fixture {
   requestId: string;
   /** The Cộng tác viên's pending request to publish the page (ADR-023). */
   approvalId: string;
+  /** A custom role nobody holds (ADR-024). */
+  customRoleId: string;
 }
 
 interface Row {
@@ -80,6 +85,21 @@ interface Row {
 }
 
 const DAY_MS = 86_400_000;
+
+/** The custom role of the matrix: edits, asks to publish and sees leads (ADR-024). */
+const CUSTOM_ROLE = {
+  name: 'Trưởng nhóm nội dung',
+  basedOn: 'editor',
+  permissions: ['pages.edit', 'pages.requestPublish', 'leads.view'],
+  wholeWorkspace: false,
+} as const;
+
+/** What a holder of `CUSTOM_ROLE` may do. */
+const CUSTOM_ACCESS = {
+  customRoleId: '64b0000000000000000000d1',
+  name: CUSTOM_ROLE.name,
+  permissions: customRolePermissions([...CUSTOM_ROLE.permissions]),
+};
 
 /**
  * Every endpoint behind a session, for each of the six roles: who may do it follows board 16,
@@ -185,6 +205,44 @@ const ROWS: Row[] = [
       }),
   },
   // Custom domains (board 13, ADR-022)
+  // Custom roles (board 16, ADR-024)
+  {
+    action: 'Xem vai trò tùy chỉnh',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/custom-roles`),
+  },
+  {
+    action: 'Tạo vai trò tùy chỉnh',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 201,
+    call: (client, { workspaceId }) =>
+      client.post(`/workspaces/${workspaceId}/custom-roles`, {
+        ...CUSTOM_ROLE,
+        name: 'Biên tập lead',
+      }),
+  },
+  {
+    action: 'Sửa vai trò tùy chỉnh',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, customRoleId }) =>
+      client.patch(`/workspaces/${workspaceId}/custom-roles/${customRoleId}`, {
+        ...CUSTOM_ROLE,
+        name: 'Biên tập trang ưu đãi',
+      }),
+  },
+  {
+    action: 'Xóa vai trò tùy chỉnh',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 204,
+    call: (client, { workspaceId, customRoleId }) =>
+      client.delete(`/workspaces/${workspaceId}/custom-roles/${customRoleId}`),
+  },
   {
     action: 'Xem tên miền',
     permission: 'domains.manage',
@@ -631,6 +689,8 @@ describe('the six roles on every endpoint', () => {
   let members: Map<MemberRole, { client: TestClient; me: MeResponse }>;
   /** A Biên tập kept to another site of the fixture's workspace. */
   let elsewhere: { client: TestClient; me: MeResponse };
+  /** A holder of `CUSTOM_ROLE` in each fixture's workspace. */
+  let customHolder: { client: TestClient; me: MeResponse };
 
   beforeAll(async () => {
     t = await createTestApp('plp_test_role_matrix', {
@@ -643,6 +703,7 @@ describe('the six roles on every endpoint', () => {
       ),
     );
     elsewhere = await signedUpClient(t.app);
+    customHolder = await signedUpClient(t.app);
   });
 
   afterAll(async () => {
@@ -699,6 +760,24 @@ describe('the six roles on every endpoint', () => {
       ).body,
     );
     const asset = await uploadImage(owner, site.id);
+    const held = customRoleSchema.parse(
+      (await owner.post(`/workspaces/${workspaceId}/custom-roles`, CUSTOM_ROLE).expect(201)).body,
+    );
+    await t.connection.collection('memberships').insertOne({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(customHolder.me.user.id),
+      role: 'custom',
+      customRoleId: new Types.ObjectId(held.id),
+      siteIds: null,
+      createdAt: new Date(),
+    });
+    const unheld = customRoleSchema.parse(
+      (
+        await owner
+          .post(`/workspaces/${workspaceId}/custom-roles`, { ...CUSTOM_ROLE, name: 'Chưa giao' })
+          .expect(201)
+      ).body,
+    );
     const asked = approvalResponseSchema.parse(
       (
         await memberOf('contributor')
@@ -760,6 +839,7 @@ describe('the six roles on every endpoint', () => {
       pendingRecipientId: pending?.id ?? '',
       requestId: (request.body as { id: string }).id,
       approvalId: asked.page.approval?.id ?? '',
+      customRoleId: unheld.id,
     };
   }
 
@@ -799,16 +879,16 @@ describe('the six roles on every endpoint', () => {
         .find({ workspaceId: new Types.ObjectId(workspaceId) })
         .sort({ _id: 1 })
         .toArray();
-    const [activity, limits, memberships, invitations, accessRequests, domains] = await Promise.all(
-      [
+    const [activity, limits, memberships, invitations, accessRequests, domains, customRoles] =
+      await Promise.all([
         t.connection.collection('activity').countDocuments({ siteId }),
         t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
         ofWorkspace('memberships'),
         ofWorkspace('invitations'),
         ofWorkspace('access_requests'),
         collection('domains'),
-      ],
-    );
+        ofWorkspace('custom_roles'),
+      ]);
     return JSON.stringify({
       siteRecord,
       sites,
@@ -826,6 +906,7 @@ describe('the six roles on every endpoint', () => {
       invitations,
       accessRequests,
       domains,
+      customRoles,
     });
   }
 
@@ -854,9 +935,22 @@ describe('the six roles on every endpoint', () => {
       expect(await stateOf(target)).toBe(before);
     }
 
+    // A custom role is refused exactly what it does not hold (ADR-024).
+    const allowed = can(CUSTOM_ACCESS, row.permission);
+    if (!allowed) {
+      expect((await row.call(customHolder.client, target)).status, 'custom role').toBe(403);
+      expect(await stateOf(target)).toBe(before);
+    }
+
     // The least powerful role that holds the permission gets the action done.
     const weakest = holders.at(-1) ?? 'owner';
     expect((await row.call(clientOf(weakest, target), target)).status).toBe(row.status);
+
+    // And it is never refused what it holds. The fixture may have moved on, so the status may be
+    // the action's own (a 404 for a request of someone else's), never a 403.
+    if (allowed) {
+      expect((await row.call(customHolder.client, target)).status, 'custom role').not.toBe(403);
+    }
   });
 });
 

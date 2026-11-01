@@ -3,6 +3,8 @@ import { can, onlyHoldersMessage, type Permission } from '@plp/contracts';
 import { forbidden, notFound } from '../../shared/errors.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { CustomRolesRepository } from './custom-roles.repository.js';
+import { accessOf } from './domain/member-access.js';
 import type { WorkspaceScope } from './workspace-scope.js';
 import { WorkspacesRepository } from './workspaces.repository.js';
 
@@ -10,7 +12,10 @@ export const WORKSPACE_NOT_FOUND = 'Không tìm thấy workspace';
 
 @Injectable()
 export class AccessService {
-  constructor(private readonly workspaces: WorkspacesRepository) {}
+  constructor(
+    private readonly workspaces: WorkspacesRepository,
+    private readonly customRoles: CustomRolesRepository,
+  ) {}
 
   /**
    * Scope for a workspace the user belongs to. Non-members get 404, the same answer as a missing
@@ -25,10 +30,15 @@ export class AccessService {
     if (!membership) {
       throw notFound(notFoundTitle);
     }
+    // A custom role is read on every request: a change to it applies at once (ADR-024).
+    const custom =
+      membership.role === 'custom' && membership.customRoleId
+        ? await this.customRoles.findOfMembership(workspaceId, membership.customRoleId)
+        : null;
     return {
       workspaceId,
       userId: user.id,
-      role: membership.role,
+      access: accessOf(membership, new Map(custom ? [[custom._id.toHexString(), custom]] : [])),
       siteIds: membership.siteIds ?? null,
     } as WorkspaceScope;
   }
@@ -45,7 +55,7 @@ export class AccessService {
 
   /** Refuses with 403 when the member's role does not hold the permission (ADR-020). */
   require(scope: WorkspaceScope, permission: Permission): void {
-    if (!can(scope.role, permission)) {
+    if (!can(scope.access, permission)) {
       throw forbidden(onlyHoldersMessage(permission));
     }
   }

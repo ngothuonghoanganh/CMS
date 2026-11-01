@@ -33,14 +33,14 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 
 **Phase 1 — Vận hành & đội nhóm** (ARCHITECTURE §5, ADR-020):
 
-| #   | Board                         | File                    | Lát                                                     |
-| --- | ----------------------------- | ----------------------- | ------------------------------------------------------- |
-| 13  | Quản lý tên miền              | `Domains.dc.html`       | C3                                                      |
-| 14  | Kết nối & xác minh tên miền   | `DomainConnect.dc.html` | C3                                                      |
-| 15  | Thành viên workspace          | `Members.dc.html`       | C2                                                      |
-| 15b | Nhận lời mời (mobile)         | `InviteAccept.dc.html`  | C2                                                      |
-| 16  | Vai trò & phân quyền          | `Roles.dc.html`         | C1 (ma trận và trạng thái bị từ chối), C4 (ô "Yêu cầu") |
-| —   | Sidebar v2 (workspace + site) | `SidebarV2.dc.html`     | C1                                                      |
+| #   | Board                         | File                    | Lát                                                                             |
+| --- | ----------------------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| 13  | Quản lý tên miền              | `Domains.dc.html`       | C3                                                                              |
+| 14  | Kết nối & xác minh tên miền   | `DomainConnect.dc.html` | C3                                                                              |
+| 15  | Thành viên workspace          | `Members.dc.html`       | C2                                                                              |
+| 15b | Nhận lời mời (mobile)         | `InviteAccept.dc.html`  | C2                                                                              |
+| 16  | Vai trò & phân quyền          | `Roles.dc.html`         | C1 (ma trận và trạng thái bị từ chối), C4 (ô "Yêu cầu"), C5 (vai trò tùy chỉnh) |
+| —   | Sidebar v2 (workspace + site) | `SidebarV2.dc.html`     | C1                                                                              |
 
 ## Giả định thiết kế (từ `canvas.json`)
 

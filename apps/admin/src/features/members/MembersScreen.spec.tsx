@@ -106,6 +106,7 @@ function renderScreen(overrides: Partial<MembersScreenProps> = {}) {
       workspace={{ id: WORKSPACE_ID, name: 'Mây Xanh Agency' }}
       viewer={{ userId: owner.userId, role: 'owner' }}
       sites={[smile, kitchen]}
+      initialCustomRoles={[]}
       initialMembers={members}
       initialInvitations={{ items: [invitation] }}
       initialRequests={{ items: [request] }}
@@ -169,6 +170,31 @@ describe('MembersScreen', () => {
     expect(within(dialog).getByLabelText('Vai trò')).toHaveValue('editor');
   });
 
+  it('asks for a role, never shows another, when the member’s role is not in the list', async () => {
+    const user = userEvent.setup();
+    const holder = member({
+      userId: '64b0000000000000000000c9',
+      name: 'Bảo Ngọc',
+      email: 'bao.ngoc@mayxanh.vn',
+      role: { customRoleId: '64b0000000000000000000d9', name: 'Vai trò đã xóa', permissions: [] },
+      siteIds: [smile.id],
+    });
+    const withHolder = { items: [...members.items, holder] };
+    apiMock.mockImplementation((endpoint) =>
+      Promise.resolve(endpoint === endpoints.listMembers ? withHolder : { items: [] }),
+    );
+    renderScreen({ initialMembers: withHolder });
+    await user.click(screen.getByRole('button', { name: 'Đổi quyền của Bảo Ngọc' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Vai trò')).toHaveValue('');
+    expect(dialog).toHaveTextContent(
+      'Vai trò đã xóa không còn trong danh sách vai trò. Chọn một vai trò để lưu.',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Lưu quyền' })).toBeDisabled();
+    await user.selectOptions(within(dialog).getByLabelText('Vai trò'), 'viewer');
+    expect(within(dialog).getByRole('button', { name: 'Lưu quyền' })).toBeEnabled();
+  });
+
   it('filters by role, site and name', async () => {
     const user = userEvent.setup();
     renderScreen();
@@ -227,6 +253,82 @@ describe('MembersScreen', () => {
       options: { body: { emails: ['thuy@smilecare.vn'], role: 'support', siteIds: [smile.id] } },
     });
     expect(await screen.findByText('Đã gửi 1 lời mời')).toBeInTheDocument();
+  });
+
+  it('invites with a custom role, given on every site when set to it (ADR-024)', async () => {
+    const user = userEvent.setup();
+    const everywhere = {
+      id: '64b0000000000000000000d2',
+      name: 'Biên tập toàn bộ',
+      basedOn: 'editor' as const,
+      permissions: ['pages.edit' as const, 'pages.publish' as const],
+      wholeWorkspace: true,
+      memberCount: 0,
+      invitationCount: 0,
+      createdAt: '2026-11-01T03:00:00.000Z',
+      updatedAt: '2026-11-01T03:00:00.000Z',
+    };
+    renderScreen({ initialCustomRoles: [everywhere] });
+    await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mời thành viên' });
+    await user.type(within(dialog).getByLabelText('Email'), 'thuy@smilecare.vn');
+    await user.click(within(dialog).getByRole('radio', { name: /Biên tập toàn bộ/ }));
+    expect(dialog).toHaveTextContent('Biên tập toàn bộ làm việc trên mọi site của workspace.');
+    expect(within(dialog).queryByRole('checkbox', { name: 'Nha khoa Smile Care' })).toBeNull();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.createInvitations
+        ? Promise.resolve({ results: [{ email: 'thuy@smilecare.vn', outcome: 'sent' }] })
+        : Promise.resolve(endpoint === endpoints.listMembers ? members : { items: [] }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Gửi 1 lời mời' }));
+    expect(lastCallTo(apiMock, endpoints.createInvitations)).toEqual({
+      args: [WORKSPACE_ID],
+      options: {
+        body: {
+          emails: ['thuy@smilecare.vn'],
+          role: `custom:${everywhere.id}`,
+          siteIds: null,
+        },
+      },
+    });
+  });
+
+  it('does not invite with a custom role deleted while the dialog was open', async () => {
+    const user = userEvent.setup();
+    const role = {
+      id: '64b0000000000000000000d3',
+      name: 'Trưởng nhóm',
+      basedOn: 'editor' as const,
+      permissions: ['pages.edit' as const],
+      wholeWorkspace: false,
+      memberCount: 0,
+      invitationCount: 0,
+      createdAt: '2026-11-01T03:00:00.000Z',
+      updatedAt: '2026-11-01T03:00:00.000Z',
+    };
+    let roles = { items: [role] };
+    apiMock.mockImplementation((endpoint) =>
+      Promise.resolve(
+        endpoint === endpoints.listMembers
+          ? members
+          : endpoint === endpoints.listCustomRoles
+            ? roles
+            : { items: [] },
+      ),
+    );
+    const { queryClient } = renderScreen({ initialCustomRoles: [role] });
+    await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mời thành viên' });
+    await user.click(within(dialog).getByRole('radio', { name: /Trưởng nhóm/ }));
+    // Deleted in another tab; the list is read again.
+    roles = { items: [] };
+    await queryClient.invalidateQueries();
+    expect(
+      await within(dialog).findByText(
+        'Vai trò đã chọn không còn trong workspace. Chọn một vai trò khác.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /^Gửi \d+ lời mời$/ })).toBeDisabled();
   });
 
   it('shows the invitations with how long they still work, and no requests to a Quản trị', async () => {

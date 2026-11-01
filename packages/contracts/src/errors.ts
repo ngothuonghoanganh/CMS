@@ -25,6 +25,8 @@ export const errorCodes = [
   'access_request_pending',
   'approval_pending',
   'approval_changed',
+  'custom_role_limit_reached',
+  'custom_role_in_use',
   'domain_exists',
   'domain_limit_reached',
   'rate_limited',

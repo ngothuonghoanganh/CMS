@@ -15,7 +15,16 @@ export async function generateMetadata({ params }: RolesPageProps): Promise<Meta
   return { title: `Vai trò & quyền — ${membership.workspace.name}` };
 }
 
-/** Board 16: what each of the six roles may do, and how many members hold each. */
+/** Members per role and the custom roles, and when they were read. */
+async function loadRoles(workspaceId: string) {
+  const [{ counts }, { items }] = await Promise.all([
+    serverApi(endpoints.roleCounts, [workspaceId]),
+    serverApi(endpoints.listCustomRoles, [workspaceId]),
+  ]);
+  return { counts, customRoles: items, loadedAt: Date.now() };
+}
+
+/** Board 16: what each role may do, how many members hold each, and the custom roles (ADR-024). */
 export default async function RolesPage({ params }: RolesPageProps) {
   const { workspaceId } = await params;
   const { membership, site } = await loadWorkspaceContext(workspaceId);
@@ -34,6 +43,14 @@ export default async function RolesPage({ params }: RolesPageProps) {
       />
     );
   }
-  const { counts } = await serverApi(endpoints.roleCounts, [workspaceId]);
-  return <RolesScreen workspaceName={membership.workspace.name} counts={counts} />;
+  const { counts, customRoles, loadedAt } = await loadRoles(workspaceId);
+  return (
+    <RolesScreen
+      workspaceId={workspaceId}
+      workspaceName={membership.workspace.name}
+      counts={counts}
+      initialCustomRoles={customRoles}
+      loadedAt={loadedAt}
+    />
+  );
 }

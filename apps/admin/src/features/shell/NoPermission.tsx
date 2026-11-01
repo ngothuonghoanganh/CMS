@@ -1,4 +1,4 @@
-import { can, type Membership, roleLabels } from '@plp/contracts';
+import { can, type Membership, accessLabel } from '@plp/contracts';
 import { ButtonLink, LockIcon } from '@plp/ui';
 import Link from 'next/link';
 import { RequestAccessButton } from './RequestAccessButton';
@@ -35,7 +35,7 @@ export function NoPermission({
       </span>
       <h1 className={styles.title}>{title}</h1>
       <p className={styles.description}>
-        Vai trò của bạn là <strong>{roleLabels[membership.role]}</strong>
+        Vai trò của bạn là <strong>{accessLabel(membership.role)}</strong>
         {sites}. {holders}
       </p>
       <div className={styles.actions}>

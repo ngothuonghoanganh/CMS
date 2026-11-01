@@ -10,7 +10,6 @@ import {
   type PageDetailResponse,
   type PageSummary,
   type PublicLeadCapture,
-  type Role,
   type SaveDraftResponse,
   type SectionInstance,
   type SectionType,
@@ -20,6 +19,7 @@ import {
   slugSchema,
   type SpacingPreset,
   spacingPresets,
+  type Access,
 } from '@plp/contracts';
 import {
   canMoveSection,
@@ -80,7 +80,7 @@ export interface EditorInit {
   detail: PageDetailResponse;
   site: Site;
   assets: readonly Asset[];
-  role: Role;
+  role: Access;
   /** Consent texts of the site's current settings, drawn in a lead form (ADR-017). */
   leadCapture: PublicLeadCapture | null;
   /** Section id generator; defaults to 12 lowercase alphanumerics from `crypto.randomUUID()`. */
@@ -109,7 +109,7 @@ export interface EditorState {
   checks: ChecksResult;
   site: Site;
   assetsById: Readonly<Record<string, Asset>>;
-  role: Role;
+  role: Access;
   leadCapture: PublicLeadCapture | null;
   /** Local counter of draft changes. Everything is saved when it equals `savedVersion`. */
   draftVersion: number;

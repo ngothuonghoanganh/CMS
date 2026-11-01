@@ -7,7 +7,8 @@ import {
   assetSchema,
   updateAssetRequestSchema,
 } from './asset.js';
-import { loginRequestSchema, meResponseSchema, signupRequestSchema } from './auth.js';
+import { loginRequestSchema, signupRequestSchema } from './auth.js';
+import { meResponseSchema } from './membership.js';
 import {
   acceptInvitationResponseSchema,
   accessGrantSchema,
@@ -26,6 +27,11 @@ import {
   transferOwnershipRequestSchema,
 } from './members.js';
 import { roleCountsSchema } from './permissions.js';
+import {
+  customRoleInputSchema,
+  customRoleListResponseSchema,
+  customRoleSchema,
+} from './custom-roles.js';
 import { checksResultSchema } from './checks.js';
 import { cursorQuerySchema } from './common.js';
 import {
@@ -186,6 +192,38 @@ export const endpoints = {
   }),
 
   // Workspace roles (ADR-020)
+  /** Custom roles of the workspace with who holds them (board 16, ADR-024). */
+  listCustomRoles: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/custom-roles`,
+    request: null,
+    query: null,
+    response: customRoleListResponseSchema,
+  }),
+  createCustomRole: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/custom-roles`,
+    request: customRoleInputSchema,
+    query: null,
+    response: customRoleSchema,
+  }),
+  updateCustomRole: endpoint({
+    method: 'PATCH',
+    path: (workspaceId: string, roleId: string) =>
+      `/workspaces/${e(workspaceId)}/custom-roles/${e(roleId)}`,
+    request: customRoleInputSchema,
+    query: null,
+    response: customRoleSchema,
+  }),
+  /** Only while nobody holds it and no pending invitation offers it. */
+  deleteCustomRole: endpoint({
+    method: 'DELETE',
+    path: (workspaceId: string, roleId: string) =>
+      `/workspaces/${e(workspaceId)}/custom-roles/${e(roleId)}`,
+    request: null,
+    query: null,
+    response: null,
+  }),
   roleCounts: endpoint({
     method: 'GET',
     path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/role-counts`,

@@ -3,11 +3,13 @@
 import {
   type AccessGrant,
   type AccessRequest,
-  type AssignableRole,
   endpoints,
   type Member,
   roleLabels,
   type Site,
+  accessLabel,
+  type CustomRole,
+  type RoleChoice,
 } from '@plp/contracts';
 import {
   Button,
@@ -24,7 +26,7 @@ import { type SubmitEvent, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { assignableRoles, permissionSummary, siteChange } from './member-presentation';
+import { permissionSummary, roleChoiceOf, roleOptions, siteChange } from './member-presentation';
 import styles from './Members.module.css';
 
 export interface ChangeAccessDialogProps {
@@ -32,6 +34,8 @@ export interface ChangeAccessDialogProps {
   member: Member;
   /** Sites of the workspace. */
   sites: readonly Site[];
+  /** The workspace's custom roles, offered with the system ones (ADR-024). */
+  customRoles: readonly CustomRole[];
   /** A request being decided: the dialog starts from it and saving accepts it (ADR-021). */
   request: AccessRequest | null;
   open: boolean;
@@ -45,12 +49,9 @@ export interface ChangeAccessDialogProps {
 
 type Scope = 'all' | 'sites';
 
-function initialRole(member: Member, request: AccessRequest | null): AssignableRole {
-  if (request !== null) {
-    return request.role;
-  }
+function initialRole(member: Member, request: AccessRequest | null): RoleChoice {
   // Chủ sở hữu never opens this dialog.
-  return member.role === 'owner' ? 'admin' : member.role;
+  return request !== null ? request.role : roleChoiceOf(member.role);
 }
 
 /**
@@ -61,6 +62,7 @@ export function ChangeAccessDialog({
   workspaceId,
   member,
   sites,
+  customRoles,
   request,
   open,
   onOpenChange,
@@ -68,16 +70,20 @@ export function ChangeAccessDialog({
   onRemoved,
   onDeclined,
 }: ChangeAccessDialogProps) {
-  const [role, setRole] = useState<AssignableRole>(() => initialRole(member, request));
+  const [role, setRole] = useState<RoleChoice>(() => initialRole(member, request));
+  const options = roleOptions(customRoles);
+  // The member's role may be missing from the list (deleted, or not loaded yet): the dialog
+  // then asks for a choice rather than show another role in its place.
+  const option = options.find((item) => item.value === role) ?? null;
   const [scope, setScope] = useState<Scope>(() =>
     member.siteIds === null || request?.wholeWorkspace === true ? 'all' : 'sites',
   );
   const [chosen, setChosen] = useState<string[]>(() => member.siteIds ?? []);
   const [sitesError, setSitesError] = useState<string | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
-  const wholeWorkspace = role === 'admin' || scope === 'all';
+  const wholeWorkspace = option?.wholeWorkspace === true || scope === 'all';
   const grant: AccessGrant = { role, siteIds: wholeWorkspace ? null : chosen };
-  const summary = permissionSummary(role);
+  const summary = option === null ? null : permissionSummary(option.access);
 
   const save = useMutation({
     mutationFn: (body: AccessGrant) =>
@@ -109,6 +115,9 @@ export function ChangeAccessDialog({
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (option === null) {
+      return;
+    }
     if (!wholeWorkspace && chosen.length === 0) {
       setSitesError('Chọn ít nhất một site');
       return;
@@ -165,7 +174,12 @@ export function ChangeAccessDialog({
             >
               Hủy
             </Button>
-            <Button type="submit" form="change-access" loading={save.isPending} disabled={busy}>
+            <Button
+              type="submit"
+              form="change-access"
+              loading={save.isPending}
+              disabled={busy || option === null}
+            >
               {request === null ? 'Lưu quyền' : 'Chấp nhận và lưu quyền'}
             </Button>
           </>
@@ -174,7 +188,7 @@ export function ChangeAccessDialog({
         <form id="change-access" className={styles.form} onSubmit={submit} noValidate>
           {request === null ? null : (
             <Callout tone="info" title="Yêu cầu đổi quyền">
-              {member.name} đang là {roleLabels[request.current.role]} và xin làm{' '}
+              {member.name} đang là {accessLabel(request.current.role)} và xin làm{' '}
               {roleLabels[request.role]}
               {request.wholeWorkspace ? ' trên toàn workspace' : ''}, gửi lúc{' '}
               {formatDateTime(request.createdAt)}.
@@ -184,23 +198,33 @@ export function ChangeAccessDialog({
           )}
           <Field label="Vai trò" id="change-access-role">
             <Select
-              value={role}
+              value={option === null ? '' : role}
               onChange={(event) => {
-                const next = assignableRoles.find((option) => option.value === event.target.value);
+                const next = options.find((item) => item.value === event.target.value);
                 if (next !== undefined) {
                   setRole(next.value);
                 }
               }}
             >
-              {assignableRoles.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {option === null ? (
+                <option value="" disabled>
+                  Chọn vai trò
+                </option>
+              ) : null}
+              {options.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </Select>
           </Field>
-          {role === 'admin' ? (
-            <p className={styles.hint}>Quản trị làm việc trên mọi site của workspace.</p>
+          {option === null ? (
+            <Callout tone="warning" role="status">
+              {accessLabel(member.role)} không còn trong danh sách vai trò. Chọn một vai trò để lưu.
+            </Callout>
+          ) : null}
+          {option?.wholeWorkspace === true ? (
+            <p className={styles.hint}>{option.label} làm việc trên mọi site của workspace.</p>
           ) : (
             <SiteScopeFields
               name="change-access-scope"
@@ -213,7 +237,9 @@ export function ChangeAccessDialog({
               onChosen={setChosen}
             />
           )}
-          <PermissionSummary roleLabel={roleLabels[role]} summary={summary} />
+          {option === null || summary === null ? null : (
+            <PermissionSummary roleLabel={option.label} summary={summary} />
+          )}
           {failure !== null ? (
             <Callout tone="danger" role="alert">
               {problemMessage(failure)}

@@ -13,6 +13,8 @@ import {
 import type { PageRecord } from '../pages/page.schema.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
+import { accessOf } from '../workspaces/domain/member-access.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { ApprovalRecord } from './approval.schema.js';
 
@@ -29,6 +31,7 @@ export class ApprovalNotifier {
     private readonly sender: EmailSender,
     private readonly users: UsersRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly customRoles: CustomRolesRepository,
   ) {}
 
   /** One email to every member who may decide on the site's pages; true when it went out. */
@@ -41,11 +44,15 @@ export class ApprovalNotifier {
     resent: boolean,
   ): Promise<boolean> {
     return this.send(scope, approval, async () => {
-      const approvers = (await this.workspaces.listMembers(scope)).filter((member) => {
+      const [members, roles] = await Promise.all([
+        this.workspaces.listMembers(scope),
+        this.customRoles.mapForWorkspace(scope),
+      ]);
+      const approvers = members.filter((member) => {
         // A membership without `siteIds` covers the whole workspace (ADR-020).
         const siteIds = member.siteIds ?? null;
         return (
-          can(member.role, 'publishApprovals.decide') &&
+          can(accessOf(member, roles), 'publishApprovals.decide') &&
           (siteIds === null || siteIds.some((id) => id.equals(site._id)))
         );
       });

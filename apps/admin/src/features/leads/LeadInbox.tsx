@@ -13,8 +13,8 @@ import {
   leadStatuses,
   leadStatusLabels,
   leadStatusSchema,
-  type Role,
   type Site,
+  type Access,
 } from '@plp/contracts';
 import {
   Button,
@@ -82,7 +82,7 @@ export interface LeadInboxProps {
    * The user's role: exporting leads, changing where they go and a person's data each need their
    * permission (ADR-017, ADR-020).
    */
-  role: Role;
+  role: Access;
   /** Filters and lead read from the URL by the server, and what it loaded for them. */
   initialFilters: LeadInboxFilters;
   initialLeadId: string | null;

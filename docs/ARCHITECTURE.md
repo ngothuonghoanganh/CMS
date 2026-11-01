@@ -1410,6 +1410,61 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - ma trận quyền.
   - E2E: Cộng tác viên được mời qua Mailpit và gửi yêu cầu. Chủ sở hữu nhận email, duyệt và xuất bản; Cộng tác viên nhận email. Thêm một lần từ chối kèm lý do.
 
+### ADR-024 — Vai trò tùy chỉnh
+
+- **Date:** 2026-11-01 · **Status:** Accepted
+- **Context:**
+  - Lát C5 của Phase 1 (màn 16, trạng thái "Vai trò tùy chỉnh": nhân bản từ vai trò có sẵn rồi bật/tắt quyền; màn 15 khi mời và đổi quyền).
+  - Chủ sản phẩm chốt ngày 2026-11-01 (ADR-020, phần sửa đổi): làm vai trò tùy chỉnh.
+- **Decision:**
+  - **Vai trò tùy chỉnh** (collection `custom_roles`):
+    - `{ workspaceId, name, basedOn, permissions, wholeWorkspace, createdBy, createdAt, updatedAt }`.
+    - `name`: 1–40 ký tự, chuẩn hóa Unicode NFC, không trùng trong workspace (không phân biệt hoa thường) và không trùng tên vai trò hệ thống. Mỗi workspace tối đa 10 vai trò tùy chỉnh.
+    - `basedOn`: vai trò hệ thống đã dùng làm điểm bắt đầu ("Bắt đầu từ"). Chỉ để so sánh "Thêm"/"Bỏ" trên màn 16; quyền thật là `permissions`.
+    - `wholeWorkspace`: "Phạm vi khi giao vai trò này". `true` thì người được giao luôn có toàn workspace, như Quản trị. `false` thì người giao chọn phạm vi lúc giao, như các vai trò khác.
+  - **Quyền chọn được** (các dòng của editor trên board):
+    - `pages.edit`, `pages.publish` hoặc `pages.requestPublish` ("Yêu cầu"), `pages.manageLive`, `publishApprovals.decide`, `leads.view`, `leads.handle`, `leads.export`, `personalData.manage`.
+    - `pages.view` luôn có.
+    - Không chọn được quyền quản trị site và workspace: `sites.manage`, `domains.manage`, `privacy.manage`, `members.manage`, `accessRequests.decide`, `workspace.transferOwnership`. Những quyền này vẫn chỉ của Chủ sở hữu và Quản trị, nên một vai trò tùy chỉnh không thể tự nâng quyền mình hay người khác.
+    - Ràng buộc:
+      - `pages.publish`, `pages.requestPublish` và `pages.manageLive` cần `pages.edit`; `pages.publish` và `pages.requestPublish` loại trừ nhau.
+      - `publishApprovals.decide` cần `pages.publish`.
+      - `leads.handle`, `leads.export` và `personalData.manage` cần `leads.view`.
+  - **Giao vai trò:**
+    - Vai trò được chọn khi mời, đổi quyền, và trong lời mời, viết là một vai trò hệ thống (`editor`, …) hoặc `custom:{id}`.
+    - Membership và lời mời lưu `role: 'custom'` cùng `customRoleId`.
+    - Mọi lần giao (đổi quyền, duyệt yêu cầu đổi quyền, mời) ghi lên vai trò (`grantSeq`) trong cùng transaction với việc giao. Xóa vai trò, hoặc chuyển nó sang "Toàn workspace" (kiểm tra và ghi trong một transaction), cùng lúc với một lần giao sẽ xung đột với lần giao đó, nên không ai giữ một vai trò đã mất.
+  - **Kiểm tra quyền:**
+    - `WorkspaceScope.access` là vai trò hệ thống, hoặc `{ customRoleId, name, permissions }` đọc lại ở mỗi request. `can(access, permission)` của `@plp/contracts` dùng chung cho API và admin.
+    - Đổi quyền của vai trò tùy chỉnh có hiệu lực ngay ở request kế tiếp của mọi người đang giữ nó.
+    - Một giá trị lạ mặc định không có quyền gì: membership `custom` mà thiếu vai trò thì chỉ còn 404/403.
+  - **Xóa:** chỉ khi không thành viên nào và không lời mời đang chờ nào giữ vai trò (409 kèm số người). Phải đổi quyền những người đó trước.
+  - **Endpoint** (`members.manage`, tức Chủ sở hữu và Quản trị): `GET`/`POST /workspaces/:id/custom-roles`, `PATCH`/`DELETE /workspaces/:id/custom-roles/:roleId`.
+  - **Admin:**
+    - Màn 16:
+      - Danh sách vai trò thêm các vai trò tùy chỉnh kèm số thành viên; nút "Vai trò tùy chỉnh".
+      - Editor gồm: tên, "Bắt đầu từ", các nhóm quyền bật/tắt (dòng xuất bản có ba mức Không, Yêu cầu, Được phép), nhãn "Thêm"/"Bỏ" so với vai trò gốc, "Tóm tắt trước khi lưu", phạm vi, số người đang giữ, "Lưu vai trò" và "Xóa vai trò".
+      - Ma trận vẫn chỉ gồm sáu vai trò hệ thống.
+    - Màn 15: chọn được vai trò tùy chỉnh khi mời và đổi quyền; danh sách và bộ lọc hiện tên vai trò tùy chỉnh. Vai trò hiện tại của thành viên không có trong danh sách thì "Đổi quyền" bắt chọn lại, không tự thay bằng vai trò khác.
+    - Sidebar, menu tài khoản và trạng thái thiếu quyền dùng tên vai trò tùy chỉnh.
+- **Ngoài phạm vi:**
+  - "Mời thành viên (tới Biên tập)": cần quy tắc chống nâng quyền riêng (chỉ giao được vai trò có ít quyền hơn mình).
+  - Các dòng "Dùng trợ lý AI" và "Lưu và quản lý template": chưa có tính năng.
+  - Yêu cầu đổi quyền sang một vai trò tùy chỉnh: yêu cầu vẫn chỉ chọn vai trò hệ thống, Chủ sở hữu có thể giao vai trò tùy chỉnh khi duyệt.
+  - Thông báo "Quyền của bạn vừa thay đổi" khi đang làm việc.
+- **Reason:**
+  - Quyền vẫn là một tập hợp kiểm tra ở một lối vào duy nhất (ADR-020); vai trò tùy chỉnh chỉ là một tập hợp khác.
+  - Giữ quản trị workspace ngoài vai trò tùy chỉnh thì không có đường nâng quyền.
+- **Consequences:**
+  - Integration test:
+    - tạo, sửa, xóa vai trò; các ràng buộc;
+    - giao vai trò khi mời, khi nhận lời mời, khi đổi quyền;
+    - quyền hiệu lực ở request kế tiếp sau khi sửa;
+    - không xóa được khi còn người giữ;
+    - phạm vi toàn workspace;
+    - người giữ vai trò tùy chỉnh đi qua ma trận endpoint đúng theo quyền của nó.
+  - E2E: Chủ sở hữu tạo vai trò từ Biên tập (xuất bản đổi thành "Yêu cầu", thêm xem lead) rồi mời một người. Người đó thấy Leads và nút "Gửi duyệt".
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -1471,9 +1526,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | C2  | Thành viên, lời mời qua email, nhận lời mời, đổi quyền, gỡ, yêu cầu đổi quyền và duyệt, chuyển quyền sở hữu (ADR-021)              | 15, 15b        | Xong       |
 | C3  | Tên miền riêng: on-demand TLS, không trùng tên miền (ADR-022), bản ghi DNS và TXT, xác minh, địa chỉ chính, 301, renderer, sitemap | 13, 14, 08     | Xong       |
 | C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt (ADR-023)                                                  | 05, 16         | Xong       |
-| C5  | Vai trò tùy chỉnh                                                                                                                  | 16             | Chưa làm   |
-
-C5 cần ADR riêng trước khi làm.
+| C5  | Vai trò tùy chỉnh (ADR-024)                                                                                                        | 16, 15         | Xong       |
 
 ## 6. Trước khi phát hành
 

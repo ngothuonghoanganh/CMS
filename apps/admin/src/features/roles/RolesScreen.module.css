@@ -212,3 +212,138 @@
   font-size: var(--text-sm);
   font-weight: 600;
 }
+
+/* Custom roles (ADR-024) */
+.customAction {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 0 4px;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.editorFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.permissionGroup {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.permissionGroupTitle {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.permissionRows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.permissionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.permissionRow:last-child {
+  border-bottom: 0;
+}
+
+.changedRow {
+  background: var(--color-primary-tint);
+}
+
+.permissionSwitch {
+  flex: 1;
+  min-width: 0;
+}
+
+.permissionLevel {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.permissionLabel {
+  color: var(--color-ink);
+}
+
+.change {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.added {
+  color: var(--color-success-ink);
+}
+
+.removed {
+  color: var(--color-danger-ink);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summaryTitle {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.summaryList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.editorActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.spacer {
+  flex: 1;
+}
