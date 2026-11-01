@@ -342,6 +342,30 @@ describe('composition validation on the server', () => {
       expect(response.status).toBe(200);
     });
 
+    it('keeps a process to 5 steps and partner logos to 3–12', async () => {
+      await expectRejected(
+        [withItems(sampleSection('benefits', 'steps'), 6)],
+        [
+          {
+            path: ['composition', 'sections', 0, 'content', 'items'],
+            code: 'too_big',
+            message: 'Bố cục “Quy trình 3 bước” có tối đa 5 lợi ích',
+          },
+        ],
+      );
+      for (const count of [2, 13]) {
+        await expectRejected(
+          [withItems(sampleSection('logos'), count)],
+          [{ path: ['composition', 'sections', 0, 'content', 'items'] }],
+        );
+      }
+      const { response } = await put([
+        withItems(sampleSection('benefits', 'steps'), 5),
+        withItems(sampleSection('logos'), 12),
+      ]);
+      expect(response.status).toBe(200);
+    });
+
     it('refuses lists over their maximum', async () => {
       const tooMany = (path: string): Partial<ProblemIssue> => ({
         path: ['composition', 'sections', 0, 'content', ...path.split('.')],
@@ -365,6 +389,29 @@ describe('composition validation on the server', () => {
         ],
         [tooMany('links')],
       );
+    });
+  });
+
+  describe('buttons limited to one kind of link', () => {
+    it('lets the quick contact call and open Zalo, and nothing else', async () => {
+      const quick = sampleSection('quick_contact');
+      const withLink = (key: 'call' | 'zalo', link: object) => ({
+        ...quick,
+        content: { ...quick.content, [key]: { label: 'Liên hệ', link } },
+      });
+      await expectRejected(
+        [withLink('call', { kind: 'url', url: 'https://smilecare.vn' })],
+        [
+          { path: ['composition', 'sections', 0, 'content', 'call', 'link', 'kind'] },
+          { path: ['composition', 'sections', 0, 'content', 'call', 'link', 'phone'] },
+        ],
+      );
+      await expectRejected(
+        [withLink('zalo', { kind: 'phone', phone: '0901 234 567' })],
+        [{ path: ['composition', 'sections', 0, 'content', 'zalo', 'link', 'kind'] }],
+      );
+      const { response } = await put([withLink('call', { kind: 'phone', phone: '0901 234 567' })]);
+      expect(response.status).toBe(200);
     });
   });
 

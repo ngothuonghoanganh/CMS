@@ -6,6 +6,7 @@ import {
   type SectionInstance,
   type Seo,
 } from '@plp/contracts';
+import { setAtPath } from '@plp/sections/schema';
 import { describe, expect, it } from 'vitest';
 import {
   cleanSeo,
@@ -427,6 +428,132 @@ describe('evaluateChecks: lead form', () => {
     const result = run([heroSection()], { leadDestinationReady: false });
     expect(result.blocking).toEqual([]);
     expect(result.passed.map((passed) => passed.code)).not.toContain('lead_destination');
+  });
+});
+
+describe('evaluateChecks: sections of the 2026-11-02 cards (ADR-007)', () => {
+  /** A section's sample content with `changes` applied at content paths, no sample markers. */
+  function filled(
+    type: 'logos' | 'before_after' | 'quick_contact' | 'benefits',
+    variant: string,
+    id: string,
+    changes: Record<string, unknown> = {},
+  ): SectionInstance {
+    const section = sampleSection(type, variant, id);
+    let content = section.content;
+    for (const [path, value] of Object.entries(changes)) {
+      content = setAtPath(content, path, value);
+    }
+    return { ...section, content, samplePaths: [] };
+  }
+
+  const described = (alt: string) => ({ assetId: ASSET_ID, alt, decorative: false });
+
+  it('blocks every partner logo without an image, and warns about one without a name', () => {
+    const logos = filled('logos', 'row', 'logo00000001');
+    const missing = run([heroSection(), logos]).blocking;
+    expect(codes(missing)).toEqual(Array.from({ length: 4 }, () => 'required_field_empty'));
+    expect(missing[1]?.title).toBe('Đối tác 2 trong section “Logo đối tác” chưa có logo');
+    expect(missing[1]?.target).toEqual({
+      kind: 'section',
+      sectionId: logos.id,
+      fieldPath: 'items.1.image',
+    });
+
+    const unnamed = filled('logos', 'row', 'logo00000001', {
+      'items.0.image': described('Bệnh viện Hòa Bình'),
+      'items.1.image': described(''),
+      'items.2.image': described('Trường Đại học Y'),
+      'items.3.image': { assetId: ASSET_ID, alt: '', decorative: true },
+    });
+    const result = run([heroSection(), unnamed]);
+    expect(result.blocking).toEqual([]);
+    const warning = only(result.warnings, 'image_alt_missing');
+    expect(warning.title).toBe('Logo của Đối tác 2 trong section “Logo đối tác” chưa có mô tả');
+    expect(warning.target).toMatchObject({ fieldPath: 'items.1.image' });
+  });
+
+  it('blocks a before and after missing a photo or a caption, and warns about a missing alt', () => {
+    const pair = filled('before_after', 'side_by_side', 'pair00000001', { afterCaption: ' ' });
+    const missing = run([pair]).blocking;
+    expect(missing.map((item) => item.title)).toEqual([
+      'Section “Trước & sau” chưa có ảnh trước',
+      'Section “Trước & sau” chưa có ảnh sau',
+      'Section “Trước & sau” chưa có chú thích ảnh sau',
+    ]);
+    expect(missing.map((item) => item.target)).toEqual(
+      ['beforeImage', 'afterImage', 'afterCaption'].map((fieldPath) => ({
+        kind: 'section',
+        sectionId: pair.id,
+        fieldPath,
+      })),
+    );
+
+    const photos = filled('before_after', 'side_by_side', 'pair00000001', {
+      beforeImage: described('Răng trước khi niềng'),
+      afterImage: { assetId: MISSING_ASSET_ID, alt: '', decorative: false },
+    });
+    expect(codes(run([photos]).blocking)).toEqual(['asset_missing']);
+    const undescribed = filled('before_after', 'side_by_side', 'pair00000001', {
+      beforeImage: described(''),
+      afterImage: described('Răng sau 12 tháng'),
+    });
+    const result = run([undescribed]);
+    expect(result.blocking).toEqual([]);
+    expect(only(result.warnings, 'image_alt_missing').title).toBe(
+      'Ảnh trước của section “Trước & sau” chưa có mô tả',
+    );
+  });
+
+  it('asks a quick contact button for its number, not for somewhere to lead', () => {
+    const quick = filled('quick_contact', 'buttons', 'quick0000001');
+    const result = run([quick]);
+    expect(result.blocking.map((item) => [item.title, item.description, item.target])).toEqual([
+      [
+        'Nút “Gọi ngay” ở section “Gọi / Zalo nhanh” chưa có số điện thoại',
+        'Nhập số điện thoại mà khách gọi tới khi bấm nút.',
+        { kind: 'section', sectionId: quick.id, fieldPath: 'call.link' },
+      ],
+      [
+        'Nút “Nhắn Zalo” ở section “Gọi / Zalo nhanh” chưa có số Zalo',
+        'Nhập số điện thoại Zalo mà khách nhắn tới khi bấm nút.',
+        { kind: 'section', sectionId: quick.id, fieldPath: 'zalo.link' },
+      ],
+    ]);
+  });
+
+  it('blocks a quick contact without any button, and passes with either one', () => {
+    const none = filled('quick_contact', 'buttons', 'quick0000001', {
+      'call.label': '',
+      'zalo.label': ' ',
+    });
+    const item = only(run([none]).blocking, 'required_field_empty');
+    expect(item.title).toBe('Section “Gọi / Zalo nhanh” chưa có nút nào');
+    expect(item.description).toBe(
+      'Điền chữ trên nút cho nút gọi điện hoặc nút Zalo trước khi xuất bản.',
+    );
+    expect(item.target).toEqual({ kind: 'section', sectionId: none.id, fieldPath: 'call.label' });
+
+    const callOnly = filled('quick_contact', 'buttons', 'quick0000001', {
+      'call.link': { kind: 'phone', phone: '0901 234 567' },
+      'zalo.label': '',
+    });
+    const zaloOnly = filled('quick_contact', 'buttons', 'quick0000001', {
+      'call.label': '',
+      'zalo.link': { kind: 'zalo', phone: '0901234567' },
+    });
+    expect(run([callOnly]).blocking).toEqual([]);
+    expect(run([zaloOnly]).blocking).toEqual([]);
+  });
+
+  it('checks the steps of a process without the icons and images the variant hides', () => {
+    const steps = filled('benefits', 'steps', 'step00000001', {
+      'items.0.image': { assetId: MISSING_ASSET_ID, alt: '', decorative: false },
+      'items.1.title': '',
+    });
+    const item = only(run([steps]).blocking, 'required_field_empty');
+    expect(item.title).toBe('Lợi ích 2 trong section “Lợi ích” chưa có tiêu đề');
+    expect(codes(run([steps]).warnings)).toEqual([]);
   });
 });
 
