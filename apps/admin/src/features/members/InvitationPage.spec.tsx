@@ -58,7 +58,7 @@ function serve(lookup: InvitationLookupResponse, me: MeResponse | null) {
       });
     }
     if (endpoint === endpoints.acceptInvitation) {
-      return Promise.resolve({ workspaceId: WORKSPACE_ID });
+      return Promise.resolve({ workspaceId: WORKSPACE_ID, slug: 'may-xanh-agency' });
     }
     return Promise.reject(new Error('unexpected call'));
   });
@@ -80,7 +80,7 @@ describe('InvitationPage', () => {
   it('signs a new person up with the invited email and opens the workspace', async () => {
     const user = userEvent.setup();
     serve(invitation, null);
-    renderWithProviders(<InvitationPage />);
+    renderWithProviders(<InvitationPage addresses={null} />);
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Tạo tài khoản để tham gia' }),
     ).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('InvitationPage', () => {
   it('lets the signed-in invited person join', async () => {
     const user = userEvent.setup();
     serve(invitation, signedIn('thuy.mkt@smilecare.vn'));
-    renderWithProviders(<InvitationPage />);
+    renderWithProviders(<InvitationPage addresses={null} />);
     await user.click(await screen.findByRole('button', { name: 'Tham gia' }));
     expect(lastCallTo(apiMock, endpoints.acceptInvitation).options).toEqual({
       body: { token: 'bi-mat-cua-link' },
@@ -114,9 +114,28 @@ describe('InvitationPage', () => {
     });
   });
 
+  it('opens the joined workspace at its own address when workspaces have one (ADR-025)', async () => {
+    const user = userEvent.setup();
+    document.cookie = 'plp_ws=; Max-Age=0; Path=/';
+    serve(invitation, signedIn('thuy.mkt@smilecare.vn'));
+    renderWithProviders(
+      <InvitationPage
+        addresses={{
+          template: 'https://{slug}.app.example.vn',
+          commonOrigin: 'https://app.example.vn',
+        }}
+      />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Tham gia' }));
+    await vi.waitFor(() => {
+      expect(loadPageMock).toHaveBeenCalledWith('https://may-xanh-agency.app.example.vn/');
+    });
+    expect(document.cookie).not.toContain(`plp_ws=${WORKSPACE_ID}`);
+  });
+
   it('tells someone signed in with another email to sign out first', async () => {
     serve(invitation, signedIn('khoa@mayxanh.vn'));
-    renderWithProviders(<InvitationPage />);
+    renderWithProviders(<InvitationPage addresses={null} />);
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Lời mời này dành cho email khácBạn đang đăng nhập bằng khoa@mayxanh.vn.',
     );
@@ -128,7 +147,7 @@ describe('InvitationPage', () => {
   it('keeps the link while an existing account signs in', async () => {
     const user = userEvent.setup();
     serve({ ...invitation, accountExists: true }, null);
-    renderWithProviders(<InvitationPage />);
+    renderWithProviders(<InvitationPage addresses={null} />);
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập' }));
     expect(window.sessionStorage.getItem(PENDING_INVITATION_KEY)).toBe('bi-mat-cua-link');
     expect(loadPageMock).toHaveBeenCalledWith('/login?next=%2Finvite');
@@ -136,7 +155,7 @@ describe('InvitationPage', () => {
 
   it('says when the invitation expired or was used', async () => {
     serve({ ...invitation, state: 'expired' }, null);
-    const { unmount } = renderWithProviders(<InvitationPage />);
+    const { unmount } = renderWithProviders(<InvitationPage addresses={null} />);
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Lời mời đã hết hạn' }),
     ).toBeInTheDocument();
@@ -144,7 +163,7 @@ describe('InvitationPage', () => {
     unmount();
 
     serve({ ...invitation, state: 'accepted' }, null);
-    renderWithProviders(<InvitationPage />);
+    renderWithProviders(<InvitationPage addresses={null} />);
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Lời mời đã được dùng' }),
     ).toBeInTheDocument();

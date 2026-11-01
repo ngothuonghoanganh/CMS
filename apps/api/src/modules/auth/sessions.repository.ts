@@ -8,19 +8,54 @@ import { SESSION_MODEL, type SessionRecord } from './user.schema.js';
 export class SessionsRepository {
   constructor(@InjectModel(SESSION_MODEL) private readonly sessions: Model<SessionRecord>) {}
 
-  async create(userId: ObjectId, tokenHash: string, expiresAt: Date): Promise<void> {
-    await this.sessions.create({ userId, tokenHash, expiresAt, createdAt: new Date() });
+  async create(
+    userId: ObjectId,
+    tokenHash: string,
+    expiresAt: Date,
+    cookieDomain: string | null,
+  ): Promise<void> {
+    await this.sessions.create({
+      userId,
+      tokenHash,
+      expiresAt,
+      cookieDomain,
+      createdAt: new Date(),
+    });
   }
 
-  /** The session for a token hash if it has not expired (the TTL index removes it later). */
-  findActive(tokenHash: string, now: Date): Promise<SessionRecord | null> {
-    return this.sessions
-      .findOne({ tokenHash, expiresAt: { $gt: now } })
-      .lean<SessionRecord>()
+  /**
+   * The first of `tokenHashes` (in their order) that is a session not expired yet, whose cookie
+   * was set with `cookieDomain`; one query. The TTL index removes expired records later.
+   */
+  async findActive(
+    tokenHashes: readonly string[],
+    now: Date,
+    cookieDomain: string | null,
+  ): Promise<SessionRecord | null> {
+    if (tokenHashes.length === 0) {
+      return null;
+    }
+    const found = await this.sessions
+      .find({
+        tokenHash: { $in: [...tokenHashes] },
+        expiresAt: { $gt: now },
+        // `null` also matches sessions from before the field existed: host-only cookies.
+        cookieDomain,
+      })
+      .lean<SessionRecord[]>()
       .exec();
+    for (const tokenHash of tokenHashes) {
+      const session = found.find((item) => item.tokenHash === tokenHash);
+      if (session !== undefined) {
+        return session;
+      }
+    }
+    return null;
   }
 
-  async delete(tokenHash: string): Promise<void> {
-    await this.sessions.deleteOne({ tokenHash }).exec();
+  async deleteAll(tokenHashes: readonly string[]): Promise<void> {
+    if (tokenHashes.length > 0) {
+      await this.sessions.deleteMany({ tokenHash: { $in: [...tokenHashes] } }).exec();
+    }
   }
 }

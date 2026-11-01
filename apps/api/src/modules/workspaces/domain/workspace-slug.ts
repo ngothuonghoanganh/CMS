@@ -1,17 +1,4 @@
-/** Host names the admin keeps for itself: never a workspace's address (ADR-025). */
-export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
-  'admin',
-  'api',
-  'app',
-  'assets',
-  'cdn',
-  'docs',
-  'help',
-  'mail',
-  'static',
-  'status',
-  'www',
-]);
+import { RESERVED_WORKSPACE_SLUGS } from '@plp/contracts';
 
 const MAX_LENGTH = 40;
 const MIN_LENGTH = 3;
@@ -35,20 +22,21 @@ export function slugBaseOf(name: string): string {
   return cut === '' ? 'workspace' : `${cut}-ws`;
 }
 
-/**
- * The first free address from `base`: itself, then `base-2`, `base-3`, … cut to fit 40
- * characters. `taken` holds the addresses already used that start with `base`.
- */
-export function freeSlug(base: string, taken: ReadonlySet<string>): string {
-  const free = (slug: string) => !taken.has(slug) && !RESERVED_SLUGS.has(slug);
-  if (free(base)) {
+/** The `n`-th form of `base`: itself, then `base-2`, `base-3`, … cut to fit 40 characters. */
+function numbered(base: string, n: number): string {
+  if (n === 1) {
     return base;
   }
-  for (let n = 2; ; n += 1) {
-    const suffix = `-${n.toString()}`;
-    const slug = `${base.slice(0, MAX_LENGTH - suffix.length).replace(/-+$/, '')}${suffix}`;
-    if (free(slug)) {
-      return slug;
-    }
-  }
+  const suffix = `-${n.toString()}`;
+  return `${base.slice(0, MAX_LENGTH - suffix.length).replace(/-+$/, '')}${suffix}`;
+}
+
+/**
+ * The forms `from` to `from + count - 1` of `base`, reserved names left out: the addresses to ask
+ * the database about, a few at a time, so a common base never loads every workspace that has it.
+ */
+export function slugCandidates(base: string, from: number, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => numbered(base, from + index)).filter(
+    (slug) => !RESERVED_WORKSPACE_SLUGS.has(slug),
+  );
 }

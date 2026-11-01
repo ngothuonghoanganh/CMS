@@ -15,6 +15,11 @@
   height: 32px;
 }
 
+.size-44 {
+  width: 44px;
+  height: 44px;
+}
+
 .size-28 {
   width: 28px;
   height: 28px;
@@ -32,4 +37,9 @@
   background: var(--color-ink);
   color: var(--color-on-primary);
   font-weight: 700;
+}
+
+/* A workspace on its own, as in the workspace list (screen 35). */
+.square.size-44 {
+  border-radius: var(--radius-md);
 }

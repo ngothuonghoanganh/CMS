@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminAddress } from '../features/shell/admin-address';
 import { apiError, renderWithProviders } from '../features/shell/test-utils';
-import HomePage from './page';
+import HomePage, { generateMetadata } from './page';
 
 class Redirected extends Error {}
 const redirect = vi.fn((href: string) => {
@@ -103,6 +103,13 @@ describe('start page', () => {
     expect(await landing()).toBe('/sites/new');
   });
 
+  it('lets an account without a workspace sign out', async () => {
+    given();
+    renderWithProviders(await HomePage());
+    expect(screen.getByRole('heading', { name: 'Chưa có workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
+  });
+
   describe('with workspace addresses (ADR-025)', () => {
     it('opens the only workspace at its address from the common one', async () => {
       address = { kind: 'common', addresses };
@@ -128,6 +135,13 @@ describe('start page', () => {
         'https://ws-0000b2.app.example.vn/',
       );
       expect(screen.getByText('ws-0000b2.app.example.vn')).toBeInTheDocument();
+      // Who may open what, as the board says it.
+      expect(screen.getByText('Chủ sở hữu · toàn workspace')).toBeInTheDocument();
+      expect(screen.getByText('Biên tập · toàn workspace')).toBeInTheDocument();
+      // The header names the common address and who is signed in, with a way out (board 35).
+      expect(screen.getByText('app.example.vn')).toBeInTheDocument();
+      expect(screen.getByRole('banner')).toHaveTextContent('khoa@mayxanh.vn');
+      expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
     });
 
     it('says when the account belongs to no workspace', async () => {
@@ -137,7 +151,8 @@ describe('start page', () => {
       expect(
         screen.getByRole('heading', { name: 'Tài khoản này chưa thuộc workspace nào' }),
       ).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
+      // One in the header, one in the card (board 35).
+      expect(screen.getAllByRole('button', { name: 'Đăng xuất' })).toHaveLength(2);
     });
 
     it('opens the workspace of its address, even without a site to show', async () => {
@@ -173,6 +188,21 @@ describe('start page', () => {
       expect(
         screen.getByRole('button', { name: 'Đăng nhập bằng tài khoản khác' }),
       ).toBeInTheDocument();
+    });
+
+    it('names screens 35 and 36 for what they say', async () => {
+      address = { kind: 'common', addresses };
+      given(
+        membership('64b0000000000000000000a1', 'owner'),
+        membership('64b0000000000000000000b2', 'editor'),
+      );
+      expect(await generateMetadata()).toEqual({ title: 'Chọn workspace' });
+
+      address = { kind: 'workspace', slug: 'smile', addresses };
+      expect(await generateMetadata()).toEqual({ title: 'Không thuộc workspace ở địa chỉ này' });
+
+      address = { kind: 'workspace', slug: 'ws-0000a1', addresses };
+      expect(await generateMetadata()).toEqual({});
     });
   });
 });

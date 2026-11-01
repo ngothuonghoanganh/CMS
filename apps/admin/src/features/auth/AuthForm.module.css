@@ -7,3 +7,26 @@
 .form > button[type='submit'] {
   margin-top: 4px;
 }
+
+/* "Chưa có tài khoản? Tạo workspace mới" inside the login card (screen 34). */
+.switch {
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.switch a {
+  color: var(--color-primary-ink);
+  font-weight: 600;
+}
+
+.switch a:hover {
+  color: var(--color-primary-pressed);
+}
+
+/* The note under the login card of a workspace address (screen 34). */
+.note {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}

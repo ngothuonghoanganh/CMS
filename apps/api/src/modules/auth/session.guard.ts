@@ -1,9 +1,11 @@
 import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { SESSION_COOKIE } from '@plp/contracts';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import type { RequestWithUser } from './current-user.decorator.js';
 import { IS_PUBLIC } from './public.decorator.js';
+import { sessionTokensOf } from './session-cookie.js';
 import { hashSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
 import { UsersRepository } from './users.repository.js';
@@ -16,6 +18,7 @@ function unauthenticated(): AppError {
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(
+    @InjectEnv() private readonly env: Env,
     private readonly reflector: Reflector,
     private readonly sessions: SessionsRepository,
     private readonly users: UsersRepository,
@@ -30,15 +33,13 @@ export class SessionGuard implements CanActivate {
       return true;
     }
     const request = context.switchToHttp().getRequest<RequestWithUser>();
-    const cookies: unknown = request.cookies;
-    const token =
-      typeof cookies === 'object' && cookies !== null && SESSION_COOKIE in cookies
-        ? (cookies as Record<string, unknown>)[SESSION_COOKIE]
-        : undefined;
-    if (typeof token !== 'string' || token === '') {
-      throw unauthenticated();
-    }
-    const session = await this.sessions.findActive(hashSessionToken(token), new Date());
+    // The first token that is still a session of the current cookie scope: a stale cookie of the
+    // other scope may come first (ADR-025).
+    const session = await this.sessions.findActive(
+      sessionTokensOf(request).map(hashSessionToken),
+      new Date(),
+      this.env.SESSION_COOKIE_DOMAIN ?? null,
+    );
     if (!session) {
       throw unauthenticated();
     }

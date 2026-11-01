@@ -233,7 +233,9 @@ export function Sidebar({
           </button>
         }
       >
-        <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {addresses === null ? 'Workspace' : 'Workspace của bạn'}
+        </DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={workspace.id}
           onValueChange={(workspaceId) => {
@@ -249,15 +251,34 @@ export function Sidebar({
                 item.workspace.name
               ) : (
                 <span className={styles.workspaceOption}>
-                  <span>{item.workspace.name}</span>
-                  <span className={styles.workspaceAddress}>
-                    {new URL(workspaceHome(addresses, item.workspace.slug)).host}
+                  <Avatar name={item.workspace.name} shape="square" size={28} />
+                  <span className={styles.workspaceOptionText}>
+                    <span className={styles.workspaceOptionName}>{item.workspace.name}</span>
+                    <span className={styles.workspaceAddress}>
+                      {new URL(workspaceHome(addresses, item.workspace.slug)).host}
+                    </span>
                   </span>
                 </span>
               )}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        {addresses === null || memberships.length < 2 ? null : (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                onNavigate?.();
+                leaveScreen(() => {
+                  loadPage(`${addresses.commonOrigin}/`);
+                  return 'leaving';
+                });
+              }}
+            >
+              Xem tất cả workspace
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenu>
 
       {workspaceItems.length === 0 ? null : (

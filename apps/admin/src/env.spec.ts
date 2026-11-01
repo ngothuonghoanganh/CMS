@@ -52,4 +52,19 @@ describe('parseAdminEnv', () => {
   it('spells the slug placeholder as the contracts do', () => {
     expect(SLUG_PLACEHOLDER).toBe(WORKSPACE_SLUG_PLACEHOLDER);
   });
+
+  it('refuses a template with the slug outside the host, or a path', () => {
+    for (const template of [
+      'https://app.example.vn/{slug}',
+      'https://{slug}.app.example.vn/admin',
+    ]) {
+      expect(() =>
+        parseAdminEnv({
+          ...valid,
+          ADMIN_ORIGIN: 'https://app.example.vn',
+          ADMIN_WORKSPACE_ORIGIN_TEMPLATE: template,
+        }),
+      ).toThrow(/no path/);
+    }
+  });
 });

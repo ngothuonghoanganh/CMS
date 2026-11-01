@@ -5,8 +5,8 @@ import styles from './Avatar.module.css';
 export interface AvatarProps {
   /** Full name; the avatar shows its initials. */
   name: string;
-  /** 32 (default) or 28 pixels. */
-  size?: 28 | 32 | undefined;
+  /** 32 (default), 28, or 44 pixels for a workspace standing on its own (screen 35). */
+  size?: 28 | 32 | 44 | undefined;
   /** `circle` for people, `square` for a workspace. Defaults to `circle`. */
   shape?: 'circle' | 'square' | undefined;
   /**

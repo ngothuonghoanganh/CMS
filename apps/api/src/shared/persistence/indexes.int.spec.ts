@@ -24,7 +24,7 @@ describe('IndexBuilder', () => {
     await t.close();
   });
 
-  it('has created every index the schemas declare once the API is initialized', async () => {
+  it('has created every index the master’s schemas declare once the API is initialized', async () => {
     const models = Object.values(t.connection.models);
     expect(models.length).toBeGreaterThan(10);
     for (const model of models) {

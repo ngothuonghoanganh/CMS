@@ -1,6 +1,6 @@
-import { workspaceSlugSchema } from '@plp/contracts';
+import { RESERVED_WORKSPACE_SLUGS, workspaceSlugSchema } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
-import { freeSlug, RESERVED_SLUGS, slugBaseOf } from './workspace-slug.js';
+import { slugBaseOf, slugCandidates } from './workspace-slug.js';
 
 describe('workspace addresses (ADR-025)', () => {
   it('turns a Vietnamese workspace name into an address', () => {
@@ -23,19 +23,26 @@ describe('workspace addresses (ADR-025)', () => {
     }
   });
 
-  it('numbers an address already taken, and never gives a reserved one', () => {
-    expect(freeSlug('may-xanh', new Set())).toBe('may-xanh');
-    expect(freeSlug('may-xanh', new Set(['may-xanh']))).toBe('may-xanh-2');
-    expect(freeSlug('may-xanh', new Set(['may-xanh', 'may-xanh-2']))).toBe('may-xanh-3');
-    for (const reserved of RESERVED_SLUGS) {
-      expect(freeSlug(reserved, new Set())).toBe(`${reserved}-2`);
+  it('numbers the forms of a base, a batch at a time', () => {
+    expect(slugCandidates('may-xanh', 1, 3)).toEqual(['may-xanh', 'may-xanh-2', 'may-xanh-3']);
+    expect(slugCandidates('may-xanh', 21, 2)).toEqual(['may-xanh-21', 'may-xanh-22']);
+  });
+
+  it('never offers a reserved name', () => {
+    for (const reserved of RESERVED_WORKSPACE_SLUGS) {
+      expect(slugCandidates(reserved, 1, 2)).toEqual([`${reserved}-2`]);
     }
   });
 
-  it('cuts a numbered address back to 40 characters', () => {
-    const base = 'a'.repeat(40);
-    const slug = freeSlug(base, new Set([base]));
-    expect(slug).toBe(`${'a'.repeat(38)}-2`);
-    expect(workspaceSlugSchema.safeParse(slug).success).toBe(true);
+  it('cuts a numbered address back to 40 characters, and the cut form is what is asked about', () => {
+    const base = slugBaseOf('Công ty Cổ phần Đầu tư và Phát triển Hà Nội');
+    expect(base).toBe('cong-ty-co-phan-dau-tu-va-phat-trien-ha');
+    const candidates = slugCandidates(base, 1, 12);
+    expect(candidates[1]).toBe('cong-ty-co-phan-dau-tu-va-phat-trien-h-2');
+    expect(candidates[11]).toBe('cong-ty-co-phan-dau-tu-va-phat-trien-12');
+    expect(new Set(candidates).size).toBe(12);
+    for (const slug of candidates) {
+      expect(workspaceSlugSchema.safeParse(slug).success).toBe(true);
+    }
   });
 });

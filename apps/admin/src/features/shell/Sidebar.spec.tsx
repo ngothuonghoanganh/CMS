@@ -337,6 +337,43 @@ describe('Sidebar', () => {
     expect(document.cookie).not.toContain('plp_ws=64b0000000000000000000a2');
   });
 
+  it('lists every workspace at the common address from the switcher (ADR-025)', async () => {
+    const user = userEvent.setup();
+    renderSidebar({
+      addresses: {
+        template: 'https://{slug}.app.example.vn',
+        commonOrigin: 'https://app.example.vn',
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    expect(screen.getByText('Workspace của bạn')).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Xem tất cả workspace' }));
+
+    expect(loadPageMock).toHaveBeenCalledWith('https://app.example.vn/');
+  });
+
+  it('lists no other workspaces to someone who has one', async () => {
+    const user = userEvent.setup();
+    renderSidebar({
+      memberships: [agency],
+      addresses: {
+        template: 'https://{slug}.app.example.vn',
+        commonOrigin: 'https://app.example.vn',
+      },
+    });
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Xem tất cả workspace' })).toBeNull();
+  });
+
+  it('keeps the one-address switcher as it was', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Xem tất cả workspace' })).toBeNull();
+    expect(screen.queryByText('Workspace của bạn')).toBeNull();
+  });
+
   it('stays when the current workspace is chosen again', async () => {
     const user = userEvent.setup();
     renderSidebar();

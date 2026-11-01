@@ -903,8 +903,10 @@ describe('the six roles on every endpoint', () => {
       domains,
       customRoles,
       addresses,
+      workspace,
     ] = await Promise.all([
-      db.collection('activity').countDocuments({ siteId }),
+      // Every field of every event: a refused call must not edit one either.
+      collection('activity'),
       t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
       ofWorkspace('memberships'),
       ofWorkspace('invitations'),
@@ -912,6 +914,7 @@ describe('the six roles on every endpoint', () => {
       t.connection.collection('domains').find({ siteId }).sort({ _id: 1 }).toArray(),
       ofWorkspace('custom_roles'),
       ofWorkspace('site_addresses'),
+      t.connection.collection('workspaces').findOne({ _id: new Types.ObjectId(workspaceId) }),
     ]);
     return JSON.stringify({
       siteRecord,
@@ -932,6 +935,7 @@ describe('the six roles on every endpoint', () => {
       domains,
       customRoles,
       addresses,
+      workspace,
     });
   }
 

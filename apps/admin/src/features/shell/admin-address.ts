@@ -17,12 +17,16 @@ export interface WorkspaceAddresses {
   commonOrigin: string;
 }
 
-/** The address a request's `Host` names; any host that is not a workspace's is the common one. */
+/**
+ * The address a request's `Host` names; any host that is not a workspace's is the common one, and
+ * the common address itself never is, whatever the template.
+ */
 export function addressOf(addresses: WorkspaceAddresses | null, host: string): AdminAddress {
   if (addresses === null) {
     return { kind: 'single' };
   }
-  const slug = slugOfHost(addresses.template, host);
+  const common = new URL(addresses.commonOrigin).host;
+  const slug = host.toLowerCase() === common ? null : slugOfHost(addresses.template, host);
   return slug === null ? { kind: 'common', addresses } : { kind: 'workspace', slug, addresses };
 }
 

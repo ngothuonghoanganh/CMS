@@ -99,7 +99,8 @@ test.describe('workspace addresses (ADR-025)', () => {
 
     // Someone else, signed in, learns nothing about the workspace at this address (screen 36).
     const stranger = await newPage(browser);
-    const strangerSlug = await signUpAtCommon(stranger, newAccount('Minh Khoa', 'Spa Hoa Sen'));
+    const strangerAccount = newAccount('Minh Khoa', 'Spa Hoa Sen');
+    const strangerSlug = await signUpAtCommon(stranger, strangerAccount);
     await stranger.goto(`${workspaceAt(ownerSlug)}/`);
     await expect(stranger.getByRole('heading', { name: NOT_MEMBER })).toBeVisible();
     await expect(stranger.getByText(owner.workspaceName)).toHaveCount(0);
@@ -108,6 +109,24 @@ test.describe('workspace addresses (ADR-025)', () => {
     await expect(stranger.getByRole('heading', { name: NOT_MEMBER })).toBeVisible();
     await stranger.getByRole('link', { name: 'Mở workspace của tôi' }).click();
     await expect(stranger).toHaveURL(new RegExp(`^${workspaceAt(strangerSlug)}/`));
+
+    // Invited later, they open the link at the common address: the workspace joined still opens,
+    // at its own address, not the list of their two workspaces.
+    await page.getByRole('button', { name: 'Mời thành viên' }).click();
+    const second = page.getByRole('dialog', { name: 'Mời thành viên' });
+    await second.getByLabel('Email').fill(strangerAccount.email);
+    await second.getByRole('radio', { name: /Biên tập/ }).check();
+    await second.getByRole('radio', { name: /Toàn workspace/ }).check();
+    await second.getByRole('button', { name: 'Gửi 1 lời mời' }).click();
+    await expect(page.getByText('Đã gửi 1 lời mời', { exact: true })).toBeVisible();
+    const strangerInvite = await waitForEmail(request, strangerAccount.email, 'mời bạn vào');
+    const atWorkspace = new RegExp(`${workspaceAt(ownerSlug)}/invite#token=[A-Za-z0-9_-]{43}`).exec(
+      strangerInvite.Text,
+    )?.[0];
+    expect(atWorkspace).toBeDefined();
+    await stranger.goto((atWorkspace ?? '').replace(workspaceAt(ownerSlug), COMMON_ORIGIN));
+    await stranger.getByRole('button', { name: 'Tham gia', exact: true }).click();
+    await expect(stranger).toHaveURL(`${workspaceAt(ownerSlug)}/sites/${siteId}`);
     await stranger.context().close();
   });
 

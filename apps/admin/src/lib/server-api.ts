@@ -1,5 +1,5 @@
 import { type EndpointDefinition, endpoints, type MeResponse } from '@plp/contracts';
-import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { z } from 'zod';
 import { parseAdminEnv } from '../env';
@@ -11,7 +11,11 @@ import {
   type ResponseOf,
 } from './api-core';
 
-/** Server Components call the API directly, forwarding the visitor's session cookie. */
+/**
+ * Server Components call the API directly, forwarding the visitor's cookies as the browser sent
+ * them: a parsed cookie map keeps one of two session cookies of the same name, and the API picks
+ * the one valid in its mode (ADR-025).
+ */
 export async function serverApi<
   E extends EndpointDefinition<
     readonly string[],
@@ -21,7 +25,7 @@ export async function serverApi<
   >,
 >(endpoint: E, args: PathArgs<E>, options: CallOptions<E> = {}): Promise<ResponseOf<E>> {
   const env = parseAdminEnv(process.env);
-  const cookieHeader = (await cookies()).toString();
+  const cookieHeader = (await headers()).get('cookie') ?? '';
   return callEndpoint(env.API_INTERNAL_URL, endpoint, args, options, {
     headers: cookieHeader === '' ? {} : { cookie: cookieHeader },
     cache: 'no-store',

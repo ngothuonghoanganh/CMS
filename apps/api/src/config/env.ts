@@ -1,4 +1,8 @@
-import { WORKSPACE_SLUG_PLACEHOLDER } from '@plp/contracts';
+import {
+  isWorkspaceOriginTemplate,
+  slugOfOrigin,
+  WORKSPACE_SLUG_PLACEHOLDER,
+} from '@plp/contracts';
 import { z } from 'zod';
 
 const secret = z.string().min(32, 'must be at least 32 characters');
@@ -46,10 +50,7 @@ const envSchema = z.object({
   ADMIN_WORKSPACE_ORIGIN_TEMPLATE: z
     .string()
     .refine((value) => value.includes(WORKSPACE_SLUG_PLACEHOLDER), 'must contain {slug}')
-    .refine(
-      (value) => URL.canParse(value.replace(WORKSPACE_SLUG_PLACEHOLDER, 'example')),
-      'must be a URL',
-    )
+    .refine(isWorkspaceOriginTemplate, 'must be an origin with {slug} in its host and no path')
     .optional(),
   /**
    * `Domain` of the session cookie: the parent of the common and the workspace addresses, so one
@@ -57,7 +58,10 @@ const envSchema = z.object({
    */
   SESSION_COOKIE_DOMAIN: z
     .string()
-    .regex(/^[a-z0-9.-]+$/, 'must be a host name')
+    .regex(
+      /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/,
+      'must be a lowercase host name, without a leading dot',
+    )
     .optional(),
 
   /** Public origin of a site's default domain, e.g. "https://{subdomain}.payload.site". */
@@ -168,7 +172,18 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
 function checkWorkspaceAddresses(env: Env): void {
   const template = env.ADMIN_WORKSPACE_ORIGIN_TEMPLATE;
   if (template === undefined) {
+    // One address keeps the host-only cookie it always had.
+    if (env.SESSION_COOKIE_DOMAIN !== undefined) {
+      throw new Error(
+        'Invalid API environment:\nSESSION_COOKIE_DOMAIN applies only with ADMIN_WORKSPACE_ORIGIN_TEMPLATE',
+      );
+    }
     return;
+  }
+  if (slugOfOrigin(template, new URL(env.ADMIN_ORIGIN).origin) !== null) {
+    throw new Error(
+      'Invalid API environment:\nADMIN_ORIGIN would be read as a workspace address; give it a reserved name such as app',
+    );
   }
   const domain = env.SESSION_COOKIE_DOMAIN;
   if (domain === undefined) {
@@ -181,6 +196,13 @@ function checkWorkspaceAddresses(env: Env): void {
   if (!within(new URL(env.ADMIN_ORIGIN).hostname) || !within(workspaceHost)) {
     throw new Error(
       `Invalid API environment:\nADMIN_ORIGIN and ADMIN_WORKSPACE_ORIGIN_TEMPLATE must be under SESSION_COOKIE_DOMAIN (${domain})`,
+    );
+  }
+  // The session must never reach a public site: their domain and the admin's stay apart (§6).
+  const sites = baseDomainOf(env);
+  if (sites === domain || sites.endsWith(`.${domain}`) || domain.endsWith(`.${sites}`)) {
+    throw new Error(
+      `Invalid API environment:\nSESSION_COOKIE_DOMAIN (${domain}) and the public sites' domain (${sites}) must not contain one another`,
     );
   }
 }

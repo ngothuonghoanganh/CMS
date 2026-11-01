@@ -8,7 +8,6 @@ import {
   type Role,
   roleSchema,
   rolesWith,
-  workspaceSlugSchema,
 } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -86,13 +85,10 @@ export class WorkspacesRepository {
     return created.toObject();
   }
 
-  /**
-   * The addresses already taken among `base` and its numbered forms (`base-2`, …). `base` is a
-   * slug, so it holds nothing a regex treats specially; the anchored prefix uses the index.
-   */
-  async takenSlugs(base: string): Promise<Set<string>> {
+  /** The addresses among `candidates` that a workspace already has; one probe of the index. */
+  async takenSlugs(candidates: readonly string[]): Promise<Set<string>> {
     const taken = await this.workspaces
-      .find({ slug: { $regex: `^${workspaceSlugSchema.parse(base)}(-[0-9]+)?$` } }, { slug: 1 })
+      .find({ slug: { $in: [...candidates] } }, { slug: 1 })
       .lean<Pick<WorkspaceRecord, 'slug'>[]>()
       .exec();
     return new Set(taken.map((workspace) => workspace.slug));

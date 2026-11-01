@@ -7,6 +7,11 @@ const uri = process.env['MONGODB_URI'];
 if (!uri) {
   throw new Error('MONGODB_URI is not set');
 }
+// A test database on this machine only: never one on a shared cluster.
+const { hostname } = new URL(uri.replace(/^mongodb(\+srv)?:/, 'http:'));
+if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)) {
+  throw new Error(`Refusing to drop databases on ${hostname}: only a local MongoDB is a test one`);
+}
 const connection = await mongoose.createConnection(uri).asPromise();
 try {
   const master = connection.name;

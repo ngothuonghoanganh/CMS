@@ -170,6 +170,27 @@ describe('ActivityRepository', () => {
       ).toBe(0);
       expect(await t.connection.collection('activity').countDocuments({ _id: id })).toBe(0);
     });
+
+    it('filters by workspace inside a workspace database too', async () => {
+      // An event of another workspace that ended up in this database (a routing slip) stays out
+      // of every read: the documents keep their workspace (ADR-025).
+      const page = new Types.ObjectId();
+      const stray = new Types.ObjectId();
+      await t.workspaceDb(scope.workspaceId).collection('activity').insertOne({
+        _id: stray,
+        workspaceId: otherScope.workspaceId,
+        siteId,
+        pageId: page,
+        actorId: new Types.ObjectId(),
+        type: 'page.published',
+        data: {},
+        reason: null,
+        createdAt: new Date(),
+      });
+      expect(await repository.findById(scope, stray)).toBeNull();
+      expect((await repository.listForPage(scope, page, undefined, 10)).items).toEqual([]);
+      expect((await repository.latestPointerEvents(scope, [page])).size).toBe(0);
+    });
   });
 
   describe('markRevalidationFailed', () => {

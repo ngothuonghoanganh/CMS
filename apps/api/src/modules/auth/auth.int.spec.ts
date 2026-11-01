@@ -129,15 +129,32 @@ describe('auth', () => {
     const tokenHash = hashSessionToken(newSessionToken());
     // An hour ahead, so the TTL monitor leaves the record alone and only the query decides.
     const expiresAt = new Date(Date.now() + 3_600_000);
-    await sessions.create(new Types.ObjectId(), tokenHash, expiresAt);
+    await sessions.create(new Types.ObjectId(), tokenHash, expiresAt, null);
+    const at = (now: Date) => sessions.findActive([tokenHash], now, null);
 
-    expect(await sessions.findActive(tokenHash, new Date())).toMatchObject({
-      tokenHash,
-      expiresAt,
+    expect(await at(new Date())).toMatchObject({ tokenHash, expiresAt });
+    expect(await at(new Date(expiresAt.getTime() - 1))).not.toBeNull();
+    expect(await at(expiresAt)).toBeNull();
+    expect(await at(new Date(expiresAt.getTime() + 1))).toBeNull();
+  });
+
+  it('finds a session only in the cookie scope it was made for (ADR-025)', async () => {
+    const sessions = t.app.get(SessionsRepository);
+    const hostOnly = hashSessionToken(newSessionToken());
+    const onDomain = hashSessionToken(newSessionToken());
+    const expiresAt = new Date(Date.now() + 3_600_000);
+    await sessions.create(new Types.ObjectId(), hostOnly, expiresAt, null);
+    await sessions.create(new Types.ObjectId(), onDomain, expiresAt, 'app.example.vn');
+    const now = new Date();
+
+    expect(await sessions.findActive([hostOnly, onDomain], now, null)).toMatchObject({
+      tokenHash: hostOnly,
     });
-    expect(await sessions.findActive(tokenHash, new Date(expiresAt.getTime() - 1))).not.toBeNull();
-    expect(await sessions.findActive(tokenHash, expiresAt)).toBeNull();
-    expect(await sessions.findActive(tokenHash, new Date(expiresAt.getTime() + 1))).toBeNull();
+    expect(await sessions.findActive([hostOnly, onDomain], now, 'app.example.vn')).toMatchObject({
+      tokenHash: onDomain,
+    });
+    expect(await sessions.findActive([onDomain], now, null)).toBeNull();
+    expect(await sessions.findActive([hostOnly], now, 'app.example.vn')).toBeNull();
   });
 
   it('rejects state-changing requests that do not come from the admin origin', async () => {

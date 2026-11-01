@@ -27,4 +27,10 @@ describe('WorkspaceDatabases', () => {
       `longer than ${MAX_MASTER_DB_NAME_LENGTH} characters`,
     );
   });
+
+  it('counts the master name in bytes, as MongoDB does', () => {
+    expect(() => new WorkspaceDatabases(master('đ'.repeat(18)))).toThrow(
+      `longer than ${MAX_MASTER_DB_NAME_LENGTH} characters`,
+    );
+  });
 });

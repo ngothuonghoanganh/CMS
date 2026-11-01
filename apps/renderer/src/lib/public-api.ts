@@ -113,8 +113,29 @@ export async function getPathStatus(
   });
 }
 
-/** Live, indexable pages of a site; null when the site does not exist. */
+/**
+ * Live, indexable pages of a site; null when the site does not exist. Never cached: unlike a
+ * page, nothing keys the sitemap by what is live, so a tagged entry could outlive a publish when a
+ * revalidation is lost or joins an older read (ADR-009). Crawlers ask for it rarely and the API
+ * answers it with bounded queries.
+ */
 export async function getSitemap(subdomain: string): Promise<SitemapResponse | null> {
+  const endpoint = endpoints.publicSitemap;
+  return fetchPublicJson({
+    baseUrl: rendererEnv().API_PUBLIC_URL,
+    path: endpoint.path(subdomain),
+    schema: endpoint.response,
+    label: 'publicSitemap',
+    timeoutMs: LOOKUP_TIMEOUT_MS,
+    cache: 'no-store',
+  });
+}
+
+/**
+ * The same lookup, cached under the site's tag, for robots.txt: it only uses the site's origin,
+ * which changes with the primary address, and crawlers ask for it often.
+ */
+export async function getCachedSitemap(subdomain: string): Promise<SitemapResponse | null> {
   return answerOf('publicSitemap', await cachedSitemap(subdomain));
 }
 

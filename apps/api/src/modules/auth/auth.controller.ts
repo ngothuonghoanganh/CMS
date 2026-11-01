@@ -18,6 +18,7 @@ import { AuthService, type IssuedSession } from './auth.service.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
 import { CurrentUser } from './current-user.decorator.js';
 import { Public } from './public.decorator.js';
+import { sessionTokensOf } from './session-cookie.js';
 
 @Controller('auth')
 export class AuthController {
@@ -64,13 +65,14 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    const cookies: unknown = request.cookies;
-    const token =
-      typeof cookies === 'object' && cookies !== null && SESSION_COOKIE in cookies
-        ? (cookies as Record<string, unknown>)[SESSION_COOKIE]
-        : undefined;
-    await this.auth.logout(typeof token === 'string' ? token : undefined);
+    await this.auth.logout(sessionTokensOf(request));
+    // With workspace addresses, both scopes: a host-only cookie from before them would otherwise
+    // outlive the sign-out. Without them the parent domain is unknown; its sessions are ended
+    // above and refused in this mode anyway (ADR-025).
     response.clearCookie(SESSION_COOKIE, this.cookieOptions());
+    if (this.env.SESSION_COOKIE_DOMAIN !== undefined) {
+      response.clearCookie(SESSION_COOKIE, this.hostOnlyOptions());
+    }
   }
 
   @Get('me')
@@ -83,16 +85,22 @@ export class AuthController {
       ...this.cookieOptions(),
       expires: session.expiresAt,
     });
+    // A host-only cookie of the same name, from before workspace addresses, would shadow the new
+    // one on this host (ADR-025).
+    if (this.env.SESSION_COOKIE_DOMAIN !== undefined) {
+      response.clearCookie(SESSION_COOKIE, this.hostOnlyOptions());
+    }
     return session.me;
+  }
+
+  private hostOnlyOptions() {
+    return { httpOnly: true, sameSite: 'lax', secure: this.env.COOKIE_SECURE, path: '/' } as const;
   }
 
   /** With workspace addresses, on their parent domain: one login serves them all (ADR-025). */
   private cookieOptions() {
     return {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.env.COOKIE_SECURE,
-      path: '/',
+      ...this.hostOnlyOptions(),
       ...(this.env.SESSION_COOKIE_DOMAIN === undefined
         ? {}
         : { domain: this.env.SESSION_COOKIE_DOMAIN }),

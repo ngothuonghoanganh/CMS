@@ -5,7 +5,8 @@ import { authPageHref, safeNextPath } from '../../../features/auth/next-path';
 import { workspaceHome } from '../../../features/shell/admin-address';
 import { currentAddress } from '../../../features/shell/current-address';
 import { FormCard } from '../../../features/shell/FormCard';
-import styles from '../../../features/workspaces/WorkspacePicker.module.css';
+import addressStyles from '../../../features/workspaces/address.module.css';
+import formStyles from '../../../features/auth/AuthForm.module.css';
 
 export const metadata: Metadata = { title: 'Đăng nhập' };
 
@@ -41,7 +42,7 @@ export default async function LoginPage({
         address.kind === 'workspace' ? (
           <>
             Bạn đang mở{' '}
-            <span className={styles.address}>
+            <span className={addressStyles.address}>
               {new URL(workspaceHome(address.addresses, address.slug)).host}
             </span>
             . Đăng nhập xong, workspace ở địa chỉ này mở ra ngay.
@@ -51,19 +52,18 @@ export default async function LoginPage({
         )
       }
       footer={
-        <>
-          Chưa có tài khoản? <a href={`${commonOrigin}/signup`}>Tạo workspace mới</a>
-          {address.kind === 'workspace' ? (
-            <>
-              <br />
-              Một lần đăng nhập dùng được cho mọi workspace của bạn. Muốn mở workspace khác?{' '}
-              <a href={`${commonOrigin}/`}>Xem tất cả workspace</a>
-            </>
-          ) : null}
-        </>
+        address.kind === 'workspace' ? (
+          <span className={formStyles.note}>
+            Một lần đăng nhập dùng được cho mọi workspace của bạn. Muốn mở workspace khác?{' '}
+            <a href={`${commonOrigin}/`}>Xem tất cả workspace</a>
+          </span>
+        ) : undefined
       }
     >
       <LoginForm next={next} />
+      <p className={formStyles.switch}>
+        Chưa có tài khoản? <a href={`${commonOrigin}/signup`}>Tạo workspace mới</a>
+      </p>
     </FormCard>
   );
 }

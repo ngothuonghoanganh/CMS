@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminAddress } from '../../../features/shell/admin-address';
 import { renderWithProviders } from '../../../features/shell/test-utils';
@@ -36,10 +36,13 @@ describe('login and sign-up with workspace addresses (ADR-025)', () => {
     renderWithProviders(await LoginPage({ searchParams: noQuery() }));
 
     expect(screen.getByText('may-xanh.app.example.vn')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Tạo workspace mới' })).toHaveAttribute(
+    // In the card, as the board has it; the note on other workspaces sits below the card.
+    const card = screen.getByRole('region', { name: 'Đăng nhập' });
+    expect(within(card).getByRole('link', { name: 'Tạo workspace mới' })).toHaveAttribute(
       'href',
       'https://app.example.vn/signup',
     );
+    expect(within(card).queryByRole('link', { name: 'Xem tất cả workspace' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Xem tất cả workspace' })).toHaveAttribute(
       'href',
       'https://app.example.vn/',

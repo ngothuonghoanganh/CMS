@@ -18,7 +18,7 @@ export function workspaceCollection<T>(name: string, schema: Schema<T>): Workspa
   return { name, schema };
 }
 
-/** `{master}_ws_{24 hex}` must stay under MongoDB's 64 bytes for a database name. */
+/** `{master}_ws_{24 hex}` must stay under MongoDB's 64 bytes for a database name (bytes, too). */
 export const MAX_MASTER_DB_NAME_LENGTH = 35;
 
 /** At most this many workspace databases get their indexes built at once. */
@@ -35,7 +35,8 @@ export class WorkspaceDatabases {
   private readonly collections = new Map<string, Schema>();
 
   constructor(@InjectConnection() private readonly master: Connection) {
-    if (master.name.length > MAX_MASTER_DB_NAME_LENGTH) {
+    // MongoDB counts bytes, not characters.
+    if (Buffer.byteLength(master.name) > MAX_MASTER_DB_NAME_LENGTH) {
       throw new Error(
         `The master database name "${master.name}" is longer than ${MAX_MASTER_DB_NAME_LENGTH} characters: workspace database names would not fit`,
       );

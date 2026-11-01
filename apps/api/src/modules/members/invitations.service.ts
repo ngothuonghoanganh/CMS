@@ -340,8 +340,14 @@ export class InvitationsService {
   /** The signed-in user joins; their email must be the invited one. */
   async accept(user: AuthenticatedUser, token: string): Promise<AcceptInvitationResponse> {
     const invitation = await this.forUser(user, token);
+    // Read before joining: the answer must not fail once the membership is stored.
+    const slug = await this.workspaces.findSlug(invitation.workspaceId);
+    if (slug === null) {
+      throw notFound(LINK_INVALID);
+    }
     await this.transactions.run((tx) => this.join.join(invitation, user.id, new Date(), tx));
-    return { workspaceId: invitation.workspaceId.toHexString() };
+    // The address it opens at (ADR-025).
+    return { workspaceId: invitation.workspaceId.toHexString(), slug };
   }
 
   async decline(user: AuthenticatedUser, token: string): Promise<void> {
