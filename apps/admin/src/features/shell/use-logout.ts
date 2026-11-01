@@ -12,8 +12,8 @@ import type { LeaveOutcome } from './screen-leave';
 export interface Logout {
   isPending: boolean;
   /**
-   * Signs out; resolves with `'stayed'` when the session could not be ended (the user was told), or
-   * when not even a page load could open the login page.
+   * Signs out; resolves with `'stayed'` when the session could not be ended, or when not even a
+   * page load could open the login page. The user is told either way.
    */
   signOut: () => Promise<LeaveOutcome>;
 }
@@ -67,8 +67,14 @@ export function useLogout(): Logout {
       try {
         loadPage('/login');
       } catch (loadError) {
-        // The user is still here: a screen that was leaving without saving saves and asks again.
+        // The user is still here, signed out: a screen that was leaving without saving keeps its
+        // changes and asks again, and the user learns why nothing happened.
         reportUnexpected('Loading the login page after signing out failed', loadError);
+        toast({
+          tone: 'danger',
+          title: 'Bạn đã đăng xuất',
+          description: 'Không mở được trang đăng nhập. Hãy tải lại trang.',
+        });
         return 'stayed';
       }
       return 'leaving';

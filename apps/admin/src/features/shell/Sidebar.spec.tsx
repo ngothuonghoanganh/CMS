@@ -422,7 +422,7 @@ describe('Sidebar', () => {
       expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
     });
 
-    it('reports that the user stays when not even a page load opens the login page', async () => {
+    it('tells the user to reload, and stays, when not even a page load opens the login page', async () => {
       const user = userEvent.setup();
       const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       onTestFinished(() => {
@@ -446,12 +446,19 @@ describe('Sidebar', () => {
         outcome = await asked[0]?.leave();
       });
 
-      // Still on the screen: it saves and asks again before the tab closes.
+      // Still on the screen: it saves and asks again before the tab closes. The session is gone,
+      // and the user learns it, with what to do.
       expect(outcome).toBe('stayed');
       expect(logged).toHaveBeenCalledWith(
         'Loading the login page after signing out failed',
         blocked,
       );
+      const told = await screen.findByText('Bạn đã đăng xuất');
+      expect(told.closest('[data-tone]')).toHaveAttribute('data-tone', 'danger');
+      expect(
+        screen.getByText('Không mở được trang đăng nhập. Hãy tải lại trang.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
     });
 
     it('still opens the login page when dropping the cached data fails', async () => {
