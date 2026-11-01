@@ -91,7 +91,7 @@ export function leadsHref(siteId: string, search = ''): string {
 }
 
 /** "Hiệu quả" (ADR-019), optionally with its range and page, such as `?range=30d`. */
-export function analyticsHref(siteId: string, search = ''): string {
+function analyticsHref(siteId: string, search = ''): string {
   return `${siteHref(siteId)}/analytics${search}`;
 }
 

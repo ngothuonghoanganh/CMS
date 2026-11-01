@@ -49,7 +49,7 @@ export type PageListQueryValues = z.output<typeof pageListQuerySchema>;
 export type CreatePageValues = z.output<typeof createPageRequestSchema>;
 export type SlugAvailabilityQuery = z.output<typeof slugAvailabilityQuerySchema>;
 
-export const PAGE_LIMIT_MESSAGE = `Mỗi site có tối đa ${MAX_PAGES_PER_SITE} trang`;
+const PAGE_LIMIT_MESSAGE = `Mỗi site có tối đa ${MAX_PAGES_PER_SITE} trang`;
 
 function firstIssueMessage(issues: readonly { message: string }[]): string {
   const issue = issues[0];

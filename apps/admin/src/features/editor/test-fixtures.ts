@@ -13,8 +13,8 @@ import { createEditorStore, type EditorInit, type EditorStore } from './store';
 
 export const SITE_ID = '64b000000000000000000001';
 export const PAGE_ID = '64b000000000000000000002';
-export const WORKSPACE_ID = '64b000000000000000000003';
-export const USER = { id: '64b000000000000000000004', name: 'Ngọc Anh' };
+const WORKSPACE_ID = '64b000000000000000000003';
+const USER = { id: '64b000000000000000000004', name: 'Ngọc Anh' };
 export const OTHER_PAGE_ID = '64b000000000000000000005';
 export const RELEASE_ID = '64b000000000000000000006';
 export const ASSET_ID = '64b000000000000000000007';
@@ -107,7 +107,7 @@ export function pageDetail(
 let idCounter = 0;
 
 /** Deterministic section ids: "new000000001", "new000000002", … */
-export function sequentialIds(): () => string {
+function sequentialIds(): () => string {
   return () => {
     idCounter += 1;
     return `new${String(idCounter).padStart(9, '0')}`;

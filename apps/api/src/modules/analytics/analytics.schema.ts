@@ -3,10 +3,10 @@ import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const ANALYTICS_SALT_MODEL = 'AnalyticsSalt';
-export const ANALYTICS_SEEN_MODEL = 'AnalyticsSeen';
-export const ANALYTICS_DAILY_MODEL = 'AnalyticsDaily';
+const ANALYTICS_SEEN_MODEL = 'AnalyticsSeen';
+const ANALYTICS_DAILY_MODEL = 'AnalyticsDaily';
 export const ANALYTICS_SALT_DAY_INDEX = 'analytics_salts_day_unique';
-export const ANALYTICS_SEEN_INDEX = 'analytics_seen_unique';
+const ANALYTICS_SEEN_INDEX = 'analytics_seen_unique';
 
 /**
  * The random salt of one Vietnamese day (ADR-019). Visitor hashes of that day use it; once it
@@ -43,7 +43,7 @@ export interface AnalyticsSeenRecord {
   expiresAt: Date;
 }
 
-export const analyticsSeenSchema = new Schema<AnalyticsSeenRecord>(
+const analyticsSeenSchema = new Schema<AnalyticsSeenRecord>(
   {
     siteId: { type: Schema.Types.ObjectId, required: true },
     pageId: { type: Schema.Types.ObjectId, default: null },
@@ -77,7 +77,7 @@ export interface AnalyticsDailyRecord {
   expiresAt: Date;
 }
 
-export const analyticsDailySchema = new Schema<AnalyticsDailyRecord>(
+const analyticsDailySchema = new Schema<AnalyticsDailyRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

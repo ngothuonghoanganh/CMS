@@ -2,7 +2,7 @@ import { type AssignableRole, assignableRoleSchema } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 
 export const INVITATION_MODEL = 'Invitation';
-export const INVITATION_TOKEN_INDEX = 'invitations_token_unique';
+const INVITATION_TOKEN_INDEX = 'invitations_token_unique';
 export const INVITATION_PENDING_EMAIL_INDEX = 'invitations_pending_email_unique';
 
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked' | 'declined';

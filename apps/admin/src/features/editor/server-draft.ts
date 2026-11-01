@@ -9,7 +9,7 @@ import type { EditorState, EditorStore } from './store';
 import { runningSavesSettled } from './use-draft-saver';
 
 /** The assets a draft from the server references that the store does not know yet. */
-export async function loadMissingAssets(
+async function loadMissingAssets(
   state: Pick<EditorState, 'site' | 'assetsById'>,
   detail: PageDetailResponse,
 ): Promise<Asset[]> {

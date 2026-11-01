@@ -21,7 +21,7 @@ import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 
-export const CUSTOM_ROLE_NOT_FOUND = 'Không tìm thấy vai trò';
+const CUSTOM_ROLE_NOT_FOUND = 'Không tìm thấy vai trò';
 
 /**
  * Runs a write of a role's name; the workspace having the name already is answered once its

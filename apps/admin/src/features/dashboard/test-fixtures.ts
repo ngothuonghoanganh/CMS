@@ -12,7 +12,7 @@ import type {
 export const SITE_ID = '64b000000000000000000001';
 export const WORKSPACE_ID = '64b0000000000000000000a1';
 
-export const ngocAnh = { id: '64b0000000000000000000c1', name: 'Ngọc Anh' };
+const ngocAnh = { id: '64b0000000000000000000c1', name: 'Ngọc Anh' };
 export const minh = { id: '64b0000000000000000000c2', name: 'Minh' };
 
 export function siteFixture(overrides: Partial<Site> = {}): Site {

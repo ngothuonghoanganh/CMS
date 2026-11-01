@@ -52,9 +52,8 @@ import {
 import type { ReleaseRecord } from './release.schema.js';
 import { IdempotencyKeyUsedError, ReleasesRepository } from './releases.repository.js';
 
-export const ACTIVITY_NOT_FOUND = 'Không tìm thấy hoạt động';
-export const UNDO_NOT_AVAILABLE_MESSAGE =
-  'Không thể hoàn tác vì trang đã thay đổi sau lần khôi phục này';
+const ACTIVITY_NOT_FOUND = 'Không tìm thấy hoạt động';
+const UNDO_NOT_AVAILABLE_MESSAGE = 'Không thể hoàn tác vì trang đã thay đổi sau lần khôi phục này';
 
 /** Pointer moves listed in the history next to releases (publishing is shown by the release). */
 const HISTORY_POINTER_TYPES = [

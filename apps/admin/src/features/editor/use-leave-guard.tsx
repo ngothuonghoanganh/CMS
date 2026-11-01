@@ -9,7 +9,7 @@ import { type EditorStore, isLeavingWithoutSaving, type SaveState } from './stor
 import { type DraftSaver, DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
-export function isUnsaved(saveState: SaveState): boolean {
+function isUnsaved(saveState: SaveState): boolean {
   return saveState === 'dirty' || saveState === 'saving' || saveState === 'error';
 }
 

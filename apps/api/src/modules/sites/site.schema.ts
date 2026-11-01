@@ -2,8 +2,8 @@ import { type RetentionMonths, type ThemePresetId, themePresetIds } from '@plp/c
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const SITE_MODEL = 'Site';
-export const SITES_SUBDOMAIN_INDEX = 'sites_subdomain_unique';
+const SITE_MODEL = 'Site';
+const SITES_SUBDOMAIN_INDEX = 'sites_subdomain_unique';
 export const SITE_ADDRESS_MODEL = 'SiteAddress';
 export const SITE_ADDRESSES_SUBDOMAIN_INDEX = 'site_addresses_subdomain_unique';
 
@@ -113,7 +113,7 @@ const leadRecipientSchema = new Schema<LeadRecipientRecord>({
   tokenExpiresAt: { type: Date, default: null },
 });
 
-export const siteSchema = new Schema<SiteRecord>(
+const siteSchema = new Schema<SiteRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     name: { type: String, required: true },

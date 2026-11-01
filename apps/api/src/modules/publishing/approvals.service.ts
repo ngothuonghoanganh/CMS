@@ -20,7 +20,7 @@ import { ApprovalsRepository } from './approvals.repository.js';
 import { APPROVALS_PER_DAY } from './domain/approval-rules.js';
 import { pointerConflict } from './pointer.service.js';
 
-export const APPROVAL_NOT_FOUND = 'Không tìm thấy yêu cầu xuất bản đang chờ';
+const APPROVAL_NOT_FOUND = 'Không tìm thấy yêu cầu xuất bản đang chờ';
 
 function approvalChanged(options?: { cause: unknown }): AppError {
   return new AppError(409, 'approval_changed', 'Yêu cầu xuất bản vừa thay đổi', {

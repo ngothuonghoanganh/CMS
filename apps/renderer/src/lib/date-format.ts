@@ -1,5 +1,5 @@
 /** Visitors of these sites are in Vietnam; server-rendered times use Vietnam time. */
-export const SITE_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const SITE_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
 const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: SITE_TIME_ZONE,

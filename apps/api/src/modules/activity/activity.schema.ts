@@ -2,7 +2,7 @@ import { type ActivityType, activityTypes } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const ACTIVITY_MODEL = 'Activity';
+const ACTIVITY_MODEL = 'Activity';
 
 /** Versions and releases an event involves; unused fields stay null (or false). */
 export interface ActivityData {
@@ -48,7 +48,7 @@ export interface ActivityRecord {
   createdAt: Date;
 }
 
-export const activitySchema = new Schema<ActivityRecord>(
+const activitySchema = new Schema<ActivityRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

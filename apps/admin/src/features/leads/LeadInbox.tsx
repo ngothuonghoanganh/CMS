@@ -65,7 +65,7 @@ import { LeadTable } from './LeadTable';
 import { leadQueryKeys, useLeadCounts } from './queries';
 import styles from './LeadInbox.module.css';
 
-export const LEAD_SEARCH_DEBOUNCE_MS = 300;
+const LEAD_SEARCH_DEBOUNCE_MS = 300;
 
 const FIRST_PAGE: string | null = null;
 

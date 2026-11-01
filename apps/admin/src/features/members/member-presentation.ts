@@ -37,7 +37,7 @@ export interface RoleOption {
 }
 
 /** The access a custom role gives its holders. */
-export function customRoleAccess(role: Pick<CustomRole, 'id' | 'name' | 'permissions'>): Access {
+function customRoleAccess(role: Pick<CustomRole, 'id' | 'name' | 'permissions'>): Access {
   return {
     customRoleId: role.id,
     name: role.name,

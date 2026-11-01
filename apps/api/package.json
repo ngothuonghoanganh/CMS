@@ -45,7 +45,6 @@
     "@swc/core": "^1.16.20",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.3.0",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.3.1",
     "unplugin-swc": "^2.0.0",

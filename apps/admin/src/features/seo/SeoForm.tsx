@@ -21,7 +21,7 @@ const DESCRIPTION_MAX = 400;
 /** A field the publish checks point at (`?focus=`): an SEO field or the slug. */
 export type SeoFocus = SeoField | 'slug';
 
-export const seoFieldIds: Record<SeoFocus, string> = {
+const seoFieldIds: Record<SeoFocus, string> = {
   slug: 'seo-slug',
   title: 'seo-title',
   description: 'seo-description',

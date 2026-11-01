@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { defineSection } from '../define.js';
 
 /** The highlighted quote shows one testimonial; the cards need 3 to 6 (ADR-007). */
-export const TESTIMONIALS_MIN = 1;
-export const TESTIMONIALS_CARDS_MIN = 3;
-export const TESTIMONIALS_MAX = 6;
+const TESTIMONIALS_MIN = 1;
+const TESTIMONIALS_CARDS_MIN = 3;
+const TESTIMONIALS_MAX = 6;
 
 const testimonialSchema = z.object({
   quote: textSchema(300),

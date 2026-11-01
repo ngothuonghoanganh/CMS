@@ -2,7 +2,7 @@ import { type Composition, type PageGoal, pageGoalIds, type Seo } from '@plp/con
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const PAGE_MODEL = 'Page';
+const PAGE_MODEL = 'Page';
 export const PAGES_DRAFT_SLUG_INDEX = 'pages_draft_slug_unique';
 export const PAGES_PUBLISHED_SLUG_INDEX = 'pages_published_slug_unique';
 
@@ -50,7 +50,7 @@ function slugMissing(this: PageRecord): boolean {
   return typeof this.draft.slug !== 'string';
 }
 
-export const pageSchema = new Schema<PageRecord>(
+const pageSchema = new Schema<PageRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

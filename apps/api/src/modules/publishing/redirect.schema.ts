@@ -1,8 +1,8 @@
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const REDIRECT_MODEL = 'Redirect';
-export const REDIRECTS_FROM_SLUG_INDEX = 'redirects_site_from_slug_unique';
+const REDIRECT_MODEL = 'Redirect';
+const REDIRECTS_FROM_SLUG_INDEX = 'redirects_site_from_slug_unique';
 
 /**
  * An old live slug of a page (ADR-006). It points to the page, not to a slug, and is resolved at
@@ -21,7 +21,7 @@ function fromSlugMissing(this: RedirectRecord): boolean {
   return typeof this.fromSlug !== 'string';
 }
 
-export const redirectSchema = new Schema<RedirectRecord>(
+const redirectSchema = new Schema<RedirectRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

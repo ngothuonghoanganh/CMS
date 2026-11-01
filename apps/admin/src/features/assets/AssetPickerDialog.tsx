@@ -35,7 +35,7 @@ export interface AssetSelection {
   decorative: boolean;
 }
 
-export function selectionOf(asset: Asset): AssetSelection {
+function selectionOf(asset: Asset): AssetSelection {
   return { assetId: asset.id, alt: asset.alt ?? '', decorative: asset.decorative };
 }
 

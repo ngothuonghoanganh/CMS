@@ -99,7 +99,7 @@ function SiteTile({ site }: { site: Site }) {
 }
 
 /** "Chủ sở hữu", or "Biên tập · 2 site" for a member kept to some sites. */
-export function membershipLabel(membership: Membership): string {
+function membershipLabel(membership: Membership): string {
   const role = accessLabel(membership.role);
   return membership.siteIds === null ? role : `${role} · ${membership.siteIds.length} site`;
 }

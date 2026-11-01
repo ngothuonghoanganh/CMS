@@ -28,7 +28,7 @@ function widen<C extends Record<string, unknown>>(
 }
 
 /** Every section type maps to exactly one definition; the type checker enforces completeness. */
-export const sectionDefinitions: { readonly [T in SectionType]: AnySectionDefinition } = {
+const sectionDefinitions: { readonly [T in SectionType]: AnySectionDefinition } = {
   navbar: widen(navbarSection),
   hero: widen(heroSection),
   benefits: widen(benefitsSection),

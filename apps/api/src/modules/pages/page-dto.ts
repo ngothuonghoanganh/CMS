@@ -49,7 +49,7 @@ export function toPointerEvent(record: ActivityRecord, by: UserRef): PointerEven
   }
 }
 
-export function toLiveReleaseRef(release: ReleaseRecord): LiveReleaseRef {
+function toLiveReleaseRef(release: ReleaseRecord): LiveReleaseRef {
   return {
     id: release._id.toHexString(),
     version: release.version,

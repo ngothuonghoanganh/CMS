@@ -10,7 +10,7 @@ import { MAX_ASSET_BYTES } from '@plp/contracts';
 import type { Observable } from 'rxjs';
 import { AppError } from '../../shared/errors.js';
 
-export const ASSET_TOO_LARGE_MESSAGE = 'Ảnh tối đa 10 MB';
+const ASSET_TOO_LARGE_MESSAGE = 'Ảnh tối đa 10 MB';
 
 /**
  * Reads the single `file` part of the upload into memory (multer's default storage) and stops at

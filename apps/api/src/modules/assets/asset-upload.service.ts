@@ -20,7 +20,7 @@ export interface UploadedImageFile {
   buffer: Buffer;
 }
 
-export const FILE_REQUIRED_MESSAGE = 'Chọn một ảnh để tải lên';
+const FILE_REQUIRED_MESSAGE = 'Chọn một ảnh để tải lên';
 
 @Injectable()
 export class AssetUploadService {

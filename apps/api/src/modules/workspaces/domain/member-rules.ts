@@ -9,7 +9,7 @@ import {
 const DAY_MS = 86_400_000;
 
 /** Closed and expired invitations, and decided access requests, are deleted this much later. */
-export const PURGE_AFTER_DAYS = 30;
+const PURGE_AFTER_DAYS = 30;
 
 /** Invitation emails a day: per workspace, and per address from every workspace (ADR-021). */
 export const INVITATION_EMAILS_PER_DAY = { workspace: 50, address: 5 } as const;

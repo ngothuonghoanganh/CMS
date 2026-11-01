@@ -10,7 +10,7 @@ import { Schema, type Types } from 'mongoose';
 import type { LeadSearchKeys } from '../leads/domain/lead-search.js';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const DATA_REQUEST_MODEL = 'DataRequest';
+const DATA_REQUEST_MODEL = 'DataRequest';
 
 /** Who made the request: the phone number as E.164, or every field masked once deleted. */
 export interface DataRequestContact {
@@ -66,7 +66,7 @@ const logEntrySchema = new Schema<DataRequestLogRecord>(
   { _id: false },
 );
 
-export const dataRequestSchema = new Schema<DataRequestRecord>(
+const dataRequestSchema = new Schema<DataRequestRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

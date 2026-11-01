@@ -2,7 +2,6 @@
 // Tokens: import '@plp/ui/tokens.css' once in the admin root layout.
 
 export { Avatar, type AvatarProps } from './Avatar/Avatar';
-export { initialsOf } from './Avatar/initials';
 export { Badge, type BadgeProps, type BadgeSize, type BadgeTone } from './Badge/Badge';
 export { StatusBadge, type StatusBadgeProps } from './Badge/StatusBadge';
 export { Button, type ButtonProps } from './Button/Button';
@@ -13,7 +12,6 @@ export {
   type LinkComponentProps,
 } from './Button/ButtonLink';
 export {
-  buttonClassName,
   type ButtonSize,
   type ButtonStyleOptions,
   type ButtonVariant,
@@ -41,7 +39,7 @@ export {
 } from './DropdownMenu/DropdownMenu';
 export { EmptyState, type EmptyStateProps } from './EmptyState/EmptyState';
 export { Field, type FieldCounter, type FieldProps } from './Field/Field';
-export { type FieldControlProps, type FieldTone, useFieldContext } from './Field/FieldContext';
+export type { FieldControlProps, FieldTone } from './Field/FieldContext';
 export { Input, type InputProps } from './Field/Input';
 export { Textarea, type TextareaProps } from './Field/Textarea';
 export {

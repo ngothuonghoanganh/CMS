@@ -2,7 +2,7 @@ import { type AssetMimeType, assetMimeTypes } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const ASSET_MODEL = 'Asset';
+const ASSET_MODEL = 'Asset';
 
 export interface AssetRecord {
   _id: Types.ObjectId;
@@ -22,11 +22,11 @@ export interface AssetRecord {
 }
 
 /** ADR-005/ADR-012: an asset is either described (non-empty alt) or decorative (alt null). */
-export function isDescribedXorDecorative(alt: string | null, decorative: boolean): boolean {
+function isDescribedXorDecorative(alt: string | null, decorative: boolean): boolean {
   return decorative ? alt === null : alt !== null && alt.trim().length > 0;
 }
 
-export const assetSchema = new Schema<AssetRecord>(
+const assetSchema = new Schema<AssetRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

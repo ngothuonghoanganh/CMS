@@ -1,7 +1,7 @@
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const APPROVAL_MODEL = 'PublishApproval';
+const APPROVAL_MODEL = 'PublishApproval';
 export const APPROVAL_PENDING_INDEX = 'publish_approvals_pending_unique';
 
 export type ApprovalStatus = 'pending' | 'published' | 'rejected' | 'withdrawn';
@@ -36,7 +36,7 @@ export interface ApprovalRecord {
   purgeAt: Date | null;
 }
 
-export const approvalSchema = new Schema<ApprovalRecord>(
+const approvalSchema = new Schema<ApprovalRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

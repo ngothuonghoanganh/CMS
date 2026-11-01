@@ -9,7 +9,7 @@ export interface Box {
 }
 
 /** Distance of the stack from the window's edges (`.viewport` in Toast.module.css). */
-export const TOAST_INSET = 16;
+const TOAST_INSET = 16;
 
 function overlaps(a: Box, b: Box): boolean {
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;

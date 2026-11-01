@@ -59,7 +59,7 @@ export function isFieldHidden(
 }
 
 /** Cuts text to `max` UTF-16 units without leaving half of a surrogate pair at the end. */
-export function clampText(value: string, max: number): string {
+function clampText(value: string, max: number): string {
   if (value.length <= max) {
     return value;
   }

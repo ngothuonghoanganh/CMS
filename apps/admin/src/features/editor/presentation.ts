@@ -24,8 +24,8 @@ export const canvasLabels: Record<Device, string> = {
 };
 
 /** Layout widths of the preview frame. The desktop frame fills the canvas from 1024 to 1280 px. */
-export const DESKTOP_MIN_WIDTH = 1024;
-export const DESKTOP_MAX_WIDTH = 1280;
+const DESKTOP_MIN_WIDTH = 1024;
+const DESKTOP_MAX_WIDTH = 1280;
 const fixedWidths: Record<Exclude<Device, 'desktop'>, number> = { tablet: 768, mobile: 390 };
 
 export interface FrameLayout {
@@ -125,7 +125,7 @@ export const SAME_AS_LIVE = 'Nội dung giống bản live';
  * keeps the look (ADR-015) and, with a form, the consent settings (ADR-017) it was published with
  * until it is published again.
  */
-export const SITE_CHANGED = 'Giao diện site đã đổi';
+const SITE_CHANGED = 'Giao diện site đã đổi';
 const PRIVACY_CHANGED = 'Dữ liệu cá nhân đã đổi';
 const SETTINGS_CHANGED = 'Cài đặt site đã đổi';
 

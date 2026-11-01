@@ -17,7 +17,7 @@ import { ASSET_STORAGE, type AssetStorage } from './asset-storage.js';
 import type { AssetRecord } from './asset.schema.js';
 import { AssetsRepository } from './assets.repository.js';
 
-export const ASSET_NOT_FOUND = 'Không tìm thấy ảnh';
+const ASSET_NOT_FOUND = 'Không tìm thấy ảnh';
 
 @Injectable()
 export class AssetsService {

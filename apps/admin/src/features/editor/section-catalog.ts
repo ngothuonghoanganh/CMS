@@ -51,7 +51,7 @@ export function buildCatalog(
 }
 
 /** Lowercase without Vietnamese diacritics, so "nhan xet" finds "Nhận xét". */
-export function normalizeSearch(text: string): string {
+function normalizeSearch(text: string): string {
   return text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')

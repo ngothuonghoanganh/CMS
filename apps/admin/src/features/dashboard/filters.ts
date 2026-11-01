@@ -7,7 +7,7 @@ export interface DashboardFilters {
 }
 
 /** Same bound as `pageListQuerySchema.q`. */
-export const SEARCH_MAX_LENGTH = 80;
+const SEARCH_MAX_LENGTH = 80;
 
 export type SearchParamValue = string | readonly string[] | null | undefined;
 

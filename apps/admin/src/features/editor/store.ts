@@ -174,7 +174,7 @@ export interface EditorState {
 
 export type EditorStore = StoreApi<EditorState>;
 
-export function randomSectionId(): string {
+function randomSectionId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 

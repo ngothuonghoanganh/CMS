@@ -1,7 +1,7 @@
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const CONSENT_VERSION_MODEL = 'ConsentVersion';
+const CONSENT_VERSION_MODEL = 'ConsentVersion';
 export const CONSENT_VERSIONS_SITE_VERSION_INDEX = 'consent_versions_site_version_unique';
 
 /**
@@ -23,7 +23,7 @@ export interface ConsentVersionRecord {
   createdAt: Date;
 }
 
-export const consentVersionSchema = new Schema<ConsentVersionRecord>(
+const consentVersionSchema = new Schema<ConsentVersionRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },
