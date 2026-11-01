@@ -126,10 +126,31 @@ describe('Sidebar', () => {
     // Words of their own, not "Ngọc AnhChủ sở hữu".
     expect(screen.getByRole('button', { name: 'Ngọc Anh Chủ sở hữu' })).toBeInTheDocument();
     // The workspace's own sections (Sidebar v2).
+    expect(screen.getByRole('link', { name: 'Thành viên' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/members`,
+    );
     expect(screen.getByRole('link', { name: 'Vai trò & quyền' })).toHaveAttribute(
       'href',
       `/workspaces/${WORKSPACE_ID}/roles`,
     );
+  });
+
+  it('lets a role that cannot change roles ask Chủ sở hữu from the account menu (ADR-021)', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValue({ request: null });
+    const { unmount } = renderSidebar({
+      membership: { ...agency, role: 'editor' },
+      leadCounts: null,
+    });
+    await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Yêu cầu đổi quyền' }));
+    expect(await screen.findByRole('dialog', { name: 'Yêu cầu đổi quyền' })).toBeInTheDocument();
+    unmount();
+
+    renderSidebar();
+    await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Yêu cầu đổi quyền' })).toBeNull();
   });
 
   it('shows each role only the sections it may use (ADR-020)', () => {

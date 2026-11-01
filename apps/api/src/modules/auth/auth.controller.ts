@@ -1,6 +1,8 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthThrottlerGuard } from './auth-throttler.guard.js';
 import {
+  type InvitedSignupRequest,
+  invitedSignupRequestSchema,
   type LoginRequest,
   loginRequestSchema,
   type MeResponse,
@@ -32,6 +34,17 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<MeResponse> {
     return this.withCookie(response, await this.auth.signup(body));
+  }
+
+  /** From an invitation link: the invited email's account, already in the workspace. */
+  @Public()
+  @UseGuards(AuthThrottlerGuard)
+  @Post('signup/invited')
+  async signupInvited(
+    @Body(new ZodPipe(invitedSignupRequestSchema)) body: InvitedSignupRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<MeResponse> {
+    return this.withCookie(response, await this.auth.signupInvited(body));
   }
 
   @Public()

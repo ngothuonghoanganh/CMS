@@ -30,6 +30,7 @@ export default async function RolesPage({ params }: RolesPageProps) {
             ? { href: '/', label: 'Về trang chủ' }
             : { href: siteHref(site.id), label: 'Về danh sách trang' }
         }
+        requestAccess
       />
     );
   }

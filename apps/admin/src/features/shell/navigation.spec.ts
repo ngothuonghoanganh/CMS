@@ -54,6 +54,12 @@ describe('siteNavItems', () => {
   it('lists the workspace sections, each behind its permission', () => {
     expect(workspaceNavItems('64b0000000000000000000aa')).toEqual([
       {
+        key: 'members',
+        label: 'Thành viên',
+        href: '/workspaces/64b0000000000000000000aa/members',
+        permission: 'members.manage',
+      },
+      {
         key: 'roles',
         label: 'Vai trò & quyền',
         href: '/workspaces/64b0000000000000000000aa/roles',

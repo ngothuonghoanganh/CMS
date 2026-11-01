@@ -23,6 +23,8 @@ const BOARD: Record<string, string> = {
   'sites.manage': 'yynnnn',
   'domains.manage': 'yynnnn',
   'members.manage': 'yynnnn',
+  'accessRequests.decide': 'ynnnnn',
+  'workspace.transferOwnership': 'ynnnnn',
 };
 
 describe('the role matrix', () => {

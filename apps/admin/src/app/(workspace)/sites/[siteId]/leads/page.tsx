@@ -32,6 +32,7 @@ export default async function LeadsPage({ params, searchParams }: LeadsPageProps
         membership={membership}
         holders={`Chỉ ${holdersOf('leads.view')} xem được lead của site.`}
         back={{ href: siteHref(site.id), label: 'Về danh sách trang' }}
+        requestAccess
       />
     );
   }

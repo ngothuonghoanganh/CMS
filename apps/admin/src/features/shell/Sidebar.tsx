@@ -29,11 +29,13 @@ import {
   PlusIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  UsersIcon,
   VisuallyHidden,
 } from '@plp/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
+import { AccessRequestDialog } from '../members/AccessRequestDialog';
 import { loadPage } from '../../lib/page-load';
 import { hostOf } from '../../lib/site-url';
 import { newLeadsBadge } from '../leads/lead-presentation';
@@ -62,6 +64,7 @@ const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   domain: GlobeIcon,
   privacy: ShieldCheckIcon,
   settings: SettingsIcon,
+  members: UsersIcon,
   roles: LockIcon,
 };
 
@@ -167,6 +170,9 @@ export function Sidebar({
     items.filter((item) => can(membership.role, item.permission));
   const workspaceItems = allowed(workspaceNavItems(workspace.id));
   const canCreateSite = can(membership.role, 'sites.manage');
+  // Roles that cannot change roles ask Chủ sở hữu instead (ADR-021).
+  const canAskForAccess = !can(membership.role, 'members.manage');
+  const [requestOpen, setRequestOpen] = useState(false);
   const newSiteHref = `/sites/new?workspace=${encodeURIComponent(workspace.id)}`;
 
   // Code navigation leaves through the screen on display, which saves what it holds first.
@@ -364,6 +370,16 @@ export function Sidebar({
           }
         >
           <DropdownMenuLabel>Tài khoản</DropdownMenuLabel>
+          {canAskForAccess ? (
+            <DropdownMenuItem
+              icon={<LockIcon size={18} />}
+              onSelect={() => {
+                setRequestOpen(true);
+              }}
+            >
+              Yêu cầu đổi quyền
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             icon={<LogoutIcon size={18} />}
             disabled={logout.isPending}
@@ -376,6 +392,14 @@ export function Sidebar({
           </DropdownMenuItem>
         </DropdownMenu>
       </div>
+      {canAskForAccess ? (
+        <AccessRequestDialog
+          workspaceId={workspace.id}
+          role={membership.role}
+          open={requestOpen}
+          onOpenChange={setRequestOpen}
+        />
+      ) : null}
     </nav>
   );
 }

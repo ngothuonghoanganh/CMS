@@ -8,6 +8,23 @@ import {
   updateAssetRequestSchema,
 } from './asset.js';
 import { loginRequestSchema, meResponseSchema, signupRequestSchema } from './auth.js';
+import {
+  acceptInvitationResponseSchema,
+  accessGrantSchema,
+  accessRequestListResponseSchema,
+  createAccessRequestSchema,
+  createInvitationsRequestSchema,
+  createInvitationsResponseSchema,
+  invitationListResponseSchema,
+  invitationLookupResponseSchema,
+  invitationSchema,
+  invitationTokenRequestSchema,
+  invitedSignupRequestSchema,
+  memberListResponseSchema,
+  memberSchema,
+  myAccessRequestResponseSchema,
+  transferOwnershipRequestSchema,
+} from './members.js';
 import { roleCountsSchema } from './permissions.js';
 import { checksResultSchema } from './checks.js';
 import { cursorQuerySchema } from './common.js';
@@ -164,6 +181,142 @@ export const endpoints = {
     request: null,
     query: null,
     response: roleCountsSchema,
+  }),
+
+  // Members (ADR-021): `members.manage`, except where noted
+  listMembers: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/members`,
+    request: null,
+    query: null,
+    response: memberListResponseSchema,
+  }),
+  updateMember: endpoint({
+    method: 'PATCH',
+    path: (workspaceId: string, userId: string) =>
+      `/workspaces/${e(workspaceId)}/members/${e(userId)}`,
+    request: accessGrantSchema,
+    query: null,
+    response: memberSchema,
+  }),
+  removeMember: endpoint({
+    method: 'DELETE',
+    path: (workspaceId: string, userId: string) =>
+      `/workspaces/${e(workspaceId)}/members/${e(userId)}`,
+    request: null,
+    query: null,
+    response: null,
+  }),
+  /** `workspace.transferOwnership`: the receiver must be a Quản trị. */
+  transferOwnership: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/ownership`,
+    request: transferOwnershipRequestSchema,
+    query: null,
+    response: memberListResponseSchema,
+  }),
+  listInvitations: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/invitations`,
+    request: null,
+    query: null,
+    response: invitationListResponseSchema,
+  }),
+  createInvitations: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/invitations`,
+    request: createInvitationsRequestSchema,
+    query: null,
+    response: createInvitationsResponseSchema,
+  }),
+  /** A new link, valid 7 days again; the old link stops working. */
+  resendInvitation: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, invitationId: string) =>
+      `/workspaces/${e(workspaceId)}/invitations/${e(invitationId)}/resend`,
+    request: null,
+    query: null,
+    response: invitationSchema,
+  }),
+  revokeInvitation: endpoint({
+    method: 'DELETE',
+    path: (workspaceId: string, invitationId: string) =>
+      `/workspaces/${e(workspaceId)}/invitations/${e(invitationId)}`,
+    request: null,
+    query: null,
+    response: null,
+  }),
+  /** No session: what the invitation page shows to whoever holds the link. */
+  lookupInvitation: endpoint({
+    method: 'POST',
+    path: () => '/public/invitations/lookup',
+    request: invitationTokenRequestSchema,
+    query: null,
+    response: invitationLookupResponseSchema,
+  }),
+  /** No session: creates the account of the invited email, joins the workspace, signs in. */
+  signupInvited: endpoint({
+    method: 'POST',
+    path: () => '/auth/signup/invited',
+    request: invitedSignupRequestSchema,
+    query: null,
+    response: meResponseSchema,
+  }),
+  /** The signed-in user, whose email must be the invited one. */
+  acceptInvitation: endpoint({
+    method: 'POST',
+    path: () => '/invitations/accept',
+    request: invitationTokenRequestSchema,
+    query: null,
+    response: acceptInvitationResponseSchema,
+  }),
+  declineInvitation: endpoint({
+    method: 'POST',
+    path: () => '/invitations/decline',
+    request: invitationTokenRequestSchema,
+    query: null,
+    response: null,
+  }),
+  /** `accessRequests.decide`: the pending requests of the workspace. */
+  listAccessRequests: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/access-requests`,
+    request: null,
+    query: null,
+    response: accessRequestListResponseSchema,
+  }),
+  /** Any member: their own pending request. */
+  myAccessRequest: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/access-requests/mine`,
+    request: null,
+    query: null,
+    response: myAccessRequestResponseSchema,
+  }),
+  /** Members without `members.manage`: asks Chủ sở hữu for another role, by email. */
+  createAccessRequest: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/access-requests`,
+    request: createAccessRequestSchema,
+    query: null,
+    response: myAccessRequestResponseSchema,
+  }),
+  /** `accessRequests.decide`: gives the member the role and sites decided, which may differ. */
+  acceptAccessRequest: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, requestId: string) =>
+      `/workspaces/${e(workspaceId)}/access-requests/${e(requestId)}/accept`,
+    request: accessGrantSchema,
+    query: null,
+    response: memberSchema,
+  }),
+  declineAccessRequest: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, requestId: string) =>
+      `/workspaces/${e(workspaceId)}/access-requests/${e(requestId)}/decline`,
+    request: null,
+    query: null,
+    response: null,
   }),
 
   // Sites

@@ -16,6 +16,7 @@ import { Types } from 'mongoose';
 import type { Response } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
+import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
 import {
@@ -44,6 +45,11 @@ import {
 interface Fixture {
   owner: TestClient;
   workspaceId: string;
+  workspaceName: string;
+  /** The Quản trị of the fixture, who may receive the ownership. */
+  adminUserId: string;
+  /** The Biên tập kept to another site, a member others may change or remove. */
+  elsewhereUserId: string;
   site: Site;
   /** A live form page: v1 live again after a rollback from v2, the draft that of v2. */
   pageId: string;
@@ -110,6 +116,70 @@ const ROWS: Row[] = [
     scope: 'workspace',
     status: 200,
     call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/role-counts`),
+  },
+  // Members (board 15, ADR-021)
+  {
+    action: 'Xem thành viên',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/members`),
+  },
+  {
+    action: 'Đổi quyền thành viên',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, elsewhereUserId }) =>
+      client.patch(`/workspaces/${workspaceId}/members/${elsewhereUserId}`, {
+        role: 'viewer',
+        siteIds: null,
+      }),
+  },
+  {
+    action: 'Gỡ thành viên',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 204,
+    call: (client, { workspaceId, elsewhereUserId }) =>
+      client.delete(`/workspaces/${workspaceId}/members/${elsewhereUserId}`),
+  },
+  {
+    action: 'Xem lời mời',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/invitations`),
+  },
+  {
+    action: 'Mời thành viên',
+    permission: 'members.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.post(`/workspaces/${workspaceId}/invitations`, {
+        emails: [newEmail('ma-tran')],
+        role: 'viewer',
+        siteIds: null,
+      }),
+  },
+  {
+    action: 'Xem yêu cầu đổi quyền',
+    permission: 'accessRequests.decide',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/access-requests`),
+  },
+  {
+    action: 'Chuyển quyền sở hữu',
+    permission: 'workspace.transferOwnership',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, workspaceName, adminUserId }) =>
+      client.post(`/workspaces/${workspaceId}/ownership`, {
+        toUserId: adminUserId,
+        confirmName: workspaceName,
+      }),
   },
   // Pages and drafts
   {
@@ -537,7 +607,7 @@ describe('the six roles on every endpoint', () => {
    * (50 per workspace) would otherwise stop the later rows.
    */
   async function fixture(): Promise<Fixture> {
-    const { client: owner, workspaceId } = await signedUpClient(t.app);
+    const { client: owner, workspaceId, me } = await signedUpClient(t.app);
     for (const role of MEMBER_ROLES) {
       await insertMembership(t, workspaceId, memberOf(role).me.user.id, role);
     }
@@ -604,6 +674,9 @@ describe('the six roles on every endpoint', () => {
     return {
       owner,
       workspaceId,
+      workspaceName: me.memberships[0]?.workspace.name ?? '',
+      adminUserId: memberOf('admin').me.user.id,
+      elsewhereUserId: elsewhere.me.user.id,
       site,
       pageId,
       v1ReleaseId: v1.release.id,
@@ -637,9 +710,18 @@ describe('the six roles on every endpoint', () => {
         collection('data_requests'),
         collection('consent_versions'),
       ]);
-    const [activity, limits] = await Promise.all([
+    const ofWorkspace = (name: string) =>
+      t.connection
+        .collection(name)
+        .find({ workspaceId: new Types.ObjectId(workspaceId) })
+        .sort({ _id: 1 })
+        .toArray();
+    const [activity, limits, memberships, invitations, accessRequests] = await Promise.all([
       t.connection.collection('activity').countDocuments({ siteId }),
       t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
+      ofWorkspace('memberships'),
+      ofWorkspace('invitations'),
+      ofWorkspace('access_requests'),
     ]);
     return JSON.stringify({
       siteRecord,
@@ -653,6 +735,9 @@ describe('the six roles on every endpoint', () => {
       versions,
       activity,
       limits,
+      memberships,
+      invitations,
+      accessRequests,
     });
   }
 

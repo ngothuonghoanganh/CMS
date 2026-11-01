@@ -8,6 +8,8 @@ import { USER_MODEL, type UserRecord } from './user.schema.js';
 
 export const USERS_EMAIL_INDEX = 'users_email_unique';
 
+export type UserContact = Pick<UserRecord, '_id' | 'name' | 'email'>;
+
 @Injectable()
 export class UsersRepository {
   constructor(@InjectModel(USER_MODEL) private readonly users: Model<UserRecord>) {}
@@ -25,6 +27,28 @@ export class UsersRepository {
 
   findByEmail(email: string): Promise<UserRecord | null> {
     return this.users.findOne({ email }).lean<UserRecord>().exec();
+  }
+
+  /** Name and email of members, invited people and requesters (ADR-021). */
+  findContacts(ids: readonly ObjectId[]): Promise<UserContact[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.users
+      .find({ _id: { $in: [...ids] } }, { name: 1, email: 1 })
+      .lean<UserContact[]>()
+      .exec();
+  }
+
+  /** The accounts of `emails`, e.g. to tell which invited people are members already. */
+  findContactsByEmail(emails: readonly string[]): Promise<UserContact[]> {
+    if (emails.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.users
+      .find({ email: { $in: [...emails] } }, { name: 1, email: 1 })
+      .lean<UserContact[]>()
+      .exec();
   }
 
   findById(id: ObjectId): Promise<UserRecord | null> {

@@ -25,6 +25,7 @@ export default async function NewPage({ params }: NewPageProps) {
           membership={membership}
           holders={`Chỉ ${holdersOf('pages.edit')} tạo được trang mới.`}
           back={{ href: siteHref(site.id), label: 'Về danh sách trang' }}
+          requestAccess
         />
       </main>
     );

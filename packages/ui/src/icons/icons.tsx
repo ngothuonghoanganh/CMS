@@ -260,3 +260,9 @@ export const BuildingIcon = createIcon(
   'building',
   <path d="M4 21V5l8-2v18M12 8h8v13M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01M3 21h18" />,
 );
+
+/** People of a workspace (Sidebar v2, "Thành viên"). */
+export const UsersIcon = createIcon(
+  'users',
+  <path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M21 20c0-2.6-1.6-4.9-4-5.7" />,
+);
