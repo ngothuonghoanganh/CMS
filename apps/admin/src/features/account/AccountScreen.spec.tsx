@@ -23,6 +23,7 @@ const user = { id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngoca
 beforeEach(() => {
   apiMock.mockReset();
   router.refresh.mockReset();
+  router.replace.mockReset();
 });
 
 function passwordSection() {
@@ -135,6 +136,44 @@ describe('AccountScreen (ADR-026)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.',
     );
+
+    // The way on: this session no longer counts, so it ends and the login page opens.
+    apiMock.mockResolvedValueOnce(undefined);
+    await events.click(
+      within(screen.getByRole('alert')).getByRole('button', { name: 'Đăng nhập lại' }),
+    );
+    expect(lastCallTo(apiMock, endpoints.logout).args).toEqual([]);
+    await vi.waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/login');
+    });
+  });
+
+  it('offers no sign-in again for another failure', async () => {
+    const events = userEvent.setup();
+    apiMock.mockRejectedValueOnce(apiError(429, 'rate_limited', 'Nhập sai mật khẩu quá nhiều lần'));
+    renderWithProviders(<AccountScreen user={user} />);
+
+    await changePassword(events, 'mat-khau-cu-123', 'mat-khau-moi-123');
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập lại' })).toBeNull();
+  });
+
+  it('announces that the new passwords differ when Enter leaves the focus in the second one', async () => {
+    const events = userEvent.setup();
+    renderWithProviders(<AccountScreen user={user} />);
+
+    const section = passwordSection();
+    await events.type(section.getByLabelText('Mật khẩu hiện tại'), 'mat-khau-cu-123');
+    await events.type(section.getByLabelText('Mật khẩu mới'), 'mat-khau-moi-123');
+    const again = section.getByLabelText('Nhập lại mật khẩu mới');
+    await events.type(again, 'mat-khau-khac-123{Enter}');
+
+    expect(again).toHaveFocus();
+    expect(
+      screen.getByText('Hai mật khẩu chưa khớp').closest('[aria-live="polite"]'),
+    ).not.toBeNull();
+    expect(apiMock).not.toHaveBeenCalled();
   });
 
   it('asks again when the new passwords differ, and sends nothing', async () => {

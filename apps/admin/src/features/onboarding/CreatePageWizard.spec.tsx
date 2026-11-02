@@ -1,9 +1,10 @@
 import { endpoints, type SlugAvailability } from '@plp/contracts';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { SITE_ID, siteFixture } from '../dashboard/test-fixtures';
+import { SLUG_CHECK_DELAY_MS } from '../seo/slug-availability';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { CreatePageWizard } from './CreatePageWizard';
 
@@ -105,17 +106,28 @@ describe('CreatePageWizard', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Nội dung chính' })).toHaveFocus();
     const title = screen.getByRole('textbox', { name: /Tên trang/ });
     expect(title).toHaveValue('Ưu đãi có thời hạn');
-    await user.clear(title);
-    await user.type(title, 'Ưu đãi niềng răng tháng 11');
+    // Each field is filled at once, not key by key: every key renders the whole wizard again, and
+    // 70 of them took more than the test's 5 s on a busy machine. The test holds the clock
+    // meanwhile, so the slug is checked when typing has paused for 400 ms and its answer is never
+    // late. Typing itself is covered where it matters (the slug, the phone).
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    fireEvent.change(title, { target: { value: 'Ưu đãi niềng răng tháng 11' } });
     expect(screen.getByRole('textbox', { name: /Đường dẫn/ })).toHaveValue(
       'uu-dai-nieng-rang-thang-11',
     );
-    await user.type(
-      screen.getByRole('textbox', { name: /Ưu đãi hoặc dịch vụ chính/ }),
-      'Giảm 30% niềng răng trong suốt',
-    );
-    await user.type(screen.getByRole('textbox', { name: /Số điện thoại/ }), '0901 234 567');
-    const available = await screen.findByText('Đường dẫn này dùng được.');
+    fireEvent.change(screen.getByRole('textbox', { name: /Ưu đãi hoặc dịch vụ chính/ }), {
+      target: { value: 'Giảm 30% niềng răng trong suốt' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: /Số điện thoại/ }), {
+      target: { value: '0901 234 567' },
+    });
+    await act(() => vi.advanceTimersByTimeAsync(SLUG_CHECK_DELAY_MS));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    vi.useRealTimers();
+    const available = screen.getByText('Đường dẫn này dùng được.');
     expect(available).toBeVisible();
     // The result also reaches screen readers while they keep typing (WCAG 4.1.3).
     expect(available.closest('[aria-live="polite"]')).not.toBeNull();

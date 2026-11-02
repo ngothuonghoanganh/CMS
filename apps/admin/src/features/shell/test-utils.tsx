@@ -1,7 +1,7 @@
 import type { ErrorCode, ProblemIssue } from '@plp/contracts';
 import { ToastProvider } from '@plp/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { ApiError } from '../../lib/api-core';
 
@@ -24,6 +24,35 @@ export function renderWithProviders(ui: ReactElement, queryClient = createTestQu
     </QueryClientProvider>,
   );
   return { ...result, queryClient };
+}
+
+/**
+ * Whether a click reaches the element, as user-event decides it: the closest `pointer-events`
+ * set on the element or an ancestor is not `none`.
+ */
+function takesClicks(element: Element): boolean {
+  for (let node: Element | null = element; node !== null; node = node.parentElement) {
+    const value = window.getComputedStyle(node).pointerEvents;
+    if (value !== '' && value !== 'inherit' && value !== 'unset') {
+      return value !== 'none';
+    }
+  }
+  return true;
+}
+
+/**
+ * The button of a toast's action, once a click reaches it. Radix counts a new toast in an effect
+ * and keeps its region from the pointer until then: a test that clicks the moment the toast shows,
+ * sooner than anyone could, misses it whenever that effect runs late (a busy machine).
+ */
+export async function findToastAction(name: string): Promise<HTMLElement> {
+  const action = await screen.findByRole('button', { name });
+  await waitFor(() => {
+    if (!takesClicks(action)) {
+      throw new Error(`The toast action “${name}” does not take clicks yet`);
+    }
+  });
+  return action;
 }
 
 /** An API problem as the server sends it. */

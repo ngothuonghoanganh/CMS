@@ -122,11 +122,13 @@ export function ResetPasswordForm() {
           }}
         />
       </Field>
+      {/* Enter in this field leaves the focus in it: the live region says the passwords differ. */}
       <Field
         label="Nhập lại mật khẩu mới"
         id={fieldIds.confirm}
         required
         error={form.errors.confirm}
+        announceMessages
       >
         <Input
           type="password"

@@ -60,8 +60,13 @@ export function AddSectionDialog({ open, onOpenChange, requestedIndex }: AddSect
       return;
     }
     if (store.getState().addSection(selected.type, selected.variant, requestedIndex)) {
-      // Named as the card just chosen: "Quy trình 3 bước" is a process, not "Lợi ích".
-      announce(`Đã thêm “${selected.name}” ở vị trí ${index + 1}.`);
+      // The section by the name the structure panel gives it, and the card chosen: "Quy trình 3
+      // bước" is a process, not any "Lợi ích". A card named as its section says it once.
+      const added =
+        selected.name === selected.sectionLabel
+          ? selected.sectionLabel
+          : `${selected.sectionLabel} “${selected.name}”`;
+      announce(`Đã thêm ${added} ở vị trí ${index + 1}.`);
       onOpenChange(false);
     }
   }

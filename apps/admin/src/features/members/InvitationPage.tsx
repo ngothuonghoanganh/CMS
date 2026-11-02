@@ -154,8 +154,15 @@ function SignupForm({
   return (
     <form className={styles.form} onSubmit={submit} noValidate>
       <h1 className={styles.title}>Tạo tài khoản để tham gia</h1>
+      {/* The account's username: a password manager saves the new password under this email. */}
       <Field label="Email" id="invite-email" help="Lời mời gắn với email này.">
-        <Input type="email" value={invitation.email} readOnly />
+        <Input
+          type="email"
+          name="email"
+          autoComplete="username"
+          value={invitation.email}
+          readOnly
+        />
       </Field>
       <Field label="Họ và tên" id={fieldIds.name} error={form.errors.name}>
         <Input
@@ -232,12 +239,13 @@ export interface InvitationPageProps {
 }
 
 /**
- * What the signed-in person chose here. The kept token is forgotten as they choose, so the page
- * shows this first: read again, it would find no token and call the link invalid.
+ * What the signed-in person chose here, with the link they chose on. The kept token is forgotten
+ * as they choose, so the page shows this first: read again, it would find no token and call the
+ * link invalid.
  */
 type Outcome =
-  | { kind: 'joining'; workspaceName: string }
-  | { kind: 'declined'; invitation: InvitationLookupResponse };
+  | { kind: 'joining'; token: string; workspaceName: string }
+  | { kind: 'declined'; token: string; invitation: InvitationLookupResponse };
 
 export function InvitationPage({ addresses }: InvitationPageProps) {
   const queryClient = useQueryClient();
@@ -269,8 +277,8 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
   const accept = useMutation({
     mutationFn: ({ secret }: { secret: string; invitation: InvitationLookupResponse }) =>
       api(endpoints.acceptInvitation, [], { body: { token: secret } }),
-    onSuccess: (result, { invitation }) => {
-      setOutcome({ kind: 'joining', workspaceName: invitation.workspaceName });
+    onSuccess: (result, { secret, invitation }) => {
+      setOutcome({ kind: 'joining', token: secret, workspaceName: invitation.workspaceName });
       openWorkspace({ id: result.workspaceId, slug: result.slug }, addresses);
     },
     onError: (error) => {
@@ -280,8 +288,8 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
   const decline = useMutation({
     mutationFn: ({ secret }: { secret: string; invitation: InvitationLookupResponse }) =>
       api(endpoints.declineInvitation, [], { body: { token: secret } }),
-    onSuccess: (_result, { invitation }) => {
-      setOutcome({ kind: 'declined', invitation });
+    onSuccess: (_result, { secret, invitation }) => {
+      setOutcome({ kind: 'declined', token: secret, invitation });
       forgetToken();
     },
     onError: (error) => {
@@ -305,12 +313,15 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
     },
   });
 
-  if (outcome?.kind === 'joining') {
+  // An outcome answers the link it was chosen on. Another link opened in this tab changes only
+  // the fragment and shows its own invitation; no token at all is the one just chosen and dropped.
+  const answered = outcome !== null && (token === null || token === outcome.token) ? outcome : null;
+  if (answered?.kind === 'joining') {
     // The workspace page is loading; nothing else is left to do here.
-    return <Spinner label={`Đang mở ${outcome.workspaceName}`} />;
+    return <Spinner label={`Đang mở ${answered.workspaceName}`} />;
   }
-  if (outcome?.kind === 'declined') {
-    const { invitation } = outcome;
+  if (answered?.kind === 'declined') {
+    const { invitation } = answered;
     return (
       <InvitationCard invitation={invitation}>
         <h1 ref={outcomeHeading} tabIndex={-1} className={styles.title}>
@@ -320,6 +331,10 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
           Bạn không tham gia {invitation.workspaceName}. Nếu đổi ý, hãy nhờ{' '}
           {invitation.invitedByName} gửi lời mời mới.
         </p>
+        {/* Only someone signed in declines: the start page opens their workspaces. */}
+        <ButtonLink href="/" variant="secondary" fullWidth>
+          Về trang chủ
+        </ButtonLink>
       </InvitationCard>
     );
   }
@@ -424,7 +439,10 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
   }
 
   if (user !== null) {
-    const failure = accept.error ?? decline.error;
+    // Like the outcome, a failure belongs to the link it happened on.
+    const failure =
+      (accept.variables?.secret === token ? accept.error : null) ??
+      (decline.variables?.secret === token ? decline.error : null);
     return (
       <InvitationCard invitation={invitation}>
         {grant}

@@ -21,10 +21,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const filters = parseDashboardFilters(await searchParams);
   const data = await loadDashboardData(site.id, filters);
   return (
-    // Each server render (a navigation such as the sidebar's "Trang", or a refresh) starts again
-    // from the filters in the URL; filtering in the browser only replaces the URL.
+    // The router keeps the page mounted when only the site in the path changes: another site
+    // starts the screen over. A server render of the same site reaches the mounted screen, which
+    // keeps its state through a refresh (the sidebar's "Trang N" after "Xóa trang").
     <Dashboard
-      key={data.loadedAt}
+      key={site.id}
       site={site}
       workspaceName={membership.workspace.name}
       initialFilters={filters}
