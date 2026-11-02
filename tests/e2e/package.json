@@ -7,7 +7,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:e2e": "playwright test && playwright test -c addresses.config.ts",
-    "visual:capture": "playwright test -c visual.config.ts"
+    "visual:capture": "playwright test -c visual.config.ts",
+    "seed:dev": "playwright test -c seed-dev.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

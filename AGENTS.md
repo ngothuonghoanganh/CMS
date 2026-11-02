@@ -81,6 +81,7 @@ pnpm install
 cp .env.example .env            # local values only
 pnpm infra:up                   # MongoDB replica set + S3 storage (docker compose)
 pnpm dev                        # admin :3100, renderer :3101, api :4100
+pnpm --filter @plp/e2e seed:dev # sample data into the dev DB (after pnpm build, with pnpm dev stopped)
 pnpm infra:down
 ```
 
