@@ -242,7 +242,10 @@ describe('MembersScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
     const invite = await screen.findByRole('dialog', { name: 'Mời thành viên' });
-    await user.type(within(invite).getByLabelText('Email'), 'thuy@smilecare.vn');
+    // Pasted, not typed: this is about the dialogs while they run, and 30-odd keys through two
+    // dialogs took more than the test's 5 s on a busy machine.
+    await user.click(within(invite).getByLabelText('Email'));
+    await user.paste('thuy@smilecare.vn');
     await user.click(within(invite).getByRole('radio', { name: /Chăm sóc khách hàng/ }));
     await user.click(within(invite).getByRole('checkbox', { name: 'Nha khoa Smile Care' }));
     await user.click(within(invite).getByRole('button', { name: 'Gửi 1 lời mời' }));
@@ -253,10 +256,10 @@ describe('MembersScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Chuyển quyền sở hữu' }));
     const transfer = await screen.findByRole('dialog', { name: 'Chuyển quyền sở hữu workspace' });
-    await user.type(
+    await user.click(
       within(transfer).getByRole('textbox', { name: 'Nhập tên workspace để xác nhận' }),
-      'Mây Xanh Agency',
     );
+    await user.paste('Mây Xanh Agency');
     await user.click(within(transfer).getByRole('button', { name: 'Chuyển quyền sở hữu' }));
     await user.keyboard('{Escape}');
     refusals.shift()?.(apiError(409, 'conflict', 'Vai trò đã đổi trong lúc chuyển'));
@@ -416,6 +419,19 @@ describe('MembersScreen', () => {
         args: [WORKSPACE_ID, stale.userId],
         options: { body: { role: 'viewer', siteIds: [smile.id] } },
       });
+    });
+
+    it('sums up no change while the dialog is untouched', async () => {
+      const user = userEvent.setup();
+      renderScreen({ initialMembers: list });
+      for (const name of ['Thu Hà', 'Gia Huy']) {
+        await user.click(screen.getByRole('button', { name: `Đổi quyền của ${name}` }));
+        const dialog = await screen.findByRole('dialog', { name: `Quyền của ${name}` });
+        expect(within(dialog).getByText('Tóm tắt thay đổi').nextElementSibling).toHaveTextContent(
+          /^Chưa có thay đổi\.$/,
+        );
+        await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+      }
     });
 
     it('asks for a site when the deleted one was all the member had', async () => {

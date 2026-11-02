@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { ApiError, api } from '../../lib/api';
 import { confirmPasswordSchema, PASSWORDS_DIFFER } from '../auth/new-password';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { useLogout } from '../shell/use-logout';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import styles from './Account.module.css';
 
@@ -65,6 +66,10 @@ export function ChangePasswordForm() {
       setFormError(problemMessage(error));
     },
   });
+  const logout = useLogout();
+  // Changed elsewhere meanwhile (ADR-026): this session no longer counts, so logging in again is
+  // the way on.
+  const signInAgain = change.error instanceof ApiError && change.error.code === 'password_changed';
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,16 +123,35 @@ export function ChangePasswordForm() {
       >
         <Input autoComplete="new-password" {...bind('newPassword')} />
       </Field>
+      {/* Enter in this field leaves the focus in it: the live region says the passwords differ. */}
       <Field
         label="Nhập lại mật khẩu mới"
         id={fieldIds.confirm}
         required
         error={form.errors.confirm}
+        announceMessages
       >
         <Input autoComplete="new-password" {...bind('confirm')} />
       </Field>
       {formError === null ? null : (
-        <Callout tone="danger" role="alert">
+        <Callout
+          tone="danger"
+          role="alert"
+          action={
+            signInAgain ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={logout.isPending}
+                onClick={() => {
+                  void logout.signOut();
+                }}
+              >
+                Đăng nhập lại
+              </Button>
+            ) : undefined
+          }
+        >
           {formError}
         </Callout>
       )}

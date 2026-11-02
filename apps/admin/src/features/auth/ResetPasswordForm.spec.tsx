@@ -67,6 +67,21 @@ describe('ResetPasswordForm (ADR-026)', () => {
     expect(apiMock).not.toHaveBeenCalled();
   });
 
+  it('announces that the passwords differ when Enter leaves the focus in the second one', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ResetPasswordForm />);
+
+    await user.type(screen.getByLabelText('Mật khẩu mới'), 'mat-khau-moi-123');
+    const again = screen.getByLabelText('Nhập lại mật khẩu mới');
+    await user.type(again, 'mat-khau-khac-123{Enter}');
+
+    expect(again).toHaveFocus();
+    expect(
+      screen.getByText('Hai mật khẩu chưa khớp').closest('[aria-live="polite"]'),
+    ).not.toBeNull();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
   it('takes the sign-up rules for the new password', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ResetPasswordForm />);

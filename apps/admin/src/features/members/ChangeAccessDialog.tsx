@@ -90,9 +90,11 @@ export function ChangeAccessDialog({
   const [removeOpen, setRemoveOpen] = useState(false);
   const wholeWorkspace = option?.wholeWorkspace === true || scope === 'all';
   // A site deleted since the member was given it has no box to untick, and the API refuses it:
-  // only the workspace's sites are kept (ADR-027).
-  const known = chosen.filter((id) => sites.some((site) => site.id === id));
+  // only the workspace's sites are kept (ADR-027), and the summary compares those alone.
+  const inWorkspace = (id: string) => sites.some((site) => site.id === id);
+  const known = chosen.filter(inWorkspace);
   const grant: AccessGrant = { role, siteIds: wholeWorkspace ? null : known };
+  const before = { role: member.role, siteIds: member.siteIds?.filter(inWorkspace) ?? null };
   const summary = option === null ? null : permissionSummary(option.access);
 
   const save = useMutation({
@@ -256,7 +258,7 @@ export function ChangeAccessDialog({
           {option === null ? null : (
             <ChangeSummary
               parts={accessChangeSummary(
-                member,
+                before,
                 { role: option.access, siteIds: grant.siteIds },
                 sites,
               )}

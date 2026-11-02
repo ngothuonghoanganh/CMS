@@ -41,6 +41,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { api, downloadFile } from '../../lib/api';
 import { cx } from '../shell/cx';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { leadsHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -493,7 +494,7 @@ export function LeadInbox({
                   loading={listQuery.isFetchingNextPage}
                   onClick={() => {
                     expectMore();
-                    void listQuery.fetchNextPage();
+                    void fetchNextPageAfterRead(listQuery);
                   }}
                 >
                   Tải thêm

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adoptServerRender, serverFirstPage } from './server-render';
+import { adoptServerRender, adoptServerRenderKeepingPages, serverFirstPage } from './server-render';
 import { createTestQueryClient } from './test-utils';
 
 const KEY = ['sites', 'site-1', 'pages', 'list', 'all', ''];
@@ -39,5 +39,48 @@ describe('serverFirstPage', () => {
       pages: [{ items: ['a'], nextCursor: 'c1' }],
       pageParams: [null],
     });
+  });
+});
+
+describe('adoptServerRenderKeepingPages', () => {
+  const first = { items: ['a'], nextCursor: 'c1' };
+  const second = { items: ['b'], nextCursor: null };
+
+  it('takes the server’s first page over a list of one page cached before it', () => {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(KEY, serverFirstPage({ items: ['old'], nextCursor: 'c1' }), {
+      updatedAt: LOADED_AT - 5_000,
+    });
+    adoptServerRenderKeepingPages(queryClient, KEY, first, LOADED_AT);
+    expect(queryClient.getQueryData(KEY)).toEqual(serverFirstPage(first));
+    expect(queryClient.getQueryState(KEY)?.dataUpdatedAt).toBe(LOADED_AT);
+  });
+
+  it('keeps the pages loaded with "Xem thêm", and has them read again', () => {
+    const queryClient = createTestQueryClient();
+    const loaded = { pages: [first, second], pageParams: [null, 'c1'] };
+    queryClient.setQueryData(KEY, loaded, { updatedAt: LOADED_AT - 5_000 });
+    adoptServerRenderKeepingPages(
+      queryClient,
+      KEY,
+      { items: ['server'], nextCursor: 'c1' },
+      LOADED_AT,
+    );
+    expect(queryClient.getQueryData(KEY)).toEqual(loaded);
+    expect(queryClient.getQueryState(KEY)?.isInvalidated).toBe(true);
+  });
+
+  it('keeps a list read after the server loaded its own', () => {
+    const queryClient = createTestQueryClient();
+    const loaded = { pages: [first, second], pageParams: [null, 'c1'] };
+    queryClient.setQueryData(KEY, loaded, { updatedAt: LOADED_AT + 5_000 });
+    adoptServerRenderKeepingPages(
+      queryClient,
+      KEY,
+      { items: ['server'], nextCursor: 'c1' },
+      LOADED_AT,
+    );
+    expect(queryClient.getQueryData(KEY)).toEqual(loaded);
+    expect(queryClient.getQueryState(KEY)?.isInvalidated).toBe(false);
   });
 });

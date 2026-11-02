@@ -27,8 +27,17 @@ export function parseDashboardFilters(params: {
   };
 }
 
+/**
+ * The search as the API takes it. Normalizing it again changes nothing: the server reads it back
+ * from the URL, and a refresh of the screen compares the two (`Dashboard`). The cut never ends in
+ * a space, nor halfway through a character such as an emoji, which the URL would turn into "�".
+ */
 export function normalizeSearch(value: string): string {
-  return value.trim().slice(0, SEARCH_MAX_LENGTH);
+  return value
+    .trim()
+    .slice(0, SEARCH_MAX_LENGTH)
+    .replace(/[\uD800-\uDBFF]$/, '')
+    .trimEnd();
 }
 
 /** "?status=live&q=uu+dai", or "" without filters. */

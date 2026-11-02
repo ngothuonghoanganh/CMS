@@ -15,7 +15,7 @@ import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
 import { installHistoryGuard } from '../shell/history-guard';
 import { type LeaveOutcome, leaveScreen } from '../shell/screen-leave';
 import { Sidebar } from '../shell/Sidebar';
-import { apiError, renderWithProviders } from '../shell/test-utils';
+import { apiError, findToastAction, renderWithProviders } from '../shell/test-utils';
 import { WORKSPACE_PREFERENCE_COOKIE } from '../shell/workspace-preference';
 import { SeoScreen } from './SeoScreen';
 
@@ -407,7 +407,7 @@ describe('SeoScreen', () => {
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       await user.click(link);
 
-      await user.click(await screen.findByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      await user.click(await findToastAction('Rời trang, bỏ thay đổi'));
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
       link.remove();
     });
@@ -425,7 +425,7 @@ describe('SeoScreen', () => {
       // the first failure offers.
       const answerSave = heldSave(detail);
       await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
-      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      await user.click(await findToastAction('Rời trang, bỏ thay đổi'));
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
 
       // The save ends, and keeps the change in the draft; the link that waited for it goes nowhere.
@@ -741,7 +741,7 @@ describe('SeoScreen', () => {
       expect(router.push).not.toHaveBeenCalled();
       expect(savedSlugs()).toEqual([]);
       expect(screen.getByRole('textbox', { name: 'Đường dẫn trang' })).toHaveValue('bang-gia');
-      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      await user.click(await findToastAction('Rời trang, bỏ thay đổi'));
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
     });
 
@@ -759,7 +759,7 @@ describe('SeoScreen', () => {
       answerSlug(detail, taken);
       await typeSlug(user, 'bang-gia');
       await user.click(screen.getByRole('link', { name: 'Mở editor' }));
-      await user.click(await screen.findByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      await user.click(await findToastAction('Rời trang, bỏ thay đổi'));
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
       const checks = taken.mock.calls.length;
 
@@ -891,7 +891,7 @@ describe('SeoScreen', () => {
       expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
       expect(loadPageMock).not.toHaveBeenCalled();
       expect(document.cookie).not.toContain(`${WORKSPACE_PREFERENCE_COOKIE}=`);
-      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      await user.click(await findToastAction('Rời trang, bỏ thay đổi'));
 
       expect(loads).toMatchObject([{ href: '/', prompted: false }]);
       expect(loads[0]?.cookie).toContain(`${WORKSPACE_PREFERENCE_COOKIE}=64b0000000000000000000a2`);
@@ -920,7 +920,7 @@ describe('SeoScreen', () => {
 
       await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
       await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
-      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      await user.click(await findToastAction('Đăng xuất, bỏ thay đổi'));
 
       await waitFor(() => {
         expect(loads).toMatchObject([{ href: '/login', prompted: false }]);
@@ -943,7 +943,7 @@ describe('SeoScreen', () => {
         [SITE_ID, PAGE_ID],
         expect.anything(),
       );
-      await user.click(screen.getByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      await user.click(await findToastAction('Đăng xuất, bỏ thay đổi'));
       expect(signOut).toHaveBeenCalledTimes(1);
     });
 
@@ -962,7 +962,7 @@ describe('SeoScreen', () => {
       );
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       leaveScreen(signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
-      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      await user.click(await findToastAction('Đăng xuất, bỏ thay đổi'));
       expect(signOut).toHaveBeenCalledTimes(1);
       await waitFor(() => {
         expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
@@ -998,7 +998,7 @@ describe('SeoScreen', () => {
 
       await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
       await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
-      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      await user.click(await findToastAction('Đăng xuất, bỏ thay đổi'));
 
       // The server is down: signing out fails too, and the user stays with the change.
       expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();

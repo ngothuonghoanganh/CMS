@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dashboardSearch,
+  normalizeSearch,
   pageListQuery,
   parseDashboardFilters,
   statusFilterOptions,
@@ -21,6 +22,20 @@ describe('parseDashboardFilters', () => {
     });
     expect(parseDashboardFilters({ q: 'x'.repeat(100) }).q).toHaveLength(80);
     expect(parseDashboardFilters({})).toEqual({ status: null, q: '' });
+  });
+});
+
+describe('normalizeSearch', () => {
+  it('reads the same once more, as the server reads it back from the URL', () => {
+    const endsInSpace = `${'a'.repeat(79)} b`;
+    const cutEmoji = `${'a'.repeat(79)}😀`;
+    expect(normalizeSearch(endsInSpace)).toBe('a'.repeat(79));
+    expect(normalizeSearch(cutEmoji)).toBe('a'.repeat(79));
+    for (const search of [endsInSpace, cutEmoji, `  ${'x'.repeat(90)}`, ' uu dai 😀 ']) {
+      const once = normalizeSearch(search);
+      expect(normalizeSearch(once)).toBe(once);
+      expect(parseDashboardFilters({ q: new URLSearchParams({ q: once }).get('q') }).q).toBe(once);
+    }
   });
 });
 

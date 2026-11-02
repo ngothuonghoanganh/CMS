@@ -23,6 +23,7 @@ import { useEffect, useId, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDayMonth, formatTime } from '../../lib/format';
 import { cx } from '../shell/cx';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { problemMessage } from '../shell/problem-message';
 import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
@@ -272,7 +273,7 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
             loading={list.isFetchingNextPage}
             onClick={() => {
               expectMore();
-              void list.fetchNextPage();
+              void fetchNextPageAfterRead(list);
             }}
           >
             Tải thêm

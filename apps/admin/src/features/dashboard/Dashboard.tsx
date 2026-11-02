@@ -38,6 +38,7 @@ import { internalVisitUrl } from '../../lib/site-url';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import {
   domainsHref,
   leadRecipientsHref,
@@ -47,7 +48,11 @@ import {
 } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
-import { adoptServerRender, serverFirstPage } from '../shell/server-render';
+import {
+  adoptServerRender,
+  adoptServerRenderKeepingPages,
+  serverFirstPage,
+} from '../shell/server-render';
 import { useDebouncedValue } from '../shell/use-debounced-value';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
@@ -94,7 +99,38 @@ function sameFilters(a: DashboardFilters, b: DashboardFilters): boolean {
 }
 
 /** Screen 01 "Trang": site summary, the filterable page list and recent activity. */
-export function Dashboard({
+export function Dashboard(props: DashboardProps) {
+  // The filters on screen, as the URL holds them: the search once typing stops.
+  const [shown, setShown] = useState(props.initialFilters);
+  // The filters on screen when the screen refreshed the route ("Xóa trang"), until it renders.
+  const [refreshedWith, setRefreshedWith] = useState<DashboardFilters | null>(null);
+  const [rendered, setRendered] = useState({ loadedAt: props.loadedAt, screen: 0 });
+  if (rendered.loadedAt !== props.loadedAt) {
+    // A server render for other filters than the ones on screen comes from a navigation (the
+    // sidebar's "Trang" while filtering): the screen starts again from its filters, as on a visit.
+    // A refresh renders the URL the screen wrote (the sidebar's "Trang N" after "Xóa trang"): the
+    // screen stays, with its focus, the search being typed and the pages "Xem thêm trang" loaded.
+    // The filters chosen while the refresh ran stay too: it renders those the screen had then.
+    const navigated =
+      !sameFilters(props.initialFilters, shown) &&
+      (refreshedWith === null || !sameFilters(props.initialFilters, refreshedWith));
+    setRendered({ loadedAt: props.loadedAt, screen: rendered.screen + (navigated ? 1 : 0) });
+    setRefreshedWith(null);
+    if (navigated) {
+      setShown(props.initialFilters);
+    }
+  }
+  return (
+    <DashboardScreen
+      key={rendered.screen}
+      {...props}
+      onFiltersShown={setShown}
+      onRefreshing={setRefreshedWith}
+    />
+  );
+}
+
+function DashboardScreen({
   site,
   workspaceName,
   initialFilters,
@@ -104,7 +140,12 @@ export function Dashboard({
   initialLeadCounts,
   loadedAt,
   role,
-}: DashboardProps) {
+  onFiltersShown,
+  onRefreshing,
+}: DashboardProps & {
+  onFiltersShown: (filters: DashboardFilters) => void;
+  onRefreshing: (filters: DashboardFilters) => void;
+}) {
   const queryClient = useQueryClient();
   const now = useNow(loadedAt);
   const canEditPages = can(role, 'pages.edit');
@@ -123,21 +164,26 @@ export function Dashboard({
   // The URL mirrors the filters so a reload or a shared link keeps them. Replacing the entry
   // (rather than navigating) keeps the server from rendering the page again.
   useEffect(() => {
+    onFiltersShown({ status, q });
     const url = `${window.location.pathname}${dashboardSearch({ status, q })}`;
     if (url !== `${window.location.pathname}${window.location.search}`) {
       window.history.replaceState(null, '', url);
     }
-  }, [status, q]);
+  }, [status, q, onFiltersShown]);
 
   // Coming back renders the dashboard again on the server: its pages and activity are newer than
   // what the cache kept from an earlier visit, which autosave or another member does not refresh.
+  // The list then starts again from its first page; rendered again while on screen, it keeps the
+  // pages "Xem thêm trang" loaded.
+  const adopted = useRef(false);
   useEffect(() => {
-    adoptServerRender(
-      queryClient,
-      siteQueryKeys.pageList(site.id, initialFilters),
-      serverFirstPage(initialPages),
-      loadedAt,
-    );
+    const listKey = siteQueryKeys.pageList(site.id, initialFilters);
+    if (adopted.current) {
+      adoptServerRenderKeepingPages(queryClient, listKey, initialPages, loadedAt);
+    } else {
+      adoptServerRender(queryClient, listKey, serverFirstPage(initialPages), loadedAt);
+    }
+    adopted.current = true;
     adoptServerRender(
       queryClient,
       siteQueryKeys.recentActivity(site.id),
@@ -405,7 +451,7 @@ export function Dashboard({
               loading={pagesQuery.isFetchingNextPage}
               onClick={() => {
                 expectMore();
-                void pagesQuery.fetchNextPage();
+                void fetchNextPageAfterRead(pagesQuery);
               }}
             >
               Xem thêm trang
@@ -433,6 +479,10 @@ export function Dashboard({
           page={deleteTarget}
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
+          onDeleted={() => {
+            // The route's refresh follows: it renders the filters on screen now.
+            onRefreshing(filters);
+          }}
           fallbackFocusRef={searchRef}
         />
       )}

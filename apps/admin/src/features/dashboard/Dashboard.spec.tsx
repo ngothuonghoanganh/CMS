@@ -10,9 +10,9 @@ import {
   type SiteAddressStatus,
 } from '@plp/contracts';
 import type { QueryClient } from '@tanstack/react-query';
-import { screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { Dashboard } from './Dashboard';
@@ -96,6 +96,20 @@ function livePageRow(): HTMLElement {
 
 function filterGroup(): HTMLElement {
   return screen.getByRole('group', { name: 'Lọc theo trạng thái' });
+}
+
+/** How long typing pauses before the search goes. */
+const SEARCH_PAUSE_MS = 300;
+
+/**
+ * The test holds the clock: the search goes when the test lets typing pause, never because a busy
+ * machine was slow between two letters, and its answer never comes late.
+ */
+function holdClock() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
 }
 
 // jsdom has no pointer capture; Radix menus call it while handling pointer events.
@@ -377,15 +391,19 @@ describe('Dashboard', () => {
   });
 
   it('searches on the server after typing stops and keeps the search in the URL', async () => {
-    const user = userEvent.setup();
+    holdClock();
     apiMock.mockResolvedValue(pageListFixture([livePage]));
     renderDashboard();
 
-    await user.type(screen.getByRole('searchbox', { name: 'Tìm trang' }), 'niềng răng');
+    const search = screen.getByRole('searchbox', { name: 'Tìm trang' });
+    for (const typed of ['niềng', 'niềng răng']) {
+      fireEvent.change(search, { target: { value: typed } });
+      await act(() => vi.advanceTimersByTimeAsync(SEARCH_PAUSE_MS - 1));
+    }
+    expect(apiMock).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
 
-    await vi.waitFor(() => {
-      expect(apiMock).toHaveBeenCalledOnce();
-    });
+    expect(apiMock).toHaveBeenCalledOnce();
     expect(lastCallTo(apiMock, endpoints.listPages).options).toHaveProperty('query', {
       q: 'niềng răng',
       limit: 50,
@@ -394,14 +412,19 @@ describe('Dashboard', () => {
   });
 
   it('announces a search without results', async () => {
-    const user = userEvent.setup();
+    holdClock();
     const all = pageListFixture([livePage, draftPage]);
     apiMock.mockResolvedValue(pageListFixture([], { counts: all.counts }));
     renderDashboard({ pages: all });
 
-    await user.type(screen.getByRole('searchbox', { name: 'Tìm trang' }), 'không có');
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm trang' }), {
+      target: { value: 'không có' },
+    });
+    // Typing stops: the search goes, then its answer reaches the screen.
+    await act(() => vi.advanceTimersByTimeAsync(SEARCH_PAUSE_MS));
+    await act(() => vi.advanceTimersByTimeAsync(0));
     expect(
-      await screen.findByText('Không có trang nào khớp', { selector: '[aria-live="polite"]' }),
+      screen.getByText('Không có trang nào khớp', { selector: '[aria-live="polite"]' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Không có trang nào khớp' })).toBeVisible();
   });

@@ -27,3 +27,28 @@ export function adoptServerRender(
 export function serverFirstPage<TPage>(page: TPage): InfiniteData<TPage, string | null> {
   return { pages: [page], pageParams: [null] };
 }
+
+/**
+ * `adoptServerRender` for an infinite list the server renders again while it stays on screen (a
+ * refresh). The pages loaded with "Xem thêm" stay: rather than drop them for the server's first
+ * page, the query reads them all again, so the rows keep their order with no gap or repeat. A list
+ * of one page takes the server's, as on a visit.
+ */
+export function adoptServerRenderKeepingPages(
+  queryClient: QueryClient,
+  queryKey: QueryKey,
+  firstPage: unknown,
+  loadedAt: number,
+): void {
+  const state = queryClient.getQueryState<InfiniteData<unknown, string | null>>(queryKey);
+  if ((state?.dataUpdatedAt ?? 0) >= loadedAt) {
+    return;
+  }
+  if ((state?.data?.pages.length ?? 0) > 1) {
+    // A read already running is the one to wait for: the screen refreshed its own lists, or "Xem
+    // thêm" adds to what such a refresh read (`fetchNextPageAfterRead`).
+    void queryClient.invalidateQueries({ queryKey, exact: true }, { cancelRefetch: false });
+    return;
+  }
+  queryClient.setQueryData(queryKey, serverFirstPage(firstPage), { updatedAt: loadedAt });
+}
