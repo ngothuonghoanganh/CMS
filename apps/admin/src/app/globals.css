@@ -10,3 +10,13 @@ body {
   outline: var(--focus-outline);
   outline-offset: var(--focus-offset);
 }
+
+/* The boards' base link color. `:where` keeps it below any class, hover included, so a link its
+   own rule styles never takes it. */
+:where(a) {
+  color: var(--color-primary-ink);
+}
+
+:where(a):hover {
+  color: var(--color-primary-pressed);
+}

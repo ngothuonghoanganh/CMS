@@ -776,6 +776,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Integration test thất bại khi Mongoose phát cảnh báo (`test/mongoose-warnings.ts`), nên option đã bị bỏ như `new: true` không quay lại; mọi `findOneAndUpdate` dùng `returnDocument: 'after'`.
   - Route của renderer bọc API theo request trong `try/catch` gọi `unstable_rethrow` đầu khối `catch`, để lỗi điều khiển của Next (prerender lúc build) không bị ghi log như lỗi tra cứu.
   - MongoDB của docker compose giới hạn bộ nhớ đệm 1 GB (`--wiredTigerCacheSizeGB 1`). Mỗi lượt integration test tạo hàng trăm database workspace (ADR-025); hai lượt chạy cùng lúc trên một máy 16 GB làm mongod bị kill vì hết bộ nhớ.
+- **Sửa 2026-11-02 (chụp màn hình):** link "Xem vai trò & quyền" của màn Thành viên mang màu xanh mặc định của trình duyệt, vì nó không có class nào.
+  - Admin có màu link cơ bản của board (`a{color:#3730A3}`, hover `#26208A`) trong `globals.css`, viết bằng `:where(a)` nên mọi class vẫn thắng, kể cả lúc hover. Link trong mô tả của tiêu đề trang đậm 600 và giữ gạch chân (1.4.1).
+  - `expectAccessible` kiểm thêm: không link nào mang màu mặc định của trình duyệt (`rgb(0, 0, 238)`, `rgb(85, 26, 139)`). Axe không bắt lỗi này, vì màu đó vẫn đủ tương phản với nền trắng.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 

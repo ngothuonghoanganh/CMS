@@ -27,6 +27,22 @@ export async function expectAccessible(page: Page, screen: string): Promise<void
         .join('\n')}`,
   );
   expect.soft(found, `${screen} has no WCAG 2.2 AA violations`).toEqual([]);
+  await expectStyledLinks(page, screen);
+}
+
+/**
+ * No link wears the browser's own blue or purple: those mean no rule of the design styles it.
+ * Axe passes them, as they contrast well with white.
+ */
+export async function expectStyledLinks(page: Page, screen: string): Promise<void> {
+  const unstyled = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('a'))
+      .filter((link) =>
+        ['rgb(0, 0, 238)', 'rgb(85, 26, 139)'].includes(getComputedStyle(link).color),
+      )
+      .map((link) => link.textContent.trim()),
+  );
+  expect.soft(unstyled, `${screen} has links in the browser's default colors`).toEqual([]);
 }
 
 /**
