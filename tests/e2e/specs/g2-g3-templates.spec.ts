@@ -93,7 +93,7 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
     await save.getByRole('radio', { name: 'Giữ chữ và ảnh như hiện tại' }).check();
     await save.getByRole('button', { name: 'Lưu template' }).click();
     await expect(page.getByText(`Đã lưu template “${TEMPLATE}”, phiên bản 1`)).toBeVisible();
-    const inUse = page.getByRole('region', { name: 'Template đang dùng' });
+    const inUse = page.getByRole('table', { name: 'Template đang dùng' });
     await expect(inUse.getByRole('link', { name: TEMPLATE })).toBeVisible();
     await expect(inUse.getByRole('row').nth(1)).toContainText('Toàn workspace');
 
@@ -229,7 +229,7 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
       );
 
       await page.goto(workspaceTemplates(site.workspaceId));
-      await expect(page.getByRole('region', { name: 'Template đang dùng' })).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Template đang dùng' })).toBeVisible();
       await expectAccessible(page, 'Template của workspace');
       await expectNoSidewaysScroll(page, 'Template của workspace');
 

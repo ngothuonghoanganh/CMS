@@ -38,6 +38,7 @@ import { formatDayMonth } from '../../lib/format';
 import { templateHref, templatesHref, workspaceTemplatesHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { ScrollRegion } from '../shell/ScrollRegion';
 import { EditTemplateDialog } from './EditTemplateDialog';
 import { templateTags } from './library-filters';
 import { SaveTemplateDialog } from './SaveTemplateDialog';
@@ -87,6 +88,8 @@ export function WorkspaceTemplatesScreen({
   const active = templatesOfTab(templates, false);
   const stored = templatesOfTab(templates, true);
   const shown = archived ? stored : active;
+  // The table's name; also the scroll region's while it scrolls sideways.
+  const tableLabel = archived ? 'Template đã lưu trữ' : 'Template đang dùng';
   const subjectId =
     dialog !== null && dialog.value.kind !== 'save' ? dialog.value.templateId : null;
   // Looked up on every render: after a change the list holds the template as it is now.
@@ -188,85 +191,82 @@ export function WorkspaceTemplatesScreen({
         )
       ) : (
         <>
-          <div
-            className={styles.tableScroll}
-            role="region"
-            aria-label={archived ? 'Template đã lưu trữ' : 'Template đang dùng'}
-            tabIndex={0}
-          >
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">TEMPLATE</th>
-                  <th scope="col">PHIÊN BẢN</th>
-                  <th scope="col">AI ĐƯỢC DÙNG</th>
-                  <th scope="col">ĐÃ TẠO</th>
-                  <th scope="col">CẬP NHẬT</th>
-                  <th scope="col">
-                    <VisuallyHidden>Thao tác</VisuallyHidden>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((template) => {
-                  const tags = templateTags(template);
-                  return (
-                    <tr key={template.id}>
-                      <td>
-                        <span className={styles.templateCell}>
-                          <TemplateThumb
-                            sections={template.sections}
-                            themePresetId={themePresetId}
-                            label={`Thu nhỏ: ${template.name}`}
-                            className={styles.thumb}
-                          />
-                          <span className={styles.names}>
-                            <Link
-                              href={templateHref(workspace.id, template.id, site?.id)}
-                              className={styles.name}
-                            >
-                              {template.name}
-                            </Link>
-                            {tags === '' ? null : <span className={styles.tags}>{tags}</span>}
-                          </span>
-                        </span>
-                      </td>
-                      <td className={styles.version}>v{template.currentVersion}</td>
-                      <td>{scopeLabel(template.scope, sites)}</td>
-                      <td>{usedLabel(template.usedCount)}</td>
-                      <td>
-                        {formatDayMonth(template.updatedAt)} · {template.updatedBy.name}
-                      </td>
-                      <td>
-                        <span className={styles.actions}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              open({ kind: 'versions', templateId: template.id });
-                            }}
-                          >
-                            Phiên bản <VisuallyHidden>của {template.name}</VisuallyHidden>
-                          </Button>
-                          {canManage ? (
-                            <TemplateMenu
-                              template={template}
-                              pending={change.isPending}
-                              onEdit={() => {
-                                open({ kind: 'edit', templateId: template.id });
-                              }}
-                              onAction={(action) => {
-                                change.mutate({ template, action });
-                              }}
+          <div className={styles.tableCard}>
+            <ScrollRegion label={tableLabel}>
+              <table className={styles.table} aria-label={tableLabel}>
+                <thead>
+                  <tr>
+                    <th scope="col">TEMPLATE</th>
+                    <th scope="col">PHIÊN BẢN</th>
+                    <th scope="col">AI ĐƯỢC DÙNG</th>
+                    <th scope="col">ĐÃ TẠO</th>
+                    <th scope="col">CẬP NHẬT</th>
+                    <th scope="col">
+                      <VisuallyHidden>Thao tác</VisuallyHidden>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((template) => {
+                    const tags = templateTags(template);
+                    return (
+                      <tr key={template.id}>
+                        <td>
+                          <span className={styles.templateCell}>
+                            <TemplateThumb
+                              sections={template.sections}
+                              themePresetId={themePresetId}
+                              label={`Thu nhỏ: ${template.name}`}
+                              className={styles.thumb}
                             />
-                          ) : null}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            <span className={styles.names}>
+                              <Link
+                                href={templateHref(workspace.id, template.id, site?.id)}
+                                className={styles.name}
+                              >
+                                {template.name}
+                              </Link>
+                              {tags === '' ? null : <span className={styles.tags}>{tags}</span>}
+                            </span>
+                          </span>
+                        </td>
+                        <td className={styles.version}>v{template.currentVersion}</td>
+                        <td>{scopeLabel(template.scope, sites)}</td>
+                        <td>{usedLabel(template.usedCount)}</td>
+                        <td>
+                          {formatDayMonth(template.updatedAt)} · {template.updatedBy.name}
+                        </td>
+                        <td>
+                          <span className={styles.actions}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                open({ kind: 'versions', templateId: template.id });
+                              }}
+                            >
+                              Phiên bản <VisuallyHidden>của {template.name}</VisuallyHidden>
+                            </Button>
+                            {canManage ? (
+                              <TemplateMenu
+                                template={template}
+                                pending={change.isPending}
+                                onEdit={() => {
+                                  open({ kind: 'edit', templateId: template.id });
+                                }}
+                                onAction={(action) => {
+                                  change.mutate({ template, action });
+                                }}
+                              />
+                            ) : null}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </ScrollRegion>
           </div>
           <p className={styles.note}>
             Lưu trữ ẩn mẫu khỏi thư viện; trang đã tạo từ mẫu không bị ảnh hưởng. Không có xóa:
