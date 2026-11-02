@@ -1,7 +1,6 @@
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { expectNoSidewaysScroll } from '../support/axe.js';
-import { Editor } from '../support/editor.js';
-import { clinicImage } from '../support/fixtures.js';
+import { Editor, uploadImageInto } from '../support/editor.js';
 import {
   createPageViaApi,
   PRIVACY,
@@ -28,18 +27,6 @@ async function addSection(page: Page, editor: Editor, category: string, card: st
   await dialog.getByRole('button', { name: new RegExp(`^${escaped(card)}`) }).click();
   await dialog.getByRole('button', { name: `Thêm “${card}”` }).click();
   await expect(dialog).toBeHidden();
-}
-
-/** Uploads the clinic image with a description into the image field inside `scope`. */
-async function uploadInto(page: Page, scope: Locator, alt: string) {
-  await scope.getByRole('button', { name: 'Chọn ảnh' }).click();
-  const picker = page.getByRole('dialog', { name: 'Chọn ảnh' });
-  await picker.getByLabel('Tệp ảnh').setInputFiles(clinicImage);
-  await picker
-    .getByRole('textbox', { name: 'Mô tả ảnh cho người dùng trình đọc màn hình' })
-    .fill(alt);
-  await picker.getByRole('button', { name: 'Tải lên và chọn' }).click();
-  await expect(picker).toBeHidden();
 }
 
 test.describe('E5 · new sections', () => {
@@ -77,7 +64,7 @@ test.describe('E5 · new sections', () => {
       // An untitled logo is numbered; once described, it is named after its partner.
       await logos.getByRole('button', { name: new RegExp(`^Đối tác ${index + 1}`) }).click();
       const item = logos.getByRole('listitem').nth(index);
-      await uploadInto(page, item, partner);
+      await uploadImageInto(page, item, partner);
       await expect(item.getByRole('button', { name: new RegExp(`^${partner}`) })).toBeVisible();
       await expect(item.getByRole('textbox', { name: 'Tên đối tác' })).toHaveValue(partner);
       await expect(editor.canvas.getByRole('img', { name: partner })).toBeVisible();
@@ -86,8 +73,8 @@ test.describe('E5 · new sections', () => {
     // Trước & sau: both photos, each with its description.
     await addSection(page, editor, 'Bằng chứng xã hội', 'Trước & sau');
     const pair = page.getByRole('complementary', { name: 'Trước & sau' });
-    await uploadInto(page, pair.getByRole('group', { name: 'Ảnh trước' }), 'Răng ố vàng');
-    await uploadInto(page, pair.getByRole('group', { name: 'Ảnh sau' }), 'Răng trắng sáng');
+    await uploadImageInto(page, pair.getByRole('group', { name: 'Ảnh trước' }), 'Răng ố vàng');
+    await uploadImageInto(page, pair.getByRole('group', { name: 'Ảnh sau' }), 'Răng trắng sáng');
 
     // Gọi / Zalo nhanh: each button takes a number, and nothing else.
     await addSection(page, editor, 'Form & liên hệ', 'Gọi / Zalo nhanh');

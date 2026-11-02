@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
+import { openAiAssistant } from '../support/ai.js';
 import { expectAccessible, SCAN_VIEWPORTS } from '../support/axe.js';
 import { Editor } from '../support/editor.js';
 import { createPageViaApi, promoPage, setUpSite, uniqueId } from '../support/setup.js';
@@ -25,14 +26,6 @@ async function openHero(page: Page): Promise<Editor> {
   await editor.heroRow.click();
   await expect(editor.heroPanel).toBeVisible();
   return editor;
-}
-
-/** The "Trợ lý AI" tab, opened. */
-async function openAssistant(page: Page) {
-  await page.getByRole('tab', { name: 'Trợ lý AI' }).click();
-  const panel = page.getByRole('tabpanel', { name: 'Trợ lý AI' });
-  await expect(panel.getByRole('radio', { name: 'Section Hero' })).toBeChecked();
-  return panel;
 }
 
 /**
@@ -65,7 +58,7 @@ test.describe('G5 · AI assistant in the editor', () => {
     const editor = await openHero(page);
     const before = await editor.heroCanvasHeading.textContent();
     expect(before).toContain(OFFER);
-    const panel = await openAssistant(page);
+    const panel = await openAiAssistant(page);
     await expect(
       panel.getByText('Còn 100/100 lượt tháng này · AI chỉ đọc chữ của bản nháp, không đọc lead.'),
     ).toBeVisible();
@@ -102,7 +95,7 @@ test.describe('G5 · AI assistant in the editor', () => {
     test(`is accessible at ${viewport.width} px: idle, then a result`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await openHero(page);
-      const panel = await openAssistant(page);
+      const panel = await openAiAssistant(page);
       await expect(panel.getByRole('button', { name: 'Viết lại' })).toBeEnabled();
       await expectAccessible(page, 'Trợ lý AI · chờ yêu cầu');
       expect(await scopeLabelLines(panel)).toEqual([

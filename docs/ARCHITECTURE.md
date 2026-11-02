@@ -46,7 +46,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Bốn thẻ còn thiếu của màn 04, link chính sách ở chân trang (ADR-007).
 - Những chỗ còn lệch thiết kế ở màn 01, 05, 06, 13, 14, 15, 15b (ADR-005, 006, 021, 022).
 
-**Phase 2 (tạo trang nhanh), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-02, theo board Phase 2 của artifact thiết kế). Template và AI đều chỉ ghi vào bản nháp:
+**Phase 2 (tạo trang nhanh), đã xong** (chủ sản phẩm yêu cầu ngày 2026-11-02, theo board Phase 2 của artifact thiết kế). Template và AI đều chỉ ghi vào bản nháp:
 
 - Thư viện template: mẫu hệ thống, tạo trang từ mẫu, xem trước (ADR-030).
 - Template của workspace: lưu trang thành template, phiên bản bất biến, phạm vi site, lưu trữ (ADR-030).

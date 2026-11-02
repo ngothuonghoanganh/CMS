@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { clinicImage } from './fixtures.js';
 
 /** Locators and actions of the page editor (screen 03), by role and accessible name. */
 export class Editor {
@@ -89,4 +90,16 @@ export class Editor {
     await done.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click();
     await expect(done).toBeHidden();
   }
+}
+
+/** Uploads the clinic image with a description into the image field inside `scope`. */
+export async function uploadImageInto(page: Page, scope: Locator, alt: string): Promise<void> {
+  await scope.getByRole('button', { name: 'Chọn ảnh' }).click();
+  const picker = page.getByRole('dialog', { name: 'Chọn ảnh' });
+  await picker.getByLabel('Tệp ảnh').setInputFiles(clinicImage);
+  await picker
+    .getByRole('textbox', { name: 'Mô tả ảnh cho người dùng trình đọc màn hình' })
+    .fill(alt);
+  await picker.getByRole('button', { name: 'Tải lên và chọn' }).click();
+  await expect(picker).toBeHidden();
 }
