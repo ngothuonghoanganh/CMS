@@ -10,7 +10,9 @@ export const activityTypes = [
   'page.rollback_undone',
   'page.unpublished',
   'page.draft_restored',
+  'page.template_applied',
   'page.deleted',
+  'template.saved',
   'asset.uploaded',
   'privacy.updated',
   'consent.version_created',
@@ -97,8 +99,8 @@ export const activityItemSchema = z.object({
    * data request covered, or how many addresses receive leads after a change; activity never holds
    * personal data (rule 10). `slug` is the address a deleted page had (`page.deleted`).
    * `hostname` is the domain of a domain event, or the default address made primary again.
-   * `template` is the name of the template a page was made from, with its version in `version`
-   * (ADR-030).
+   * `template` is the name of the template a page was made from, applied to its draft or saved
+   * from it (`template.saved`), with the template's version in `version` (ADR-030).
    */
   data: z.object({
     version: z.number().int().positive().nullable(),

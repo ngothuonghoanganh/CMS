@@ -260,15 +260,23 @@ export const createPageRequestSchema = z.object({
     }),
     /**
      * A template of the library (ADR-030), at the version the user previewed: a newer one is
-     * refused (409 `template_changed`) rather than made unseen. Workspace templates (G2) add
-     * `source: 'workspace'` with their own id.
+     * refused (409 `template_changed`) rather than made unseen. A system template by its
+     * kebab-case id, a workspace template by its ObjectId.
      */
-    z.object({
-      kind: z.literal('template'),
-      source: z.literal('system'),
-      templateId: systemTemplateIdSchema,
-      version: templateVersionSchema,
-    }),
+    z.discriminatedUnion('source', [
+      z.object({
+        kind: z.literal('template'),
+        source: z.literal('system'),
+        templateId: systemTemplateIdSchema,
+        version: templateVersionSchema,
+      }),
+      z.object({
+        kind: z.literal('template'),
+        source: z.literal('workspace'),
+        templateId: idSchema,
+        version: templateVersionSchema,
+      }),
+    ]),
   ]),
 });
 export type CreatePageRequest = z.input<typeof createPageRequestSchema>;

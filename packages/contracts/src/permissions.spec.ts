@@ -13,6 +13,7 @@ import {
 const BOARD: Record<string, string> = {
   'pages.view': 'yyyyyy',
   'pages.edit': 'yyyynn',
+  'templates.manage': 'yyynnn',
   'pages.publish': 'yyynnn',
   'pages.requestPublish': 'nnnynn',
   'publishApprovals.decide': 'yynnnn',

@@ -17,6 +17,7 @@ describe('custom roles (ADR-024)', () => {
   it('starts from what the system role may do among the rows it may switch', () => {
     expect(customizablePermissionsOf('editor')).toEqual([
       'pages.edit',
+      'templates.manage',
       'pages.publish',
       'pages.manageLive',
     ]);
@@ -24,6 +25,8 @@ describe('custom roles (ADR-024)', () => {
       'pages.edit',
       'pages.requestPublish',
     ]);
+    // A custom role may save and manage the workspace's templates (ADR-030), with no other row.
+    expect(customRoleProblem(['templates.manage'])).toBeNull();
     expect(customizablePermissionsOf('admin')).toContain('publishApprovals.decide');
     expect(customizablePermissionsOf('admin')).not.toContain('pages.requestPublish');
   });

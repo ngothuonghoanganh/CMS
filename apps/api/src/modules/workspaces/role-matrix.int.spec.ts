@@ -15,6 +15,7 @@ import {
   rolesWith,
   type Site,
   siteListResponseSchema,
+  workspaceTemplateSchema,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
 import type { Response } from 'supertest';
@@ -73,6 +74,23 @@ interface Fixture {
   approvalId: string;
   /** A custom role nobody holds (ADR-024). */
   customRoleId: string;
+  /** A workspace template for the whole workspace, at v1, and an archived one (ADR-030). */
+  templateId: string;
+  archivedTemplateId: string;
+}
+
+/** "Lưu trang thành template" of a page's draft, for the whole workspace. */
+function saveTemplateBody(siteId: string, pageId: string) {
+  return {
+    source: { siteId, pageId, kind: 'draft' },
+    content: 'keep',
+    note: '',
+    name: 'Tư vấn niềng răng trả góp',
+    description: '',
+    goal: 'lead',
+    industry: 'dental_health',
+    scope: { kind: 'workspace' },
+  } as const;
 }
 
 interface Row {
@@ -373,6 +391,128 @@ const ROWS: Row[] = [
         title: 'Ưu đãi tẩy trắng răng',
         slug: uniqueSlug('mau'),
         start: { kind: 'template', source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+      }),
+  },
+  {
+    action: 'Tạo trang từ template của workspace',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 201,
+    call: (client, { site, templateId }) =>
+      client.post(`/sites/${site.id}/pages`, {
+        title: 'Niềng răng trả góp',
+        slug: uniqueSlug('mau'),
+        start: { kind: 'template', source: 'workspace', templateId, version: 1 },
+      }),
+  },
+  {
+    action: 'Áp dụng mẫu vào trang đang sửa',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: async (client, { owner, site, draftPageId }) =>
+      client.post(`/sites/${site.id}/pages/${draftPageId}/draft/template`, {
+        baseRevision: (await getPage(owner, site.id, draftPageId)).draft.revision,
+        template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+      }),
+  },
+  {
+    action: 'Áp dụng mẫu trong editor',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: (client, { site, draftPageId, templateId }) =>
+      client.post(`/sites/${site.id}/pages/${draftPageId}/template-composition`, {
+        source: 'workspace',
+        templateId,
+        version: 1,
+      }),
+  },
+  // Workspace templates (board 19, ADR-030)
+  {
+    action: 'Template của workspace',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/workspace-templates`),
+  },
+  {
+    action: 'Lịch sử phiên bản template',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, templateId }) =>
+      client.get(`/workspaces/${workspaceId}/workspace-templates/${templateId}/versions`),
+  },
+  {
+    action: 'Lưu trang thành template',
+    // And `pages.view` on the page's site, which every role holds.
+    permission: 'templates.manage',
+    scope: 'site',
+    status: 201,
+    call: (client, { workspaceId, site, pageId }) =>
+      client.post(
+        `/workspaces/${workspaceId}/workspace-templates`,
+        saveTemplateBody(site.id, pageId),
+      ),
+  },
+  {
+    action: 'Lưu phiên bản mới của template',
+    permission: 'templates.manage',
+    scope: 'site',
+    status: 201,
+    call: (client, { workspaceId, site, pageId, templateId }) =>
+      client.post(`/workspaces/${workspaceId}/workspace-templates/${templateId}/versions`, {
+        ...saveTemplateBody(site.id, pageId),
+        baseVersion: 1,
+      }),
+  },
+  {
+    action: 'Sửa thông tin template',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, templateId }) =>
+      client.patch(`/workspaces/${workspaceId}/workspace-templates/${templateId}`, {
+        name: 'Tư vấn niềng răng trả góp 0%',
+        description: '',
+        goal: 'lead',
+        industry: 'dental_health',
+        scope: { kind: 'workspace' },
+      }),
+  },
+  {
+    action: 'Nhân bản template',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 201,
+    call: (client, { workspaceId, templateId }) =>
+      client.post(`/workspaces/${workspaceId}/workspace-templates/${templateId}/duplicate`),
+  },
+  {
+    action: 'Lưu trữ template',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, templateId }) =>
+      client.post(`/workspaces/${workspaceId}/workspace-templates/${templateId}/archive`),
+  },
+  {
+    action: 'Khôi phục template',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId, archivedTemplateId }) =>
+      client.post(`/workspaces/${workspaceId}/workspace-templates/${archivedTemplateId}/restore`),
+  },
+  {
+    action: 'Dùng lại phiên bản template',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 201,
+    call: (client, { workspaceId, templateId }) =>
+      client.post(`/workspaces/${workspaceId}/workspace-templates/${templateId}/versions/1/reuse`, {
+        baseVersion: 1,
       }),
   },
   {
@@ -870,6 +1010,22 @@ describe('the six roles on every endpoint', () => {
           .expect(201)
       ).body,
     );
+    const saveTemplate = async () =>
+      workspaceTemplateSchema.parse(
+        (
+          await owner
+            .post(
+              `/workspaces/${workspaceId}/workspace-templates`,
+              saveTemplateBody(site.id, pageId),
+            )
+            .expect(201)
+        ).body,
+      );
+    const template = await saveTemplate();
+    const archivedTemplate = await saveTemplate();
+    await owner
+      .post(`/workspaces/${workspaceId}/workspace-templates/${archivedTemplate.id}/archive`)
+      .expect(200);
     const asked = approvalResponseSchema.parse(
       (
         await memberOf('contributor')
@@ -934,6 +1090,8 @@ describe('the six roles on every endpoint', () => {
       requestId: (request.body as { id: string }).id,
       approvalId: asked.page.approval?.id ?? '',
       customRoleId: unheld.id,
+      templateId: template.id,
+      archivedTemplateId: archivedTemplate.id,
     };
   }
 
@@ -944,6 +1102,12 @@ describe('the six roles on every endpoint', () => {
     const db = t.workspaceDb(workspaceId);
     const collection = (name: string) =>
       db.collection(name).find({ siteId }).sort({ _id: 1 }).toArray();
+    const workspaceDocuments = (name: string) =>
+      db
+        .collection(name)
+        .find({ workspaceId: new Types.ObjectId(workspaceId) })
+        .sort({ _id: 1 })
+        .toArray();
     const [
       siteRecord,
       sites,
@@ -955,6 +1119,8 @@ describe('the six roles on every endpoint', () => {
       requests,
       versions,
       approvals,
+      templates,
+      templateVersions,
     ] = await Promise.all([
       db.collection('sites').findOne({ _id: siteId }),
       db.collection('sites').countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
@@ -966,6 +1132,9 @@ describe('the six roles on every endpoint', () => {
       collection('data_requests'),
       collection('consent_versions'),
       collection('publish_approvals'),
+      // Templates belong to the workspace, not to a site (ADR-030).
+      workspaceDocuments('templates'),
+      workspaceDocuments('template_versions'),
     ]);
     const ofWorkspace = (name: string) =>
       t.connection
@@ -1006,6 +1175,8 @@ describe('the six roles on every endpoint', () => {
       requests,
       versions,
       approvals,
+      templates,
+      templateVersions,
       activity,
       limits,
       memberships,

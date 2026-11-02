@@ -4,6 +4,7 @@ export * from './links.js';
 export * from './paths.js';
 export * from './registry.js';
 export * from './seo.js';
+export * from './template-content.js';
 export * from './templates.js';
 export * from './themes.js';
 export type { BeforeAfterContent } from './sections/before-after.js';

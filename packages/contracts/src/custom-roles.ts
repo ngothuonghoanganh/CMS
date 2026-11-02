@@ -18,6 +18,7 @@ export const CUSTOM_ROLE_NAME_MAX = 40;
  */
 export const customizablePermissionSchema = permissionSchema.extract([
   'pages.edit',
+  'templates.manage',
   'pages.publish',
   'pages.requestPublish',
   'pages.manageLive',
