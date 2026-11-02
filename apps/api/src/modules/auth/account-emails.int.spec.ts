@@ -7,7 +7,9 @@ import {
   linkTokenIn,
   SIGNUP_EMAIL_SUBJECT,
   signUp,
+  signupForm,
   signupInput,
+  signupVerifyBody,
   TestClient,
 } from '../../../test/client.js';
 import { TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
@@ -50,12 +52,12 @@ describe('account emails', () => {
     // The confirmation is the first; the helper reads it.
     await signUp(t.app, input);
     await post('/auth/password/forgot', { email: input.email }).expect(202);
-    await post('/auth/signup', { ...signupInput(), email: input.email }).expect(202);
+    await post('/auth/signup', { ...signupForm(signupInput()), email: input.email }).expect(202);
     expect(await counted(input.email)).toBe(3);
 
     for (const [path, body] of [
       ['/auth/password/forgot', { email: input.email }],
-      ['/auth/signup', { ...signupInput(), email: input.email }],
+      ['/auth/signup', { ...signupForm(signupInput()), email: input.email }],
       ['/auth/signup/resend', { email: input.email }],
     ] as const) {
       const problem = problemSchema.parse((await post(path, body).expect(429)).body);
@@ -120,7 +122,7 @@ describe('account emails', () => {
     const warned = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
-    const response = await post('/auth/signup', input).expect(503);
+    const response = await post('/auth/signup', signupForm(input)).expect(503);
     expect(problemSchema.parse(response.body)).toMatchObject({
       code: 'email_unavailable',
       title: 'Chưa gửi được email, thử lại sau ít phút',
@@ -138,7 +140,10 @@ describe('account emails', () => {
     await post('/auth/signup/resend', { email: input.email }).expect(202);
     const [email] = t.emails.to(input.email);
     expect(email?.subject).toBe(SIGNUP_EMAIL_SUBJECT);
-    await post('/auth/signup/verify', { token: linkTokenIn(email?.text ?? '') ?? '' }).expect(201);
+    await post(
+      '/auth/signup/verify',
+      signupVerifyBody(linkTokenIn(email?.text ?? '') ?? '', input),
+    ).expect(201);
     expect(await counted(input.email)).toBe(1);
   });
 
@@ -164,14 +169,14 @@ describe('account emails', () => {
     vi.spyOn(t.app.get(PendingSignupsRepository), 'replace').mockRejectedValueOnce(
       new Error('connection reset'),
     );
-    await post('/auth/signup', input).expect(500);
+    await post('/auth/signup', signupForm(input)).expect(500);
     expect(await counted(input.email)).toBe(0);
 
     t.emails.failNext('smtp_unavailable');
     vi.spyOn(t.app.get(AuthEmailLimitsRepository), 'giveBack').mockRejectedValueOnce(
       new Error('not primary'),
     );
-    const response = await post('/auth/signup', input).expect(503);
+    const response = await post('/auth/signup', signupForm(input)).expect(503);
     expect(problemSchema.parse(response.body).code).toBe('email_unavailable');
     // Still counted, the safe side; logged without the key that stands for the address.
     expect(await counted(input.email)).toBe(1);

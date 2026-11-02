@@ -7,12 +7,14 @@ export const AUTH_EMAIL_LIMIT_MODEL = 'AuthEmailLimit';
 /**
  * A sign-up waiting for its email to be confirmed (ADR-026): no account, workspace or database
  * exists for it yet. One per email; signing up again replaces it, so an older link stops working.
+ * No password: whoever opens the link chooses it, so a sign-up made with someone else's email
+ * gives its maker nothing.
  */
 export interface PendingSignupRecord {
   _id: Types.ObjectId;
   email: string;
+  /** As typed in the form; the link's page may correct it. */
   name: string;
-  passwordHash: string;
   workspaceName: string;
   /** sha256 of the link's secret; the secret itself is only in the email. */
   tokenHash: string;
@@ -27,7 +29,6 @@ export const pendingSignupSchema = new Schema<PendingSignupRecord>(
   {
     email: { type: String, required: true },
     name: { type: String, required: true },
-    passwordHash: { type: String, required: true },
     workspaceName: { type: String, required: true },
     tokenHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },

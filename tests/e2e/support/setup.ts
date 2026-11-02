@@ -76,16 +76,24 @@ export async function call<T>(
 
 /**
  * Signs `account` up through both steps of ADR-026, as its owner would: the form, then the link
- * Mailpit received. `request` holds the session afterwards.
+ * Mailpit received, whose page sets the password. `request` holds the session afterwards.
  */
 export async function signUpViaApi(
   request: APIRequestContext,
   account: Account,
 ): Promise<MeResponse> {
-  await call(request, 'POST', endpoints.signup.path(), accountEmailResponseSchema, account);
-  const email = await waitForEmail(request, account.email, SIGNUP_EMAIL_SUBJECT);
+  const { name, email, password, workspaceName } = account;
+  await call(request, 'POST', endpoints.signup.path(), accountEmailResponseSchema, {
+    name,
+    email,
+    workspaceName,
+  });
+  const message = await waitForEmail(request, email, SIGNUP_EMAIL_SUBJECT);
   return call(request, 'POST', endpoints.verifySignup.path(), meResponseSchema, {
-    token: tokenOf(accountLink(email, SIGNUP_VERIFY_PATH)),
+    token: tokenOf(accountLink(message, SIGNUP_VERIFY_PATH)),
+    password,
+    name,
+    workspaceName,
   });
 }
 

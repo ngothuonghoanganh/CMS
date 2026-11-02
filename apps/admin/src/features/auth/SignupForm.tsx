@@ -21,10 +21,9 @@ type SignupField = keyof SignupRequest;
 const fieldIds: Record<SignupField, string> = {
   name: 'signup-name',
   email: 'signup-email',
-  password: 'signup-password',
   workspaceName: 'signup-workspace',
 };
-const fieldOrder: readonly SignupField[] = ['name', 'email', 'password', 'workspaceName'];
+const fieldOrder: readonly SignupField[] = ['name', 'email', 'workspaceName'];
 
 export interface SignupFormProps {
   /** The line under the card, e.g. the link to the login page. */
@@ -33,13 +32,13 @@ export interface SignupFormProps {
 
 /**
  * Sign-up (ADR-026): the form emails a confirmation link, then the card says to check the inbox,
- * with "Gửi lại" and "Đổi email". The account and its workspace exist once the link is used.
+ * with "Gửi lại" and "Đổi email". No password here: the link's page sets it, so only whoever
+ * reads the mailbox can. The account and its workspace exist once the link is used.
  */
 export function SignupForm({ footer }: SignupFormProps) {
   const form = useSchemaForm(signupRequestSchema, {
     name: '',
     email: '',
-    password: '',
     workspaceName: '',
   });
   const [formError, setFormError] = useState<string | null>(null);
@@ -126,7 +125,7 @@ export function SignupForm({ footer }: SignupFormProps) {
       description="Tạo workspace cho agency hoặc doanh nghiệp của bạn, rồi thêm site khách hàng đầu tiên."
       footer={footer}
     >
-      {/* POST: sent before the page is interactive, the browser must not put the password in the URL. */}
+      {/* POST: sent before the page is interactive, the browser must not put the email in the URL. */}
       <form method="post" noValidate className={styles.form} onSubmit={handleSubmit}>
         <Field label="Họ và tên" id={fieldIds.name} required error={form.errors.name}>
           <Input autoComplete="name" placeholder="Nguyễn Ngọc Anh" {...bind('name')} />
@@ -139,15 +138,6 @@ export function SignupForm({ footer }: SignupFormProps) {
             placeholder="ban@congty.vn"
             {...bind('email')}
           />
-        </Field>
-        <Field
-          label="Mật khẩu"
-          id={fieldIds.password}
-          required
-          help="Ít nhất 8 ký tự."
-          error={form.errors.password}
-        >
-          <Input type="password" autoComplete="new-password" {...bind('password')} />
         </Field>
         <Field
           label="Tên workspace"
@@ -189,8 +179,8 @@ function CheckEmail({ email, onChangeEmail }: { email: string; onChangeEmail: ()
   return (
     <div ref={panel} tabIndex={-1} className={styles.sent}>
       <p className={styles.message}>
-        Chúng tôi đã gửi link xác nhận tới <strong>{email}</strong>. Mở email và bấm link để tạo
-        workspace. Link có hiệu lực {SIGNUP_LINK_VALID_HOURS} giờ.
+        Chúng tôi đã gửi link xác nhận tới <strong>{email}</strong>. Mở email, bấm link và đặt mật
+        khẩu để tạo workspace. Link có hiệu lực {SIGNUP_LINK_VALID_HOURS} giờ.
       </p>
       <p className={styles.note}>Không thấy email? Hãy xem cả mục spam, hoặc gửi lại.</p>
       {resend.isSuccess ? (

@@ -9,8 +9,10 @@ import {
   requestSignup,
   signedUpClient,
   signUp,
+  signupForm,
   signupInput,
   signupLinkToken,
+  signupVerifyBody,
   TestClient,
 } from '../../../test/client.js';
 import { TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
@@ -35,7 +37,9 @@ describe('auth', () => {
     const client = new TestClient(t.app);
     const input = signupInput({ workspaceName: 'Mây Xanh Agency' });
     const token = await requestSignup(t.app, input, client);
-    const response = await client.post('/auth/signup/verify', { token }).expect(201);
+    const response = await client
+      .post('/auth/signup/verify', signupVerifyBody(token, input))
+      .expect(201);
 
     const me = meResponseSchema.parse(response.body);
     expect(me.user.email).toBe(input.email);
@@ -54,8 +58,11 @@ describe('auth', () => {
 
   it('never stores the session token itself', async () => {
     const client = new TestClient(t.app);
-    const linkToken = await requestSignup(t.app, signupInput(), client);
-    const response = await client.post('/auth/signup/verify', { token: linkToken }).expect(201);
+    const input = signupInput();
+    const linkToken = await requestSignup(t.app, input, client);
+    const response = await client
+      .post('/auth/signup/verify', signupVerifyBody(linkToken, input))
+      .expect(201);
     const token = /plp_session=([^;]+)/.exec(String(response.headers['set-cookie']))?.[1];
     expect(token).toBeDefined();
     const stored = await t.connection.collection('sessions').findOne({ tokenHash: token });
@@ -66,21 +73,23 @@ describe('auth', () => {
     const input = signupInput();
     const client = new TestClient(t.app);
     const response = await client
-      .post('/auth/signup', { ...input, email: `  ${input.email.toUpperCase()} ` })
+      .post('/auth/signup', { ...signupForm(input), email: `  ${input.email.toUpperCase()} ` })
       .expect(202);
     expect(response.body).toEqual({ email: input.email });
     const token = await signupLinkToken(t.app, input.email);
-    const verified = await client.post('/auth/signup/verify', { token }).expect(201);
+    const verified = await client
+      .post('/auth/signup/verify', signupVerifyBody(token, input))
+      .expect(201);
     expect(meResponseSchema.parse(verified.body).user.email).toBe(input.email);
   });
 
   it('validates the signup body with the contract schema', async () => {
     const response = await new TestClient(t.app)
-      .post('/auth/signup', { ...signupInput(), password: 'short' })
+      .post('/auth/signup', { ...signupForm(signupInput()), workspaceName: '  ' })
       .expect(422);
     const problem = problemSchema.parse(response.body);
     expect(problem.code).toBe('validation_failed');
-    expect(problem.issues?.[0]?.path).toEqual(['password']);
+    expect(problem.issues?.[0]?.path).toEqual(['workspaceName']);
   });
 
   it('logs in with the right password and rejects a wrong one with a generic message', async () => {
@@ -173,7 +182,7 @@ describe('auth', () => {
     const response = await request(t.app.getHttpServer())
       .post('/auth/signup')
       .set('Origin', 'https://evil.example')
-      .send(signupInput())
+      .send(signupForm(signupInput()))
       .expect(403);
     expect(problemSchema.parse(response.body).code).toBe('origin_rejected');
   });
@@ -246,10 +255,11 @@ describe('auth rate limit behind a trusted edge proxy', () => {
       password: 'whatever-123',
     }).expect(401);
 
-    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(202);
-    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(202);
-    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(429);
-    await fromClient('198.51.100.40', '/auth/signup', signupInput()).expect(202);
+    const signup = () => signupForm(signupInput());
+    await fromClient('203.0.113.30', '/auth/signup', signup()).expect(202);
+    await fromClient('203.0.113.30', '/auth/signup', signup()).expect(202);
+    await fromClient('203.0.113.30', '/auth/signup', signup()).expect(429);
+    await fromClient('198.51.100.40', '/auth/signup', signup()).expect(202);
   });
 
   it('counts an IPv6 client per /64, however its address is written', async () => {

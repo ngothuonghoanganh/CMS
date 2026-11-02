@@ -25,7 +25,6 @@ function renderForm() {
 async function fillForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByRole('textbox', { name: 'Họ và tên' }), 'Ngọc Anh');
   await user.type(screen.getByRole('textbox', { name: 'Email' }), EMAIL);
-  await user.type(screen.getByLabelText('Mật khẩu'), 'mat-khau-dai');
   await user.type(screen.getByRole('textbox', { name: 'Tên workspace' }), 'Mây Xanh Agency');
 }
 
@@ -38,12 +37,18 @@ async function signUp(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('SignupForm', () => {
-  it('posts, so a submit before the page is interactive keeps the password out of the URL', () => {
+  it('posts, so a submit before the page is interactive keeps the email out of the URL', () => {
     renderForm();
     expect(screen.getByRole('button', { name: 'Tạo tài khoản' }).closest('form')).toHaveAttribute(
       'method',
       'post',
     );
+  });
+
+  it('asks for no password: the emailed link’s page sets it (ADR-026)', () => {
+    renderForm();
+    expect(screen.queryByLabelText(/Mật khẩu/)).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
   });
 
   it('shows every missing field before sending', async () => {
@@ -58,8 +63,8 @@ describe('SignupForm', () => {
     expect(screen.getByRole('textbox', { name: 'Tên workspace' })).toHaveAccessibleDescription(
       expect.stringContaining('Nhập tên workspace'),
     );
-    expect(screen.getByLabelText('Mật khẩu')).toHaveAccessibleDescription(
-      expect.stringContaining('Mật khẩu cần ít nhất 8 ký tự'),
+    expect(screen.getByRole('textbox', { name: 'Email' })).toHaveAccessibleDescription(
+      expect.stringContaining('Email không hợp lệ'),
     );
     expect(apiMock).not.toHaveBeenCalled();
   });
@@ -91,12 +96,7 @@ describe('SignupForm', () => {
     await signUp(user);
 
     expect(lastCallTo(apiMock, endpoints.signup).options).toEqual({
-      body: {
-        name: 'Ngọc Anh',
-        email: EMAIL,
-        password: 'mat-khau-dai',
-        workspaceName: 'Mây Xanh Agency',
-      },
+      body: { name: 'Ngọc Anh', email: EMAIL, workspaceName: 'Mây Xanh Agency' },
     });
     const message = screen.getByText(/Chúng tôi đã gửi link xác nhận tới/);
     expect(message).toHaveTextContent(EMAIL);

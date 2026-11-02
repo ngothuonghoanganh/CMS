@@ -4,6 +4,7 @@ import {
   meResponseSchema,
   problemSchema,
   SESSION_COOKIE,
+  signupLookupResponseSchema,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -14,7 +15,11 @@ import {
   SIGNUP_EMAIL_SUBJECT,
   signedUpClient,
   signUp,
+  signupForm,
+  type SignupInput,
   signupInput,
+  signupLinkToken,
+  signupVerifyBody,
   TestClient,
 } from '../../../test/client.js';
 import { TEST_ADMIN_ORIGIN } from '../../../test/env.js';
@@ -28,7 +33,6 @@ interface StoredPendingSignup {
   email: string;
   name: string;
   workspaceName: string;
-  passwordHash: string;
   tokenHash: string;
   expiresAt: Date;
   createdAt: Date;
@@ -63,13 +67,22 @@ describe('two-step sign-up', () => {
 
   const usersWith = (email: string) => t.connection.collection('users').countDocuments({ email });
 
-  const verify = (token: string, client = new TestClient(t.app)) =>
-    client.post('/auth/signup/verify', { token });
+  /** The link's page creating the account, with the password and names of `input`. */
+  const verify = (token: string, input: SignupInput, client = new TestClient(t.app)) =>
+    client.post('/auth/signup/verify', signupVerifyBody(token, input));
+
+  const lookup = (token: string, client = new TestClient(t.app)) =>
+    client.post('/auth/signup/lookup', { token });
+
+  const login = (email: string, password: string) =>
+    new TestClient(t.app).post('/auth/login', { email, password });
 
   it('creates no account, workspace or database before the email is confirmed', async () => {
     const before = await workspaceDatabases();
     const input = signupInput({ workspaceName: 'Mây Xanh Agency' });
-    const response = await new TestClient(t.app).post('/auth/signup', input).expect(202);
+    const response = await new TestClient(t.app)
+      .post('/auth/signup', signupForm(input))
+      .expect(202);
 
     expect(response.body).toEqual({ email: input.email } satisfies AccountEmailResponse);
     expect(response.headers['set-cookie']).toBeUndefined();
@@ -84,16 +97,16 @@ describe('two-step sign-up', () => {
     expect(email?.html).toContain(`href="${TEST_ADMIN_ORIGIN}/signup/verify#token=${token ?? ''}"`);
     expect(email?.html).toContain('Xác nhận và tạo workspace');
 
-    // The password is hashed and only the sha256 of the link's secret is kept, for 24 hours.
+    // No password, which the link's page chooses, and only the sha256 of the link's secret, for
+    // 24 hours.
     const pending = await pendingOf(input.email);
     expect(pending).toMatchObject({ name: input.name, workspaceName: 'Mây Xanh Agency' });
-    expect(pending?.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(pending).not.toHaveProperty('passwordHash');
     expect(pending?.tokenHash).toBe(
       createHash('sha256')
         .update(token ?? '')
         .digest('hex'),
     );
-    expect(JSON.stringify(pending)).not.toContain(input.password);
     expect((pending?.expiresAt.getTime() ?? 0) - (pending?.createdAt.getTime() ?? 0)).toBe(
       24 * HOUR_MS,
     );
@@ -105,7 +118,7 @@ describe('two-step sign-up', () => {
     const client = new TestClient(t.app);
     const token = await requestSignup(t.app, input, client);
 
-    const response = await verify(token, client).expect(201);
+    const response = await verify(token, input, client).expect(201);
     const me = meResponseSchema.parse(response.body);
     expect(me.user).toMatchObject({ name: input.name, email: input.email });
     expect(me.memberships).toHaveLength(1);
@@ -120,18 +133,85 @@ describe('two-step sign-up', () => {
       [...before, t.app.get(WorkspaceDatabases).nameOf(workspaceId)].sort(),
     );
     expect(await pendingOf(input.email)).toBeNull();
-    // The password typed in the form is the account's.
-    await new TestClient(t.app)
-      .post('/auth/login', { email: input.email, password: input.password })
-      .expect(200);
+    // The password chosen on the link's page is the account's.
+    await login(input.email, input.password).expect(200);
+  });
+
+  it('refuses a password in the form: only whoever opens the link chooses it', async () => {
+    const input = signupInput();
+    const response = await new TestClient(t.app)
+      .post('/auth/signup', { ...signupForm(input), password: input.password })
+      .expect(422);
+    const problem = problemSchema.parse(response.body);
+    expect(problem.code).toBe('validation_failed');
+    expect(problem.issues?.[0]?.code).toBe('unrecognized_keys');
+    expect(await pendingOf(input.email)).toBeNull();
+    expect(t.emails.to(input.email)).toEqual([]);
+  });
+
+  it('gives whoever signs up with someone else’s email no way into the account', async () => {
+    const victim = signupInput({ workspaceName: 'Nha khoa Smile Care' });
+    const attacker = new TestClient(t.app);
+    // The owner of the mailbox signs up, and someone else signs the same email up over it: the
+    // newest link goes to the mailbox, never to whoever filled the form.
+    const first = await requestSignup(t.app, victim);
+    await attacker
+      .post('/auth/signup', { ...signupForm(victim), name: 'Kẻ lạ', workspaceName: 'Kẻ lạ' })
+      .expect(202);
+    const newest = await signupLinkToken(t.app, victim.email);
+    await lookup(first).expect(410);
+
+    // The owner opens the newest link in another browser, sees what the form stored, and sets
+    // their own password and names.
+    const owner = new TestClient(t.app);
+    const shown = signupLookupResponseSchema.parse((await lookup(newest, owner).expect(200)).body);
+    expect(shown).toEqual({ email: victim.email, name: 'Kẻ lạ', workspaceName: 'Kẻ lạ' });
+    const me = meResponseSchema.parse((await verify(newest, victim, owner).expect(201)).body);
+    expect(me.user).toMatchObject({ email: victim.email, name: victim.name });
+    expect(me.memberships[0]?.workspace.name).toBe('Nha khoa Smile Care');
+    await owner.get('/auth/me').expect(200);
+
+    // Whoever filled the form holds no session, and no password they could have chosen opens it.
+    await attacker.get('/auth/me').expect(401);
+    for (const guess of ['mat-khau-ke-la-456', 'mat-khau-an-toan-789']) {
+      await login(victim.email, guess).expect(401);
+    }
+    await login(victim.email, victim.password).expect(200);
+  });
+
+  it('shows the link’s page the email and the names typed, using nothing up', async () => {
+    const input = signupInput({ name: 'Ngọc Anh', workspaceName: 'Mây Xanh Agency' });
+    const token = await requestSignup(t.app, input);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await lookup(token).expect(200);
+      expect(signupLookupResponseSchema.parse(response.body)).toEqual({
+        email: input.email,
+        name: 'Ngọc Anh',
+        workspaceName: 'Mây Xanh Agency',
+      });
+      expect(response.headers['set-cookie']).toBeUndefined();
+    }
+    expect(await usersWith(input.email)).toBe(0);
+
+    // The page may correct the names typed in the form.
+    const corrected = { ...input, name: 'Trần Ngọc Anh', workspaceName: 'Mây Xanh Studio' };
+    const me = meResponseSchema.parse((await verify(token, corrected).expect(201)).body);
+    expect(me.user.name).toBe('Trần Ngọc Anh');
+    expect(me.memberships[0]?.workspace.name).toBe('Mây Xanh Studio');
+    expect(me.memberships[0]?.workspace.slug).toMatch(/^may-xanh-studio/);
+
+    const used = await lookup(token).expect(410);
+    expect(problemSchema.parse(used.body).code).toBe('signup_link_invalid');
+    expect(used.headers['content-type']).toContain('application/problem+json');
   });
 
   it('uses a link once', async () => {
     const input = signupInput();
     const token = await requestSignup(t.app, input);
-    await verify(token).expect(201);
+    await verify(token, input).expect(201);
 
-    const again = await verify(token).expect(410);
+    const again = await verify(token, input).expect(410);
     const problem = problemSchema.parse(again.body);
     expect(problem.code).toBe('signup_link_invalid');
     expect(problem.detail).toContain('đăng ký lại');
@@ -149,8 +229,9 @@ describe('two-step sign-up', () => {
     const before = await workspaceDatabases();
 
     for (const link of [token, newLinkToken().token]) {
-      const response = await verify(link).expect(410);
+      const response = await verify(link, input).expect(410);
       expect(problemSchema.parse(response.body).code).toBe('signup_link_invalid');
+      await lookup(link).expect(410);
     }
     expect(await usersWith(input.email)).toBe(0);
     expect(await workspaceDatabases()).toEqual(before);
@@ -161,7 +242,7 @@ describe('two-step sign-up', () => {
     const token = await requestSignup(t.app, input);
     const before = await workspaceDatabases();
 
-    const responses = await Promise.all([verify(token), verify(token)]);
+    const responses = await Promise.all([verify(token, input), verify(token, input)]);
     expect(responses.map((response) => response.status).sort()).toEqual([201, 410]);
     expect(await usersWith(input.email)).toBe(1);
     // The other confirmation's database is dropped again (ADR-025).
@@ -173,9 +254,10 @@ describe('two-step sign-up', () => {
     const first = await requestSignup(t.app, input);
     const second = await requestSignup(t.app, { ...input, workspaceName: 'Tên mới' });
 
-    await verify(first).expect(410);
-    const me = meResponseSchema.parse((await verify(second).expect(201)).body);
-    expect(me.memberships[0]?.workspace.name).toBe('Tên mới');
+    await verify(first, input).expect(410);
+    const shown = signupLookupResponseSchema.parse((await lookup(second).expect(200)).body);
+    expect(shown.workspaceName).toBe('Tên mới');
+    await verify(second, input).expect(201);
   });
 
   it('answers an email with an account exactly as a new one, and emails it something else', async () => {
@@ -184,9 +266,9 @@ describe('two-step sign-up', () => {
     const fresh = signupInput();
 
     const taken = await new TestClient(t.app)
-      .post('/auth/signup', { ...signupInput(), email: existing.email })
+      .post('/auth/signup', { ...signupForm(signupInput()), email: existing.email })
       .expect(202);
-    const free = await new TestClient(t.app).post('/auth/signup', fresh).expect(202);
+    const free = await new TestClient(t.app).post('/auth/signup', signupForm(fresh)).expect(202);
 
     const answer = (response: typeof taken) => ({
       status: response.status,
@@ -205,9 +287,7 @@ describe('two-step sign-up', () => {
     expect(t.emails.to(fresh.email)[0]?.subject).toBe(SIGNUP_EMAIL_SUBJECT);
     // Nothing was stored, and the account is as it was.
     expect(await pendingOf(existing.email)).toBeNull();
-    await new TestClient(t.app)
-      .post('/auth/login', { email: existing.email, password: existing.password })
-      .expect(200);
+    await login(existing.email, existing.password).expect(200);
   });
 
   it('refuses a link whose email got an account meanwhile, and drops the sign-up', async () => {
@@ -221,13 +301,13 @@ describe('two-step sign-up', () => {
       .expect(201);
     const before = await workspaceDatabases();
 
-    const response = await verify(token).expect(409);
+    const response = await verify(token, input).expect(409);
     const problem = problemSchema.parse(response.body);
     expect(problem.code).toBe('email_taken');
     expect(problem.detail).toContain('Quên mật khẩu');
     expect(await pendingOf(input.email)).toBeNull();
     expect(await workspaceDatabases()).toEqual(before);
-    await verify(token).expect(410);
+    await verify(token, input).expect(410);
   });
 
   it('sends a sign-up still waiting a new link, valid 24 hours again; the old one stops working', async () => {
@@ -253,8 +333,8 @@ describe('two-step sign-up', () => {
     const pending = await pendingOf(input.email);
     expect((pending?.expiresAt.getTime() ?? 0) - Date.now()).toBeGreaterThan(23.9 * HOUR_MS);
 
-    await verify(first).expect(410);
-    await verify(second ?? '').expect(201);
+    await verify(first, input).expect(410);
+    await verify(second ?? '', input).expect(201);
   });
 
   it('answers "Gửi lại" the same when no sign-up waits, and sends nothing', async () => {
@@ -273,12 +353,26 @@ describe('two-step sign-up', () => {
 
   it('validates the bodies with the contract schemas', async () => {
     const client = new TestClient(t.app);
-    const short = await client
-      .post('/auth/signup', { ...signupInput(), password: 'short' })
+    const input = signupInput();
+    const unnamed = await client
+      .post('/auth/signup', { ...signupForm(input), name: ' ' })
       .expect(422);
+    expect(problemSchema.parse(unnamed.body).issues?.[0]?.path).toEqual(['name']);
+
+    // A body the page should not have sent uses nothing up: the link still works.
+    const token = await requestSignup(t.app, input);
+    const short = await verify(token, { ...input, password: 'short' }).expect(422);
     expect(problemSchema.parse(short.body).issues?.[0]?.path).toEqual(['password']);
+    const { password: _password, ...withoutPassword } = signupVerifyBody(token, input);
+    const missing = await client.post('/auth/signup/verify', withoutPassword).expect(422);
+    expect(problemSchema.parse(missing.body).issues?.[0]?.path).toEqual(['password']);
+    const noWorkspace = await verify(token, { ...input, workspaceName: '' }).expect(422);
+    expect(problemSchema.parse(noWorkspace.body).issues?.[0]?.path).toEqual(['workspaceName']);
     await client.post('/auth/signup/verify', {}).expect(422);
-    await client.post('/auth/signup/verify', { token: '' }).expect(422);
+    await verify('', input).expect(422);
+    await client.post('/auth/signup/lookup', {}).expect(422);
+    await client.post('/auth/signup/lookup', { token: '' }).expect(422);
     await client.post('/auth/signup/resend', { email: 'khong-phai-email' }).expect(422);
+    await verify(token, input).expect(201);
   });
 });
