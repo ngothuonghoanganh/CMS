@@ -1,6 +1,88 @@
-import { endpoints } from '@plp/contracts';
+import { aiJobEventSchema, endpoints } from '@plp/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, attachmentFilename, downloadFile } from './api';
+import { ApiError, attachmentFilename, downloadFile, splitLines, streamEndpoint } from './api';
+
+describe('streamEndpoint (ADR-031)', () => {
+  const SITE_ID = '64b000000000000000000001';
+  const JOB_ID = '64b000000000000000000002';
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('splits what arrived into whole lines, keeping the rest for later', () => {
+    expect(splitLines('{"a":1}\n\n{"b":2}\n{"c"')).toEqual({
+      lines: ['{"a":1}', '{"b":2}'],
+      rest: '{"c"',
+    });
+    expect(splitLines('')).toEqual({ lines: [], rest: '' });
+  });
+
+  it('hands each line to the caller as it arrives, across chunk boundaries', async () => {
+    const encoder = new TextEncoder();
+    const chunks = [
+      '{"type":"heartbeat"}\n{"type":"sec',
+      'tion","sectionId":"abcdefgh1234",',
+      '"status":"done"}\n',
+    ];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(body, { headers: { 'Content-Type': 'application/x-ndjson' } })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const events: unknown[] = [];
+    await streamEndpoint(
+      endpoints.retryAiPageJob,
+      [SITE_ID, JOB_ID],
+      {},
+      aiJobEventSchema,
+      (event) => {
+        events.push(event);
+      },
+    );
+    expect(events).toEqual([
+      { type: 'heartbeat' },
+      { type: 'section', sectionId: 'abcdefgh1234', status: 'done' },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(`/api/sites/${SITE_ID}/ai/page-jobs/${JOB_ID}/retry`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/x-ndjson' },
+    });
+  });
+
+  it('throws the problem of a refused request before any line', async () => {
+    const problem = {
+      type: 'about:blank',
+      title: 'Workspace đã dùng hết 100 lượt AI tháng này',
+      status: 429,
+      code: 'ai_quota_exhausted',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(problem), {
+            status: 429,
+            headers: { 'Content-Type': 'application/problem+json' },
+          }),
+        ),
+      ),
+    );
+    const onEvent = vi.fn();
+    await expect(
+      streamEndpoint(endpoints.retryAiPageJob, [SITE_ID, JOB_ID], {}, aiJobEventSchema, onEvent),
+    ).rejects.toMatchObject({ code: 'ai_quota_exhausted' });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+});
 
 describe('attachmentFilename', () => {
   it('reads the name the server gave a download', () => {

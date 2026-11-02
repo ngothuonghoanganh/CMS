@@ -79,6 +79,11 @@ describe('CreatePageWizard', () => {
     expect(within(outline).getByText('Form ngắn: Họ và tên + Số điện thoại')).toBeInTheDocument();
     expect(within(outline).getByText('Ô đồng ý xử lý dữ liệu không tick sẵn')).toBeInTheDocument();
     expect(screen.queryByText('Duyệt thư viện mẫu')).not.toBeInTheDocument();
+    // Creating with AI starts from here too (ADR-031).
+    expect(screen.getByRole('link', { name: 'Tạo bằng AI' })).toHaveAttribute(
+      'href',
+      `/sites/${SITE_ID}/pages/new/ai`,
+    );
   });
 
   it('keeps the phone call defaults for a goal without a form', async () => {

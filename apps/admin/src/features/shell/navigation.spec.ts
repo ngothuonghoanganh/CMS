@@ -4,6 +4,7 @@ import {
   leadsHref,
   navCurrent,
   newLeadsHref,
+  newAiPageHref,
   newPageHref,
   openPageHref,
   pageHref,
@@ -145,6 +146,7 @@ describe('page routes', () => {
     expect(pageHref(siteId, 'p1', 'seo')).toBe(`/sites/${siteId}/pages/p1/seo`);
     expect(pageHref(siteId, 'p1', 'history')).toBe(`/sites/${siteId}/pages/p1/history`);
     expect(newPageHref(siteId)).toBe(`/sites/${siteId}/pages/new`);
+    expect(newAiPageHref(siteId)).toBe(`/sites/${siteId}/pages/new/ai`);
   });
 
   it('opens a page in the editor for roles that edit it, in its history otherwise', () => {
