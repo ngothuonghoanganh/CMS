@@ -41,11 +41,6 @@
   outline-offset: -2px;
 }
 
-.item[data-disabled] {
-  color: var(--color-disabled);
-  cursor: not-allowed;
-}
-
 .danger {
   color: var(--color-danger);
 }
@@ -53,6 +48,17 @@
 .danger[data-highlighted] {
   background: var(--color-danger-soft);
   color: var(--color-danger-ink);
+}
+
+/* A disabled item keeps the focus the arrow keys give it: highlighted, it shows where the focus
+   is without looking like an action, danger or not. */
+.item[data-disabled] {
+  color: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.item[data-disabled][data-highlighted] {
+  background: var(--color-hover);
 }
 
 .icon {

@@ -123,6 +123,37 @@ describe('DropdownMenu', () => {
     expect(onDelete).not.toHaveBeenCalled();
   });
 
+  it('lets the arrow keys reach a disabled item, which Enter and Space do not run (APG menu)', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <DropdownMenu trigger={<button type="button">Tùy chọn khác</button>}>
+        <DropdownMenuItem>Lịch sử phiên bản</DropdownMenuItem>
+        <DropdownMenuItem
+          tone="danger"
+          disabled
+          description="Gỡ xuất bản trước khi xóa"
+          onSelect={onDelete}
+        >
+          Xóa trang
+        </DropdownMenuItem>
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', { name: 'Tùy chọn khác' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('menuitem', { name: 'Lịch sử phiên bản' })).toHaveFocus();
+    // A disabled item is met, with its reason, rather than skipped as if it were not there.
+    await user.keyboard('{ArrowDown}');
+    const item = screen.getByRole('menuitem', { name: 'Xóa trang Gỡ xuất bản trước khi xóa' });
+    expect(item).toHaveFocus();
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(item).toHaveFocus();
+  });
+
   it('marks the current choice in a radio group', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
