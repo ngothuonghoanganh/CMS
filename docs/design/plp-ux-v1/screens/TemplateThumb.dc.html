@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Ảnh thu nhỏ template</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div role="img" aria-label="{{ label }}" style="box-sizing: border-box; width: 100%; height: 100%; min-height: 120px; overflow: hidden; background: #FFFFFF; display: flex; flex-direction: column; gap: {{ gap }}; padding: {{ pad }}">
+  <div style="display: flex; align-items: center; justify-content: space-between">
+    <span style="width: 22%; height: 6px; border-radius: 3px; background: {{ p.ink }}"></span>
+    <span style="width: 14%; height: 9px; border-radius: 999px; background: {{ p.brand }}"></span>
+  </div>
+  <div style="display: flex; flex-direction: {{ heroDir }}; gap: 8%; align-items: center; padding: {{ heroPad }}; border-radius: 6px; background: {{ p.soft }}">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 5px; align-items: {{ heroAlign }}; width: 100%">
+      <span style="width: 92%; height: 9px; border-radius: 3px; background: {{ p.ink }}"></span>
+      <span style="width: 70%; height: 9px; border-radius: 3px; background: {{ p.ink }}"></span>
+      <span style="width: 80%; height: 4px; border-radius: 2px; background: {{ p.muted }}; margin-top: 3px"></span>
+      <span style="width: 64%; height: 4px; border-radius: 2px; background: {{ p.muted }}"></span>
+      <span style="width: 36%; height: 12px; border-radius: 999px; background: {{ p.accent }}; margin-top: 4px"></span>
+    </div>
+    <sc-if value="{{ hasImage }}" hint-placeholder-val="{{ true }}">
+      <div style="flex: 1; width: 100%; aspect-ratio: 4 / 3; border-radius: 6px; background: {{ p.brand }}; opacity: 0.85; display: flex; align-items: flex-end; justify-content: flex-end; padding: 6px; box-sizing: border-box">
+        <span style="width: 34%; height: 30%; border-radius: 4px; background: {{ p.soft }}; opacity: 0.6"></span>
+      </div>
+    </sc-if>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat({{ cols }}, minmax(0, 1fr)); gap: 6px">
+    <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; border: 1px solid {{ p.line }}">
+        <span style="width: 14px; height: 14px; border-radius: 4px; background: {{ p.soft }}"></span>
+        <span style="width: 80%; height: 4px; border-radius: 2px; background: {{ p.ink }}"></span>
+        <span style="width: 95%; height: 3px; border-radius: 2px; background: {{ p.muted }}"></span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-radius: 6px; background: {{ p.brand }}">
+    <span style="width: 46%; height: 6px; border-radius: 3px; background: #FFFFFF; opacity: 0.9"></span>
+    <span style="width: 24%; height: 11px; border-radius: 999px; background: {{ p.accent }}"></span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"variant":{"editor":"int","min":0,"max":5,"default":0},"mobile":{"editor":"boolean","default":false},"label":{"editor":"text","default":"Bản xem thu nhỏ của template"},"$preview":{"width":320,"height":240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var v = Number(this.props.variant ?? 0) % 6;
+    var mobile = this.props.mobile ?? false;
+    var P = [
+      { brand: '#0F5E55', soft: '#EAF6F3', accent: '#F2A33A', ink: '#0B2E2A', muted: '#B9CFCA', line: '#D7E6E2' },
+      { brand: '#7A3E5B', soft: '#F7EEF2', accent: '#D9A441', ink: '#3A1F2C', muted: '#D9C4CE', line: '#EADCE2' },
+      { brand: '#1F4E99', soft: '#EEF3FB', accent: '#F2C94C', ink: '#142B52', muted: '#C3D0E6', line: '#DCE4F2' },
+      { brand: '#2F3A2E', soft: '#F1F1EC', accent: '#B88A44', ink: '#1C221B', muted: '#CFD1C6', line: '#E2E3DA' },
+      { brand: '#B4472A', soft: '#FBF0EA', accent: '#2F6E4F', ink: '#3B1A10', muted: '#E6C7BA', line: '#F0DDD4' },
+      { brand: '#15171C', soft: '#F0F2F5', accent: '#E2513C', ink: '#15171C', muted: '#CDD2DA', line: '#E2E5EA' }
+    ];
+    var centered = v === 2 || v === 5;
+    return {
+      p: P[v],
+      label: this.props.label ?? 'Bản xem thu nhỏ của template',
+      hasImage: !centered,
+      heroDir: mobile ? 'column' : (v % 2 === 1 ? 'row-reverse' : 'row'),
+      heroAlign: centered ? 'center' : 'flex-start',
+      heroPad: mobile ? '10px' : '14px',
+      cols: mobile ? 1 : 3,
+      cards: mobile ? [1, 2] : [1, 2, 3],
+      gap: mobile ? '7px' : '9px',
+      pad: mobile ? '10px' : '12px'
+    };
+  }
+}
+</script>
+</body>
+</html>

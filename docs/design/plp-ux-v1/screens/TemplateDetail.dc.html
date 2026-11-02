@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Chi tiết template — Ưu đãi dịch vụ nha khoa</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="templates" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 32px 56px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px">
+      <a href="TemplateLibrary.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 13px; font-weight: 600; text-decoration: none">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+        Templates
+      </a>
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; flex-wrap: wrap; gap: 6px">
+            <span style="padding: 2px 8px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 11px; font-weight: 700">HỆ THỐNG</span>
+            <span style="padding: 2px 8px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-size: 11px; font-weight: 600">Thu lead</span>
+            <span style="padding: 2px 8px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-size: 11px; font-weight: 600">Nha khoa &amp; y tế</span>
+          </div>
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Ưu đãi dịch vụ nha khoa</h1>
+          <p style="margin: 0; max-width: 680px; font-size: 14px; line-height: 1.55; color: #3C424E">Cho chiến dịch quảng cáo một dịch vụ cụ thể: nêu ưu đãi ngay đầu trang, giới thiệu bác sĩ, cảm nhận khách hàng và form đặt lịch tư vấn.</p>
+        </div>
+        <div role="group" aria-label="Xem theo thiết bị" style="display: flex; gap: 2px; padding: 3px; background: #ECEEF2; border-radius: 10px">
+          <button type="button" aria-pressed="{{ dDesk.pressed }}" onClick="{{ setDesktop }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ dDesk.bg }}; box-shadow: {{ dDesk.shadow }}; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"></rect><path d="M8 20h8M12 16v4"></path></svg>Máy tính
+          </button>
+          <button type="button" aria-pressed="{{ dMob.pressed }}" onClick="{{ setMobile }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ dMob.bg }}; box-shadow: {{ dMob.shadow }}; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>Điện thoại
+          </button>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <section aria-label="Bản xem trước" style="flex: 999 1 560px; min-width: 0; display: flex; justify-content: center; padding: 24px; border-radius: 14px; background: #ECEEF2; box-sizing: border-box">
+          <div style="width: {{ frameW }}; max-width: 100%; height: 620px; border-radius: {{ frameR }}; overflow: hidden; background: #FFFFFF; box-shadow: 0 2px 10px rgba(21,23,28,0.14); border: {{ frameBorder }}">
+            <dc-import name="TemplateThumb" variant="0" mobile="{{ isMobile }}" label="Bản xem trước mẫu Ưu đãi dịch vụ nha khoa" hint-size="100%,620px"></dc-import>
+          </div>
+        </section>
+
+        <aside style="flex: 1 1 320px; max-width: 380px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <button type="button" onClick="{{ openCreate }}" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Tạo trang từ mẫu</button>
+            <button type="button" onClick="{{ openApply }}" style="min-height: 44px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Áp dụng vào trang đang sửa…</button>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Chữ mẫu được đánh dấu. Checklist xuất bản sẽ nhắc bạn thay trước khi live.</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <h2 style="margin: 0; font-size: 14px; font-weight: 700">Gồm 7 section</h2>
+            <ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.85; color: #3C424E">
+              <li>Hero · ưu đãi và nút đặt lịch</li>
+              <li>Lợi ích · 3 lý do chọn phòng khám</li>
+              <li>Giới thiệu bác sĩ</li>
+              <li>Cảm nhận khách hàng</li>
+              <li>Câu hỏi thường gặp</li>
+              <li>Form đăng ký tư vấn</li>
+              <li>Chân trang · địa chỉ, giờ mở cửa</li>
+            </ol>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <h2 style="margin: 0; font-size: 14px; font-weight: 700">Cần có trước khi xuất bản</h2>
+            <div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.5">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+              <span><strong>Nơi nhận lead</strong> · Smile Care đã có ngocanh@mayxanh.vn</span>
+            </div>
+            <div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.5">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+              <span><strong>Nội dung đồng ý</strong> · Smile Care đang dùng phiên bản 3</span>
+            </div>
+            <div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.5">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 15l4-4 4 4 3-3 5 5"></path></svg>
+              <span><strong>Ảnh của bạn</strong> · mẫu dùng ảnh minh họa, nên thay bằng ảnh phòng khám thật</span>
+            </div>
+          </div>
+
+          <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px">
+            <dt style="color: #5E6573">Phiên bản</dt><dd style="margin: 0">v3 · cập nhật 12/10/2026</dd>
+            <dt style="color: #5E6573">Theme</dt><dd style="margin: 0">Bạc hà · 4 color scheme đạt AA</dd>
+            <dt style="color: #5E6573">Đã dùng</dt><dd style="margin: 0">3 trang trong workspace</dd>
+          </dl>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ showCreate }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 96px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="cr-title" style="width: 100%; max-width: 560px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="padding: 22px 24px 6px; display: flex; flex-direction: column; gap: 6px">
+          <h2 id="cr-title" style="margin: 0; font-size: 18px; font-weight: 700">Tạo trang từ mẫu</h2>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">Trang mới là bản nháp. Chưa ai thấy cho tới khi bạn xuất bản.</p>
+        </div>
+        <div style="padding: 12px 24px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="cr-site" style="font-size: 14px; font-weight: 600">Site</label>
+            <select id="cr-site" style="min-height: 44px; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>{{ siteName }}</option></select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="cr-name" style="font-size: 14px; font-weight: 600">Tên trang</label>
+            <input id="cr-name" type="text" value="Ưu đãi tẩy trắng răng tháng 12" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="cr-slug" style="font-size: 14px; font-weight: 600">Đường dẫn</label>
+            <div style="display: flex; align-items: center; min-height: 44px; border: 1px solid #828998; border-radius: 10px; overflow: hidden">
+              <span style="padding: 0 10px; align-self: stretch; display: flex; align-items: center; background: #FAFBFC; border-right: 1px solid #E2E5EA; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #5E6573">{{ siteHost }}/</span>
+              <input id="cr-slug" type="text" value="uu-dai-tay-trang-rang" style="flex: 1; min-width: 0; height: 42px; border: 0; padding: 0 10px; outline: none; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px">
+            </div>
+          </div>
+          <sc-if value="{{ needsSetup }}" hint-placeholder-val="{{ false }}">
+            <div role="note" style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00; font-size: 13px; line-height: 1.55">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C27803" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+              <span><strong>Bếp Nhà Mây chưa có nơi nhận lead và nội dung đồng ý.</strong> Bạn vẫn tạo được bản nháp. Trước khi xuất bản, hãy thiết lập ở <a href="Consent.dc.html" style="font-weight: 600">Dữ liệu &amp; đồng ý</a>; checklist xuất bản sẽ chặn nếu còn thiếu.</span>
+            </div>
+          </sc-if>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 12px 24px 22px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none">Tạo bản nháp và mở editor</a>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showApply }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 96px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="ap-title" style="width: 100%; max-width: 580px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="padding: 22px 24px 6px">
+          <h2 id="ap-title" style="margin: 0; font-size: 18px; font-weight: 700">Áp dụng mẫu vào trang đang sửa</h2>
+        </div>
+        <div style="padding: 12px 24px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="ap-page" style="font-size: 14px; font-weight: 600">Trang</label>
+            <select id="ap-page" style="min-height: 44px; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Ưu đãi niềng răng tháng 11 · Live · có thay đổi</option></select>
+          </div>
+          <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+            <legend style="padding: 0 0 6px; font-size: 14px; font-weight: 600">Áp dụng gì</legend>
+            <label style="display: flex; gap: 10px; padding: 12px; border: 1px solid #4338CA; background: #F5F5FF; border-radius: 10px; cursor: pointer">
+              <input type="radio" name="ap-mode" checked style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">
+              <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Thay toàn bộ section</span><span style="font-size: 13px; color: #3C424E">5 section hiện có trong bản nháp được thay bằng 7 section của mẫu, kèm chữ mẫu.</span></span>
+            </label>
+            <label style="display: flex; gap: 10px; padding: 12px; border: 1px solid #E2E5EA; border-radius: 10px; cursor: pointer">
+              <input type="radio" name="ap-mode" style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">
+              <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Chỉ đổi theme</span><span style="font-size: 13px; color: #3C424E">Giữ nguyên nội dung, đổi color scheme, font và khoảng cách theo mẫu.</span></span>
+            </label>
+          </fieldset>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 13px; line-height: 1.55">
+            <div style="padding: 12px 14px; border-radius: 10px; background: #E2F4EA; color: #0B4F33"><span style="display: block; font-weight: 600">Giữ nguyên</span>Trang live v12, tên trang, đường dẫn, SEO.</div>
+            <div style="padding: 12px 14px; border-radius: 10px; background: #F0F2F5; color: #3C424E"><span style="display: block; font-weight: 600; color: #15171C">Hoàn tác được</span>Bằng Ctrl+Z trong editor, hoặc “Quay về bản live”.</div>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 12px 24px 22px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none">Thay bản nháp và mở editor</a>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["default","mobilePreview","create","createNeedsSetup","applyToPage"],"default":"default"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { device: null, dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'default';
+    var device = this.state.device ?? (s === 'mobilePreview' ? 'mobile' : 'desktop');
+    var dialog = this.state.dialog ?? ({ create: 'create', createNeedsSetup: 'setup', applyToPage: 'apply' }[s] || null);
+    var mobile = device === 'mobile';
+    function seg(on) { return { pressed: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', shadow: on ? '0 1px 2px rgba(21,23,28,0.08)' : 'none' }; }
+    var setup = dialog === 'setup';
+    return {
+      isMobile: mobile,
+      frameW: mobile ? '360px' : '100%',
+      frameR: mobile ? '28px' : '10px',
+      frameBorder: mobile ? '8px solid #15171C' : '1px solid #E2E5EA',
+      dDesk: seg(!mobile), dMob: seg(mobile),
+      setDesktop: function () { self.setState({ device: 'desktop' }); },
+      setMobile: function () { self.setState({ device: 'mobile' }); },
+      showCreate: dialog === 'create' || setup,
+      needsSetup: setup,
+      siteName: setup ? 'Bếp Nhà Mây' : 'Nha khoa Smile Care',
+      siteHost: setup ? 'bepnhamay.payload.site' : 'go.smilecare.vn',
+      showApply: dialog === 'apply',
+      openCreate: function () { self.setState({ dialog: 'create' }); },
+      openApply: function () { self.setState({ dialog: 'apply' }); },
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

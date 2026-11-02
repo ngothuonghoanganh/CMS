@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Template của workspace — Mây Xanh Agency</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="templates" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <a href="TemplateLibrary.dc.html" style="font-size: 13px; font-weight: 600; text-decoration: none">Templates</a>
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Template của workspace</h1>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">Mẫu nội bộ của Mây Xanh Agency, lưu từ những trang chạy tốt để dùng lại cho khách hàng khác.</p>
+        </div>
+        <button type="button" onClick="{{ openSave }}" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+          Lưu trang thành template
+        </button>
+      </header>
+
+      <div role="tablist" aria-label="Trạng thái" style="display: flex; gap: 4px; border-bottom: 1px solid #E2E5EA">
+        <button type="button" role="tab" aria-selected="true" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid #4338CA; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #3730A3; cursor: pointer">Đang dùng · {{ activeCount }}</button>
+        <button type="button" role="tab" aria-selected="false" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 14px; font-weight: 500; color: #3C424E; cursor: pointer">Lưu trữ · 1</button>
+      </div>
+
+      <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}">
+        <section aria-label="Template đang dùng" style="border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow-x: auto">
+          <div style="min-width: 860px">
+            <div style="display: grid; grid-template-columns: minmax(0, 3fr) 90px minmax(0, 1.4fr) 100px 140px 170px; gap: 14px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+              <span>TEMPLATE</span><span>PHIÊN BẢN</span><span>AI ĐƯỢC DÙNG</span><span>ĐÃ TẠO</span><span>CẬP NHẬT</span><span></span>
+            </div>
+            <sc-for list="{{ items }}" as="t" hint-placeholder-count="4">
+              <div style="display: grid; grid-template-columns: minmax(0, 3fr) 90px minmax(0, 1.4fr) 100px 140px 170px; gap: 14px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                <span style="display: flex; align-items: center; gap: 14px; min-width: 0">
+                  <span style="flex: none; width: 112px; height: 76px; border-radius: 8px; overflow: hidden; border: 1px solid #E2E5EA">
+                    <dc-import name="TemplateThumb" variant="{{ t.v }}" label="Thu nhỏ: {{ t.name }}" hint-size="112px,76px"></dc-import>
+                  </span>
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="font-weight: 600">{{ t.name }}</span>
+                    <span style="font-size: 12px; color: #5E6573">{{ t.tags }}</span>
+                  </span>
+                </span>
+                <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px">{{ t.ver }}</span>
+                <span style="font-size: 13px; color: #3C424E">{{ t.who }}</span>
+                <span style="font-size: 13px; color: #3C424E">{{ t.used }}</span>
+                <span style="font-size: 13px; color: #3C424E">{{ t.updated }}</span>
+                <span style="display: flex; justify-content: flex-end; gap: 6px">
+                  <button type="button" onClick="{{ t.openVersions }}" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Phiên bản</button>
+                  <button type="button" aria-label="Sửa thông tin, nhân bản hoặc lưu trữ {{ t.name }}" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+        <p style="margin: 0; font-size: 13px; color: #5E6573">Menu “…” gồm: Sửa thông tin, Nhân bản, Lưu trữ. Lưu trữ ẩn mẫu khỏi thư viện; trang đã tạo không bị ảnh hưởng.</p>
+      </sc-if>
+
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; text-align: center">
+          <span style="font-size: 17px; font-weight: 600">Chưa có template nội bộ</span>
+          <span style="max-width: 480px; font-size: 14px; line-height: 1.6; color: #3C424E">Trang nào chạy tốt cho một khách hàng, hãy lưu thành template để lần sau dựng nhanh hơn. Mở trang trong editor, chọn “…” rồi “Lưu thành template”, hoặc bấm nút dưới đây.</span>
+          <button type="button" onClick="{{ openSave }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Lưu trang thành template</button>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{ showSave }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="sv-title" style="width: 100%; max-width: 720px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="padding: 20px 24px 6px">
+          <h2 id="sv-title" style="margin: 0; font-size: 18px; font-weight: 700">Lưu trang thành template</h2>
+        </div>
+        <div style="padding: 10px 24px; display: flex; flex-wrap: wrap; gap: 20px">
+          <div style="flex: 999 1 360px; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <label for="sv-page" style="font-size: 14px; font-weight: 600">Trang nguồn</label>
+                <select id="sv-page" style="min-height: 44px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Ưu đãi niềng răng tháng 11</option></select>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <label for="sv-from" style="font-size: 14px; font-weight: 600">Lấy từ</label>
+                <select id="sv-from" style="min-height: 44px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Bản live v12</option><option>Bản nháp hiện tại</option></select>
+              </div>
+            </div>
+            <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px">
+              <legend style="padding: 0 0 6px; font-size: 14px; font-weight: 600">Lưu thành</legend>
+              <label style="display: flex; gap: 10px; align-items: center; font-size: 14px"><input type="radio" name="sv-as" style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">Template mới</label>
+              <label style="display: flex; gap: 10px; align-items: center; font-size: 14px"><input type="radio" name="sv-as" checked style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">Phiên bản mới của “Tư vấn niềng răng trả góp” (v2 → v3)</label>
+            </fieldset>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="sv-name" style="font-size: 14px; font-weight: 600">Tên</label>
+              <input id="sv-name" type="text" value="Tư vấn niềng răng trả góp" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="sv-note" style="font-size: 14px; font-weight: 600">Có gì mới trong phiên bản này</label>
+              <input id="sv-note" type="text" value="Thêm FAQ về trả góp 0%, đổi CTA thành “Nhận lịch tư vấn”" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+            </div>
+            <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px">
+              <legend style="padding: 0 0 6px; font-size: 14px; font-weight: 600">Nội dung</legend>
+              <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5"><input type="radio" name="sv-content" checked style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">Đánh dấu toàn bộ chữ là chữ mẫu, để trang tạo sau phải thay trước khi xuất bản</label>
+              <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5"><input type="radio" name="sv-content" style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">Giữ chữ và ảnh như hiện tại</label>
+            </fieldset>
+          </div>
+          <div style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 12px">
+            <span style="font-size: 14px; font-weight: 600">Ảnh thu nhỏ</span>
+            <div style="height: 150px; border-radius: 10px; overflow: hidden; border: 1px solid #E2E5EA">
+              <dc-import name="TemplateThumb" variant="0" label="Ảnh thu nhỏ tự chụp từ trang" hint-size="100%,150px"></dc-import>
+            </div>
+            <button type="button" style="min-height: 40px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Tải ảnh khác</button>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="sv-who" style="font-size: 14px; font-weight: 600">Ai được dùng</label>
+              <select id="sv-who" style="min-height: 44px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Toàn workspace</option><option>Chỉ site được chọn</option></select>
+            </div>
+            <div style="padding: 12px; border-radius: 10px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 12px; line-height: 1.55; color: #3C424E"><strong style="color: #15171C">Không lưu vào template:</strong> lead, tên miền, nơi nhận lead, nội dung đồng ý, SEO riêng của trang.</div>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 24px 22px">
+          <span style="font-size: 12px; color: #5E6573">3 trang đã tạo từ v1–v2 giữ nguyên, không tự cập nhật.</span>
+          <span style="display: flex; gap: 10px">
+            <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+            <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Lưu phiên bản v3</button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showVersions }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; justify-content: flex-end">
+      <div role="dialog" aria-modal="true" aria-labelledby="vs-title" style="width: 100%; max-width: 460px; min-height: 100%; background: #FFFFFF; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 20px 24px; border-bottom: 1px solid #EEF0F3">
+          <span style="flex: 1; display: flex; flex-direction: column">
+            <h2 id="vs-title" style="margin: 0; font-size: 17px; font-weight: 700">Tư vấn niềng răng trả góp</h2>
+            <span style="font-size: 13px; color: #5E6573">Lịch sử phiên bản</span>
+          </span>
+          <button type="button" aria-label="Đóng" onClick="{{ close }}" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+        <ol style="list-style: none; margin: 0; padding: 16px 24px; display: flex; flex-direction: column; gap: 12px">
+          <li style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid #4338CA; border-radius: 12px; background: #F5F5FF">
+            <span style="display: flex; align-items: center; gap: 8px"><span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600">v2</span><span style="padding: 2px 8px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-size: 11px; font-weight: 700">ĐANG DÙNG</span></span>
+            <span style="font-size: 13px; color: #3C424E">Thêm bảng so sánh mắc cài · Ngọc Anh · 12/10/2026</span>
+            <span style="font-size: 12px; color: #5E6573">Đã tạo 2 trang</span>
+          </li>
+          <li style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid #E2E5EA; border-radius: 12px">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600">v1</span>
+            <span style="font-size: 13px; color: #3C424E">Lưu từ trang “Niềng răng tháng 9” · Quốc Bảo · 02/09/2026</span>
+            <span style="font-size: 12px; color: #5E6573">Đã tạo 1 trang</span>
+            <span style="display: flex; gap: 8px; padding-top: 4px">
+              <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Xem trước</button>
+              <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Dùng lại v1</button>
+            </span>
+          </li>
+        </ol>
+        <p style="margin: 0; padding: 0 24px; font-size: 13px; line-height: 1.6; color: #3C424E">Phiên bản không bị sửa sau khi lưu. “Dùng lại v1” tạo v3 có nội dung giống v1; trang đã tạo từ mẫu không bị ảnh hưởng.</p>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["list","empty","saveDialog","versions"],"default":"list"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'list';
+    var dialog = this.state.dialog ?? ({ saveDialog: 'save', versions: 'versions' }[s] || null);
+    var empty = s === 'empty';
+    var items = [
+      { name: 'Tư vấn niềng răng trả góp', tags: 'Thu lead · Nha khoa', v: 0, ver: 'v2', who: 'Toàn workspace', used: '3 trang', updated: '12/10 · Ngọc Anh' },
+      { name: 'Thực đơn mới & đặt bàn', tags: 'Bán sản phẩm · F&B', v: 4, ver: 'v1', who: 'Bếp Nhà Mây', used: '2 trang', updated: '28/09 · Minh Khoa' },
+      { name: 'Liệu trình chăm sóc da', tags: 'Thu lead · Spa', v: 1, ver: 'v4', who: 'Spa Lá Xanh, Smile Care', used: '6 trang', updated: '05/10 · Quốc Bảo' },
+      { name: 'Lớp thử miễn phí', tags: 'Sự kiện · Thể hình', v: 5, ver: 'v1', who: 'Toàn workspace', used: 'Chưa dùng', updated: 'Hôm qua · Hoàng Yến' }
+    ];
+    items.forEach(function (it) { it.openVersions = function () { self.setState({ dialog: 'versions' }); }; });
+    return {
+      items: items,
+      activeCount: empty ? 0 : 4,
+      hasItems: !empty, isEmpty: empty,
+      showSave: dialog === 'save', showVersions: dialog === 'versions',
+      openSave: function () { self.setState({ dialog: 'save' }); },
+      openVersions: function () { self.setState({ dialog: 'versions' }); },
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -31,7 +31,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Hiệu quả trang, đo không dùng cookie (ADR-019).
 - Tương ứng màn 10–12, cộng các phần MVP A đang ẩn ở màn 01, 02, 04, 05, 09 và sidebar.
 
-**Phase 1 (vận hành & đội nhóm), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-01, theo board Phase 1 của artifact thiết kế):
+**Phase 1 (vận hành & đội nhóm), đã xong** (chủ sản phẩm yêu cầu ngày 2026-11-01, theo board Phase 1 của artifact thiết kế):
 
 - Sáu vai trò cố định, phạm vi site, kiểm tra quyền ở mọi endpoint (ADR-020).
 - Thành viên và lời mời, đổi quyền, gỡ, chuyển quyền sở hữu.
@@ -46,11 +46,19 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Bốn thẻ còn thiếu của màn 04, link chính sách ở chân trang (ADR-007).
 - Những chỗ còn lệch thiết kế ở màn 01, 05, 06, 13, 14, 15, 15b (ADR-005, 006, 021, 022).
 
-**Ngoài phạm vi MVP B và Phase 1:**
+**Phase 2 (tạo trang nhanh), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-02, theo board Phase 2 của artifact thiết kế). Template và AI đều chỉ ghi vào bản nháp:
+
+- Thư viện template: mẫu hệ thống, tạo trang từ mẫu, xem trước (ADR-030).
+- Template của workspace: lưu trang thành template, phiên bản bất biến, phạm vi site, lưu trữ (ADR-030).
+- Áp dụng mẫu vào bản nháp đang sửa, hoàn tác được (ADR-030).
+- Tạo trang bằng AI từ brief, và trợ lý AI viết lại chữ trong editor. AI chạy qua một cổng có adapter; bản đầu nối AI local qua API tương thích OpenAI, có hạn mức lượt mỗi tháng (ADR-031).
+- Tương ứng màn 17–21 và mục Templates của Sidebar v2. Lát và trạng thái ở §5.
+
+**Ngoài phạm vi MVP B, Phase 1 và Phase 2:**
 
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
 - Form có trường tùy ý, captcha của bên thứ ba, banner cookie, tạo trang chính sách từ mẫu.
-- Billing, template library, AI (Phase 2–4 của artifact thiết kế, chưa có quyết định phạm vi).
+- CRM và automation (Phase 3), gói, thanh toán và marketplace (Phase 4): chưa có quyết định phạm vi. Mọi phần của màn 17–21 nói tới Marketplace hay gói thuộc Phase 4.
 - Vai trò tùy chỉnh, luồng "yêu cầu xuất bản" của Cộng tác viên (ADR-020).
 - Free styling, điểm lưu bản nháp, rich text, màu thương hiệu tự nhập.
 
@@ -1908,6 +1916,184 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - `livePages` đếm trang có pointer (`live` và `live_with_changes`). `leadsLast7Days` dùng cùng cửa sổ và quy tắc spam với thẻ "Lead 7 ngày qua", và là số chính xác.
   - Màn Sites dùng danh sách site khung workspace đã nạp, không gọi thêm. Nút ở đầu màn là "Tạo site"; trạng thái trống là "Tạo site đầu tiên". Thành viên không tạo được site thấy lời giải thích theo phạm vi của họ.
 
+### ADR-030 — Template: mẫu hệ thống, template của workspace, áp dụng mẫu
+
+- **Date:** 2026-11-02 · **Status:** Accepted
+- **Context:**
+  - Board 17–19 của Phase 2 và ghi chú `phase2Decisions`. Chủ sản phẩm yêu cầu làm toàn bộ Phase 2 ngày 2026-11-02, nên các giả định của ghi chú được chốt như dưới đây.
+  - Tạo trang hôm nay chỉ có "trang trắng" và "theo mục tiêu" (blueprint, S6). Agency muốn dùng lại trang đã chạy tốt cho khách khác.
+- **Decision:**
+  - **Một template** là một composition (section, variant, color scheme, spacing, hiển thị, nội dung, `samplePaths`, ADR-007) cùng tên, mô tả, mục tiêu, ngành và cờ "có form".
+    - Template không mang theo lead, tên miền, nơi nhận lead, nội dung đồng ý, slug hay SEO riêng của trang.
+    - Theme thuộc site và chỉ Chủ sở hữu đổi (ADR-004), nên trang tạo từ mẫu dùng theme của site đích. Chữ "Theme" ở màn 18 là theme mẫu được vẽ trong preview.
+  - **Mẫu hệ thống** nằm trong code, ở `@plp/sections/schema` cạnh blueprint của mục tiêu: không nằm trong database, đổi qua code review.
+    - Mỗi mẫu có `id` ổn định và `version` tăng khi nội dung đổi.
+    - Mọi chữ là chữ mẫu và không có ảnh (khung ảnh trống). Checklist xuất bản nhắc thay chữ như hôm nay.
+    - Bộ đầu có 12 mẫu, phủ các mục tiêu và ngành của bộ lọc màn 17. Unit test kiểm mỗi mẫu qua `parseComposition` của registry.
+  - **Template của workspace** nằm trong workspace DB (ADR-025):
+    - `templates { workspaceId, name, description, goal, industry, scope, currentVersion, archivedAt, createdBy, updatedAt }`.
+      - `scope` là `{ kind: 'workspace' }` hoặc `{ kind: 'sites', siteIds }`.
+    - `template_versions { workspaceId, templateId, version, composition, note, source: { pageId, kind: 'live' | 'draft' }, createdBy, createdAt }`.
+      - Phiên bản bất biến như release (ADR-005).
+      - "Dùng lại v1" tạo một phiên bản mới có nội dung của v1.
+    - **Lưu trang thành template:**
+      - Lấy từ bản live hoặc bản nháp hiện tại.
+      - Lưu thành template mới, hoặc thành phiên bản mới của một template có sẵn.
+      - Chọn giữa "Đánh dấu toàn bộ chữ là chữ mẫu" (`samplePaths` gồm mọi field chữ) và "Giữ chữ và ảnh như hiện tại".
+    - Menu "…" có Sửa thông tin, Nhân bản, Lưu trữ và Khôi phục.
+      - Không có xóa: trang đã tạo vẫn ghi mẫu nguồn của nó.
+      - Lưu trữ chỉ ẩn mẫu khỏi thư viện.
+    - Giới hạn: 100 template mỗi workspace, 50 phiên bản mỗi template, nên mọi danh sách có chặn trên.
+  - **Ảnh:** asset thuộc một site (ADR-012). Composition của một trang chỉ được trỏ tới asset của chính site đó.
+    - Lưu một phiên bản template chép các ảnh mà composition dùng thành asset của template, ở một prefix storage của workspace. Xóa site nguồn vì vậy không làm hỏng mẫu.
+    - Tạo trang hay áp mẫu chép các ảnh đó thành asset mới của site đích (`CopyObject` trên storage, không tải xuống).
+  - **Tạo trang từ mẫu:**
+    - Gọi `POST /sites/:siteId/pages` với `start: { kind: 'template', source: 'system' | 'workspace', templateId, version }`.
+    - Server đọc mẫu, cấp id mới cho từng section và parse composition bằng registry.
+    - Trang ghi `createdFrom { kind: 'template', source, templateId, version }`, là nguồn của số "Đã dùng N trang".
+    - Mẫu có form mà site chưa cài nơi nhận lead hay nội dung đồng ý thì vẫn tạo được. Hộp tạo có ghi chú như board 18, và checklist xuất bản chặn như hiện tại (ADR-016, 017).
+  - **Áp dụng mẫu vào bản nháp đang sửa:**
+    - Chỉ có "Thay toàn bộ section". Trang live, tên trang, đường dẫn và SEO giữ nguyên.
+    - Từ màn 18 ("Áp dụng vào trang đang sửa…"), đó là một lần lưu bản nháp có `baseRevision` như autosave, rồi editor mở ra. "Quay về bản live" vẫn có.
+    - Trong editor, đó là một command của store (ADR-008), tức một bước hoàn tác.
+    - "Chỉ đổi theme" của board không làm, vì theme thuộc site (ADR-004).
+  - **Quyền:**
+    - Thư viện: mọi thành viên thấy mẫu hệ thống, và template của workspace nào có phạm vi chứa một site họ thấy được.
+    - Tạo trang từ mẫu và áp mẫu: `pages.edit` trên site đích, như tạo trang hôm nay.
+    - Lưu trang thành template, sửa thông tin, nhân bản, lưu trữ và dùng lại phiên bản cần quyền mới `templates.manage`, cộng `pages.view` trên site nguồn.
+      - Chủ sở hữu, Quản trị và Biên tập có quyền này.
+      - Board 16 có thêm hàng "Lưu và quản lý template của workspace" trong nhóm Nội dung; vai trò tùy chỉnh bật tắt được hàng này (ADR-024).
+    - Template giới hạn site chỉ dùng được cho các site đó. Workspace khác nhận 404 như mọi tài nguyên (ADR-025).
+  - **Màn:**
+    - `/workspaces/[id]/templates` là màn 17:
+      - tab "Tất cả", "Hệ thống" và "Của workspace";
+      - tìm không dấu; lọc theo mục tiêu, ngành và "Có form thu lead";
+      - "Tạo trang cho" chọn site đích; nút "Tạo bằng AI" (ADR-031).
+    - Màn 18 là chi tiết một mẫu:
+      - preview máy tính và điện thoại bằng chính component của `@plp/sections`;
+      - danh sách section; mục "Cần có trước khi xuất bản" theo site đã chọn; phiên bản và số trang đã dùng.
+    - Tab "Của workspace" là màn 19: bảng, menu "…", hộp lưu và lịch sử phiên bản.
+    - Sidebar v2 có mục "Templates" trong nhóm WORKSPACE, với mọi vai trò.
+    - Menu "…" của editor có "Lưu thành template" và "Áp dụng mẫu…".
+    - Ảnh thu nhỏ được vẽ từ composition (loại section và color scheme), như thành phần TemplateThumb. Chưa có "Tải ảnh khác".
+  - **Activity:** "tạo trang từ mẫu", "lưu template, phiên bản N" và "áp dụng mẫu vào bản nháp".
+- **Ngoài phạm vi (Phase 4):** tab "Đã sở hữu từ Marketplace", mẫu trả phí, "Tìm trên Marketplace" và "Xem gói".
+- **Reason:**
+  - Template chỉ ghi vào bản nháp, nên không bất biến nào của ADR-005 đổi.
+  - Mẫu hệ thống trong code có review và test như blueprint.
+  - Phiên bản bất biến giữ cho trang đã tạo và lịch sử không đổi khi mẫu đổi.
+- **Consequences:**
+  - Thêm một quyền: ma trận vai trò, test role-matrix và màn 16 đổi theo.
+  - Thêm hai collection và index của chúng trong mỗi workspace DB.
+  - Integration test:
+    - cô lập workspace và phạm vi site;
+    - quyền;
+    - phiên bản bất biến;
+    - chép ảnh sang site khác;
+    - tạo trang và áp mẫu với `baseRevision` cũ (409).
+  - E2E:
+    - tạo trang từ mẫu hệ thống;
+    - lưu trang thành template rồi tạo trang ở site khác;
+    - áp mẫu trong editor rồi hoàn tác.
+
+### ADR-031 — AI: cổng adapter, tạo trang từ brief, trợ lý trong editor
+
+- **Date:** 2026-11-02 · **Status:** Accepted
+- **Context:**
+  - Board 20–21 và ghi chú `phase2Decisions`.
+  - Chủ sản phẩm quyết định ngày 2026-11-02:
+    - trước mắt nối một AI local bằng API key;
+    - làm adapter để sau này nối các nhà cung cấp phổ biến;
+    - hạn mức 100 lượt mỗi workspace mỗi tháng.
+- **Decision:**
+  - **Cổng `AiTextModel`** nằm trong module `ai` của API. Nó có một hàm: nhận lời dặn hệ thống, prompt, JSON Schema của kết quả, số token tối đa và `AbortSignal`, rồi trả chữ cùng số token đã dùng. Adapter:
+    - `openai-compatible`:
+      - gọi `POST {AI_BASE_URL}/chat/completions` bằng `fetch`, không thêm thư viện;
+      - gửi `Authorization: Bearer {AI_API_KEY}` và `model: AI_MODEL`, và yêu cầu kết quả JSON;
+      - chạy được với AI local (Ollama, LM Studio, vLLM, LiteLLM) và mọi dịch vụ có API tương thích.
+    - `fake`: kết quả xác định, chỉ dùng cho test và E2E; API từ chối khởi động với adapter này khi `NODE_ENV=production`.
+    - Adapter khác (Anthropic, Gemini…) cắm vào cùng cổng về sau. Mỗi adapter cần một bổ sung ADR, vì nó đổi nơi nhận dữ liệu.
+    - Env:
+      - `AI_PROVIDER`: `none`, `openai-compatible` hoặc `fake`;
+      - `AI_BASE_URL`, `AI_API_KEY` (secret, không vào log), `AI_MODEL`;
+      - `AI_TIMEOUT_MS`, mặc định 60000;
+      - `AI_MONTHLY_QUOTA`, mặc định 100.
+    - Với `none` (mặc định khi thiếu cấu hình), mọi lối vào AI hiện "AI chưa được bật" và gợi ý dùng template.
+  - **Kết quả của AI là dữ liệu không tin cậy:**
+    - Chỉ nhận JSON, parse bằng schema của section trong registry.
+    - AI chỉ viết field chữ và nhãn nút. Nó không viết đích của link, số điện thoại, ảnh hay variant.
+    - Độ dài theo giới hạn của field; không có HTML.
+    - Sai schema thì thử lại một lần, rồi coi phần đó là chưa viết được.
+  - **Dữ liệu gửi đi:**
+    - Có: brief người dùng nhập, tên site, và chữ của bản nháp trong phạm vi được chọn.
+    - Không bao giờ: lead, nội dung đồng ý, nơi nhận lead, dữ liệu cá nhân.
+    - Prompt và kết quả không vào log (redact như body của lead, ADR-013).
+  - **Hạn mức:**
+    - Một lượt là một lần "Viết nội dung" của cả trang ở màn 20, hoặc một yêu cầu thành công của trợ lý.
+    - Một bộ đếm mỗi workspace mỗi tháng lịch theo giờ Việt Nam, trong workspace DB. Lượt được giữ chỗ nguyên tử (`$inc` có điều kiện) trước khi gọi AI, và trả lại khi không có gì được ghi: lỗi, quá tải hay người dùng hủy.
+    - Thử lại section lỗi trong cùng một lần tạo không tốn thêm lượt, tối đa 2 lần.
+    - Thêm giới hạn 10 yêu cầu AI mỗi phút cho mỗi người dùng.
+    - Board vẽ hai hạn mức riêng (20 lượt tạo trang, 50 lượt sửa). Chủ sản phẩm chọn một hạn mức chung là 100. Phase 4 sẽ gắn con số theo gói.
+  - **Tạo trang bằng AI** (màn 20, `/sites/[siteId]/pages/new/ai`):
+    - Brief gồm:
+      - sản phẩm hoặc dịch vụ, khách hàng mục tiêu, mục tiêu trang (các mục tiêu của S6), điểm khác biệt;
+      - giọng văn (Thân thiện, Chuyên nghiệp, Năng động) và ngôn ngữ (Tiếng Việt, English);
+      - "Nội dung bạn đã có" dạng chữ dán vào. Chưa nhận tệp.
+    - **Cấu trúc đề xuất không gọi AI và không tốn lượt:**
+      - Nó lấy từ blueprint của mục tiêu; người dùng sắp xếp, bỏ hay thêm section.
+      - Dòng gợi ý của mỗi section là mô tả của section đó, không viết theo brief như board.
+      - Nhờ vậy bước này không tốn chi phí AI ngoài hạn mức.
+    - **"Viết nội dung" là một job trên server:**
+      - Job nằm ở `ai_jobs` trong workspace DB: brief, cấu trúc, trạng thái từng section và lượt đã giữ. API viết các section song song, có giới hạn đồng thời.
+      - Admin nhận tiến độ qua response streaming (NDJSON) của chính request khởi chạy, không polling.
+      - Người dùng rời màn thì job vẫn chạy tới cuối, và bản nháp xuất hiện trong danh sách trang.
+      - Job có hạn chạy. Job quá hạn (ví dụ API khởi động lại giữa chừng) được đánh dấu thất bại và lượt được trả.
+    - **Kết thúc:**
+      - Có ít nhất một section viết được thì tạo trang (bản nháp) với tên và đường dẫn người dùng nhập. Section chưa viết được giữ chữ mẫu.
+      - Không section nào viết được thì không tạo trang và lượt được trả.
+  - **Câu cần kiểm tra:**
+    - AI đánh dấu các câu nêu số liệu, giá hay cam kết, nhất là về y tế.
+    - Section lưu các đường dẫn đó ở `reviewPaths`, cạnh `samplePaths`.
+    - Checklist xuất bản có cảnh báo `ai_review` ("Câu do AI viết cần kiểm tra").
+    - Sửa field nào thì đường dẫn của field đó rời `reviewPaths`.
+  - **Trợ lý trong editor** (màn 21) là tab "Trợ lý AI" cạnh "Thuộc tính":
+    - Phạm vi: đoạn chữ đang chọn, section, hoặc toàn trang.
+    - Tác vụ: Viết lại, Rút gọn, Đổi giọng văn, Gợi ý tiêu đề, Gợi ý CTA, Viết nội dung section, Gợi ý SEO, hoặc yêu cầu tự do (tối đa 300 ký tự).
+    - `POST /sites/:siteId/pages/:pageId/ai/suggestions` không đổi bản nháp.
+      - Nó trả các thay đổi `{ sectionId, path, before, after, review }` đã parse.
+      - Nó tốn một lượt khi có ít nhất một thay đổi hợp lệ.
+    - "Áp dụng" là một command của store, tức một bước hoàn tác, rồi autosave như mọi sửa đổi. "Bỏ" không đổi gì.
+    - **Xung đột:** request mang chữ hiện tại của phạm vi. Nếu bản nháp trong editor đã đổi phạm vi đó khi kết quả về, panel báo "đã thay đổi trong lúc AI chạy" với hai lựa chọn:
+      - "Tạo lại với nội dung mới", một yêu cầu mới;
+      - "Vẫn xem gợi ý": áp dụng sẽ ghi đè thay đổi đó.
+    - Hủy giữa chừng thì hủy request và trả lượt.
+  - **Quyền:** `pages.edit` trên site, cho cả hai luồng.
+  - **Mức dùng:**
+    - Hiện "Còn N/100 lượt tháng này".
+    - Khi hết lượt: nút bị tắt, brief được giữ, và màn ghi "Lượt mới có vào 01/MM".
+    - Chưa có "Xem gói" (Phase 4).
+- **Ngoài phạm vi:**
+  - Tạo ảnh và đọc tệp đính kèm (PDF, ảnh).
+  - Dịch trang có sẵn.
+  - Adapter Anthropic và Gemini. OpenAI chạy qua `openai-compatible`, nhưng dùng nó cho dữ liệu thật vẫn cần bổ sung ADR và xác nhận ở §6.
+  - AI không bao giờ xuất bản.
+- **Reason:**
+  - AI chỉ ghi vào bản nháp qua command hay qua lần lưu có `baseRevision`, nên mọi bất biến của ADR-005 giữ nguyên.
+  - Cổng adapter tách code sản phẩm khỏi nhà cung cấp.
+  - Kết quả được parse bằng registry như dữ liệu từ client.
+  - Hạn mức có giữ chỗ, nên lỗi không làm mất lượt.
+- **Consequences:**
+  - Composition thêm `reviewPaths`. Bản nháp cũ đọc vào có `[]`, và release giữ nguyên field này như `samplePaths`.
+  - Integration test:
+    - hạn mức (đồng thời, trả lượt, đổi tháng);
+    - job dở dang;
+    - cô lập workspace;
+    - quyền;
+    - kết quả AI sai schema;
+    - không có dữ liệu cá nhân trong prompt, kiểm qua adapter giả ghi lại request;
+    - không có prompt trong log.
+  - E2E dùng `AI_PROVIDER=fake`: tạo trang bằng AI rồi mở editor; trợ lý viết lại Hero, áp dụng rồi hoàn tác.
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -1989,6 +2175,24 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Xong       |
 | E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Xong       |
 
+**Phase 2 — Tạo trang nhanh** (chủ sản phẩm yêu cầu ngày 2026-11-02):
+
+| Lát | Nội dung                                                                                                               | Màn                | Trạng thái |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
+| G1  | 12 mẫu hệ thống, thư viện, chi tiết và preview, tạo trang từ mẫu, mục Templates của Sidebar v2 (ADR-030)               | 17, 18, Sidebar v2 | Chưa làm   |
+| G2  | Template của workspace: lưu trang thành template, phiên bản, phạm vi site, lưu trữ, chép ảnh, quyền `templates.manage` | 19, 17, 16         | Chưa làm   |
+| G3  | Áp dụng mẫu vào bản nháp: từ màn 18 và từ editor, một bước hoàn tác (ADR-030)                                          | 18, 03             | Chưa làm   |
+| G4  | Cổng AI và adapter `openai-compatible`/`fake`, hạn mức, job, tạo trang bằng AI, `reviewPaths` và cảnh báo `ai_review`  | 20, 05             | Chưa làm   |
+| G5  | Trợ lý AI trong editor: phạm vi, tác vụ, gợi ý có so sánh, áp dụng là một bước hoàn tác, xung đột (ADR-031)            | 21, 03             | Chưa làm   |
+
+**Hoàn thành Phase 2** khi một E2E chạy xanh toàn bộ chuỗi:
+
+1. Tạo trang từ một mẫu hệ thống → sửa chữ mẫu → xuất bản.
+2. Lưu trang đó thành template của workspace → tạo trang từ template ở site khác, ảnh đã được chép sang.
+3. Áp một mẫu vào bản nháp trong editor → hoàn tác → trang live không đổi.
+4. Tạo trang bằng AI (adapter giả) → bản nháp có cảnh báo `ai_review` → trợ lý viết lại Hero → áp dụng → hoàn tác.
+5. Số lượt AI còn lại giảm đúng số lượt đã dùng.
+
 ## 6. Trước khi phát hành
 
 Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR quy định nó. Chưa đủ hết thì không đưa dữ liệu thật của khách vào.
@@ -2027,12 +2231,16 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - index mới trên collection lớn được dựng trước khi deploy;
   - không xóa hay đổi tên index khi API đang chạy.
 
+- AI (ADR-031): đặt `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` cho dịch vụ AI của production. Không dùng `fake`.
+
 **Chủ sản phẩm cần quyết**
 
 - `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
+- Dịch vụ AI của production (ADR-031): AI tự host, hay một nhà cung cấp bên ngoài. Bên ngoài thì cần adapter và bổ sung ADR.
 
 **Người phụ trách pháp lý cần xác nhận** (ADR-017)
 
 - Hạn xử lý yêu cầu dữ liệu: 2 và 20 ngày làm việc, chưa trừ ngày lễ.
 - Thời gian lưu lead mặc định 12 tháng, và nội dung đồng ý mặc định.
 - Thời gian giữ chính các yêu cầu dữ liệu.
+- Nếu AI của production không tự host (ADR-031): việc gửi brief và chữ của bản nháp (không có dữ liệu cá nhân) cho nhà cung cấp, và điều khoản xử lý dữ liệu của họ.
