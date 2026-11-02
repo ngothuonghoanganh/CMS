@@ -440,6 +440,8 @@ export function createEditorStore(init: EditorInit): EditorStore {
           (draft) => {
             draft.content = content;
             draft.samplePaths = withoutSamplePath(draft.samplePaths, path);
+            // Edited text is the user's own: it no longer needs the review the AI asked for.
+            draft.reviewPaths = withoutSamplePath(draft.reviewPaths, path);
             return true;
           },
           options.merge ? `content:${sectionId}:${path}` : undefined,
@@ -493,9 +495,9 @@ export function createEditorStore(init: EditorInit): EditorStore {
           !isPathWithin(selection.fieldPath, removedPath);
         const done = editSection(sectionId, (draft) => {
           draft.content = content;
-          draft.samplePaths = remapListPaths(draft.samplePaths, listKey, (old) =>
-            old === index ? null : old > index ? old - 1 : old,
-          );
+          const mapIndex = (old: number) => (old === index ? null : old > index ? old - 1 : old);
+          draft.samplePaths = remapListPaths(draft.samplePaths, listKey, mapIndex);
+          draft.reviewPaths = remapListPaths(draft.reviewPaths, listKey, mapIndex);
           return true;
         });
         if (done && !keepField) {
@@ -525,9 +527,9 @@ export function createEditorStore(init: EditorInit): EditorStore {
         const order = reordered.map((item) => items.indexOf(item));
         return editSection(sectionId, (draft) => {
           draft.content = content;
-          draft.samplePaths = remapListPaths(draft.samplePaths, listKey, (old) =>
-            order.indexOf(old),
-          );
+          const mapIndex = (old: number) => order.indexOf(old);
+          draft.samplePaths = remapListPaths(draft.samplePaths, listKey, mapIndex);
+          draft.reviewPaths = remapListPaths(draft.reviewPaths, listKey, mapIndex);
           return true;
         });
       },

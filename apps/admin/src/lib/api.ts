@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AI_JOB_STREAM_TYPE,
   type Asset,
   assetSchema,
   type EndpointDefinition,
@@ -69,6 +70,75 @@ export async function uploadAsset(
     );
   }
   return assetSchema.parse(await response.json());
+}
+
+/**
+ * Splits what arrived of an NDJSON stream into its complete lines, keeping the unfinished last
+ * one for the next chunk. Blank lines are skipped.
+ */
+export function splitLines(pending: string): { lines: string[]; rest: string } {
+  const parts = pending.split('\n');
+  const rest = parts.pop() ?? '';
+  return { lines: parts.filter((line) => line.trim() !== ''), rest };
+}
+
+/**
+ * Calls an endpoint that answers with an NDJSON stream (an AI job, ADR-031) through the `/api`
+ * proxy, and hands each line to `onEvent`, parsed by `schema`, as it arrives. A refused request
+ * throws its ApiError before any line. Resolves when the server ends the stream; aborting
+ * `options.signal` only stops reading, the server's work goes on.
+ */
+export async function streamEndpoint<
+  E extends EndpointDefinition<
+    readonly string[],
+    z.ZodType | null,
+    z.ZodType | null,
+    z.ZodType | null
+  >,
+  T,
+>(
+  endpoint: E,
+  args: PathArgs<E>,
+  options: CallOptions<E>,
+  schema: z.ZodType<T>,
+  onEvent: (event: T) => void,
+): Promise<void> {
+  const hasBody = options.body !== undefined;
+  const response = await fetch(`/api${endpoint.path(...args)}${toQueryString(options.query)}`, {
+    method: endpoint.method,
+    credentials: 'same-origin',
+    headers: {
+      Accept: AI_JOB_STREAM_TYPE,
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(hasBody ? { body: JSON.stringify(options.body) } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+  if (response.body === null) {
+    throw new Error(`${endpoint.method} ${endpoint.path(...args)} answered without a stream`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  const emit = (line: string) => {
+    onEvent(schema.parse(JSON.parse(line)));
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    const split = splitLines(pending + decoder.decode(value, { stream: true }));
+    pending = split.rest;
+    split.lines.forEach(emit);
+  }
+  const last = pending + decoder.decode();
+  if (last.trim() !== '') {
+    emit(last);
+  }
 }
 
 /** What the server said about a downloaded export. */

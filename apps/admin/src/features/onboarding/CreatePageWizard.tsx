@@ -37,6 +37,7 @@ import {
   ListIcon,
   LockIcon,
   RadioCardGroup,
+  SparklesIcon,
   TagIcon,
   VisuallyHidden,
 } from '@plp/ui';
@@ -48,7 +49,7 @@ import { api, ApiError } from '../../lib/api';
 import { hostOf } from '../../lib/site-url';
 import { siteQueryKeys } from '../dashboard/queries';
 import { cx } from '../shell/cx';
-import { pageHref, siteHref } from '../shell/navigation';
+import { newAiPageHref, pageHref, siteHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { BlankPageDialog } from './BlankPageDialog';
 import { PageSlugField } from './PageSlugField';
@@ -361,6 +362,10 @@ export function CreatePageWizard({ site }: CreatePageWizardProps) {
         </div>
         <Stepper current={state.step} />
         <div className={styles.headerEnd}>
+          <Link href={newAiPageHref(site.id)} className={styles.textLink}>
+            <SparklesIcon size={16} />
+            Tạo bằng AI
+          </Link>
           <button
             type="button"
             className={styles.textButton}

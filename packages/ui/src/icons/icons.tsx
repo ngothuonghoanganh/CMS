@@ -115,6 +115,12 @@ export const ArrowRightIcon = createIcon('arrow-right', <path d="M5 12h14M13 6l6
 export const ArrowUpIcon = createIcon('arrow-up', <path d="M12 19V5M6 11l6-6 6 6" />);
 export const ArrowDownIcon = createIcon('arrow-down', <path d="M12 5v14M6 13l6 6 6-6" />);
 
+/* AI (boards 17, 20) */
+export const SparklesIcon = createIcon(
+  'sparkles',
+  <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />,
+);
+
 /* Visibility and devices */
 const eyeOutline = <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />;
 export const EyeIcon = createIcon(

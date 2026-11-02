@@ -45,6 +45,11 @@ export const sectionInstanceSchema = z.object({
   content: z.record(z.string(), z.unknown()),
   /** Content paths that still hold sample text, e.g. "items.0.title". */
   samplePaths: z.array(z.string().max(200)).max(300),
+  /**
+   * Content paths of sentences the AI wrote that state figures, prices or claims, until the user
+   * edits them (ADR-031). Drafts and releases stored before it read as `[]`.
+   */
+  reviewPaths: z.array(z.string().max(200)).max(300).default([]),
 });
 export type SectionInstance = z.infer<typeof sectionInstanceSchema>;
 

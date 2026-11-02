@@ -190,3 +190,8 @@ export function openPageHref(siteId: string, pageId: string, canEdit: boolean): 
 export function newPageHref(siteId: string): string {
   return `${siteHref(siteId)}/pages/new`;
 }
+
+/** "Tạo trang bằng AI" (board 20, ADR-031). */
+export function newAiPageHref(siteId: string): string {
+  return `${newPageHref(siteId)}/ai`;
+}

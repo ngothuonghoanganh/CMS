@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { activityListQuerySchema, activityListResponseSchema } from './activity.js';
+import { aiJobSchema, aiPageJobRequestSchema, aiUsageSchema } from './ai.js';
 import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
   assetListQuerySchema,
@@ -986,6 +987,56 @@ export const endpoints = {
     request: createPreviewLinkRequestSchema,
     query: null,
     response: previewLinkResponseSchema,
+  }),
+
+  // AI (ADR-031): `pages.edit` on the site
+  /** The workspace's uses this month, and whether the API has an AI service at all. */
+  aiUsage: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/ai/usage`,
+    request: null,
+    query: null,
+    response: aiUsageSchema,
+  }),
+  /**
+   * "Viết nội dung": reserves one use and starts a job that writes the sections and creates the
+   * draft. 200 with an NDJSON stream (`AI_JOB_STREAM_TYPE`), one `aiJobEventSchema` per line, until
+   * the job ends; the job still ends when the client goes away. Refused before the stream starts:
+   * 409 `ai_disabled`, 429 `ai_quota_exhausted` or `rate_limited`, 409 `slug_taken`.
+   */
+  startAiPageJob: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/ai/page-jobs`,
+    request: aiPageJobRequestSchema,
+    query: null,
+    response: null,
+  }),
+  /** A job as it stands; a job past its deadline is ended and its use given back first. */
+  getAiPageJob: endpoint({
+    method: 'GET',
+    path: (siteId: string, jobId: string) => `/sites/${e(siteId)}/ai/page-jobs/${e(jobId)}`,
+    request: null,
+    query: null,
+    response: aiJobSchema,
+  }),
+  /**
+   * "Thử lại N section": writes the failed sections of a finished job into its draft, without
+   * another use, at most `AI_RETRIES_PER_JOB` times. The same NDJSON stream as `startAiPageJob`.
+   */
+  retryAiPageJob: endpoint({
+    method: 'POST',
+    path: (siteId: string, jobId: string) => `/sites/${e(siteId)}/ai/page-jobs/${e(jobId)}/retry`,
+    request: null,
+    query: null,
+    response: null,
+  }),
+  /** "Hủy": stops a running job; a first run writes no draft and gives its use back. */
+  cancelAiPageJob: endpoint({
+    method: 'POST',
+    path: (siteId: string, jobId: string) => `/sites/${e(siteId)}/ai/page-jobs/${e(jobId)}/cancel`,
+    request: null,
+    query: null,
+    response: aiJobSchema,
   }),
 
   // Activity

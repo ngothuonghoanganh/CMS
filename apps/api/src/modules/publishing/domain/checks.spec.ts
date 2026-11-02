@@ -366,6 +366,23 @@ describe('evaluateChecks: warnings', () => {
     expect(one.fingerprint).toBe(two.fingerprint);
   });
 
+  it('warns once per section with sentences the AI wrote to review (ADR-031)', () => {
+    const hero = heroSection({ id: 'hero00000001' });
+    // `secondaryCta` is a button, its text at ".label"; `image.alt` is no text field of the panel.
+    const flagged = { ...hero, reviewPaths: ['subheading', 'primaryCta.label', 'image.alt'] };
+    const item = only(run([flagged]).warnings, 'ai_review');
+    expect(item.title).toBe('Câu do AI viết cần kiểm tra trong section “Hero”');
+    expect(item.description).toBe(
+      '2 câu nêu số liệu, giá hay cam kết. Kiểm tra lại cho đúng sự thật trước khi xuất bản.',
+    );
+    expect(item.target).toEqual({ kind: 'section', sectionId: hero.id, fieldPath: 'subheading' });
+    expect(item.fingerprint).toBe(`ai_review:section:${hero.id}`);
+    // Like sample text, a field the variant hides is not reviewed on the page.
+    const centered = { ...flagged, variant: 'centered', reviewPaths: ['secondaryCta.label'] };
+    expect(codes(run([centered]).warnings)).not.toContain('ai_review');
+    expect(run([hero]).warnings).toEqual([]);
+  });
+
   it('warns about a missing or long SEO title and description', () => {
     expect(
       codes(run([heroSection()], { seo: cleanSeo({ title: '', description: '' }) }).warnings),

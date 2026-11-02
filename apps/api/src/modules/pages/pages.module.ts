@@ -18,7 +18,7 @@ import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-d
 
 /**
  * Pages and their drafts. Exports page access, persistence and evaluation (status + checks) to
- * publishing, preview and public delivery, which build on pages.
+ * publishing, preview and public delivery, which build on pages, and page creation to AI jobs.
  */
 @Module({
   imports: [
@@ -35,6 +35,6 @@ import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-d
   ],
   controllers: [PagesController],
   providers: [PagesRepository, PageAccessService, PageEvaluator, PagesService, PageDeletionService],
-  exports: [PagesRepository, PageAccessService, PageEvaluator],
+  exports: [PagesRepository, PageAccessService, PageEvaluator, PagesService],
 })
 export class PagesModule {}

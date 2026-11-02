@@ -2210,6 +2210,46 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - không có dữ liệu cá nhân trong prompt, kiểm qua adapter giả ghi lại request;
     - không có prompt trong log.
   - E2E dùng `AI_PROVIDER=fake`: tạo trang bằng AI rồi mở editor; trợ lý viết lại Hero, áp dụng rồi hoàn tác.
+- **Chi tiết khi làm (lát G4):**
+  - **Endpoint** (đều cần `pages.edit` trên site):
+    - `GET /sites/:siteId/ai/usage`: `{ enabled, month, limit, used, remaining, resetsOn }`. Đọc mức dùng cũng kết thúc các job quá hạn của workspace trước.
+    - `POST /sites/:siteId/ai/page-jobs` (brief, tên trang, đường dẫn, cấu trúc) và `POST …/page-jobs/:jobId/retry` trả 200 với luồng NDJSON (`application/x-ndjson`): `started` (job), `section` (tiến độ từng section), `heartbeat`, rồi `finished` (job).
+    - `GET …/page-jobs/:jobId` để đọc lại job khi luồng bị đứt (màn có nút "Xem tiến độ", không polling); `POST …/page-jobs/:jobId/cancel` cho "Hủy".
+    - Từ chối trước khi luồng bắt đầu, nên chưa tốn lượt: 409 `ai_disabled`, 429 `rate_limited`, 422 cấu trúc sai (đường dẫn `structure.N…`) hay không có gì để viết, 409 `slug_taken` hoặc `page_limit_reached`, 429 `ai_quota_exhausted` (kèm `resetsOn`).
+  - **Luồng NDJSON:** `heartbeat` mỗi 10 giây, vì rewrite `/api` của Next cắt kết nối im lặng quá 30 giây và một section có thể lâu hơn. `Cache-Control: no-store, no-transform`, vì nén gzip của Next giữ các dòng lại tới khi đủ khối.
+  - **AI không viết** (bổ sung quy tắc "chỉ field chữ và nhãn nút"):
+    - tên hiển thị của thanh điều hướng (trống là tên site);
+    - mọi nhận xét của Cảm nhận khách hàng: đó là lời và tên của khách thật, AI chỉ viết tiêu đề;
+    - chú thích ảnh của Trước & sau, vì AI không thấy ảnh;
+    - cả Chân trang: tên doanh nghiệp, địa chỉ, số điện thoại, giờ làm việc, liên kết, bản quyền.
+    - Nhãn của nút đang không dùng (nhãn trống) cũng không được viết, để không tạo nút không dẫn tới đâu.
+    - Section không còn gì để viết có trạng thái `kept` ("Bạn tự điền"), không tính là viết được hay lỗi. Cấu trúc chỉ có các section như vậy bị từ chối (422).
+  - **Danh sách:** AI chọn số mục trong giới hạn của variant; prompt gợi ý bằng số mục hiện có. Mục thêm lấy từ `newItem` của field, nên biểu tượng và ảnh giữ mặc định.
+  - **Kết quả của AI** là JSON (chấp nhận khung code bao quanh), mỗi field là chuỗi trong giới hạn, không có thẻ HTML, không có chữ Hán, Kana hay Hangul (model nhỏ hay lẫn sang), rồi được registry parse.
+    - Câu trả lời bị cắt ở giới hạn token cũng tính là sai.
+    - Lần thử lại duy nhất kèm danh sách lỗi, không bao giờ kèm câu trả lời đã bị từ chối.
+  - **`reviewPaths`** = câu AI đánh dấu, cộng mọi câu AI viết có chữ số, vì model nhỏ hiếm khi đánh dấu đủ.
+    - Cảnh báo `ai_review` mỗi section một mục: "Câu do AI viết cần kiểm tra trong section “Hero”", fingerprint `ai_review:section:{id}`, đích là đường dẫn đầu tiên, không có mục "đã đạt" tương ứng.
+    - Panel thuộc tính ghi "AI viết · cần kiểm tra" cạnh nhãn field.
+  - **Bản nháp ban đầu** dựng từ cấu trúc: section trùng (loại, variant) với blueprint của mục tiêu lấy chữ mẫu của blueprint, section khác lấy chữ mẫu của chính nó; màu theo nhịp "Nhẹ nhàng"; nút chính của Hero dẫn tới form khi trang có form, như trang theo mục tiêu (ADR-016).
+  - **Kết thúc một lượt chạy** luôn là update có điều kiện theo `run.id` khi job còn `running`, nên chỉ một cách kết thúc thắng và lượt chỉ được trả một lần:
+    - viết được: tạo trang và kết thúc job trong cùng một transaction;
+    - không viết được gì, "Hủy", hay quá hạn: lượt đầu trả lượt trong cùng transaction;
+    - lượt chạy thua (bị hủy hay hết hạn trước khi kịp ghi) không ghi gì: transaction tạo trang bị bỏ.
+    - "Hủy" kết thúc job ngay và trả lượt; lượt chạy ở instance khác ghi muộn thì không khớp `run.id`.
+  - **"Thử lại"** chỉ ghi khi bản nháp còn đúng revision job đã ghi, bằng `baseRevision` như autosave; bản nháp đã bị sửa thì trả 409 `revision_conflict` trước khi gọi AI, và nếu bị sửa trong lúc chạy thì các section đó là `draft_changed`.
+  - **Hạn chạy:** ngân sách = số vòng (3 section một vòng) × 2 lần × `AI_TIMEOUT_MS`. Runner tự dừng ở ngân sách; hạn lưu trong job thêm 60 giây cho bước ghi. Job quá hạn được kết thúc khi đọc mức dùng hay job, và lúc khởi động (mọi workspace), với lỗi `interrupted`. Khi API dừng, các lượt chạy bị dừng và vẫn tạo bản nháp với những section đã viết.
+  - **Hạn mức:** `ai_usage { workspaceId, month }` (unique), bộ đếm được tạo trước transaction; lượt được giữ bằng `$inc` có điều kiện trong chính transaction ghi job. Trả lượt về đúng tháng đã giữ. Giới hạn 10 yêu cầu mỗi phút tính theo người dùng trên mọi workspace, trong `lead_limits` ở master, và tính cả yêu cầu bị từ chối.
+  - **`ai_jobs` tự xóa sau 30 ngày** (TTL theo `expiresAt`): job chỉ là bản ghi công việc, brief không cần giữ lâu hơn.
+  - **Prompt:** lời dặn bằng tiếng Anh, ngôn ngữ của chữ theo brief và được nhắc lại ở cuối (model nhỏ viết theo ngôn ngữ của brief). Prompt có tên site, mục tiêu, brief, tên các section theo thứ tự, mô tả section, các field kèm giới hạn và chữ hiện có của đúng các field đó; không có link, ảnh, mô tả ảnh hay số điện thoại.
+  - **Log:** `brief`, `system`, `prompt`, `messages`, `output` bị che ở object được log (và một cấp bên trong) và ở mọi độ sâu của lỗi được log. `AiError` không bao giờ chứa prompt hay câu trả lời; adapter không đọc body lỗi của dịch vụ.
+  - **Adapter `openai-compatible`:** `response_format` là `json_schema`, `max_tokens` theo độ dài các field (tối đa 4096), `stream: false`. HTTP 429, 503, 529 là quá tải; 408, 504 là hết giờ; 5xx khác là không dùng được; 4xx khác là bị từ chối.
+  - **Màn 20:**
+    - Bước Brief có thêm "Tên trang" và "Đường dẫn" (board không vẽ chỗ nhập); tên trang theo sản phẩm cho tới khi được sửa.
+    - "Tạo bằng AI" nằm ở header của màn 02 (cạnh "Bắt đầu trống"), và ở màn 17 như board: cạnh "Tạo trang cho" (cho site đang chọn) và ở trạng thái không có mẫu nào khớp.
+    - "Chọn template thay vì AI" và "Dùng template" mở thư viện template cho site đó. Màn "AI chưa được bật" có thêm "Tạo trang theo mục tiêu".
+    - Viết đủ mọi section thì mở thẳng editor; viết được một phần thì hiện "Gần xong" với số section viết được trên số section AI viết. "Hủy" đưa về bước cấu trúc.
+  - **Kiểm thử thật với Ollama `qwen3:4b-instruct`** (2026-11-02): cả 6 section của trang thu lead viết và qua registry ngay lần đầu, mỗi section 3–40 giây chạy lần lượt; FAQ chậm nhất. Model vẫn bịa chi tiết (chính sách hủy, thời gian điều trị) và hay đánh dấu thừa: cảnh báo `ai_review` là lưới an toàn, không thay người đọc lại.
 
 ---
 
@@ -2299,7 +2339,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | G1  | 12 mẫu hệ thống, thư viện, chi tiết và preview, tạo trang từ mẫu, mục Templates của Sidebar v2 (ADR-030)               | 17, 18, Sidebar v2 | Xong       |
 | G2  | Template của workspace: lưu trang thành template, phiên bản, phạm vi site, lưu trữ, chép ảnh, quyền `templates.manage` | 19, 17, 16         | Chưa làm   |
 | G3  | Áp dụng mẫu vào bản nháp: từ màn 18 và từ editor, một bước hoàn tác (ADR-030)                                          | 18, 03             | Chưa làm   |
-| G4  | Cổng AI và adapter `openai-compatible`/`fake`, hạn mức, job, tạo trang bằng AI, `reviewPaths` và cảnh báo `ai_review`  | 20, 05             | Chưa làm   |
+| G4  | Cổng AI và adapter `openai-compatible`/`fake`, hạn mức, job, tạo trang bằng AI, `reviewPaths` và cảnh báo `ai_review`  | 20, 05             | Xong       |
 | G5  | Trợ lý AI trong editor: phạm vi, tác vụ, gợi ý có so sánh, áp dụng là một bước hoàn tác, xung đột (ADR-031)            | 21, 03             | Chưa làm   |
 
 **Hoàn thành Phase 2** khi một E2E chạy xanh toàn bộ chuỗi:
@@ -2349,6 +2389,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - không xóa hay đổi tên index khi API đang chạy.
 
 - AI (ADR-031): đặt `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` cho dịch vụ AI của production. Không dùng `fake`.
+  - Một job viết 3 section cùng lúc. AI tự host xếp hàng các yêu cầu (Ollama mặc định), nên đặt cho nó xử lý song song từ 3 yêu cầu (`OLLAMA_NUM_PARALLEL`), hoặc tăng `AI_TIMEOUT_MS`: thời gian chờ trong hàng cũng tính vào hạn của mỗi yêu cầu.
 
 **Chủ sản phẩm cần quyết**
 

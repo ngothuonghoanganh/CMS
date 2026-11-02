@@ -155,6 +155,46 @@ describe('parseEnv', () => {
       parseEnv({ ...valid, NODE_ENV: 'production', DOMAIN_DNS_ZONE_FILE: '/tmp/zone.json' }),
     ).toThrow(/DOMAIN_DNS_ZONE_FILE/);
   });
+
+  describe('the AI service (ADR-031)', () => {
+    const local = {
+      AI_PROVIDER: 'openai-compatible',
+      AI_BASE_URL: 'http://localhost:11434/v1',
+      AI_API_KEY: 'ollama',
+      AI_MODEL: 'qwen3:4b-instruct',
+    };
+
+    it('is off by default, with a minute per request and 100 uses a month', () => {
+      const env = parseEnv(valid);
+      expect(env.AI_PROVIDER).toBe('none');
+      expect(env.AI_TIMEOUT_MS).toBe(60_000);
+      expect(env.AI_MONTHLY_QUOTA).toBe(100);
+    });
+
+    it('needs the address, key and model of an OpenAI-compatible service', () => {
+      expect(parseEnv({ ...valid, ...local }).AI_MODEL).toBe('qwen3:4b-instruct');
+      const { AI_API_KEY: _key, AI_MODEL: _model, ...partial } = local;
+      expect(() => parseEnv({ ...valid, ...partial })).toThrow(
+        'AI_PROVIDER=openai-compatible needs AI_API_KEY, AI_MODEL',
+      );
+      expect(() => parseEnv({ ...valid, ...local, AI_BASE_URL: 'ftp://ai.local' })).toThrow(
+        /AI_BASE_URL/,
+      );
+    });
+
+    it('refuses the fake AI in production', () => {
+      expect(parseEnv({ ...valid, AI_PROVIDER: 'fake' }).AI_PROVIDER).toBe('fake');
+      expect(() =>
+        parseEnv({
+          ...valid,
+          NODE_ENV: 'production',
+          CUSTOM_DOMAIN_IPV4: '203.0.113.10',
+          AI_PROVIDER: 'fake',
+        }),
+      ).toThrow('AI_PROVIDER=fake writes fixed text for tests');
+    });
+  });
+
   describe('workspace addresses (ADR-025)', () => {
     const addresses = {
       ADMIN_ORIGIN: 'https://app.example.vn',

@@ -350,8 +350,8 @@ function checkImageLeaf(findings: Findings, context: SectionContext, leaf: LeafO
   }
 }
 
-/** Sample paths that belong to a field this variant shows. */
-function visibleSamplePaths(section: SectionInstance, leaves: readonly LeafOccurrence[]): string[] {
+/** Sample or review paths that belong to a field this variant shows. */
+function visibleTextPaths(paths: readonly string[], leaves: readonly LeafOccurrence[]): string[] {
   const visible = new Set<string>();
   for (const leaf of leaves) {
     if (leaf.field.kind === 'text') {
@@ -360,7 +360,7 @@ function visibleSamplePaths(section: SectionInstance, leaves: readonly LeafOccur
       visible.add(`${leaf.path}.label`);
     }
   }
-  return section.samplePaths.filter((path) => visible.has(path));
+  return paths.filter((path) => visible.has(path));
 }
 
 /**
@@ -416,7 +416,7 @@ function checkSection(findings: Findings, context: SectionContext): void {
     }
   }
   checkOneButton(findings, context, leaves);
-  const samples = visibleSamplePaths(section, leaves);
+  const samples = visibleTextPaths(section.samplePaths, leaves);
   const firstSample = samples[0];
   if (firstSample !== undefined) {
     findings.add(
@@ -425,6 +425,19 @@ function checkSection(findings: Findings, context: SectionContext): void {
       sectionTarget(section, firstSample),
       `Section “${definition.label}” còn nội dung mẫu`,
       `Còn ${samples.length} đoạn chữ mẫu chưa được thay bằng nội dung thật.`,
+      `section:${section.id}`,
+    );
+  }
+  // Sentences the AI wrote with figures, prices or claims, until someone edits them (ADR-031).
+  const reviews = visibleTextPaths(section.reviewPaths, leaves);
+  const firstReview = reviews[0];
+  if (firstReview !== undefined) {
+    findings.add(
+      'warning',
+      'ai_review',
+      sectionTarget(section, firstReview),
+      `Câu do AI viết cần kiểm tra trong section “${definition.label}”`,
+      `${reviews.length} câu nêu số liệu, giá hay cam kết. Kiểm tra lại cho đúng sự thật trước khi xuất bản.`,
       `section:${section.id}`,
     );
   }

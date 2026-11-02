@@ -38,6 +38,8 @@ export const warningCheckCodes = [
   'seo_description_too_long',
   'page_link_not_live',
   'section_hidden_everywhere',
+  /** Sentences the AI wrote that state figures, prices or claims (ADR-031). */
+  'ai_review',
 ] as const;
 
 /**

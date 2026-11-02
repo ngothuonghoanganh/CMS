@@ -47,7 +47,25 @@
 
 .headerEnd {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 4px 16px;
+}
+
+/* "Tạo bằng AI" (ADR-031), beside "Bắt đầu trống" where board 02 keeps its other starts. */
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--target-min);
+  padding: 0 4px;
+  font-size: var(--text-body);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.textLink:hover {
+  text-decoration: underline;
 }
 
 .textButton {

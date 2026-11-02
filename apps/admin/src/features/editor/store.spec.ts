@@ -257,6 +257,52 @@ describe('editor store: content', () => {
   });
 });
 
+describe('editor store: text the AI wrote to review (ADR-031)', () => {
+  /** A page whose Hero and FAQ hold sentences the AI marked: a figure, a price, a claim. */
+  function reviewedStore() {
+    const composition = sampleComposition();
+    return makeStore({
+      detail: pageDetail({
+        ...composition,
+        sections: composition.sections.map((section) =>
+          section.id === HERO
+            ? { ...section, reviewPaths: ['subheading', 'primaryCta.label'] }
+            : section.id === FAQ
+              ? { ...section, reviewPaths: ['items.0.answer', 'items.2.answer'] }
+              : section,
+        ),
+      }),
+    });
+  }
+
+  it('drops the path of a field the user edits, as with sample text, and undo brings it back', () => {
+    const store = reviewedStore();
+    expect(store.getState().updateContent(HERO, 'subheading', 'Giảm 15% trong tháng 11')).toBe(
+      true,
+    );
+    expect(sectionById(store, HERO).reviewPaths).toEqual(['primaryCta.label']);
+    store.getState().updateContent(HERO, 'primaryCta', {
+      label: 'Đặt lịch',
+      link: { kind: 'none' },
+    });
+    expect(sectionById(store, HERO).reviewPaths).toEqual([]);
+    store.getState().undo();
+    store.getState().undo();
+    expect(sectionById(store, HERO).reviewPaths).toEqual(['subheading', 'primaryCta.label']);
+  });
+
+  it('follows list items that move and forgets those removed', () => {
+    const store = reviewedStore();
+    expect(store.getState().moveListItem(FAQ, 'items', 0, 1)).toBe(true);
+    expect(sectionById(store, FAQ).reviewPaths).toEqual(['items.1.answer', 'items.2.answer']);
+    expect(store.getState().removeListItem(FAQ, 'items', 1)).toBe(true);
+    expect(sectionById(store, FAQ).reviewPaths).toEqual(['items.1.answer']);
+    // Editing another field of the item keeps the answer's review.
+    store.getState().updateContent(FAQ, 'items.1.question', 'Có trả góp không?');
+    expect(sectionById(store, FAQ).reviewPaths).toEqual(['items.1.answer']);
+  });
+});
+
 describe('editor store: layout and visibility', () => {
   it('sets a known variant only', () => {
     const store = makeStore();

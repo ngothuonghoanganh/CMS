@@ -28,6 +28,8 @@ const apiEnv = {
   DOMAIN_MONITOR_INTERVAL_MS: '0',
   CUSTOM_DOMAIN_IPV4: '127.0.0.1',
   CUSTOM_DOMAIN_ORIGIN_TEMPLATE: `http://{host}:${new URL(urls.renderer).port}`,
+  // Creating a page with AI (ADR-031) uses the fake AI: fixed copy, at once, never a real service.
+  AI_PROVIDER: 'fake',
 };
 
 // Servers are never reused: one started outside this config may point at another database. A

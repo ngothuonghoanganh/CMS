@@ -133,6 +133,22 @@ const baseEnvSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   /** Public base URL of the bucket, e.g. "https://cdn.example.com/plp-assets". */
   S3_PUBLIC_BASE_URL: z.url(),
+
+  /**
+   * The AI that writes pages (ADR-031): `openai-compatible` calls `{AI_BASE_URL}/chat/completions`
+   * (Ollama, LM Studio, vLLM, LiteLLM or a hosted service), `fake` writes fixed text for tests and
+   * E2E and is refused in production, `none` turns AI off.
+   */
+  AI_PROVIDER: z.enum(['none', 'openai-compatible', 'fake']).default('none'),
+  /** E.g. "http://localhost:11434/v1"; required by `openai-compatible`. */
+  AI_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
+  /** Sent as `Authorization: Bearer …`; never logged. Local servers accept any value. */
+  AI_API_KEY: z.string().min(1).optional(),
+  AI_MODEL: z.string().min(1).max(200).optional(),
+  /** How long one AI request may take before it counts as failed. */
+  AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600_000).default(60_000),
+  /** AI uses per workspace per calendar month in Vietnam. */
+  AI_MONTHLY_QUOTA: z.coerce.number().int().min(0).max(100_000).default(100),
 });
 
 /** Emails go to an SMTP server (ADR-018), the default. */
@@ -180,7 +196,28 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     );
   }
   checkWorkspaceAddresses(result.data);
+  checkAi(result.data);
   return result.data;
+}
+
+/** The AI service a provider needs, and no fixed text in production (ADR-031). */
+function checkAi(env: Env): void {
+  if (env.AI_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
+    throw new Error(
+      'Invalid API environment:\nAI_PROVIDER=fake writes fixed text for tests; production needs a real AI service',
+    );
+  }
+  if (env.AI_PROVIDER !== 'openai-compatible') {
+    return;
+  }
+  const missing = (['AI_BASE_URL', 'AI_API_KEY', 'AI_MODEL'] as const).filter(
+    (name) => env[name] === undefined,
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Invalid API environment:\nAI_PROVIDER=openai-compatible needs ${missing.join(', ')}`,
+    );
+  }
 }
 
 /**

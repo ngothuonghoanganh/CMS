@@ -144,13 +144,16 @@ export function canWriteAt(content: unknown, path: string): boolean {
   return isRecord(current) && typeof last === 'string';
 }
 
-/** Sample markers that stay after `path` was edited: the path and everything below it go. */
+/**
+ * Sample (or review) markers that stay after `path` was edited: the path and everything below it
+ * go.
+ */
 export function withoutSamplePath(samplePaths: readonly string[], path: string): string[] {
   return samplePaths.filter((samplePath) => !isPathWithin(samplePath, path));
 }
 
 /**
- * Renumbers the sample markers of a list after items were removed or reordered. `mapIndex` gives
+ * Renumbers the sample (or review) markers of a list after items were removed or reordered. `mapIndex` gives
  * the new index of an old one, or null when that item is gone.
  */
 export function remapListPaths(

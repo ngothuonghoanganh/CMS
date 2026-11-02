@@ -53,6 +53,24 @@ export function vnDaysWindow(from: VnDay, to: VnDay): InstantWindow {
   return { from: vnDayStart(from), to: vnDayStart(addVnDays(to, 1)) };
 }
 
+/** A Vietnamese calendar month as "2026-11": the AI quota counts uses per month (ADR-031). */
+export const vnMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+export type VnMonth = z.infer<typeof vnMonthSchema>;
+
+/** The Vietnamese calendar month of an instant: 30/11 at 23:59 in Vietnam is still "2026-11". */
+export function vnMonthOf(at: Date): VnMonth {
+  return vnDayOf(at).slice(0, 7);
+}
+
+/** The first day of the month after `month`, when its uses come back: "2026-12-01". */
+export function nextVnMonthStart(month: VnMonth): VnDay {
+  const [year, monthNumber] = month.split('-').map(Number);
+  if (year === undefined || monthNumber === undefined) {
+    throw new Error(`"${month}" is not a month`);
+  }
+  return new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10);
+}
+
 /** Today and the `days - 1` days before it, in Vietnam: "7 ngày qua" is `recentDaysWindow(now, 7)`. */
 export function recentDaysWindow(now: Date, days: number): InstantWindow {
   const today = vnDayOf(now);

@@ -9,7 +9,8 @@ import { signedUpClient } from '../../../test/client.js';
  * account emails (ADR-026), lead rate-limit windows (ADR-016), leads past the site's retention (rule 10), and the
  * day salts, "seen today" hashes and daily totals of page views (ADR-019). Invitations and access
  * requests go at their `purgeAt` (ADR-021), since their `expiresAt` is when a link stops working,
- * and closed requests to publish at theirs (ADR-023).
+ * and closed requests to publish at theirs (ADR-023). AI jobs go 30 days after they start
+ * (ADR-031): the brief need not stay.
  * The app only computes the date, so without the index nothing is ever deleted. The master DB
  * holds accounts, access and shared counters; each workspace database its own data (ADR-025).
  */
@@ -26,6 +27,7 @@ const EXPIRING_IN_MASTER: Record<string, string> = {
 };
 
 const EXPIRING_IN_WORKSPACE: Record<string, string> = {
+  ai_jobs: 'expiresAt',
   leads: 'expiresAt',
   analytics_seen: 'expiresAt',
   analytics_daily: 'expiresAt',

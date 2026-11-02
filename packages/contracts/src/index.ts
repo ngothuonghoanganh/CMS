@@ -1,4 +1,5 @@
 export * from './activity.js';
+export * from './ai.js';
 export * from './analytics.js';
 export * from './asset.js';
 export * from './auth.js';

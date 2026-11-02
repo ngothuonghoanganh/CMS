@@ -145,6 +145,13 @@
   outline-offset: var(--focus-offset);
 }
 
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
 .empty {
   padding: 56px 24px;
   border: 1px solid var(--color-border);

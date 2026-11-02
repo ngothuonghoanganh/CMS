@@ -36,6 +36,8 @@ export const errorCodes = [
   'domain_limit_reached',
   'template_changed',
   'rate_limited',
+  'ai_disabled',
+  'ai_quota_exhausted',
   'payload_too_large',
   'unsupported_media_type',
   'origin_rejected',
