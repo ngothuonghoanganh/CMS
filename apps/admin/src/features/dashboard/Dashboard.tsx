@@ -471,6 +471,8 @@ function DashboardScreen({
           page={unpublishTarget}
           open={unpublishOpen}
           onOpenChange={setUnpublishOpen}
+          // Filtered by "Live", the row leaves the list with its menu.
+          fallbackFocusRef={searchRef}
         />
       )}
       {deleteTarget === null ? null : (

@@ -78,6 +78,8 @@ test.describe('E4 · deleting a page and a site (ADR-027)', () => {
 
     await expect(page.getByText(`Đã xóa trang “${TITLE}”`, { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Chưa có trang nào' })).toBeVisible();
+    // The row and its menu went once the list read itself again: the focus waits in the search.
+    await expect(page.getByRole('searchbox', { name: 'Tìm trang' })).toBeFocused();
     const activity = page.getByRole('region', { name: 'Hoạt động xuất bản gần đây' });
     await expect(activity.getByRole('listitem').nth(0)).toContainText(
       `Ngọc Anh xóa trang “${TITLE}”`,
