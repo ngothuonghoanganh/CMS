@@ -6,6 +6,7 @@ import {
   MAX_WORKSPACE_TEMPLATES,
   type PageDetailResponse,
   pageDetailResponseSchema,
+  pageListResponseSchema,
   problemSchema,
   type Site,
   type TemplateDetail,
@@ -18,13 +19,14 @@ import {
   workspaceTemplateSchema,
 } from '@plp/contracts';
 import { findSystemTemplate, getAtPath } from '@plp/sections/schema';
-import { Types } from 'mongoose';
+import { mongo, Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { cleanSeo, composition, heroSection } from '../../../test/compositions.js';
 import { createPage, getPage, publish, replaceDraft, uniqueSlug } from '../../../test/pages.js';
 import { addMember, createSite, uploadImage } from '../../../test/resources.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { TEMPLATE_VERSION_COLLECTION } from './template.schema.js';
@@ -629,6 +631,61 @@ describe('workspace templates', () => {
         })
         .expect(200);
     }
+  });
+
+  it('keeps the photos it copied when a commit’s result is unknown: it may have applied', async () => {
+    const { pageId } = await pageWithPhoto(owner, smile);
+    const saved = await saveTemplate(owner, saveBody(smile.id, pageId));
+    const transactions = t.app.get(TransactionRunner);
+    const run = transactions.run.bind(transactions);
+    /** The next write commits, then the driver gives up learning whether its commit applied. */
+    const commitUnknown = () =>
+      vi.spyOn(transactions, 'run').mockImplementationOnce(async (work) => {
+        await run(work);
+        const unknown = new mongo.MongoError('Transaction commit result is unknown');
+        unknown.addErrorLabel('UnknownTransactionCommitResult');
+        throw unknown;
+      });
+
+    // A page made from the template: the page holds a copy of the photo in its site.
+    const slug = uniqueSlug('chua-ro');
+    let spy = commitUnknown();
+    try {
+      await owner
+        .post(`/sites/${kitchen.id}/pages`, { ...fromTemplate(saved.id, 1), slug })
+        .expect(500);
+    } finally {
+      spy.mockRestore();
+    }
+    const pages = pageListResponseSchema.parse(
+      (await owner.get(`/sites/${kitchen.id}/pages?q=${slug}`).expect(200)).body,
+    );
+    const created = pages.items.find((item) => item.slug === slug);
+    if (created === undefined) {
+      throw new Error('The page was not committed');
+    }
+    const image = imageOf(await getPage(owner, kitchen.id, created.id));
+    const assets = assetListResponseSchema.parse(
+      (await owner.get(`/sites/${kitchen.id}/assets?ids=${image}`).expect(200)).body,
+    );
+    expect((await fetch(assets.items[0]?.url ?? '')).status).toBe(200);
+
+    // A template saved from the page: the version holds the template's own copy of the photo.
+    spy = commitUnknown();
+    try {
+      await owner
+        .post(base(), saveBody(smile.id, pageId, { name: 'Lưu chưa rõ kết quả' }))
+        .expect(500);
+    } finally {
+      spy.mockRestore();
+    }
+    const stored = (await board(owner)).find((item) => item.name === 'Lưu chưa rõ kết quả');
+    if (stored === undefined) {
+      throw new Error('The template was not committed');
+    }
+    const images = Object.values((await detail(owner, stored.id)).images);
+    expect(images).toHaveLength(1);
+    expect((await fetch(images[0]?.url ?? '')).status).toBe(200);
   });
 
   it('belongs to its workspace: another one finds nothing', async () => {

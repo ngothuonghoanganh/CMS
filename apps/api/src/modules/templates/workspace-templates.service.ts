@@ -18,7 +18,11 @@ import { compositionHasForm, compositionOutline, parseComposition } from '@plp/s
 import type { z } from 'zod';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
-import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
+import {
+  commitMayHaveApplied,
+  type Tx,
+  TransactionRunner,
+} from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
@@ -535,7 +539,10 @@ export class WorkspaceTemplatesService {
     };
   }
 
-  /** Writes a version whose images were copied; when the write fails, they are deleted. */
+  /**
+   * Writes a version whose images were copied; when the write fails, they are deleted, unless its
+   * commit may have applied: the version would then name deleted images.
+   */
   private async writing(
     prepared: { images: TemplateImages },
     siteId: ObjectId,
@@ -544,10 +551,12 @@ export class WorkspaceTemplatesService {
     try {
       await write();
     } catch (error) {
-      await this.templateAssets.discard(
-        prepared.images.assets.map((asset) => asset.storageKey),
-        siteId,
-      );
+      if (!commitMayHaveApplied(error)) {
+        await this.templateAssets.discard(
+          prepared.images.assets.map((asset) => asset.storageKey),
+          siteId,
+        );
+      }
       throw error;
     }
   }
