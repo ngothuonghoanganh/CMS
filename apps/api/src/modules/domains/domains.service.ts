@@ -118,7 +118,10 @@ export class DomainsService {
       // Adding writes the site, so two at once in one site conflict: the later one counts the
       // other's domain against the limit.
       await this.transactions.run(async (tx) => {
-        await this.sites.recordDomainCreation(scope, site._id, tx);
+        if (!(await this.sites.recordDomainCreation(scope, site._id, tx))) {
+          // Deleted since it was read (ADR-027).
+          throw notFound(SITE_NOT_FOUND);
+        }
         if ((await this.domains.countForSite(scope, site._id, tx)) >= CUSTOM_DOMAINS_MAX) {
           throw new AppError(
             409,

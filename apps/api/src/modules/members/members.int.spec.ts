@@ -775,9 +775,9 @@ describe('members, invitations and access requests (ADR-021)', () => {
       await owner
         .post(`/workspaces/${workspaceId}/invitations/${before._id.toHexString()}/resend`)
         .expect(200);
-      expect(await t.app.get(InvitationsRepository).claim(before, 'accepted', new Date())).toBe(
-        false,
-      );
+      expect(
+        await t.app.get(InvitationsRepository).claim(before, 'accepted', new Date()),
+      ).toBeNull();
     });
 
     it('sends one address 5 invitations a day, and gives back an email that failed', async () => {

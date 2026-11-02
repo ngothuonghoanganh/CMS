@@ -60,6 +60,13 @@ export interface SiteRecord {
   /** Custom domains added so far; the same guard as `pageSeq`, for their limit (ADR-022). */
   domainSeq?: number;
   /**
+   * Writes of the site's data that would not otherwise write the site (a data request, an image,
+   * a consent version, an activity of the inbox) so far. Writing the site in their transaction
+   * makes it conflict with the deletion of the site: the data is either deleted with the site or
+   * refused once the site is gone, never left behind (ADR-027).
+   */
+  dataSeq?: number;
+  /**
    * Null until the owner saves the settings once. Sites created before ADR-017 lack the field;
    * read it through `sitePrivacyOf`.
    */
@@ -133,6 +140,7 @@ const siteSchema = new Schema<SiteRecord>(
     defaultShareImageAssetId: { type: Schema.Types.ObjectId, default: null },
     pageSeq: { type: Number, default: 0 },
     domainSeq: { type: Number, default: 0 },
+    dataSeq: { type: Number, default: 0 },
     privacy: { type: sitePrivacySchema, default: null },
     leadRecipients: { type: [leadRecipientSchema], default: [] },
     createdBy: { type: Schema.Types.ObjectId, required: true },
@@ -159,12 +167,19 @@ export interface SiteAddressRecord {
   workspaceId: Types.ObjectId;
   /** Lowercase and immutable, like the site's. */
   subdomain: string;
+  /**
+   * Grants naming the site (a member's sites, an invitation's) stored so far. Writing the address
+   * in their transaction makes them conflict with the deletion of the site, which removes it: a
+   * grant never keeps a site that is gone (ADR-027). Addresses created before lack the field.
+   */
+  grantSeq?: number;
 }
 
 export const siteAddressSchema = new Schema<SiteAddressRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     subdomain: { type: String, required: true, lowercase: true, immutable: true },
+    grantSeq: { type: Number, default: 0 },
   },
   { collection: 'site_addresses', versionKey: false },
 );

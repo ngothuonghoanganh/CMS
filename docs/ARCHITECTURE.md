@@ -1843,6 +1843,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Bằng chứng đồng ý có `consent.snapshot` (phiên bản, đơn vị, link chính sách, nội dung) là `null`.
     - Admin, CSV và JSON xuất dữ liệu một người ghi "Không còn bản lưu nội dung đồng ý (trang bị xóa đúng lúc khách gửi form)".
     - Contract: các trường của release trong bằng chứng đồng ý nằm dưới `consent.snapshot`.
+- **Amended 2026-11-02 (review toàn vẹn dữ liệu sau E1–E6):** mọi việc ghi dữ liệu của một site đều xung đột với việc xóa site đó.
+  - Transaction nào lưu một document của site mà không ghi gì việc xóa cũng ghi, thì trước hết tăng `sites.dataSeq`; site đã mất thì trả 404 "Không tìm thấy site". Gồm: ghi nhận yêu cầu dữ liệu, tải ảnh lên, tạo phiên bản đồng ý, "Xóa dữ liệu người này", và activity `lead.exported` (nay ghi trong một transaction ngắn). Việc xóa site vì vậy hoặc chờ rồi xóa luôn document đó, hoặc làm việc ghi thất bại.
+  - Ảnh bị từ chối thì file vừa lưu bị xóa (`AssetStorage.delete`); xóa lỗi thì log.
+  - Tạo trang và thêm tên miền trên site vừa bị xóa trả 404, không 500. Hoàn tất yêu cầu dữ liệu của site vừa bị xóa trả 404.
+  - **Quyền theo site:** lưu một lần giao quyền (đổi quyền, mời, duyệt yêu cầu đổi quyền) tăng `grantSeq` của `site_addresses` các site đó trong cùng transaction; site đã mất thì 422 `site_not_found`. Nhận lời mời dựng membership từ lời mời đúng như lúc `claim` đóng nó. "Đổi quyền" chỉ lưu các site còn trong workspace; cột phạm vi bỏ qua id đã mất.
+  - `sites.dataSeq` và `site_addresses.grantSeq` có ở document cũ từ lần `$inc` đầu; không cần migration.
+  - Chấp nhận: lượt xem (`analytics_daily`, `analytics_seen`) ghi sau lượt quét vẫn còn tới khi TTL xóa; chúng chỉ có số đếm và hash.
+  - Hai test chạy đua giữa xuất bản và xóa trang kiểm "đúng một bên thắng, không bao giờ có release mất trang", vì MongoDB có thể hủy tạm transaction đang giữ trang và chạy lại nó.
 
 ### ADR-028 — Màn Sites của workspace và số đếm ở Sidebar v2
 

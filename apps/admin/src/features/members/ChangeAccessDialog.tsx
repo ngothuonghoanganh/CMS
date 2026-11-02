@@ -89,7 +89,10 @@ export function ChangeAccessDialog({
   const [sitesError, setSitesError] = useState<string | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
   const wholeWorkspace = option?.wholeWorkspace === true || scope === 'all';
-  const grant: AccessGrant = { role, siteIds: wholeWorkspace ? null : chosen };
+  // A site deleted since the member was given it has no box to untick, and the API refuses it:
+  // only the workspace's sites are kept (ADR-027).
+  const known = chosen.filter((id) => sites.some((site) => site.id === id));
+  const grant: AccessGrant = { role, siteIds: wholeWorkspace ? null : known };
   const summary = option === null ? null : permissionSummary(option.access);
 
   const save = useMutation({
@@ -125,7 +128,7 @@ export function ChangeAccessDialog({
     if (option === null) {
       return;
     }
-    if (!wholeWorkspace && chosen.length === 0) {
+    if (!wholeWorkspace && known.length === 0) {
       setSitesError('Chọn ít nhất một site');
       return;
     }

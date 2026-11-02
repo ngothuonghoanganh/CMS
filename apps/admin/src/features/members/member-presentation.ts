@@ -77,13 +77,16 @@ export function roleChoiceOf(access: Access): RoleChoice {
   return access === 'owner' ? 'admin' : access;
 }
 
-/** "Toàn workspace", or the names of the sites the user can see. */
+/**
+ * "Toàn workspace", or the names of the workspace's sites among `siteIds`. An id of no site of the
+ * workspace is a site deleted since (ADR-027): it gives nothing, so it is not counted.
+ */
 export function scopeLabel(siteIds: readonly string[] | null, sites: readonly Site[]): string {
   if (siteIds === null) {
     return 'Toàn workspace';
   }
   const names = sites.filter((site) => siteIds.includes(site.id)).map((site) => site.name);
-  return names.length === 0 ? `${siteIds.length} site` : names.join(', ');
+  return names.length === 0 ? '0 site' : names.join(', ');
 }
 
 /** Where a pending invitation stands, as the "TRẠNG THÁI" column shows it. */

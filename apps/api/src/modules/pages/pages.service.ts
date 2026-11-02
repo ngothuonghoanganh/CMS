@@ -35,7 +35,7 @@ import { ReleasesRepository } from '../publishing/releases.repository.js';
 import { ASSET_NOT_IN_SITE_MESSAGE } from '../sites/site-management.service.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
-import { SitesService } from '../sites/sites.service.js';
+import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
 import { revisionConflict } from './page-errors.js';
@@ -158,7 +158,10 @@ export class PagesService {
     const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
     const composition = this.initialComposition(site, input.start);
     const page = await this.transactions.run(async (tx) => {
-      await this.sitesRepository.recordPageCreation(scope, site._id, tx);
+      if (!(await this.sitesRepository.recordPageCreation(scope, site._id, tx))) {
+        // Deleted since it was read (ADR-027).
+        throw notFound(SITE_NOT_FOUND);
+      }
       if ((await this.pages.countForSite(scope, site._id, tx)) >= MAX_PAGES_PER_SITE) {
         throw new AppError(409, 'page_limit_reached', PAGE_LIMIT_MESSAGE);
       }

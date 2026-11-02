@@ -182,6 +182,31 @@ export class SitesRepository {
     return result.deletedCount === 1;
   }
 
+  /**
+   * Increments `grantSeq` of the sites a grant names, in the transaction that stores the grant.
+   * The write conflicts with the deletion of any of them, which removes the address: either the
+   * deletion waits and then takes the site out of the stored grant, or the grant finds the site
+   * gone. False when one of them is not a site of the workspace any more.
+   */
+  async holdForGrant(
+    scope: WorkspaceScope,
+    siteIds: readonly ObjectId[],
+    tx: Tx,
+  ): Promise<boolean> {
+    if (siteIds.length === 0) {
+      return true;
+    }
+    const result = await this.addresses
+      .updateMany(
+        { _id: { $in: [...siteIds] }, workspaceId: scope.workspaceId },
+        { $inc: { grantSeq: 1 } },
+        { session: tx },
+      )
+      .exec();
+    // The contract names each site once.
+    return result.matchedCount === siteIds.length;
+  }
+
   /** Applies a settings patch and returns the updated site, or null when it is not in scope. */
   update(scope: WorkspaceScope, siteId: ObjectId, patch: SitePatch): Promise<SiteRecord | null> {
     return this.sites(scope)
@@ -357,32 +382,44 @@ export class SitesRepository {
   /**
    * Increments `pageSeq` inside a page-creation transaction. The write makes concurrent creations
    * in the site conflict, so the page count read afterwards in the same transaction is exact.
+   * False when the site was deleted since it was read (ADR-027).
    */
-  async recordPageCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
-    const result = await this.sites(scope)
-      .updateOne(
-        { _id: siteId, workspaceId: scope.workspaceId },
-        { $inc: { pageSeq: 1 } },
-        { session: tx },
-      )
-      .exec();
-    if (result.matchedCount === 0) {
-      throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
-    }
+  recordPageCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    return this.increment(scope, siteId, 'pageSeq', tx);
   }
 
-  /** Increments `domainSeq` inside the transaction that adds a custom domain (ADR-022). */
-  async recordDomainCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
+  /**
+   * Increments `domainSeq` inside the transaction that adds a custom domain (ADR-022). False when
+   * the site was deleted since it was read (ADR-027).
+   */
+  recordDomainCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    return this.increment(scope, siteId, 'domainSeq', tx);
+  }
+
+  /**
+   * Increments `dataSeq` inside a transaction that stores data of the site without otherwise
+   * writing the site. The write conflicts with the deletion of the site (ADR-027), so either the
+   * deletion waits and deletes the data too, or the data is refused. False when the site is gone:
+   * deleted since it was read, its data already swept, so the transaction must store nothing.
+   */
+  recordDataWrite(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    return this.increment(scope, siteId, 'dataSeq', tx);
+  }
+
+  private async increment(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    counter: 'pageSeq' | 'domainSeq' | 'dataSeq',
+    tx: Tx,
+  ): Promise<boolean> {
     const result = await this.sites(scope)
       .updateOne(
         { _id: siteId, workspaceId: scope.workspaceId },
-        { $inc: { domainSeq: 1 } },
+        { $inc: { [counter]: 1 } },
         { session: tx },
       )
       .exec();
-    if (result.matchedCount === 0) {
-      throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
-    }
+    return result.matchedCount === 1;
   }
 
   /**

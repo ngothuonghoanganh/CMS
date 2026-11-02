@@ -87,10 +87,12 @@ describe('workspace databases', () => {
       await own.collection('pages').countDocuments({ _id: new Types.ObjectId(page.page.id) }),
     ).toBe(1);
     expect(await t.workspaceDb(b.workspaceId).collection('sites').countDocuments()).toBe(0);
+    // The address and the counter grants write to serialize with a deletion (ADR-027): no data.
     expect(await t.connection.collection('site_addresses').findOne({ _id: siteId })).toEqual({
       _id: siteId,
       workspaceId: new Types.ObjectId(a.workspaceId),
       subdomain: site.subdomain,
+      grantSeq: 0,
     });
     const master = await collectionsOf(t.connection);
     expect(master.filter((name) => WORKSPACE_COLLECTIONS.includes(name))).toEqual([]);
