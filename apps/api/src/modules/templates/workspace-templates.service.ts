@@ -325,11 +325,15 @@ export class WorkspaceTemplatesService {
       items: versions.map((version) => ({
         version: version.version,
         note: version.note,
-        source: {
-          pageId: version.source.pageId.toHexString(),
-          pageTitle: version.source.pageTitle,
-          kind: version.source.kind,
-        },
+        // The page is named only to members who open its site (ADR-020): a template every site
+        // uses may come from a site the member does not see.
+        source: this.access.coversSite(scope, version.source.siteId)
+          ? {
+              pageId: version.source.pageId.toHexString(),
+              pageTitle: version.source.pageTitle,
+              kind: version.source.kind,
+            }
+          : { pageId: null, pageTitle: null, kind: version.source.kind },
         reusedFrom: version.reusedFrom,
         createdBy: refOf(users, version.createdBy),
         createdAt: version.createdAt.toISOString(),

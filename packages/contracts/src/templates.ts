@@ -306,10 +306,13 @@ export type WorkspaceTemplateListResponse = z.infer<typeof workspaceTemplateList
 export const templateVersionItemSchema = z.object({
   version: templateVersionSchema,
   note: z.string(),
-  /** The page it was saved from, with its title then. */
+  /**
+   * The page it was saved from, with its title then. Both null for a member who does not open the
+   * page's site (ADR-020): the admin says "một trang ở site khác".
+   */
   source: z.object({
-    pageId: idSchema,
-    pageTitle: z.string(),
+    pageId: idSchema.nullable(),
+    pageTitle: z.string().nullable(),
     kind: z.enum(['live', 'draft']),
   }),
   /** "Dùng lại vN": the version whose content it took; null for a version saved from a page. */

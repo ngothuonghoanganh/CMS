@@ -48,6 +48,10 @@ describe('the version history', () => {
     expect(versionOrigin(v2)).toBe('Thêm bảng so sánh mắc cài');
     expect(versionOrigin(v1)).toBe('Lưu từ trang “Niềng răng tháng 9”');
     expect(versionOrigin({ ...v1, version: 3, reusedFrom: 1 })).toBe('Dùng lại nội dung v1');
+    // The API names no page of a site the member does not open.
+    expect(versionOrigin({ ...v1, source: { pageId: null, pageTitle: null, kind: 'draft' } })).toBe(
+      'Lưu từ một trang ở site khác',
+    );
     expect(versionUsedLabel(2)).toBe('Đã tạo 2 trang');
     expect(versionUsedLabel(0)).toBe('Chưa tạo trang nào');
   });

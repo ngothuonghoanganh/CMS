@@ -513,6 +513,27 @@ describe('workspace templates', () => {
     await owner.post(`/sites/${kitchen.id}/pages`, fromTemplate(limited.id, 1)).expect(201);
   });
 
+  it('names the page a version came from only to members who see its site', async () => {
+    const { pageId } = await pageWithPhoto(owner, spa);
+    const saved = await saveTemplate(owner, saveBody(spa.id, pageId));
+    const elsewhere = await addMember(t, workspaceId, 'editor', [kitchen.id]);
+    const sourceOf = async (client: TestClient) =>
+      templateVersionListResponseSchema.parse(
+        (await client.get(`${base()}/${saved.id}/versions`).expect(200)).body,
+      ).items[0]?.source;
+    expect(await sourceOf(owner)).toEqual({
+      pageId,
+      pageTitle: 'Niềng răng tháng 9',
+      kind: 'draft',
+    });
+    // The template is for every site, but its page is of a site this member does not open.
+    expect(await sourceOf(elsewhere.client)).toEqual({
+      pageId: null,
+      pageTitle: null,
+      kind: 'draft',
+    });
+  });
+
   it('never keeps a site deleted meanwhile among the sites that may use a template', async () => {
     const { pageId } = await pageWithPhoto(owner, smile);
     const sitesRepository = t.app.get(SitesRepository);
