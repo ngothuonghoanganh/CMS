@@ -418,6 +418,19 @@ describe('MembersScreen', () => {
       });
     });
 
+    it('sums up no change while the dialog is untouched', async () => {
+      const user = userEvent.setup();
+      renderScreen({ initialMembers: list });
+      for (const name of ['Thu Hà', 'Gia Huy']) {
+        await user.click(screen.getByRole('button', { name: `Đổi quyền của ${name}` }));
+        const dialog = await screen.findByRole('dialog', { name: `Quyền của ${name}` });
+        expect(within(dialog).getByText('Tóm tắt thay đổi').nextElementSibling).toHaveTextContent(
+          /^Chưa có thay đổi\.$/,
+        );
+        await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+      }
+    });
+
     it('asks for a site when the deleted one was all the member had', async () => {
       const user = userEvent.setup();
       renderScreen({ initialMembers: list });
