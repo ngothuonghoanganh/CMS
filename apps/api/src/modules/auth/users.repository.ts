@@ -4,11 +4,22 @@ import type { UserRef } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
-import { USER_MODEL, type UserRecord } from './user.schema.js';
+import { credentialsVersionOf, USER_MODEL, type UserRecord } from './user.schema.js';
 
 export const USERS_EMAIL_INDEX = 'users_email_unique';
 
 export type UserContact = Pick<UserRecord, '_id' | 'name' | 'email'>;
+
+/** The password a change proved, as it was read: its hash and the credentials version. */
+export interface ProvenCredentials {
+  passwordHash: string;
+  credentialsVersion: number;
+}
+
+/** Matches a credentials version; 0 is also an account from before the field. */
+function credentialsVersionIs(version: number) {
+  return version === 0 ? { $in: [0, null] } : version;
+}
 
 @Injectable()
 export class UsersRepository {
@@ -55,12 +66,35 @@ export class UsersRepository {
     return this.users.findById(id).lean<UserRecord>().exec();
   }
 
-  /** False when the user no longer exists. */
-  async setPasswordHash(id: ObjectId, passwordHash: string, tx: Tx): Promise<boolean> {
-    const result = await this.users
-      .updateOne({ _id: id }, { $set: { passwordHash } }, { session: tx })
+  /**
+   * Sets a new password and moves the user to the next credentials version, which sessions issued
+   * against an earlier one do not pass (ADR-026). With `proven`, only while the user still has
+   * that hash and version: a reset or change committed since they were read wins. The new version;
+   * null when the user is gone or `proven` no longer holds.
+   */
+  async setPassword(
+    id: ObjectId,
+    passwordHash: string,
+    tx: Tx,
+    proven?: ProvenCredentials,
+  ): Promise<number | null> {
+    const filter =
+      proven === undefined
+        ? { _id: id }
+        : {
+            _id: id,
+            passwordHash: proven.passwordHash,
+            credentialsVersion: credentialsVersionIs(proven.credentialsVersion),
+          };
+    const updated = await this.users
+      .findOneAndUpdate(
+        filter,
+        { $set: { passwordHash }, $inc: { credentialsVersion: 1 } },
+        { session: tx, returnDocument: 'after', projection: { credentialsVersion: 1 } },
+      )
+      .lean<Pick<UserRecord, '_id' | 'credentialsVersion'>>()
       .exec();
-    return result.matchedCount === 1;
+    return updated === null ? null : credentialsVersionOf(updated);
   }
 
   async setName(id: ObjectId, name: string): Promise<void> {

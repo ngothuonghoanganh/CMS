@@ -4,7 +4,6 @@ import {
   problemSchema,
   SESSION_COOKIE,
   type MeResponse,
-  type SignupRequest,
   type Site,
   siteSchema,
 } from '@plp/contracts';
@@ -12,7 +11,12 @@ import { Types } from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { requestSignup, signupInput } from '../../../test/client.js';
+import {
+  requestSignup,
+  type SignupInput,
+  signupInput,
+  signupVerifyBody,
+} from '../../../test/client.js';
 import { TEST_ADMIN_ORIGIN } from '../../../test/env.js';
 import { publishableDraft } from '../../../test/compositions.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
@@ -67,9 +71,9 @@ class AddressClient {
   }
 
   /** Both steps of a sign-up (ADR-026): the form, then its emailed link, which signs in. */
-  async confirmSignup(input: SignupRequest, status: number): Promise<request.Response> {
+  async confirmSignup(input: SignupInput, status: number): Promise<request.Response> {
     const token = await requestSignup(this.t.app, input, this);
-    return this.post('/auth/signup/verify', { token }).expect(status);
+    return this.post('/auth/signup/verify', signupVerifyBody(token, input)).expect(status);
   }
 
   async createSite(workspaceId: string): Promise<Site> {

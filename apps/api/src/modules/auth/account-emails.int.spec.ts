@@ -7,7 +7,9 @@ import {
   linkTokenIn,
   SIGNUP_EMAIL_SUBJECT,
   signUp,
+  signupForm,
   signupInput,
+  signupVerifyBody,
   TestClient,
 } from '../../../test/client.js';
 import { TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
@@ -33,8 +35,9 @@ describe('account emails', () => {
     vi.restoreAllMocks();
   });
 
-  const keyOf = (email: string) =>
-    createHmac('sha256', TEST_LOGIN_ATTEMPT_SECRET).update(email).digest('hex');
+  /** The key of a mailbox; the test addresses without `+` or Gmail dots are their own mailbox. */
+  const keyOf = (mailbox: string) =>
+    createHmac('sha256', TEST_LOGIN_ATTEMPT_SECRET).update(mailbox).digest('hex');
 
   const counted = async (email: string) =>
     (
@@ -50,12 +53,12 @@ describe('account emails', () => {
     // The confirmation is the first; the helper reads it.
     await signUp(t.app, input);
     await post('/auth/password/forgot', { email: input.email }).expect(202);
-    await post('/auth/signup', { ...signupInput(), email: input.email }).expect(202);
+    await post('/auth/signup', { ...signupForm(signupInput()), email: input.email }).expect(202);
     expect(await counted(input.email)).toBe(3);
 
     for (const [path, body] of [
       ['/auth/password/forgot', { email: input.email }],
-      ['/auth/signup', { ...signupInput(), email: input.email }],
+      ['/auth/signup', { ...signupForm(signupInput()), email: input.email }],
       ['/auth/signup/resend', { email: input.email }],
     ] as const) {
       const problem = problemSchema.parse((await post(path, body).expect(429)).body);
@@ -68,6 +71,40 @@ describe('account emails', () => {
     ]);
     // Another address has its own limit.
     await post('/auth/password/forgot', { email: signupInput().email }).expect(202);
+  });
+
+  it('counts the emails of one mailbox together, however its address is written', async () => {
+    // One Gmail inbox: `+tag`, dots and googlemail.com all reach it (ADR-021's `mailboxOf`).
+    const first = 'hopthuchung+1@gmail.com';
+    const second = 'hop.thu.chung+2@gmail.com';
+    const signup = (email: string) => post('/auth/signup', { ...signupForm(signupInput()), email });
+
+    await signup(first).expect(202);
+    await signup(second).expect(202);
+    await post('/auth/signup/resend', { email: first }).expect(202);
+    for (const send of [
+      () => signup('hopthuchung+4@googlemail.com'),
+      () => post('/auth/signup/resend', { email: second }),
+    ]) {
+      const problem = problemSchema.parse((await send().expect(429)).body);
+      expect(problem).toMatchObject({
+        code: 'rate_limited',
+        title: 'Đã gửi quá nhiều email tới hộp thư này',
+      });
+    }
+
+    const variants = [first, second, 'hopthuchung+4@googlemail.com'];
+    const sent = t.emails.sent.filter((email) => email.to.some((to) => variants.includes(to)));
+    expect(sent.map((email) => email.to)).toEqual([[first], [second], [first]]);
+    // One count for the mailbox, the refused requests included; none for an address of it.
+    expect(await counted('hopthuchung@gmail.com')).toBe(5);
+    expect(
+      await t.connection
+        .collection('auth_email_limits')
+        .countDocuments({ key: { $in: variants.map(keyOf) } }),
+    ).toBe(0);
+    // Another mailbox has its own limit.
+    await signup('hopthukhac+1@gmail.com').expect(202);
   });
 
   it('limits an email without an account the same way, so the limit tells nothing', async () => {
@@ -120,7 +157,7 @@ describe('account emails', () => {
     const warned = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
-    const response = await post('/auth/signup', input).expect(503);
+    const response = await post('/auth/signup', signupForm(input)).expect(503);
     expect(problemSchema.parse(response.body)).toMatchObject({
       code: 'email_unavailable',
       title: 'Chưa gửi được email, thử lại sau ít phút',
@@ -138,7 +175,10 @@ describe('account emails', () => {
     await post('/auth/signup/resend', { email: input.email }).expect(202);
     const [email] = t.emails.to(input.email);
     expect(email?.subject).toBe(SIGNUP_EMAIL_SUBJECT);
-    await post('/auth/signup/verify', { token: linkTokenIn(email?.text ?? '') ?? '' }).expect(201);
+    await post(
+      '/auth/signup/verify',
+      signupVerifyBody(linkTokenIn(email?.text ?? '') ?? '', input),
+    ).expect(201);
     expect(await counted(input.email)).toBe(1);
   });
 
@@ -164,14 +204,14 @@ describe('account emails', () => {
     vi.spyOn(t.app.get(PendingSignupsRepository), 'replace').mockRejectedValueOnce(
       new Error('connection reset'),
     );
-    await post('/auth/signup', input).expect(500);
+    await post('/auth/signup', signupForm(input)).expect(500);
     expect(await counted(input.email)).toBe(0);
 
     t.emails.failNext('smtp_unavailable');
     vi.spyOn(t.app.get(AuthEmailLimitsRepository), 'giveBack').mockRejectedValueOnce(
       new Error('not primary'),
     );
-    const response = await post('/auth/signup', input).expect(503);
+    const response = await post('/auth/signup', signupForm(input)).expect(503);
     expect(problemSchema.parse(response.body).code).toBe('email_unavailable');
     // Still counted, the safe side; logged without the key that stands for the address.
     expect(await counted(input.email)).toBe(1);

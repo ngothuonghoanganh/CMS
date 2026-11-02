@@ -25,10 +25,14 @@ export const workspaceNameSchema = z
   .min(1, 'Nhập tên workspace')
   .max(80, 'Tên workspace tối đa 80 ký tự');
 
-export const signupRequestSchema = z.object({
+/**
+ * The first step of a sign-up (ADR-026): who signs up, and the workspace's name. No password:
+ * whoever opens the emailed link proves the mailbox and chooses it there. Strict, so a client that
+ * still sends a password is told so instead of having it dropped.
+ */
+export const signupRequestSchema = z.strictObject({
   name: personNameSchema,
   email: emailSchema,
-  password: passwordSchema,
   workspaceName: workspaceNameSchema,
 });
 export type SignupRequest = z.infer<typeof signupRequestSchema>;
@@ -69,7 +73,28 @@ export type AccountEmailResponse = z.infer<typeof accountEmailResponseSchema>;
 export const accountEmailRequestSchema = z.object({ email: emailSchema });
 export type AccountEmailRequest = z.infer<typeof accountEmailRequestSchema>;
 
-export const signupVerifyRequestSchema = z.object({ token: accountLinkTokenSchema });
+/** The sign-up a confirmation link names, for its page; nothing is used up. */
+export const signupLookupRequestSchema = z.object({ token: accountLinkTokenSchema });
+export type SignupLookupRequest = z.infer<typeof signupLookupRequestSchema>;
+
+/** What the form stored: the email, shown as it is, and the names the page lets one edit. */
+export const signupLookupResponseSchema = z.object({
+  email: z.string(),
+  name: z.string(),
+  workspaceName: z.string(),
+});
+export type SignupLookupResponse = z.infer<typeof signupLookupResponseSchema>;
+
+/**
+ * The link's page creates the account: whoever holds the link chooses its password, and may
+ * correct the names typed in the form.
+ */
+export const signupVerifyRequestSchema = z.object({
+  token: accountLinkTokenSchema,
+  password: passwordSchema,
+  name: personNameSchema,
+  workspaceName: workspaceNameSchema,
+});
 export type SignupVerifyRequest = z.infer<typeof signupVerifyRequestSchema>;
 
 export const resetPasswordRequestSchema = z.object({

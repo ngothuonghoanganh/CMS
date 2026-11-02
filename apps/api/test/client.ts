@@ -1,6 +1,6 @@
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import type { MeResponse, SignupRequest } from '@plp/contracts';
+import type { MeResponse, SignupRequest, SignupVerifyRequest } from '@plp/contracts';
 import { meResponseSchema } from '@plp/contracts';
 import type { Connection } from 'mongoose';
 import request from 'supertest';
@@ -44,7 +44,15 @@ export class TestClient {
 
 let counter = 0;
 
-export function signupInput(overrides: Partial<SignupRequest> = {}): SignupRequest {
+/**
+ * An account a test signs up: the sign-up form's fields, and the password chosen on the page of
+ * the emailed link (ADR-026).
+ */
+export interface SignupInput extends SignupRequest {
+  password: string;
+}
+
+export function signupInput(overrides: Partial<SignupInput> = {}): SignupInput {
   counter += 1;
   return {
     name: `Người dùng ${counter}`,
@@ -53,6 +61,16 @@ export function signupInput(overrides: Partial<SignupRequest> = {}): SignupReque
     workspaceName: `Workspace ${counter}`,
     ...overrides,
   };
+}
+
+/** What the sign-up form sends: no password, which the link's page chooses (ADR-026). */
+export function signupForm(input: SignupRequest): SignupRequest {
+  return { name: input.name, email: input.email, workspaceName: input.workspaceName };
+}
+
+/** What the page of a sign-up's link sends to create the account of `input`. */
+export function signupVerifyBody(token: string, input: SignupInput): SignupVerifyRequest {
+  return { token, password: input.password, name: input.name, workspaceName: input.workspaceName };
 }
 
 /** Subject of the email that confirms a sign-up (ADR-026). */
@@ -99,28 +117,30 @@ export async function requestSignup(
   input: SignupRequest,
   client: PostingClient = new TestClient(app),
 ): Promise<string> {
-  await client.post('/auth/signup', input).expect(202);
+  await client.post('/auth/signup', signupForm(input)).expect(202);
   return signupLinkToken(app, input.email);
 }
 
 /**
- * Signs `input` up through both steps of ADR-026, the form and the emailed link, as a person
- * would; `client` then holds the new session.
+ * Signs `input` up through both steps of ADR-026, the form and the emailed link whose page sets
+ * the password, as a person would; `client` then holds the new session.
  */
 export async function signUp(
   app: NestExpressApplication,
-  input: SignupRequest,
+  input: SignupInput,
   client: PostingClient = new TestClient(app),
 ): Promise<MeResponse> {
   const token = await requestSignup(app, input, client);
-  const response = await client.post('/auth/signup/verify', { token }).expect(201);
+  const response = await client
+    .post('/auth/signup/verify', signupVerifyBody(token, input))
+    .expect(201);
   return meResponseSchema.parse(response.body);
 }
 
 /** Signs up a fresh user (owner of a new workspace) and returns the signed-in client. */
 export async function signedUpClient(
   app: NestExpressApplication,
-  overrides: Partial<SignupRequest> = {},
+  overrides: Partial<SignupInput> = {},
 ): Promise<{ client: TestClient; me: MeResponse; workspaceId: string }> {
   const client = new TestClient(app);
   const me = await signUp(app, signupInput(overrides), client);

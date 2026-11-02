@@ -10,7 +10,7 @@ import {
 import type { AttemptWindow } from './login-attempts.repository.js';
 
 /**
- * Account emails per address and hour (ADR-026), shared by every API instance. Counted like
+ * Account emails per mailbox and hour (ADR-026), shared by every API instance. Counted like
  * failed logins (`LoginAttemptsRepository`): atomically before sending, given back when the
  * email did not go out.
  */

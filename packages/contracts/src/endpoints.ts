@@ -13,6 +13,8 @@ import {
   changePasswordRequestSchema,
   loginRequestSchema,
   resetPasswordRequestSchema,
+  signupLookupRequestSchema,
+  signupLookupResponseSchema,
   signupRequestSchema,
   signupVerifyRequestSchema,
   updateMeRequestSchema,
@@ -184,7 +186,15 @@ export const endpoints = {
     query: null,
     response: accountEmailResponseSchema,
   }),
-  /** The link's secret: creates the account and its workspace, then signs in. */
+  /** The sign-up a confirmation link names, for its page; 410 when the link no longer works. */
+  lookupSignup: endpoint({
+    method: 'POST',
+    path: () => '/auth/signup/lookup',
+    request: signupLookupRequestSchema,
+    query: null,
+    response: signupLookupResponseSchema,
+  }),
+  /** The link's secret and a password: creates the account and its workspace, then signs in. */
   verifySignup: endpoint({
     method: 'POST',
     path: () => '/auth/signup/verify',
