@@ -3,10 +3,11 @@ import {
   ctaSchema,
   EMPTY_IMAGE,
   imageRefSchema,
+  type Link,
   type SectionInstance,
   type TemplateContentMode,
 } from '@plp/contracts';
-import { collectLeaves, samplePathsOf, setAtPath } from '@plp/sections/schema';
+import { collectLeaves, type LeafField, samplePathsOf, setAtPath } from '@plp/sections/schema';
 
 /*
  * What a workspace template version holds of a page (ADR-030), as pure functions: the version is
@@ -20,14 +21,14 @@ const NO_LINK = { kind: 'none' } as const;
 function rewriteLeaves(
   section: SectionInstance,
   kind: 'cta' | 'image',
-  rewrite: (value: unknown) => unknown,
+  rewrite: (value: unknown, field: LeafField) => unknown,
 ): SectionInstance {
   let content = section.content;
   for (const leaf of collectLeaves(section, { includeHidden: true })) {
     if (leaf.field.kind !== kind) {
       continue;
     }
-    const next = rewrite(leaf.value);
+    const next = rewrite(leaf.value, leaf.field);
     if (next !== leaf.value) {
       content = setAtPath(content, leaf.path, next);
     }
@@ -46,6 +47,32 @@ function withoutPageLinks(section: SectionInstance): SectionInstance {
   });
 }
 
+/**
+ * The buttons without the source site's own phone number, Zalo and web addresses: they belong to
+ * that business, as its texts do, and another site's page would call it. A button that may lead
+ * anywhere gets "chưa chọn đích"; one that leads to one kind only (the quick contact's call and
+ * Zalo buttons) keeps its kind with nothing to call. A button to a section stays: the section
+ * comes with the template.
+ */
+function withoutContactTargets(section: SectionInstance): SectionInstance {
+  return rewriteLeaves(section, 'cta', (value, field) => {
+    const cta = ctaSchema.safeParse(value);
+    if (!cta.success) {
+      return value;
+    }
+    const { link } = cta.data;
+    if (link.kind !== 'phone' && link.kind !== 'zalo' && link.kind !== 'url') {
+      return value;
+    }
+    if (field.kind !== 'cta' || field.linkKinds === undefined) {
+      return { ...cta.data, link: NO_LINK };
+    }
+    const untargeted: Link =
+      link.kind === 'url' ? { kind: 'url', url: '' } : { kind: link.kind, phone: '' };
+    return { ...cta.data, link: untargeted };
+  });
+}
+
 function withoutImages(section: SectionInstance): SectionInstance {
   return rewriteLeaves(section, 'image', (value) => {
     const image = imageRefSchema.safeParse(value);
@@ -55,9 +82,10 @@ function withoutImages(section: SectionInstance): SectionInstance {
 
 /**
  * The content a version keeps of a page's composition. Never a link to a page of the source site.
- * `sample` ("Đánh dấu toàn bộ chữ là chữ mẫu") marks every text and button label as sample text
- * and empties the image frames, like a system template; `keep` ("Giữ chữ và ảnh như hiện tại")
- * keeps texts, sample marks and images as they are.
+ * `sample` ("Đánh dấu toàn bộ chữ là chữ mẫu") marks every text and button label as sample text,
+ * empties the image frames, like a system template, and drops the phone, Zalo and web targets of
+ * the buttons; `keep` ("Giữ chữ và ảnh như hiện tại") keeps texts, sample marks, images and those
+ * targets as they are: the agency chose to reuse that business's content (ADR-030).
  */
 export function templateContentOf(
   composition: Composition,
@@ -70,7 +98,7 @@ export function templateContentOf(
       if (mode === 'keep') {
         return section;
       }
-      const emptied = withoutImages(section);
+      const emptied = withoutContactTargets(withoutImages(section));
       // Sample text is replaced before publishing anyway: no sentence is left for the user to
       // check as one the AI wrote (ADR-031).
       return { ...emptied, samplePaths: samplePathsOf(emptied), reviewPaths: [] };
