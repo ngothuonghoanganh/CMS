@@ -290,6 +290,52 @@ describe('Toast', () => {
     expect(region).toHaveTextContent('Logo mới đã được áp dụng.');
   });
 
+  it('announces the title, the description and the action as separate sentences', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <Trigger
+          label="Có mô tả"
+          options={{
+            title: 'Đã gửi lại email của “Ưu đãi niềng răng”',
+            description: 'Lead đã được gửi tới 2 địa chỉ.',
+            action: { label: 'Hoàn tác', onClick: () => undefined },
+          }}
+        />
+        <Trigger label="Có dấu chấm" options={{ title: 'Đã lưu.', description: 'Logo mới' }} />
+      </ToastProvider>,
+    );
+    /** What Radix reads out: a live region it fills for a second after a toast shows. */
+    async function announced(): Promise<string> {
+      return waitFor(() => {
+        const live = screen
+          .getAllByRole('status')
+          .filter((element) => element.getAttribute('aria-live') === 'polite')
+          .map((element) => element.textContent)
+          .filter((text) => text !== 'Thông báo ' && text !== '');
+        expect(live).toHaveLength(1);
+        return live[0] ?? '';
+      });
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Có mô tả' }));
+    expect(await announced()).toBe(
+      'Thông báo Đã gửi lại email của “Ưu đãi niềng răng”. Lead đã được gửi tới 2 địa chỉ. Hoàn tác',
+    );
+    // What shows is unchanged: the separators are for assistive technology only.
+    expect(screen.getByText('Đã gửi lại email của “Ưu đãi niềng răng”')).toHaveTextContent(
+      /^Đã gửi lại email của “Ưu đãi niềng răng”$/,
+    );
+    await user.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Lead đã được gửi tới 2 địa chỉ.')).not.toBeInTheDocument();
+    });
+
+    // A title that already ends a sentence is followed by a space only.
+    await user.click(screen.getByRole('button', { name: 'Có dấu chấm' }));
+    expect(await announced()).toBe('Thông báo Đã lưu. Logo mới');
+  });
+
   it('calls the action back and closes ("Hoàn tác")', async () => {
     const user = userEvent.setup();
     const onUndo = vi.fn();
