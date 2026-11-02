@@ -52,6 +52,12 @@
   color: var(--color-ink-2);
 }
 
+/* A link in the sentence, e.g. "Xem vai trò & quyền" (board Members). It keeps its underline:
+   it must stand out from the text around it by more than its color (WCAG 1.4.1). */
+.description a {
+  font-weight: 600;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
