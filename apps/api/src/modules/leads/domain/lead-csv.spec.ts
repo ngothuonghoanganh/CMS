@@ -1,3 +1,4 @@
+import { CONSENT_SNAPSHOT_MISSING_LABEL } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   csvField,
@@ -103,5 +104,11 @@ describe('leadCsvFields', () => {
       '2',
       'Tôi đồng ý để Nha khoa Smile Care liên hệ.',
     ]);
+  });
+
+  it('says the consent text is gone when the release went with its page (ADR-027)', () => {
+    const fields = personCsvFields(lead, 'Trang đã xóa', null);
+    expect(fields).toHaveLength(PERSON_CSV_HEADER.length);
+    expect(fields.slice(-3)).toEqual(['2026-10-24 16:42:07', '', CONSENT_SNAPSHOT_MISSING_LABEL]);
   });
 });

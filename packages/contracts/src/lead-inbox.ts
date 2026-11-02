@@ -192,6 +192,39 @@ export function pageTitleLabel(title: string | null): string {
   return title ?? DELETED_PAGE_LABEL;
 }
 
+/**
+ * The consent texts of the release a visitor sent the form from, with the business name filled in
+ * (ADR-017). `marketingText` is null when the form had no marketing checkbox.
+ */
+export const consentSnapshotSchema = z.object({
+  version: z.number().int().positive(),
+  controllerName: z.string(),
+  policyUrl: z.string(),
+  requiredText: z.string(),
+  marketingText: z.string().nullable(),
+});
+export type ConsentSnapshot = z.infer<typeof consentSnapshotSchema>;
+
+/**
+ * Where a lead's consent texts are gone: a page unpublished and deleted while its form was being
+ * sent took the release along (ADR-027). The lead still holds when the visitor agreed.
+ */
+export const CONSENT_SNAPSHOT_MISSING_LABEL =
+  'Không còn bản lưu nội dung đồng ý (trang bị xóa đúng lúc khách gửi form)';
+
+/**
+ * Consent evidence (ADR-017): when the visitor agreed, the texts of the release they saw, and
+ * their choice of the separate, optional marketing checkbox.
+ */
+const consentEvidenceSchema = z.object({
+  at: isoDateTimeSchema,
+  /** Null when the release is gone (`CONSENT_SNAPSHOT_MISSING_LABEL`). */
+  snapshot: consentSnapshotSchema.nullable(),
+  /** Ticked the marketing checkbox. */
+  marketing: z.boolean(),
+  marketingWithdrawnAt: isoDateTimeSchema.nullable(),
+});
+
 export const leadListItemSchema = z.object({
   id: idSchema,
   name: z.string(),
@@ -229,21 +262,7 @@ export const leadDetailSchema = z.object({
   status: leadStatusSchema,
   note: z.string(),
   spam: z.object({ suspected: z.boolean(), reasons: z.array(spamReasonSchema) }),
-  /**
-   * Consent evidence (ADR-017): when the visitor agreed, and the texts of the release they saw,
-   * with the business name filled in.
-   */
-  consent: z.object({
-    at: isoDateTimeSchema,
-    version: z.number().int().positive(),
-    controllerName: z.string(),
-    policyUrl: z.string(),
-    requiredText: z.string(),
-    marketingText: z.string().nullable(),
-    /** Ticked the separate, optional marketing checkbox. */
-    marketing: z.boolean(),
-    marketingWithdrawnAt: isoDateTimeSchema.nullable(),
-  }),
+  consent: consentEvidenceSchema,
   /** The email notification (ADR-018); null for a lead stored before notifications existed. */
   notification: leadNotificationSchema.nullable(),
   createdAt: isoDateTimeSchema,
@@ -326,16 +345,7 @@ export const personExportFileSchema = z.object({
       device: z.string(),
       status: z.string(),
       note: z.string(),
-      consent: z.object({
-        at: isoDateTimeSchema,
-        version: z.number().int().positive(),
-        controllerName: z.string(),
-        policyUrl: z.string(),
-        requiredText: z.string(),
-        marketingText: z.string().nullable(),
-        marketing: z.boolean(),
-        marketingWithdrawnAt: isoDateTimeSchema.nullable(),
-      }),
+      consent: consentEvidenceSchema,
     }),
   ),
 });

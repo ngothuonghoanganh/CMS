@@ -59,12 +59,14 @@ export function leadDetail(overrides: Partial<LeadDetail> = {}): LeadDetail {
     spam: { suspected: false, reasons: [] },
     consent: {
       at: '2026-10-24T09:42:07.000Z',
-      version: 2,
-      controllerName: 'Công ty TNHH Nha khoa Smile Care',
-      policyUrl: 'https://smilecare.vn/chinh-sach',
-      requiredText:
-        'Tôi đồng ý để Công ty TNHH Nha khoa Smile Care xử lý họ tên và số điện thoại của tôi.',
-      marketingText: 'Nhận thông tin ưu đãi qua Zalo hoặc SMS (không bắt buộc)',
+      snapshot: {
+        version: 2,
+        controllerName: 'Công ty TNHH Nha khoa Smile Care',
+        policyUrl: 'https://smilecare.vn/chinh-sach',
+        requiredText:
+          'Tôi đồng ý để Công ty TNHH Nha khoa Smile Care xử lý họ tên và số điện thoại của tôi.',
+        marketingText: 'Nhận thông tin ưu đãi qua Zalo hoặc SMS (không bắt buộc)',
+      },
       marketing: false,
       marketingWithdrawnAt: null,
     },

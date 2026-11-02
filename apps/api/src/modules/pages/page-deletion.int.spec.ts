@@ -2,11 +2,13 @@ import {
   activityListResponseSchema,
   analyticsReportSchema,
   approvalResponseSchema,
+  CONSENT_SNAPSHOT_MISSING_LABEL,
   dataRequestDetailSchema,
   leadDetailSchema,
   leadListResponseSchema,
   pageListResponseSchema,
   pathStatusResponseSchema,
+  personExportFileSchema,
   pointerMoveResponseSchema,
   previewLinkResponseSchema,
   problemSchema,
@@ -41,12 +43,23 @@ import {
 import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addMember, createSite } from '../../../test/resources.js';
+import { LeadsRepository } from '../leads/leads.repository.js';
 import { LeadNotifier } from '../notifications/lead-notifier.service.js';
 import { RedirectsRepository } from '../publishing/redirects.repository.js';
+import { ReleaseErasureRepository } from '../publishing/release-erasure.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import { PagesRepository } from './pages.repository.js';
 
 const DAY_MS = 86_400_000;
+
+/** A promise and the function that settles it. */
+function gate(): { opened: Promise<void>; open: () => void } {
+  let open = (): void => undefined;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { opened, open };
+}
 
 /** "Xóa trang" (ADR-027): only a page that is not live; leads keep their consent evidence. */
 describe('DELETE /sites/:siteId/pages/:pageId', () => {
@@ -256,7 +269,7 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
       (await owner.get(`/sites/${site.id}/leads/${inbox.items[0]?.id ?? ''}`).expect(200)).body,
     );
     expect(lead).toMatchObject({ page: { id: pageId, title: null }, releaseVersion: 1 });
-    expect(lead.consent.version).toBe(1);
+    expect(lead.consent.snapshot?.version).toBe(1);
     const csv = await owner.post(`/sites/${site.id}/leads/export`, { range: 'all' }).expect(200);
     expect(csv.text).toContain('Trang đã xóa');
     const person = await owner
@@ -315,15 +328,6 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
   });
 
   describe('a publish and a deletion at the same moment', () => {
-    /** A promise and the function that settles it. */
-    function gate(): { opened: Promise<void>; open: () => void } {
-      let open = (): void => undefined;
-      const opened = new Promise<void>((resolve) => {
-        open = resolve;
-      });
-      return { opened, open };
-    }
-
     /** A page that is not live with a draft ready to publish, and the publish request's body. */
     async function readyPage(site: Site) {
       const slug = uniqueSlug('dua');
@@ -417,6 +421,106 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
           .findOne({ _id: oid(pageId) }),
       ).toBeNull();
       expect(await documentsOf('releases', pageId)).toHaveLength(0);
+    });
+  });
+
+  describe('a lead sent while its page is unpublished and deleted', () => {
+    it('removes the lead stored after the deletion took its release, and answers 404', async () => {
+      const site = await formSite();
+      const { pageId, published } = await createLiveFormPage(owner, site.id, uniqueSlug('giua'));
+      const leads = t.app.get(LeadsRepository);
+      const insert = leads.insertPublic.bind(leads);
+      // Intake read the page as live; it is unpublished and deleted before the lead is stored, so
+      // the deletion found no lead referring to the release and deleted it too.
+      const spy = vi.spyOn(leads, 'insertPublic').mockImplementation(async (...args) => {
+        await unpublish(site.id, pageId, published.release.id);
+        await remove(owner, site.id, pageId).expect(204);
+        return insert(...args);
+      });
+      try {
+        const refused = await submitLead(
+          t,
+          site.subdomain,
+          leadBody(published.release.id, { name: 'Gửi lúc xóa' }),
+        ).expect(404);
+        expect(problemSchema.parse(refused.body).title).toBe('Form này không còn nhận đăng ký');
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await documentsOf('leads', pageId)).toHaveLength(0);
+      expect(await documentsOf('releases', pageId)).toHaveLength(0);
+    });
+
+    it('shows the consent evidence as missing for a lead stored before the deletion committed', async () => {
+      const site = await formSite();
+      const recipient = `nhan-${site.subdomain}@smilecare.vn`;
+      const { pageId, published } = await createLiveFormPage(owner, site.id, uniqueSlug('sot'));
+      const leads = t.app.get(LeadsRepository);
+      const releases = t.app.get(ReleaseErasureRepository);
+      const insert = leads.insertPublic.bind(leads);
+      const deleteForPage = releases.deleteForPage.bind(releases);
+      const deleting = gate();
+      const commit = gate();
+      let deleted: Promise<number> = Promise.resolve(0);
+      // The deletion has deleted the release in its transaction and waits before committing.
+      const releaseSpy = vi.spyOn(releases, 'deleteForPage').mockImplementation(async (...args) => {
+        await deleteForPage(...args);
+        deleting.open();
+        await commit.opened;
+      });
+      // Intake read the page as live; the lead is stored, and its release read again, while the
+      // deletion's transaction is open: the release is still there for anyone outside it.
+      const insertSpy = vi.spyOn(leads, 'insertPublic').mockImplementation(async (...args) => {
+        await unpublish(site.id, pageId, published.release.id);
+        deleted = remove(owner, site.id, pageId).then((response) => response.status);
+        await deleting.opened;
+        return insert(...args);
+      });
+      try {
+        await submitLead(
+          t,
+          site.subdomain,
+          leadBody(published.release.id, { name: 'Lưu lúc xóa' }),
+        ).expect(201);
+        commit.open();
+        expect(await deleted).toBe(204);
+      } finally {
+        insertSpy.mockRestore();
+        releaseSpy.mockRestore();
+      }
+      expect(await documentsOf('releases', pageId)).toHaveLength(0);
+      const [stored] = await documentsOf('leads', pageId);
+      const leadId = String(stored?.['_id']);
+
+      const lead = leadDetailSchema.parse(
+        (await owner.get(`/sites/${site.id}/leads/${leadId}`).expect(200)).body,
+      );
+      expect(lead).toMatchObject({
+        name: 'Lưu lúc xóa',
+        page: { id: pageId, title: null },
+        releaseVersion: 1,
+        consent: { snapshot: null, marketing: false, marketingWithdrawnAt: null },
+      });
+      const json = await owner
+        .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'json' })
+        .expect(200);
+      const file = personExportFileSchema.parse(JSON.parse(json.text));
+      expect(file.leads.find((item) => item.name === 'Lưu lúc xóa')?.consent).toMatchObject({
+        snapshot: null,
+      });
+      const csv = await owner
+        .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'csv' })
+        .expect(200);
+      // When they agreed, no version, and the text column says why.
+      const row = csv.text.split('\r\n').find((line) => line.includes('Lưu lúc xóa')) ?? '';
+      expect(row.endsWith(`,,${CONSENT_SNAPSHOT_MISSING_LABEL}`)).toBe(true);
+      expect(row.split(',').at(-3)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+      // The email never needed the release.
+      await vi.waitFor(() => {
+        expect(t.emails.to(recipient).some((email) => email.text.includes('Lưu lúc xóa'))).toBe(
+          true,
+        );
+      });
     });
   });
 

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  CONSENT_SNAPSHOT_MISSING_LABEL,
   endpoints,
   formatLeadPhone,
   LEAD_NOTE_MAX,
@@ -276,6 +277,9 @@ export function LeadDetailPanel({
   const noteChanged = noteDraft !== null && noteDraft.trim() !== lead.note;
   const pendingStatus = update.isPending ? update.variables.status : undefined;
   const { consent } = lead;
+  const { snapshot } = consent;
+  // Without the release's texts (ADR-027), the form had a marketing checkbox only if it was ticked.
+  const marketingBox = snapshot === null ? consent.marketing : snapshot.marketingText !== null;
   const delivery = notificationView(lead.notification, lead.spam.suspected);
 
   return (
@@ -377,9 +381,11 @@ export function LeadDetailPanel({
           <ul className={styles.evidenceList}>
             <li>
               <CheckIcon size={16} strokeWidth={2.4} className={styles.evidenceYes} />
-              Đồng ý để {consent.controllerName} xử lý dữ liệu
+              {snapshot === null
+                ? 'Đồng ý xử lý dữ liệu'
+                : `Đồng ý để ${snapshot.controllerName} xử lý dữ liệu`}
             </li>
-            {consent.marketingText === null ? null : (
+            {marketingBox ? (
               <li>
                 {consent.marketing ? (
                   <CheckIcon size={16} strokeWidth={2.4} className={styles.evidenceYes} />
@@ -393,19 +399,25 @@ export function LeadDetailPanel({
                   ? ''
                   : ` · đã rút ngày ${formatDate(consent.marketingWithdrawnAt)}`}
               </li>
-            )}
+            ) : null}
           </ul>
           <p className={styles.evidenceMeta}>
-            {`Nội dung đồng ý bản ${consent.version} · ${consentMoment(consent.at)} · `}
-            <button
-              type="button"
-              className={styles.linkButton}
-              onClick={() => {
-                setEvidenceOpen(true);
-              }}
-            >
-              Xem nội dung
-            </button>
+            {snapshot === null ? (
+              `${CONSENT_SNAPSHOT_MISSING_LABEL} · ${consentMoment(consent.at)}`
+            ) : (
+              <>
+                {`Nội dung đồng ý bản ${snapshot.version} · ${consentMoment(consent.at)} · `}
+                <button
+                  type="button"
+                  className={styles.linkButton}
+                  onClick={() => {
+                    setEvidenceOpen(true);
+                  }}
+                >
+                  Xem nội dung
+                </button>
+              </>
+            )}
           </p>
         </section>
 
@@ -568,7 +580,15 @@ export function LeadDetailPanel({
         </div>
       ) : null}
 
-      <ConsentEvidenceDialog consent={consent} open={evidenceOpen} onOpenChange={setEvidenceOpen} />
+      {snapshot === null ? null : (
+        <ConsentEvidenceDialog
+          snapshot={snapshot}
+          at={consent.at}
+          marketing={consent.marketing}
+          open={evidenceOpen}
+          onOpenChange={setEvidenceOpen}
+        />
+      )}
       {canManage && editKey > 0 ? (
         <EditLeadContactDialog
           key={editKey}

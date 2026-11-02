@@ -163,6 +163,14 @@ export class LeadIntakeService {
       await this.leads.deletePublic(site, site._id, stored._id);
       throw notFound(FORM_NOT_FOUND);
     }
+    if ((await this.releases.findPublicOwner(site, release._id)) === null) {
+      // The page was unpublished and deleted meanwhile (ADR-027). The deletion keeps the releases
+      // leads refer to, but it read them before this lead was stored, so this lead's consent
+      // evidence went with the page (rule 10). A lead stored while the deletion's transaction was
+      // still open can pass this read; reading such a lead shows its evidence as missing.
+      await this.leads.deletePublic(site, site._id, stored._id);
+      throw notFound(FORM_NOT_FOUND);
+    }
     const latest = retentionOf(current.privacy);
     if (latest !== retention) {
       await this.leads.setPublicExpiry(

@@ -158,10 +158,11 @@ export class LeadExportService {
       const rows = included.map((item) => {
         const capture = consentOf(captures, item);
         return csvRecord(
-          personCsvFields(item, pageTitleLabel(pageTitleOf(titles, item.pageId)), {
-            version: capture.consentVersion,
-            requiredText: capture.requiredText,
-          }),
+          personCsvFields(
+            item,
+            pageTitleLabel(pageTitleOf(titles, item.pageId)),
+            capture && { version: capture.consentVersion, requiredText: capture.requiredText },
+          ),
         );
       });
       return {
