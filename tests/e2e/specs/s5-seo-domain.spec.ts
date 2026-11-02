@@ -257,13 +257,13 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
       .click();
     await expect(page).toHaveURL(new RegExp(`/sites/${site.id}/domain$`));
 
-    const addresses = page.getByRole('region', { name: '1 địa chỉ' }).getByRole('listitem');
+    const addresses = page.getByRole('region', { name: 'Địa chỉ của site' }).getByRole('listitem');
     await expect(addresses).toHaveCount(1);
     await expect(addresses.getByText(host, { exact: true })).toBeVisible();
     await expect(addresses).toContainText('ĐỊA CHỈ CHÍNH');
     await expect(addresses).toContainText('MẶC ĐỊNH');
     await expect(addresses).toContainText('Có sẵn khi tạo site, luôn hoạt động.');
-    // Custom domains came with C3 (ADR-022); c3-domains.spec.ts connects one.
+    // Board 13 names the list "Địa chỉ của site" until a custom domain is added (ADR-022).
     await expect(page.getByRole('heading', { name: 'Chưa có tên miền riêng' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Kết nối tên miền riêng' }).first()).toBeVisible();
   });
