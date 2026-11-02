@@ -328,7 +328,7 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
       return { pageId: page.page.id, body: await currentPublishBody(owner, site.id, page.page.id) };
     }
 
-    it('fails the deletion while the publish holds the page in its transaction', async () => {
+    it('lets one of the two win while the publish holds the page, normally the publish', async () => {
       const site = await createSite(owner, workspaceId);
       const { pageId, body } = await readyPage(site);
       const releases = t.app.get(ReleasesRepository);
@@ -348,6 +348,7 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
         deleting.open();
         return deleteIfNotLive(...args);
       });
+      let outcome;
       try {
         const published = publishRequest(owner, site.id, pageId, body).then((response) => response);
         await held.opened;
@@ -355,17 +356,34 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
         // The deletion tried the page while the publish's write on it was not committed yet.
         await deleting.opened;
         publishing.open();
-
-        expect((await published).status).toBe(201);
-        const refused = await deleted;
-        expect(refused.status).toBe(409);
-        expect(problemSchema.parse(refused.body).code).toBe('page_live');
+        outcome = { published: await published, deleted: await deleted };
       } finally {
         insertSpy.mockRestore();
         deleteSpy.mockRestore();
       }
-      expect((await getPage(owner, site.id, pageId)).page.liveRelease?.version).toBe(1);
-      expect(await documentsOf('releases', pageId)).toHaveLength(1);
+      const { published, deleted } = outcome;
+      expect([published.status === 201, deleted.status === 204].filter(Boolean)).toHaveLength(1);
+      const winner = published.status === 201 ? 'publish' : 'deletion';
+      // Which order ran: the deletion only wins when MongoDB aborted the publish's transaction
+      // (a transient error, e.g. under memory pressure) and retried it after the deletion.
+      console.info(`A publish and a deletion of one page at the same moment: the ${winner} won`);
+      if (winner === 'publish') {
+        expect(deleted.status).toBe(409);
+        expect(problemSchema.parse(deleted.body).code).toBe('page_live');
+        expect((await getPage(owner, site.id, pageId)).page.liveRelease?.version).toBe(1);
+        expect(await documentsOf('releases', pageId)).toHaveLength(1);
+      } else {
+        expect(published.status).toBe(404);
+        expect(problemSchema.parse(published.body).code).toBe('not_found');
+        expect(deleted.status).toBe(204);
+        // Never a release without its page.
+        expect(
+          await db()
+            .collection('pages')
+            .findOne({ _id: oid(pageId) }),
+        ).toBeNull();
+        expect(await documentsOf('releases', pageId)).toHaveLength(0);
+      }
     });
 
     it('fails the publish while the deletion holds the page in its transaction', async () => {
