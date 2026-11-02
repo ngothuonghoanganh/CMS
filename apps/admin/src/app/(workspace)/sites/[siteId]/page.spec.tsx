@@ -202,6 +202,53 @@ describe('dashboard route', () => {
     expect(screen.getByRole('link', { name: livePage.title })).toBeInTheDocument();
   });
 
+  it('keeps the filters chosen while the refresh after "Xóa trang" ran', async () => {
+    const user = userEvent.setup();
+    const view = renderRoute(await serverRender());
+    apiMock.mockImplementation((endpoint, _args, options) => {
+      switch (endpoint) {
+        case endpoints.deletePage:
+          return Promise.resolve(undefined);
+        case endpoints.listPages:
+          return Promise.resolve(
+            listFor((options as { query: Parameters<typeof listFor>[0] }).query),
+          );
+        case endpoints.listActivity:
+          return Promise.resolve({ items: [], nextCursor: null });
+        case endpoints.leadCounts:
+          return Promise.resolve(NO_LEADS);
+        default:
+          return Promise.reject(new Error('unexpected call'));
+      }
+    });
+    await user.click(screen.getByRole('button', { name: 'Xem thêm trang' }));
+    await user.click(
+      await screen.findByRole('button', { name: `Tùy chọn khác cho ${draftPage.title}` }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Xóa trang' }),
+    );
+    await vi.waitFor(() => {
+      expect(router.refresh).toHaveBeenCalled();
+    });
+
+    // The user filters before the refresh comes back: it renders the filters the screen had.
+    await user.click(filterButton('Bản nháp · 1'));
+    vi.setSystemTime(LOADED_AT + 5_000);
+    view.rerender(await serverRender(SITE_ID, {}));
+
+    expect(filterButton('Bản nháp · 1')).toHaveAttribute('aria-pressed', 'true');
+    expect(window.location.search).toBe('?status=draft');
+
+    // The refresh has rendered: the sidebar's "Trang" starts the screen over again.
+    vi.setSystemTime(LOADED_AT + 10_000);
+    view.rerender(await serverRender(SITE_ID, {}));
+
+    expect(filterButton('Tất cả · 2')).toHaveAttribute('aria-pressed', 'true');
+    expect(window.location.search).toBe('');
+  });
+
   it('starts over for another site', async () => {
     const user = userEvent.setup();
     const view = renderRoute(await serverRender());

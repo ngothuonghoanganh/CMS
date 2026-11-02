@@ -38,6 +38,7 @@ import { internalVisitUrl } from '../../lib/site-url';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import {
   domainsHref,
   leadRecipientsHref,
@@ -101,19 +102,32 @@ function sameFilters(a: DashboardFilters, b: DashboardFilters): boolean {
 export function Dashboard(props: DashboardProps) {
   // The filters on screen, as the URL holds them: the search once typing stops.
   const [shown, setShown] = useState(props.initialFilters);
+  // The filters on screen when the screen refreshed the route ("Xóa trang"), until it renders.
+  const [refreshedWith, setRefreshedWith] = useState<DashboardFilters | null>(null);
   const [rendered, setRendered] = useState({ loadedAt: props.loadedAt, screen: 0 });
   if (rendered.loadedAt !== props.loadedAt) {
     // A server render for other filters than the ones on screen comes from a navigation (the
     // sidebar's "Trang" while filtering): the screen starts again from its filters, as on a visit.
     // A refresh renders the URL the screen wrote (the sidebar's "Trang N" after "Xóa trang"): the
     // screen stays, with its focus, the search being typed and the pages "Xem thêm trang" loaded.
-    const navigated = !sameFilters(props.initialFilters, shown);
+    // The filters chosen while the refresh ran stay too: it renders those the screen had then.
+    const navigated =
+      !sameFilters(props.initialFilters, shown) &&
+      (refreshedWith === null || !sameFilters(props.initialFilters, refreshedWith));
     setRendered({ loadedAt: props.loadedAt, screen: rendered.screen + (navigated ? 1 : 0) });
+    setRefreshedWith(null);
     if (navigated) {
       setShown(props.initialFilters);
     }
   }
-  return <DashboardScreen key={rendered.screen} {...props} onFiltersShown={setShown} />;
+  return (
+    <DashboardScreen
+      key={rendered.screen}
+      {...props}
+      onFiltersShown={setShown}
+      onRefreshing={setRefreshedWith}
+    />
+  );
 }
 
 function DashboardScreen({
@@ -127,7 +141,11 @@ function DashboardScreen({
   loadedAt,
   role,
   onFiltersShown,
-}: DashboardProps & { onFiltersShown: (filters: DashboardFilters) => void }) {
+  onRefreshing,
+}: DashboardProps & {
+  onFiltersShown: (filters: DashboardFilters) => void;
+  onRefreshing: (filters: DashboardFilters) => void;
+}) {
   const queryClient = useQueryClient();
   const now = useNow(loadedAt);
   const canEditPages = can(role, 'pages.edit');
@@ -433,7 +451,7 @@ function DashboardScreen({
               loading={pagesQuery.isFetchingNextPage}
               onClick={() => {
                 expectMore();
-                void pagesQuery.fetchNextPage();
+                void fetchNextPageAfterRead(pagesQuery);
               }}
             >
               Xem thêm trang
@@ -461,6 +479,10 @@ function DashboardScreen({
           page={deleteTarget}
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
+          onDeleted={() => {
+            // The route's refresh follows: it renders the filters on screen now.
+            onRefreshing(filters);
+          }}
           fallbackFocusRef={searchRef}
         />
       )}
