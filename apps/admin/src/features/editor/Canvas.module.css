@@ -78,7 +78,8 @@
 }
 
 .chrome:hover .chip,
-.selected .chip {
+.selected .chip,
+.chip.reading {
   opacity: 1;
 }
 

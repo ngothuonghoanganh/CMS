@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { aiJobEventSchema, aiPageJobRequestSchema } from './ai.js';
+import {
+  aiJobEventSchema,
+  aiPageJobRequestSchema,
+  aiSuggestionEventSchema,
+  aiSuggestionRequestSchema,
+  contentPathSchema,
+} from './ai.js';
 import { compositionSchema } from './composition.js';
 
 const BRIEF = {
@@ -73,5 +79,110 @@ describe('reviewPaths of a section (ADR-031)', () => {
       ],
     });
     expect(parsed.sections[0]?.reviewPaths).toEqual([]);
+  });
+});
+
+describe('a request to the assistant (ADR-031, board 21)', () => {
+  const HERO = {
+    id: 'abcdefgh1234',
+    type: 'hero',
+    variant: 'split',
+    texts: { heading: 'Niềng răng trong suốt', 'primaryCta.label': 'Đặt lịch' },
+  } as const;
+
+  function messages(input: unknown): string[] {
+    const parsed = aiSuggestionRequestSchema.safeParse(input);
+    return parsed.success ? [] : parsed.error.issues.map((issue) => issue.message);
+  }
+
+  it('takes a scope, an action and the scope’s text; the instruction is optional', () => {
+    const parsed = aiSuggestionRequestSchema.parse({
+      scope: { kind: 'section', sectionId: HERO.id },
+      action: 'rewrite',
+      sections: [HERO],
+    });
+    expect(parsed.instruction).toBe('');
+    expect(
+      messages({
+        scope: { kind: 'field', sectionId: HERO.id, path: 'items.1.answer' },
+        action: 'shorten',
+        instruction: '  nhấn mạnh trả góp 0%  ',
+        sections: [HERO],
+      }),
+    ).toEqual([]);
+  });
+
+  it('needs what each action needs', () => {
+    const base = { scope: { kind: 'page' }, sections: [HERO] };
+    expect(messages({ ...base, action: 'custom', instruction: '   ' })).toEqual([
+      'Nhập yêu cầu cho trợ lý',
+    ]);
+    expect(messages({ ...base, action: 'change_tone' })).toEqual(['Chọn giọng văn']);
+    expect(messages({ ...base, action: 'suggest_seo' })).toEqual(['Thiếu tiêu đề và mô tả SEO']);
+    expect(
+      messages({
+        ...base,
+        scope: { kind: 'section', sectionId: HERO.id },
+        action: 'suggest_seo',
+        seo: { title: '', description: '' },
+      }),
+    ).toEqual(['Gợi ý SEO dùng chữ của toàn trang']);
+    expect(messages({ ...base, action: 'rewrite', instruction: 'a'.repeat(301) })).toEqual([
+      'Tối đa 300 ký tự',
+    ]);
+  });
+
+  it('accepts content paths only', () => {
+    for (const path of ['heading', 'primaryCta.label', 'items.11.answer']) {
+      expect(contentPathSchema.safeParse(path).success).toBe(true);
+    }
+    for (const path of ['', '.heading', 'items..title', '__proto__.x', 'heading;']) {
+      expect(contentPathSchema.safeParse(path).success).toBe(false);
+    }
+  });
+
+  it('reads the result line: changes, failed parts, whether a use was spent', () => {
+    const line = {
+      type: 'result',
+      result: {
+        changes: [
+          {
+            status: 'ok',
+            sectionId: HERO.id,
+            path: 'heading',
+            before: 'Niềng răng trong suốt',
+            after: 'Niềng răng không ai nhận ra',
+            review: false,
+          },
+          {
+            status: 'ok',
+            sectionId: 'seo',
+            path: 'title',
+            before: '',
+            after: 'Niềng răng',
+            review: false,
+          },
+          {
+            status: 'failed',
+            sectionId: HERO.id,
+            path: 'primaryCta.label',
+            before: 'Đặt lịch',
+            failure: 'ai_invalid_output',
+          },
+        ],
+        charged: true,
+        failure: null,
+        usage: {
+          enabled: true,
+          month: '2026-11',
+          limit: 100,
+          used: 4,
+          remaining: 96,
+          resetsOn: '2026-12-01',
+        },
+      },
+    };
+    expect(aiSuggestionEventSchema.parse(line)).toEqual(line);
+    expect(aiSuggestionEventSchema.parse({ type: 'heartbeat' })).toEqual({ type: 'heartbeat' });
   });
 });

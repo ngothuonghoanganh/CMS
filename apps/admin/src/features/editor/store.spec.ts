@@ -303,6 +303,84 @@ describe('editor store: text the AI wrote to review (ADR-031)', () => {
   });
 });
 
+describe('editor store: applying the AI assistant’s suggestions (ADR-031)', () => {
+  it('writes every accepted change as one undo step, marking what to check', () => {
+    const store = makeStore();
+    const before = store.getState().draft;
+    expect(sectionById(store, HERO).samplePaths).toContain('heading');
+    const count = store.getState().applyAiChanges([
+      { sectionId: HERO, path: 'heading', after: 'Niềng răng không ai nhận ra', review: false },
+      { sectionId: HERO, path: 'subheading', after: 'Giảm 3 triệu trước 30/11.', review: true },
+      { sectionId: FAQ, path: 'items.1.answer', after: 'Từ 6 đến 18 tháng.', review: true },
+    ]);
+    expect(count).toBe(3);
+    const hero = sectionById(store, HERO);
+    expect(hero.content).toMatchObject({
+      heading: 'Niềng răng không ai nhận ra',
+      subheading: 'Giảm 3 triệu trước 30/11.',
+    });
+    // The AI's text is no sample any more; the figures are to check.
+    expect(hero.samplePaths).not.toContain('heading');
+    expect(hero.samplePaths).not.toContain('subheading');
+    expect(hero.reviewPaths).toEqual(['subheading']);
+    expect(sectionById(store, FAQ).reviewPaths).toEqual(['items.1.answer']);
+    expect(store.getState().history.past).toHaveLength(1);
+    expect(store.getState().saveState).toBe('dirty');
+
+    expect(store.getState().undo()).toBe(true);
+    expect(store.getState().draft).toBe(before);
+    expect(store.getState().redo()).toBe(true);
+    expect(sectionById(store, HERO).content['heading']).toBe('Niềng răng không ai nhận ra');
+  });
+
+  it('writes the SEO through the SEO command’s rule, in the same step', () => {
+    const store = makeStore();
+    expect(
+      store.getState().applyAiChanges([
+        { sectionId: 'seo', path: 'title', after: 'Niềng răng trong suốt', review: false },
+        { sectionId: 'seo', path: 'description', after: 'Tư vấn miễn phí.', review: false },
+        { sectionId: HERO, path: 'heading', after: 'Tiêu đề mới', review: false },
+      ]),
+    ).toBe(3);
+    expect(store.getState().draft.seo).toMatchObject({
+      title: 'Niềng răng trong suốt',
+      description: 'Tư vấn miễn phí.',
+    });
+    expect(store.getState().history.past).toHaveLength(1);
+    // What the SEO command refuses, the apply refuses whole.
+    expect(
+      store.getState().applyAiChanges([
+        { sectionId: 'seo', path: 'title', after: 'x'.repeat(201), review: false },
+        { sectionId: HERO, path: 'heading', after: 'Tiêu đề khác', review: false },
+      ]),
+    ).toBe(0);
+    expect(sectionById(store, HERO).content['heading']).toBe('Tiêu đề mới');
+    expect(store.getState().history.past).toHaveLength(1);
+  });
+
+  it('writes only text the AI may write, in sections that still exist', () => {
+    const store = makeStore();
+    expect(
+      store.getState().applyAiChanges([
+        { sectionId: HERO, path: 'primaryCta.link', after: 'https://example.com', review: false },
+        { sectionId: FOOTER, path: 'phone', after: '0900000000', review: false },
+        { sectionId: 'gone00000001', path: 'heading', after: 'Mất rồi', review: false },
+        { sectionId: FAQ, path: 'items.9.answer', after: 'Không có mục này', review: false },
+      ]),
+    ).toBe(0);
+    expect(store.getState().history.past).toHaveLength(0);
+    // Text longer than the field is cut to it, as typing would be.
+    expect(
+      store
+        .getState()
+        .applyAiChanges([
+          { sectionId: HERO, path: 'heading', after: 'a'.repeat(120), review: false },
+        ]),
+    ).toBe(1);
+    expect(String(sectionById(store, HERO).content['heading'])).toHaveLength(80);
+  });
+});
+
 describe('editor store: layout and visibility', () => {
   it('sets a known variant only', () => {
     const store = makeStore();

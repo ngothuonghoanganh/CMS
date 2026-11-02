@@ -1,6 +1,11 @@
 import type { z } from 'zod';
 import { activityListQuerySchema, activityListResponseSchema } from './activity.js';
-import { aiJobSchema, aiPageJobRequestSchema, aiUsageSchema } from './ai.js';
+import {
+  aiJobSchema,
+  aiPageJobRequestSchema,
+  aiSuggestionRequestSchema,
+  aiUsageSchema,
+} from './ai.js';
 import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
   assetListQuerySchema,
@@ -1158,6 +1163,22 @@ export const endpoints = {
     request: null,
     query: null,
     response: aiJobSchema,
+  }),
+  /**
+   * The assistant of the editor (board 21): suggestions for the scope's text, never a change of the
+   * draft. 200 with an NDJSON stream (`AI_JOB_STREAM_TYPE`) of `aiSuggestionEventSchema` lines,
+   * heartbeats then the result; one use is spent when at least one change came back, and given
+   * back when the client goes away first ("Hủy"). Refused before the stream starts: 409
+   * `ai_disabled`, 429 `rate_limited` or `ai_quota_exhausted`, 422 for a path the AI may not write
+   * or nothing to write.
+   */
+  aiSuggestions: endpoint({
+    method: 'POST',
+    path: (siteId: string, pageId: string) =>
+      `/sites/${e(siteId)}/pages/${e(pageId)}/ai/suggestions`,
+    request: aiSuggestionRequestSchema,
+    query: null,
+    response: null,
   }),
 
   // Activity

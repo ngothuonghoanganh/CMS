@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useAiReading } from './assistant/ai-assistant-context';
 import styles from './Canvas.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { focusOutlineRow } from './focus-target';
@@ -91,6 +92,7 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
   const missingAlt = imagesMissingAlt(section);
   const canInsertAfter = definition.position !== 'last';
   const full = sections.length >= MAX_SECTIONS;
+  const reading = useAiReading(section.id);
 
   // A move that reaches the first or last free slot disables the focused button, which would drop
   // focus to <body>: keep it on that button, else the other one, else the structure row.
@@ -132,8 +134,12 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
       onClick={select}
       onFocus={select}
     >
-      <span className={styles.chip} aria-hidden="true">
-        {kind}
+      {/* The assistant says what it reads in its panel; the chip shows it on the canvas. */}
+      <span
+        className={[styles.chip, reading ? styles.reading : undefined].filter(Boolean).join(' ')}
+        aria-hidden="true"
+      >
+        {reading ? `${kind} · AI đang đọc` : kind}
       </span>
       {selected ? (
         <div

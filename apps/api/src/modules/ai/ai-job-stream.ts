@@ -12,17 +12,24 @@ export const HEARTBEAT_MS = 10_000;
 const logger = new Logger('AiJobStream');
 
 /**
- * Streams a run's progress on the response of the request that started it, as NDJSON (ADR-031):
- * `started`, each section's progress, `heartbeat`s, then `finished` with the job. No polling. A
- * client that goes away only stops the stream: the run goes on and ends its job. `no-transform`
- * keeps compressing proxies from holding lines back.
+ * Starts a 200 NDJSON answer at once, before any line: `no-transform` keeps compressing proxies
+ * from holding lines back, `X-Accel-Buffering` keeps nginx from buffering them.
  */
-export function streamRun(response: Response, run: AiRunHandle, heartbeatMs = HEARTBEAT_MS): void {
+export function startNdjson(response: Response): void {
   response.status(200);
   response.setHeader('Content-Type', `${AI_JOB_STREAM_TYPE}; charset=utf-8`);
   response.setHeader('Cache-Control', 'no-store, no-transform');
   response.setHeader('X-Accel-Buffering', 'no');
   response.flushHeaders();
+}
+
+/**
+ * Streams a run's progress on the response of the request that started it, as NDJSON (ADR-031):
+ * `started`, each section's progress, `heartbeat`s, then `finished` with the job. No polling. A
+ * client that goes away only stops the stream: the run goes on and ends its job.
+ */
+export function streamRun(response: Response, run: AiRunHandle, heartbeatMs = HEARTBEAT_MS): void {
+  startNdjson(response);
   const open = () => !response.writableEnded && !response.destroyed;
   const write = (event: AiJobEvent) => {
     if (open()) {

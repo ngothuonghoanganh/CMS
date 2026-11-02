@@ -69,11 +69,7 @@ import {
   initialAiCreateState,
 } from './ai-create-state';
 import styles from './AiCreateScreen.module.css';
-
-/** TanStack Query key of the workspace's AI uses, read through the site (ADR-031). */
-export const aiQueryKeys = {
-  usage: (siteId: string) => ['sites', siteId, 'ai', 'usage'] as const,
-};
+import { aiQueryKeys } from './queries';
 
 const fieldIds: Record<BriefField, string> = {
   product: 'ai-product',

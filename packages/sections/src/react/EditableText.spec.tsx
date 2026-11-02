@@ -29,6 +29,7 @@ function Host({ initial, multiline }: { initial: string; multiline: boolean }) {
     <EditableText
       as="p"
       className={undefined}
+      path="heading"
       value={value}
       multiline={multiline}
       placeholder="Tiêu đề"
@@ -48,6 +49,7 @@ function Controlled({ value }: { value: string }) {
     <EditableText
       as="p"
       className={undefined}
+      path="heading"
       value={value}
       multiline={false}
       placeholder="Tiêu đề"

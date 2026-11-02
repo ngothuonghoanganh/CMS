@@ -18,14 +18,18 @@ import {
   fakeAi,
   finishedJob,
   postAiJob,
+  postSuggestion,
+  scopeTextOf,
   streamEvents,
+  suggestionResultOf,
 } from '../../test/ai.js';
 import { createTestApp, type TestApp } from '../../test/app.js';
 import { requestSignup, signupInput, signupVerifyBody, TestClient } from '../../test/client.js';
-import { formDraft, leadFormSection } from '../../test/compositions.js';
+import { formDraft, heroSection, leadFormSection, sampleSection } from '../../test/compositions.js';
 import { TEST_ADMIN_ORIGIN } from '../../test/env.js';
 import { createLiveFormPage, leadBody, PHONE_UA, submitLead } from '../../test/leads.js';
 import {
+  createPage,
   RecordingRevalidationClient,
   uniqueSlug,
   withRevalidationRecorder,
@@ -357,5 +361,62 @@ describe('request log', () => {
     expect(logged).toContain('"sectionType":"hero"');
     expect(logged).toContain(REDACTED);
     expectNotLogged(brief.product, brief.differentiators, brief.existingContent, answer);
+  });
+
+  it('keeps the assistant’s scope text, request and answers out of the log (ADR-031)', async () => {
+    const heading = 'Tiêu-đề-bí-mật-chưa-lưu';
+    const instruction = 'Yêu-cầu-bí-mật-cho-trợ-lý';
+    const answer = 'Gợi-ý-bí-mật-của-AI';
+    const hero = heroSection({ heading });
+    const faq = sampleSection('faq');
+    const fake = fakeAi(t);
+    fake.respondWith((request) => {
+      if (request.schema.name === 'section_hero') {
+        throw Object.assign(
+          new AiError('unavailable', 'The AI service answered HTTP 500', {
+            status: 500,
+            cause: Object.assign(new Error('upstream'), { output: request.prompt }),
+          }),
+          { request: { system: request.system, prompt: request.prompt } },
+        );
+      }
+      return {
+        text: JSON.stringify({
+          heading: answer,
+          items: [0, 1, 2].map(() => ({ question: `${answer}?`, answer })),
+          review: [],
+        }),
+        usage: { inputTokens: 1, outputTokens: 1 },
+        truncated: false,
+      };
+    });
+    const page = await createPage(owner, site.id);
+    try {
+      const response = await postSuggestion(owner, site.id, page.page.id, {
+        scope: { kind: 'page' },
+        action: 'custom',
+        instruction,
+        sections: [scopeTextOf(hero), scopeTextOf(faq)],
+      })
+        .set('x-request-id', 'log-ai-assistant')
+        .expect(200);
+      expect(suggestionResultOf(response).charged).toBe(true);
+    } finally {
+      fake.reset();
+    }
+
+    expect((await requestLine('log-ai-assistant')).res.statusCode).toBe(200);
+    const logged = await vi.waitFor(() => {
+      const lines = output.join('').split('\n');
+      const failed = lines.find((text) => text.includes('"AI suggestion not written"'));
+      const ended = lines.find((text) => text.includes('"AI suggestion ended"'));
+      if (failed === undefined || ended === undefined) {
+        throw new Error('The suggestion logged no failure or no end');
+      }
+      return failed;
+    });
+    expect(logged).toContain('"target":"hero"');
+    expect(logged).toContain(REDACTED);
+    expectNotLogged(heading, instruction, answer);
   });
 });

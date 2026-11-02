@@ -168,3 +168,166 @@ export const aiUsageSchema = z.object({
   resetsOn: vnDaySchema,
 });
 export type AiUsage = z.infer<typeof aiUsageSchema>;
+
+/*
+ * The assistant in the editor (ADR-031, board 21): suggestions for the text of a field, a section
+ * or the page. A request never changes the draft; the editor applies what the user accepts.
+ */
+
+/** "Hoặc mô tả bạn muốn": the free request, or extra guidance for a chip. */
+export const AI_INSTRUCTION_MAX = 300;
+
+/**
+ * The chips of board 21, then the free request (`custom`). Each writes some of the scope's text:
+ * every field the AI may write, the headings only ("Gợi ý tiêu đề"), the button labels only
+ * ("Gợi ý CTA"), or the page's SEO title and description ("Gợi ý SEO").
+ */
+export const aiAssistActionIds = [
+  'rewrite',
+  'shorten',
+  'change_tone',
+  'suggest_heading',
+  'suggest_cta',
+  'write_section',
+  'suggest_seo',
+  'custom',
+] as const;
+export const aiAssistActionSchema = z.enum(aiAssistActionIds);
+export type AiAssistAction = z.infer<typeof aiAssistActionSchema>;
+
+export const aiAssistActionLabels: Record<AiAssistAction, string> = {
+  rewrite: 'Viết lại',
+  shorten: 'Rút gọn',
+  change_tone: 'Đổi giọng văn',
+  suggest_heading: 'Gợi ý tiêu đề',
+  suggest_cta: 'Gợi ý CTA',
+  write_section: 'Viết nội dung section',
+  suggest_seo: 'Gợi ý SEO',
+  custom: 'Yêu cầu riêng',
+};
+
+/** A content path of a section, e.g. "heading", "primaryCta.label" or "items.1.answer". */
+export const contentPathSchema = z
+  .string()
+  .max(200)
+  .regex(
+    /^[A-Za-z][A-Za-z0-9]*(\.(\d+|[A-Za-z][A-Za-z0-9]*))*$/,
+    'Đường dẫn nội dung không hợp lệ',
+  );
+
+/** "Đoạn chữ" (one field), "Section …" (the selected section) or "Toàn trang". */
+export const aiSuggestionScopeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('field'), sectionId: sectionIdSchema, path: contentPathSchema }),
+  z.object({ kind: z.literal('section'), sectionId: sectionIdSchema }),
+  z.object({ kind: z.literal('page') }),
+]);
+export type AiSuggestionScope = z.infer<typeof aiSuggestionScopeSchema>;
+
+/** Longer than any text field of the registry, which checks each field's own limit. */
+const SCOPE_TEXT_MAX = 2000;
+
+/**
+ * The text of one section of the scope as the editor holds it now, unsaved changes included: the
+ * paths the AI may write there (`aiWritablePaths` of `@plp/sections`) and their text. The API
+ * refuses any other path, so links, phone numbers and images never leave the editor this way.
+ */
+export const aiScopeSectionSchema = z.object({
+  id: sectionIdSchema,
+  type: sectionTypeSchema,
+  variant: z.string().min(1).max(40),
+  texts: z.record(contentPathSchema, z.string().max(SCOPE_TEXT_MAX)),
+});
+export type AiScopeSection = z.infer<typeof aiScopeSectionSchema>;
+
+/** The page's SEO texts, which "Gợi ý SEO" writes again from the page text. */
+export const aiScopeSeoSchema = z.object({
+  title: z.string().max(200),
+  description: z.string().max(400),
+});
+export type AiScopeSeo = z.infer<typeof aiScopeSeoSchema>;
+
+export const aiSuggestionRequestSchema = z
+  .object({
+    scope: aiSuggestionScopeSchema,
+    action: aiAssistActionSchema,
+    /** The tone "Đổi giọng văn" writes in. */
+    tone: aiToneSchema.optional(),
+    instruction: z
+      .string()
+      .trim()
+      .max(AI_INSTRUCTION_MAX, `Tối đa ${AI_INSTRUCTION_MAX} ký tự`)
+      .default(''),
+    /** The sections of the scope: the one of a field or section scope, every one for the page. */
+    sections: z.array(aiScopeSectionSchema).max(MAX_SECTIONS),
+    seo: aiScopeSeoSchema.optional(),
+  })
+  .superRefine((request, ctx) => {
+    if (request.action === 'custom' && request.instruction === '') {
+      ctx.addIssue({ code: 'custom', path: ['instruction'], message: 'Nhập yêu cầu cho trợ lý' });
+    }
+    if (request.action === 'change_tone' && request.tone === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['tone'], message: 'Chọn giọng văn' });
+    }
+    if (request.action === 'suggest_seo') {
+      if (request.scope.kind !== 'page') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['scope'],
+          message: 'Gợi ý SEO dùng chữ của toàn trang',
+        });
+      }
+      if (request.seo === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['seo'], message: 'Thiếu tiêu đề và mô tả SEO' });
+      }
+    }
+  });
+export type AiSuggestionRequest = z.input<typeof aiSuggestionRequestSchema>;
+
+/** Where a suggestion goes: a section of the draft, or its SEO (`title`, `description`). */
+export const AI_SEO_TARGET = 'seo';
+export const aiSuggestionTargetSchema = z.union([sectionIdSchema, z.literal(AI_SEO_TARGET)]);
+
+/**
+ * One text of the scope. `ok`: the AI's new text, parsed by the registry, with `review` when it
+ * states a figure, a price or a claim to check. `failed`: the AI wrote nothing usable there
+ * ("Chưa viết được phần này").
+ */
+export const aiSuggestionChangeSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('ok'),
+    sectionId: aiSuggestionTargetSchema,
+    path: contentPathSchema,
+    before: z.string(),
+    after: z.string(),
+    review: z.boolean(),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    sectionId: aiSuggestionTargetSchema,
+    path: contentPathSchema,
+    before: z.string(),
+    failure: aiFailureSchema,
+  }),
+]);
+export type AiSuggestionChange = z.infer<typeof aiSuggestionChangeSchema>;
+
+export const aiSuggestionResultSchema = z.object({
+  /** In the order of the scope, section by section and field by field; unchanged text is left out. */
+  changes: z.array(aiSuggestionChangeSchema),
+  /** One use was spent: at least one `ok` change came back. */
+  charged: z.boolean(),
+  /** Why the AI wrote nothing usable, when no `ok` change came back because of it; else null. */
+  failure: aiFailureSchema.nullable(),
+  usage: aiUsageSchema,
+});
+export type AiSuggestionResult = z.infer<typeof aiSuggestionResultSchema>;
+
+/**
+ * One line of the NDJSON answer of a suggestion request (`AI_JOB_STREAM_TYPE`): `heartbeat` while
+ * the AI writes (proxies close quiet connections), then the `result`.
+ */
+export const aiSuggestionEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('heartbeat') }),
+  z.object({ type: z.literal('result'), result: aiSuggestionResultSchema }),
+]);
+export type AiSuggestionEvent = z.infer<typeof aiSuggestionEventSchema>;

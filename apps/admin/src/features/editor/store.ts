@@ -1,4 +1,5 @@
 import {
+  AI_SEO_TARGET,
   type Asset,
   type ChecksResult,
   type ColorSchemeId,
@@ -22,6 +23,7 @@ import {
   type Access,
 } from '@plp/contracts';
 import {
+  aiWritablePaths,
   canMoveSection,
   createSectionInstance,
   getAtPath,
@@ -97,6 +99,18 @@ export interface UpdateOptions {
   merge?: boolean;
 }
 
+/**
+ * A suggestion of the AI assistant the user accepted (ADR-031): new text for a field of a section,
+ * or for the page's SEO title or description (`sectionId` is `AI_SEO_TARGET`).
+ */
+export interface AiDraftChange {
+  sectionId: string;
+  path: string;
+  after: string;
+  /** The AI flagged the sentence, or it holds a figure: the field shows "AI viết · cần kiểm tra". */
+  review: boolean;
+}
+
 export interface EditorState {
   draft: DraftSnapshot;
   /** Server revision the draft is based on; sent with every save. */
@@ -152,6 +166,12 @@ export interface EditorState {
    * undo step. The slug and SEO stay. Load the template's images first (`addAssets`).
    */
   applyTemplate: (composition: Composition) => boolean;
+  /**
+   * Writes the AI suggestions the user accepted, all as one undo step: only into text the AI may
+   * write, each field leaving the sample text, flagged ones marked for review. SEO texts go
+   * through the SEO command's own rule. Returns how many were written, 0 when none could be.
+   */
+  applyAiChanges: (changes: readonly AiDraftChange[]) => number;
   undo: () => boolean;
   redo: () => boolean;
   /** Ends the merged undo step started by an update with `{ merge: true }`. */
@@ -233,6 +253,30 @@ function validSelection(selection: Selection, composition: Composition): Selecti
 }
 
 type SectionRecipe = (section: Draft<SectionInstance>, index: number) => boolean;
+
+/**
+ * The SEO command's rule: the patched SEO must still parse. `updateSeo` and the assistant's
+ * `applyAiChanges` both write SEO through it, so the SEO keeps one official editor (ADR-008).
+ * Null when the patch is refused.
+ */
+function seoRecipe(
+  current: Seo,
+  patch: Partial<Seo>,
+): ((draft: Draft<DraftSnapshot>) => boolean) | null {
+  if (!seoSchema.safeParse({ ...current, ...patch }).success) {
+    return null;
+  }
+  return (draft) => {
+    Object.assign(draft.seo, patch);
+    return true;
+  };
+}
+
+/** One section's part of an `applyAiChanges`: its new content and the fields written. */
+interface AiSectionWrite {
+  content: SectionInstance['content'];
+  paths: { path: string; review: boolean }[];
+}
 
 export function createEditorStore(init: EditorInit): EditorStore {
   const newId = init.newId ?? randomSectionId;
@@ -624,18 +668,12 @@ export function createEditorStore(init: EditorInit): EditorStore {
       },
 
       updateSeo(patch, options = {}) {
-        const next = { ...get().draft.seo, ...patch };
-        if (!seoSchema.safeParse(next).success) {
+        const recipe = seoRecipe(get().draft.seo, patch);
+        if (recipe === null) {
           return false;
         }
         const fields = Object.keys(patch).sort().join(',');
-        return edit(
-          (draft) => {
-            Object.assign(draft.seo, patch);
-            return true;
-          },
-          { mergeKey: options.merge ? `seo:${fields}` : null },
-        );
+        return edit(recipe, { mergeKey: options.merge ? `seo:${fields}` : null });
       },
 
       setSlug(slug, options = {}) {
@@ -670,6 +708,59 @@ export function createEditorStore(init: EditorInit): EditorStore {
           },
           { selection: { sectionId: null, fieldPath: null } },
         );
+      },
+
+      applyAiChanges(changes) {
+        const writes = new Map<string, AiSectionWrite>();
+        const seoPatch: Partial<Seo> = {};
+        let count = 0;
+        for (const change of changes) {
+          if (change.sectionId === AI_SEO_TARGET) {
+            if (change.path === 'title' || change.path === 'description') {
+              seoPatch[change.path] = change.after;
+              count += 1;
+            }
+            continue;
+          }
+          const section = findSection(change.sectionId);
+          const target = section ? resolvePath(section.type, change.path) : null;
+          // Only where the AI may write now: the editor may have changed since the AI answered.
+          if (
+            !section ||
+            target?.kind !== 'leaf' ||
+            !aiWritablePaths(section).includes(change.path)
+          ) {
+            continue;
+          }
+          const write = writes.get(section.id) ?? { content: section.content, paths: [] };
+          write.content = setAtPath(write.content, change.path, clampToField(target, change.after));
+          write.paths.push({ path: change.path, review: change.review });
+          writes.set(section.id, write);
+          count += 1;
+        }
+        const seo = count > 0 ? seoRecipe(get().draft.seo, seoPatch) : null;
+        if (count === 0 || seo === null) {
+          return 0;
+        }
+        const done = edit((draft) => {
+          for (const section of draft.composition.sections) {
+            const write = writes.get(section.id);
+            if (!write) {
+              continue;
+            }
+            section.content = write.content;
+            for (const { path, review } of write.paths) {
+              // The AI's text is no sample; its review marker is for this text, not the old one.
+              section.samplePaths = withoutSamplePath(section.samplePaths, path);
+              section.reviewPaths = withoutSamplePath(section.reviewPaths, path);
+              if (review) {
+                section.reviewPaths.push(path);
+              }
+            }
+          }
+          return seo(draft);
+        });
+        return done ? count : 0;
       },
 
       undo: () => step('undo'),

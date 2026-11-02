@@ -22,6 +22,7 @@ describe('endpoints', () => {
       endpoints.getAiPageJob.path(SITE_ID, ID),
       endpoints.retryAiPageJob.path(SITE_ID, ID),
       endpoints.cancelAiPageJob.path(SITE_ID, ID),
+      endpoints.aiSuggestions.path(SITE_ID, ID),
     ];
     for (const path of paths) {
       expect(path.startsWith(`/sites/${SITE_ID}/`)).toBe(true);

@@ -158,9 +158,17 @@ describe('section components', () => {
     const edit = render(target, editCtx());
     expect(live).toContain(`id="section-${target.id}"`);
     expect(live).not.toContain('contentEditable');
+    expect(live).not.toContain('data-content-path');
     expect(live).not.toContain('Nội dung section không hợp lệ');
     expect(edit).toContain(EDITABLE);
     expect(edit).not.toContain('<a ');
+  });
+
+  it('names the content path of each text on the canvas, for the admin’s assistant', () => {
+    const edit = render(section('faq'), editCtx());
+    for (const path of ['heading', 'items.0.question', 'items.2.answer']) {
+      expect(edit).toContain(`data-content-path="${path}"`);
+    }
   });
 
   it('has a component for every section type', () => {

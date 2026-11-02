@@ -2305,6 +2305,27 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - "Chọn template thay vì AI" và "Dùng template" mở thư viện template cho site đó. Màn "AI chưa được bật" có thêm "Tạo trang theo mục tiêu".
     - Viết đủ mọi section thì mở thẳng editor; viết được một phần thì hiện "Gần xong" với số section viết được trên số section AI viết. "Hủy" đưa về bước cấu trúc.
   - **Kiểm thử thật với Ollama `qwen3:4b-instruct`** (2026-11-02): cả 6 section của trang thu lead viết và qua registry ngay lần đầu, mỗi section 3–40 giây chạy lần lượt; FAQ chậm nhất. Model vẫn bịa chi tiết (chính sách hủy, thời gian điều trị) và hay đánh dấu thừa: cảnh báo `ai_review` là lưới an toàn, không thay người đọc lại.
+- **Chi tiết khi làm (lát G5):**
+  - **Quy tắc "AI được viết gì"** (`copyPlanOf`, `AI_NEVER_WRITES`) chuyển từ API sang `@plp/sections/schema` (`ai-copy.ts`), cùng `aiWritablePaths` (mọi đường dẫn chữ AI được viết của section lúc này, kể cả từng mục danh sách đang có) và `aiActionPaths` (phần tác vụ viết: tất cả, chỉ `heading` cho "Gợi ý tiêu đề", chỉ nhãn nút đang dùng và `submitLabel` của form cho "Gợi ý CTA"). Editor chỉ gửi những đường dẫn này; API từ chối mọi đường dẫn khác.
+  - **Endpoint** `POST /sites/:siteId/pages/:pageId/ai/suggestions` (`pages.edit`):
+    - Body: `scope` (`field` gồm `sectionId` và `path`, `section`, `page`), `action` (`rewrite`, `shorten`, `change_tone` kèm `tone`, `suggest_heading`, `suggest_cta`, `write_section`, `suggest_seo`, `custom` cho yêu cầu tự do), `instruction` (≤ 300 ký tự, bắt buộc với `custom`, kèm theo được mọi chip), `sections` (chữ của phạm vi: mỗi section `{ id, type, variant, texts: { path: chữ } }`, gồm thay đổi chưa lưu), `seo` cho "Gợi ý SEO".
+    - "Đoạn chữ" và "Section" gửi cả section, vì API dựng lại section bằng registry: chữ mẫu của variant, danh sách đúng số mục editor đang có, mọi chữ AI được viết thay bằng chữ editor gửi (thiếu là trống, nên nút không dùng vẫn không dùng). Đường dẫn AI không được viết là 422 `not_writable`; registry parse kết quả như mọi bản nháp.
+    - "Viết nội dung section" chỉ cho phạm vi Section; "Gợi ý SEO" chỉ cho Toàn trang. Không có gì để viết thì 422 `nothing_to_write`. Mọi lần từ chối đều trước khi giữ lượt; giới hạn 10 yêu cầu mỗi phút tính cả yêu cầu bị từ chối, như G4.
+    - Trả 200 với luồng NDJSON như G4: `heartbeat` mỗi 10 giây rồi một dòng `result` `{ changes, charged, failure, usage }`. Mỗi thay đổi là `ok` `{ sectionId | 'seo', path, before, after, review }` hoặc `failed` `{ …, failure }`; chữ AI để nguyên thì không thành thay đổi.
+  - **Gọi AI:** mỗi section có chữ trong phạm vi là một request (3 request cùng lúc), "Gợi ý SEO" là một request đọc chữ của trang (tối đa 4.000 ký tự). Danh sách giữ đúng số mục (gợi ý đổi chữ, không thêm bớt mục). Câu trả lời không vừa thì thử lại một lần kèm danh sách lỗi; sau đó field nào qua được thì giữ, field còn lại là `failed` ("Chưa viết được phần này"). Ngôn ngữ theo chữ của phạm vi (có chữ cái riêng của tiếng Việt thì tiếng Việt). SEO được hỏi theo độ dài khuyến nghị (60, 160) và kiểm theo giới hạn của `seoSchema`.
+  - **Hạn mức:** giữ lượt trong transaction trước khi gọi AI; trả lượt khi không có thay đổi `ok` nào (lỗi, trả lời sai, chữ không đổi) hoặc khi client đã đi (đóng request trước khi có kết quả, kể cả lúc đang giữ lượt). API nghe `close` của response từ đầu request. Chấp nhận: API dừng giữa chừng thì lượt đó mất, vì không có bản ghi giữ lượt như `ai_jobs`.
+  - **Log:** một dòng "AI suggestion ended" chỉ có số đếm, token và thời gian; lỗi của từng request ghi loại lỗi, không có prompt, chữ hay câu trả lời.
+  - **Admin:**
+    - Cột phải có hai tab "Thuộc tính" và "Trợ lý AI" (tablist, phím mũi tên); hai panel giữ nguyên khi đổi tab, trợ lý chỉ đọc mức dùng khi mở lần đầu. "Sửa" từ checklist mở lại tab "Thuộc tính".
+    - "Đoạn chữ" là ô chữ được focus sau cùng của section đang chọn, trên canvas (`data-content-path` của chữ trên canvas) hoặc trong bảng thuộc tính; chưa có thì tùy chọn này tắt. Phạm vi đã chọn mà không còn dùng được thì lùi về phạm vi rộng hơn.
+    - Chip không dùng được ở phạm vi đang chọn có `aria-disabled` và lý do đọc được. "Đổi giọng văn" mở menu ba giọng văn của brief. Ctrl+Enter gửi yêu cầu tự do.
+    - Board vẽ "Phương án 1 2 3"; lát này trả một phương án.
+    - **Áp dụng** là command `applyAiChanges`: một bước hoàn tác, chỉ ghi vào đường dẫn AI được viết của section còn tồn tại, bỏ chữ mẫu ở đó, đặt `reviewPaths` cho câu được đánh dấu. SEO đi qua chính quy tắc của command SEO (`seoRecipe`, dùng chung với `updateSeo`). Autosave lưu như mọi sửa đổi.
+    - "Đã áp dụng N thay đổi vào bản nháp" nằm ở chân canvas với "Hoàn tác", chỉ khi bản nháp vẫn là bản lần áp dụng tạo ra; sửa tiếp thì nút đó biến mất và Ctrl+Z lùi từng bước.
+    - **Xung đột:** khi kết quả về, so chữ của phạm vi lúc gửi với bản nháp hiện tại ("Đoạn chữ" chỉ so ô đó; phạm vi khác so mọi chữ, bố cục và mục danh sách). Bấm "Áp dụng" cũng so lại; khác thì hiện xung đột thay vì ghi đè.
+    - "Thử lại" của một phần lỗi là một yêu cầu "Đoạn chữ" (SEO thì hỏi lại SEO), nên tốn một lượt nếu viết được.
+    - Trình đọc màn hình nghe trạng thái qua announcer của editor; thất bại và xung đột là `role="alert"`. Focus chỉ chuyển khi control đang giữ focus biến mất hoặc nằm trong panel trợ lý, nên người đang gõ trên canvas lúc AI chạy không bị cướp focus.
+  - **Kiểm thử thật với Ollama `qwen3:4b-instruct`** (2026-11-02): "Viết lại" Hero 4,6–6 giây, FAQ 2 câu 9 giây, "Rút gọn" một ô 2,4 giây, "Gợi ý SEO" 5,2 giây; JSON hợp lệ và qua registry ngay lần đầu. Lời dặn ban đầu làm model trả nguyên 3 trên 4 ô của Hero, nên "Viết lại" nói rõ không trả lại ô không đổi. Model vẫn chỉ đổi cách viết hoa ở vài ô và thêm khẳng định về sức khỏe không có số ("không cảm thấy đau gì cả") mà không đánh dấu; người dùng vẫn phải đọc gợi ý trước khi áp dụng.
 
 ---
 
@@ -2395,7 +2416,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | G2  | Template của workspace: lưu trang thành template, phiên bản, phạm vi site, lưu trữ, chép ảnh, quyền `templates.manage` | 19, 17, 16         | Xong       |
 | G3  | Áp dụng mẫu vào bản nháp: từ màn 18 và từ editor, một bước hoàn tác (ADR-030)                                          | 18, 03             | Xong       |
 | G4  | Cổng AI và adapter `openai-compatible`/`fake`, hạn mức, job, tạo trang bằng AI, `reviewPaths` và cảnh báo `ai_review`  | 20, 05             | Xong       |
-| G5  | Trợ lý AI trong editor: phạm vi, tác vụ, gợi ý có so sánh, áp dụng là một bước hoàn tác, xung đột (ADR-031)            | 21, 03             | Chưa làm   |
+| G5  | Trợ lý AI trong editor: phạm vi, tác vụ, gợi ý có so sánh, áp dụng là một bước hoàn tác, xung đột (ADR-031)            | 21, 03             | Xong       |
 
 **Hoàn thành Phase 2** khi một E2E chạy xanh toàn bộ chuỗi:
 
