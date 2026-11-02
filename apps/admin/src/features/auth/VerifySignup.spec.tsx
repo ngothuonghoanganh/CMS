@@ -1,7 +1,8 @@
 import { endpoints, type SignupLookupResponse } from '@plp/contracts';
+import { onlineManager } from '@tanstack/react-query';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { VerifySignup } from './VerifySignup';
@@ -81,6 +82,9 @@ describe('VerifySignup (ADR-026)', () => {
     const email = await screen.findByRole('textbox', { name: 'Email' });
     expect(email).toHaveValue(SIGNUP.email);
     expect(email).toHaveAttribute('readonly');
+    // A password manager saves the password under the email, not the workspace name above it.
+    expect(email).toHaveAttribute('autocomplete', 'username');
+    expect(email).toHaveAttribute('name', 'email');
     expect(screen.getByRole('textbox', { name: 'Họ và tên' })).toHaveValue('Ngọc Anh');
     expect(screen.getByRole('textbox', { name: 'Tên workspace' })).toHaveValue('Mây Xanh Agency');
     expect(screen.getByLabelText('Mật khẩu')).toHaveValue('');
@@ -133,6 +137,65 @@ describe('VerifySignup (ADR-026)', () => {
     expect(again).toHaveAccessibleDescription('Hai mật khẩu chưa khớp');
     expect(again).toHaveFocus();
     expect(verifyCalls()).toEqual([]);
+  });
+
+  it('announces that the passwords differ when Enter leaves the focus in the second one', async () => {
+    const user = userEvent.setup();
+    answer({});
+    renderWithProviders(<VerifySignup />);
+
+    await user.type(await screen.findByLabelText('Mật khẩu'), PASSWORD);
+    const again = screen.getByLabelText('Nhập lại mật khẩu');
+    await user.type(again, 'mat-khau-khac-123{Enter}');
+
+    expect(again).toHaveFocus();
+    expect(
+      screen.getByText('Hai mật khẩu chưa khớp').closest('[aria-live="polite"]'),
+    ).not.toBeNull();
+    expect(verifyCalls()).toEqual([]);
+  });
+
+  it('keeps the form and what was typed when reading the link again fails', async () => {
+    const user = userEvent.setup();
+    answer({ lookup: [{ value: SIGNUP }, { error: new TypeError('Failed to fetch') }] });
+    const { queryClient } = renderWithProviders(<VerifySignup />);
+    await user.type(await screen.findByLabelText('Mật khẩu'), PASSWORD);
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['signup-link', TOKEN] });
+      // The query tells the page a task later.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(queryClient.getQueryState(['signup-link', TOKEN])?.status).toBe('error');
+
+    expect(screen.getByLabelText('Mật khẩu')).toHaveValue(PASSWORD);
+    expect(screen.getByRole('button', { name: 'Tạo tài khoản và workspace' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('does not read the link again when the network comes back', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+      onlineManager.setOnline(true);
+    });
+    answer({});
+    renderWithProviders(<VerifySignup />);
+    await screen.findByLabelText('Mật khẩu');
+
+    // An hour later the laptop wakes up, offline, then back online.
+    vi.setSystemTime(Date.now() + 60 * 60_000);
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      // The cache reacts once the mutations paused offline resumed: within a task.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByLabelText('Mật khẩu')).toBeInTheDocument();
+    expect(
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.lookupSignup),
+    ).toHaveLength(1);
   });
 
   it('takes the sign-up rules for the password and the names', async () => {
@@ -251,6 +314,16 @@ describe('VerifySignup (ADR-026)', () => {
     await user.click(screen.getByRole('button', { name: 'Thử lại' }));
 
     expect(await screen.findByRole('textbox', { name: 'Email' })).toHaveValue(SIGNUP.email);
+  });
+
+  it('offers to sign up again, or to log in, when looking the link up keeps failing', async () => {
+    answer({ lookup: [{ error: apiError(500, 'internal', 'Máy chủ đang bận') }] });
+    renderWithProviders(<VerifySignup />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Máy chủ đang bận');
+    expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Đăng ký lại' })).toHaveAttribute('href', '/signup');
+    expect(screen.getByRole('link', { name: 'Đăng nhập' })).toHaveAttribute('href', '/login');
   });
 
   it('takes another link opened in the same tab', async () => {

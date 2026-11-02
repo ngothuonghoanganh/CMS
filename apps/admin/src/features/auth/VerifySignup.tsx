@@ -83,7 +83,12 @@ export function VerifySignup() {
     // Once the account exists the link is used up; asking again would only say so.
     enabled: typeof token === 'string' && !created,
     retry: false,
+    // What the sign-up stored does not change while the form is filled in: the network coming
+    // back is no reason to read it again, and the answer of "Tạo tài khoản" speaks for the link.
+    staleTime: Infinity,
   });
+  // Once read, the sign-up stays: a later read that fails never takes the form and what was typed.
+  const lookupError = lookup.data === undefined ? lookup.error : null;
 
   if (token === undefined) {
     return null;
@@ -104,7 +109,7 @@ export function VerifySignup() {
     return <Spinner label="Đang mở workspace" />;
   }
 
-  const problem = (thisLink ? problemOf(verify.error) : null) ?? problemOf(lookup.error);
+  const problem = (thisLink ? problemOf(verify.error) : null) ?? problemOf(lookupError);
   if (problem?.code === 'signup_link_invalid') {
     return <LinkUsedUp problem={problem} />;
   }
@@ -123,11 +128,11 @@ export function VerifySignup() {
       </div>
     );
   }
-  if (lookup.isError) {
+  if (lookupError !== null) {
     return (
       <div className={styles.form}>
         <Callout tone="danger" role="alert">
-          {problemMessage(lookup.error)}
+          {problemMessage(lookupError)}
         </Callout>
         <Button
           variant="secondary"
@@ -139,6 +144,10 @@ export function VerifySignup() {
         >
           Thử lại
         </Button>
+        {/* A failure that lasts still has a way on, as a link used up has. */}
+        <p className={styles.switch}>
+          <Link href="/signup">Đăng ký lại</Link> hoặc <Link href="/login">Đăng nhập</Link>
+        </p>
       </div>
     );
   }
@@ -242,8 +251,10 @@ function AccountForm({
 
   return (
     <form method="post" noValidate className={styles.form} onSubmit={handleSubmit}>
+      {/* The account's username: a password manager saves the password under this email, not
+          under the workspace name typed above the password. */}
       <Field label="Email" id="verify-email" help="Link xác nhận gắn với email này.">
-        <Input type="email" value={signup.email} readOnly />
+        <Input type="email" name="email" autoComplete="username" value={signup.email} readOnly />
       </Field>
       <Field label="Họ và tên" id={fieldIds.name} required error={form.errors.name}>
         <Input autoComplete="name" {...bind('name')} />
@@ -266,7 +277,14 @@ function AccountForm({
       >
         <Input type="password" autoComplete="new-password" {...bind('password')} />
       </Field>
-      <Field label="Nhập lại mật khẩu" id={fieldIds.confirm} required error={form.errors.confirm}>
+      {/* Enter in this field leaves the focus in it: the live region says the passwords differ. */}
+      <Field
+        label="Nhập lại mật khẩu"
+        id={fieldIds.confirm}
+        required
+        error={form.errors.confirm}
+        announceMessages
+      >
         <Input
           type="password"
           autoComplete="new-password"
