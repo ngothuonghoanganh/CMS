@@ -18,6 +18,7 @@ import {
   recipientConfirmationEmail,
   signupConfirmationEmail,
 } from './emails.js';
+import { mailerRequestOf } from './sqs-email-sender.js';
 
 const ID = '6724f0c2a1b2c3d4e5f60789';
 const OTHER_ID = '6724f0c2a1b2c3d4e5f6078a';
@@ -205,6 +206,15 @@ describe('the data of every email', () => {
 
   it.each(EVERY_EMAIL)('%s matches the schema of its template', (_name, email) => {
     expect(templateDataProblems(email.template, email.data)).toEqual([]);
+  });
+
+  it.each(EVERY_EMAIL)('%s makes a request plp-mailer takes', (_name, email) => {
+    expect(mailerRequestOf({ to: ['nhan@example.com'], ...email })).toEqual({
+      template: email.template,
+      to: ['nhan@example.com'],
+      data: email.data,
+      idempotencyKey: email.idempotencyKey,
+    });
   });
 
   it.each(EVERY_EMAIL)('%s has a key plp-mailer takes, without the token', (_name, email) => {

@@ -48,8 +48,59 @@ describe('parseEnv', () => {
     expect(() => parseEnv(rest)).toThrow(/SMTP_URL/);
     expect(() => parseEnv({ ...valid, SMTP_URL: 'http://localhost:1125' })).toThrow(/SMTP_URL/);
     expect(
-      parseEnv({ ...valid, SMTP_URL: 'smtps://user:pass@smtp.example.com:465' }).SMTP_URL,
-    ).toBe('smtps://user:pass@smtp.example.com:465');
+      parseEnv({ ...valid, SMTP_URL: 'smtps://user:pass@smtp.example.com:465' }),
+    ).toMatchObject({ SMTP_URL: 'smtps://user:pass@smtp.example.com:465' });
+  });
+
+  describe('MAIL_TRANSPORT (ADR-029)', () => {
+    const { SMTP_URL: _url, LEAD_EMAIL_FROM: _from, ...withoutSmtp } = valid;
+    const sqs = {
+      ...withoutSmtp,
+      MAIL_TRANSPORT: 'sqs',
+      MAIL_QUEUE_URL: 'https://sqs.ap-southeast-1.amazonaws.com/123456789012/plp-mailer-MailQueue',
+      MAIL_QUEUE_REGION: 'ap-southeast-1',
+    };
+
+    it('sends through SMTP unless told otherwise', () => {
+      expect(parseEnv(valid)).toMatchObject({
+        MAIL_TRANSPORT: 'smtp',
+        SMTP_URL: 'smtp://localhost:1125',
+        LEAD_EMAIL_FROM: 'Payload Landing Page <no-reply@payload.site>',
+      });
+      expect(parseEnv({ ...valid, MAIL_TRANSPORT: 'smtp' }).MAIL_TRANSPORT).toBe('smtp');
+    });
+
+    it('queues for plp-mailer with a queue URL and its region, and no SMTP settings', () => {
+      const env = parseEnv(sqs);
+      expect(env).toMatchObject({
+        MAIL_TRANSPORT: 'sqs',
+        MAIL_QUEUE_URL: sqs.MAIL_QUEUE_URL,
+        MAIL_QUEUE_REGION: 'ap-southeast-1',
+      });
+      expect(env).not.toHaveProperty('SMTP_URL');
+      expect(env).not.toHaveProperty('LEAD_EMAIL_FROM');
+      // A local SQS-compatible queue serves http.
+      expect(
+        parseEnv({ ...sqs, MAIL_QUEUE_URL: 'http://127.0.0.1:9324/000000000000/mail' })
+          .MAIL_TRANSPORT,
+      ).toBe('sqs');
+    });
+
+    it('names what the chosen transport is missing', () => {
+      const { MAIL_QUEUE_URL: _queue, ...noQueue } = sqs;
+      expect(() => parseEnv(noQueue)).toThrow(/MAIL_QUEUE_URL/);
+      const { MAIL_QUEUE_REGION: _region, ...noRegion } = sqs;
+      expect(() => parseEnv(noRegion)).toThrow(/MAIL_QUEUE_REGION/);
+      expect(() => parseEnv(withoutSmtp)).toThrow(/SMTP_URL/);
+    });
+
+    it('refuses another transport, a queue URL that is not a web URL and a malformed region', () => {
+      expect(() => parseEnv({ ...valid, MAIL_TRANSPORT: 'ses' })).toThrow(/MAIL_TRANSPORT/);
+      expect(() => parseEnv({ ...sqs, MAIL_QUEUE_URL: 'sqs://queue' })).toThrow(/MAIL_QUEUE_URL/);
+      expect(() => parseEnv({ ...sqs, MAIL_QUEUE_REGION: 'Singapore' })).toThrow(
+        /MAIL_QUEUE_REGION/,
+      );
+    });
   });
 
   it('rejects short secrets', () => {

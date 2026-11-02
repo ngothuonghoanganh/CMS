@@ -21,6 +21,9 @@ export class SmtpEmailSender implements OnModuleDestroy {
   private readonly transport;
 
   constructor(env: Env) {
+    if (env.MAIL_TRANSPORT !== 'smtp') {
+      throw new Error(`SMTP is not the mail transport: MAIL_TRANSPORT is ${env.MAIL_TRANSPORT}`);
+    }
     this.transport = createTransport(
       { url: env.SMTP_URL, ...TIMEOUTS },
       { from: env.LEAD_EMAIL_FROM },

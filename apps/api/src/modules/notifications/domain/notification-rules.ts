@@ -71,6 +71,43 @@ export function smtpErrorCode(error: unknown): EmailErrorCode {
   return 'unknown';
 }
 
+/**
+ * The code of a failed SendMessage from what the AWS SDK reports (ADR-029): its own timeouts, a
+ * Node network error, or the queue's answer. Throttling and 5xx mean try later; any other answer
+ * is a refusal, e.g. a role without `MailProducerPolicy` or a queue that does not exist.
+ */
+export function sqsErrorCode(error: unknown): EmailErrorCode {
+  if (typeof error !== 'object' || error === null) {
+    return 'unknown';
+  }
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : null;
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : null;
+  const status =
+    '$metadata' in error &&
+    typeof error.$metadata === 'object' &&
+    error.$metadata !== null &&
+    'httpStatusCode' in error.$metadata &&
+    typeof error.$metadata.httpStatusCode === 'number'
+      ? error.$metadata.httpStatusCode
+      : null;
+  const throttling =
+    '$retryable' in error &&
+    typeof error.$retryable === 'object' &&
+    error.$retryable !== null &&
+    'throttling' in error.$retryable &&
+    error.$retryable.throttling === true;
+  if (name === 'TimeoutError' || code === 'ETIMEDOUT') {
+    return 'timeout';
+  }
+  if (status !== null) {
+    return throttling || status === 429 || status >= 500 ? 'smtp_unavailable' : 'smtp_rejected';
+  }
+  if (code !== null && UNREACHABLE.has(code)) {
+    return 'smtp_unavailable';
+  }
+  return 'unknown';
+}
+
 /** When a new confirmation link stops working. */
 export function confirmationExpiry(now: Date): Date {
   return new Date(now.getTime() + RECIPIENT_CONFIRMATION_DAYS * 86_400_000);
