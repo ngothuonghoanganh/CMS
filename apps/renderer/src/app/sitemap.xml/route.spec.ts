@@ -109,3 +109,34 @@ describe('SEO files while the API cannot answer', () => {
     expect(log).toHaveBeenCalledWith('Sitemap lookup failed; answering 503', error);
   });
 });
+
+// With `cacheComponents`, the build prerenders route handlers; reading the host stops that by
+// throwing, and Next serves the route per request once it sees the error (ADR-009).
+describe('SEO files while the build prerenders them', () => {
+  it.each([
+    ['/sitemap.xml', getSitemapXml],
+    ['/robots.txt', getRobots],
+  ])('%s hands Next its bail-out instead of logging a failed lookup', async (path, get) => {
+    // What Next throws when a prerender reads `request.headers`.
+    const bailout = Object.assign(
+      new Error(
+        `Route ${path} needs to bail out of prerendering at this point because it used request.headers.`,
+      ),
+      { digest: 'NEXT_PRERENDER_INTERRUPTED' },
+    );
+    const prerendering = new Proxy(request(path, 'smilecare.localhost:3101'), {
+      get(target, property) {
+        if (property === 'headers') {
+          throw bailout;
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return value;
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(get(prerendering)).rejects.toBe(bailout);
+    expect(log).not.toHaveBeenCalled();
+    expect(getSitemap).not.toHaveBeenCalled();
+    expect(getCachedSitemap).not.toHaveBeenCalled();
+  });
+});

@@ -1,4 +1,5 @@
 import type { SitemapResponse } from '@plp/contracts';
+import { unstable_rethrow } from 'next/navigation';
 import { rendererEnv } from '../env';
 import { getHostSite } from './public-api';
 import { subdomainForRequest } from './request-site';
@@ -23,6 +24,9 @@ export async function answerWithSitemap(
     }
     sitemap = await lookup(subdomain);
   } catch (error) {
+    // Next's own control flow, not a failed lookup: reading the host stops the build's prerender
+    // of these routes by throwing, and Next must see that to serve them per request.
+    unstable_rethrow(error);
     console.error('Sitemap lookup failed; answering 503', error);
     return unavailableText();
   }
