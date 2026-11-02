@@ -246,7 +246,7 @@ function checkCtaLeaf(findings: Findings, context: SectionContext, leaf: LeafOcc
     return;
   }
   const cta = parsed.data;
-  const { section, definition } = context;
+  const { section } = context;
   const place = placeOf(context, leaf.path);
   const used = isCtaUsed(cta);
   const required = leaf.field.required === true;
