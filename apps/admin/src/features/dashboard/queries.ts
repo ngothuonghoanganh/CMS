@@ -1,4 +1,8 @@
-import { type ActivityListQuery, publishingActivityTypes } from '@plp/contracts';
+import {
+  type ActivityListQuery,
+  domainActivityTypes,
+  publishingActivityTypes,
+} from '@plp/contracts';
 import type { DashboardFilters } from './filters';
 
 /**
@@ -18,11 +22,11 @@ export const siteQueryKeys = {
 export const PAGE_LIST_LIMIT = 50;
 
 /**
- * "Hoạt động xuất bản gần đây": the 5 newest publishing events and page deletions (ADR-027) only,
- * so uploads and page creations never push them out, and a site that never published shows the
- * empty state.
+ * "Hoạt động xuất bản gần đây": the 5 newest publishing events, page deletions (ADR-027) and
+ * domain events (ADR-022) only, so uploads and page creations never push them out, and a site that
+ * never published shows the empty state.
  */
 export const RECENT_ACTIVITY_QUERY = {
   limit: 5,
-  types: [...publishingActivityTypes, 'page.deleted'].join(','),
+  types: [...publishingActivityTypes, 'page.deleted', ...domainActivityTypes].join(','),
 } as const satisfies ActivityListQuery;

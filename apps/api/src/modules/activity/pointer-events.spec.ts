@@ -1,7 +1,7 @@
 import type { ActivityType } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { newObjectId, type ObjectId } from '../../shared/persistence/object-id.js';
-import { isUndoable } from './pointer-events.js';
+import { isUndoable, pointerActorOf } from './pointer-events.js';
 
 function event(type: ActivityType, pageId: ObjectId | null = newObjectId()) {
   return { _id: newObjectId(), type, pageId };
@@ -32,5 +32,15 @@ describe('isUndoable', () => {
   it('is false for a rollback without a page', () => {
     const record = event('page.rolled_back', null);
     expect(isUndoable(record, { _id: record._id })).toBe(false);
+  });
+});
+
+describe('pointerActorOf', () => {
+  it('is the member who moved the pointer, and an error for an event without one', () => {
+    const actorId = newObjectId();
+    expect(pointerActorOf({ ...event('page.published'), actorId })).toBe(actorId);
+    expect(() => pointerActorOf({ ...event('page.published'), actorId: null })).toThrow(
+      /has no actor/,
+    );
   });
 });

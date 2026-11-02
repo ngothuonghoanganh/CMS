@@ -1,4 +1,4 @@
-import { type ActivityType, activityTypes } from '@plp/contracts';
+import { type ActivityType, activityTypes, isSystemActivityType } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
@@ -18,6 +18,8 @@ export interface ActivityData {
   count: number | null;
   /** The draft slug of a page when it was deleted (`page.deleted`, ADR-027). */
   slug: string | null;
+  /** The domain of a domain event, or the default address made primary again (ADR-022). */
+  hostname: string | null;
   /** Set after the commit when the renderer could not be revalidated (ADR-009). */
   revalidationFailed: boolean;
 }
@@ -30,6 +32,7 @@ export const EMPTY_ACTIVITY_DATA: ActivityData = {
   toReleaseId: null,
   count: null,
   slug: null,
+  hostname: null,
   revalidationFailed: false,
 };
 
@@ -44,7 +47,8 @@ export interface ActivityRecord {
   pageId: Types.ObjectId | null;
   /** Title of the page when the event happened; set exactly when `pageId` is set. */
   pageTitle: string | null;
-  actorId: Types.ObjectId;
+  /** The member who did it; null exactly for the events of `systemActivityTypes`. */
+  actorId: Types.ObjectId | null;
   type: ActivityType;
   data: ActivityData;
   reason: string | null;
@@ -57,7 +61,7 @@ const activitySchema = new Schema<ActivityRecord>(
     siteId: { type: Schema.Types.ObjectId, required: true },
     pageId: { type: Schema.Types.ObjectId, default: null },
     pageTitle: { type: String, default: null },
-    actorId: { type: Schema.Types.ObjectId, required: true },
+    actorId: { type: Schema.Types.ObjectId, default: null },
     type: { type: String, enum: activityTypes, required: true },
     data: {
       version: { type: Number, default: null },
@@ -67,6 +71,7 @@ const activitySchema = new Schema<ActivityRecord>(
       toReleaseId: { type: Schema.Types.ObjectId, default: null },
       count: { type: Number, default: null },
       slug: { type: String, default: null },
+      hostname: { type: String, default: null },
       revalidationFailed: { type: Boolean, default: false },
     },
     reason: { type: String, default: null },
@@ -80,6 +85,9 @@ activitySchema.index({ pageId: 1, createdAt: -1, _id: -1 });
 activitySchema.pre('validate', function () {
   if ((this.pageId === null) !== (this.pageTitle === null)) {
     this.invalidate('pageTitle', 'An activity about a page needs the page title snapshot');
+  }
+  if (isSystemActivityType(this.type) !== (this.actorId === null)) {
+    this.invalidate('actorId', `${this.type} needs ${this.actorId === null ? 'an' : 'no'} actor`);
   }
 });
 

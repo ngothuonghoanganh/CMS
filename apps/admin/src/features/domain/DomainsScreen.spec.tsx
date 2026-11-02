@@ -35,6 +35,16 @@ const broken = domainFixture({
   status: 'misconfigured',
   httpsValidUntil: null,
   activeSince: null,
+  found: [{ type: 'A', value: '103.97.125.18' }],
+  records: [
+    { type: 'CNAME', name: 'uudai.smilecare.vn', value: 'cname.payload.site', state: 'wrong' },
+    {
+      type: 'TXT',
+      name: '_payload.uudai.smilecare.vn',
+      value: 'payload-verify=8f3a2c91e07b4d5aa1b2c3d4e5f60718',
+      state: 'ok',
+    },
+  ],
 });
 
 function renderScreen(list = domainList([primary, apex, broken], primary.id)) {
@@ -57,8 +67,11 @@ describe('DomainsScreen', () => {
     expect(rows).toHaveLength(4);
     expect(rows[0]).toHaveTextContent('go.smilecare.vnĐỊA CHỈ CHÍNH');
     expect(rows[0]).toHaveTextContent('HTTPS hợp lệ tới 12/01/2027');
-    expect(rows[1]).toHaveTextContent('Đang chuyển hướng → go.smilecare.vn');
+    // Each row says what the last check saw, as board 14 does (ADR-022).
+    expect(rows[0]).toHaveTextContent('Kết nối từ 14/10/2026 bởi Ngọc Anh.');
+    expect(rows[1]).toHaveTextContent('Tên miền gốc · đang chuyển hướng → go.smilecare.vn');
     expect(rows[2]).toHaveTextContent('Cấu hình sai');
+    expect(rows[2]).toHaveTextContent('Đang có bản ghi A, cần đổi sang CNAME.');
     expect(screen.getByRole('link', { name: 'Sửa cấu hình uudai.smilecare.vn' })).toHaveAttribute(
       'href',
       `/sites/${site.id}/domain/connect?domain=${broken.id}`,
@@ -73,7 +86,12 @@ describe('DomainsScreen', () => {
     renderScreen();
     await user.click(screen.getByRole('button', { name: 'Đặt smilecare.vn làm địa chỉ chính' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Đặt smilecare.vn làm địa chỉ chính?' });
-    expect(dialog).toHaveTextContent('các địa chỉ khác tự chuyển hướng 301 về đây');
+    expect(dialog).toHaveTextContent(
+      '6 trang đang live sẽ có địa chỉ mới, ví dụ smilecare.vn/uu-dai-nieng-rang.',
+    );
+    expect(dialog).toHaveTextContent(
+      'Link cũ trên go.smilecare.vn vẫn mở được, tự chuyển hướng 301 sang địa chỉ mới.',
+    );
     apiMock.mockResolvedValueOnce(
       domainList(
         [
@@ -137,6 +155,10 @@ describe('DomainsScreen', () => {
     renderScreen();
     await user.click(screen.getByRole('button', { name: 'Ngắt kết nối uudai.smilecare.vn' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Ngắt kết nối uudai.smilecare.vn?' });
+    expect(dialog).toHaveTextContent(
+      'Bạn nên xóa bản ghi CNAME uudai tại nhà cung cấp tên miền sau khi ngắt.',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Giữ kết nối' })).toBeInTheDocument();
     apiMock.mockResolvedValueOnce(undefined);
     await user.click(within(dialog).getByRole('button', { name: 'Ngắt kết nối' }));
     expect(lastCallTo(apiMock, endpoints.removeDomain).args).toEqual([site.id, broken.id]);
@@ -144,10 +166,27 @@ describe('DomainsScreen', () => {
 
   it('starts from the default address when there is no custom domain', () => {
     renderScreen(domainList([]));
+    expect(screen.getByRole('heading', { name: 'Địa chỉ của site' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Chưa có tên miền riêng' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Kết nối tên miền riêng' })).toHaveAttribute(
-      'href',
-      `/sites/${site.id}/domain/connect`,
+    // The header's and the empty state's, as on board 13.
+    const links = screen.getAllByRole('link', { name: 'Kết nối tên miền riêng' });
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link).toHaveAttribute('href', `/sites/${site.id}/domain/connect`);
+    }
+  });
+
+  it('says how many live pages move when the default address becomes primary again', async () => {
+    const user = userEvent.setup();
+    renderScreen(domainList([primary], primary.id, { count: 1, exampleSlug: '' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Đặt smilecare.payload.site làm địa chỉ chính' }),
+    );
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Đặt smilecare.payload.site làm địa chỉ chính?',
+    });
+    expect(dialog).toHaveTextContent(
+      '1 trang đang live sẽ có địa chỉ mới, ví dụ smilecare.payload.site.',
     );
   });
 });

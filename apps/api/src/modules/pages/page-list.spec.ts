@@ -89,6 +89,19 @@ describe('page list helpers', () => {
     expect(filterPages(pages, { q: '  ' })).toEqual(pages);
   });
 
+  it('ignores accents, case and extra spaces, like the lead inbox (ADR-005)', () => {
+    const promo = listed('live', { title: 'Ưu đãi tháng 11', slug: 'khuyen-mai' });
+    const hanoi = listed('draft', { title: 'Đặt lịch Hà Nội', slug: 'dat-lich' });
+    const pages = [promo, hanoi];
+    expect(filterPages(pages, { q: 'uu dai' })).toEqual([promo]);
+    expect(filterPages(pages, { q: 'UU   ĐÃI' })).toEqual([promo]);
+    expect(filterPages(pages, { q: 'dat lich ha noi' })).toEqual([hanoi]);
+    expect(filterPages(pages, { q: 'KHUYẾN-MÃI' })).toEqual([promo]);
+    // A slug's dashes are spaces to whoever types.
+    expect(filterPages(pages, { q: 'khuyen mai' })).toEqual([promo]);
+    expect(filterPages(pages, { q: 'uu dai', status: 'draft' })).toEqual([]);
+  });
+
   it('pages with a cursor on (updatedAt, id) into disjoint pages', () => {
     const pages = [listed('live'), listed('live'), listed('live'), listed('live'), listed('live')];
     const first = paginatePages(pages, undefined, 2);

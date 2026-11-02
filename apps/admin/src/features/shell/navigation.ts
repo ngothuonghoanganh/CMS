@@ -37,7 +37,12 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
       href: analyticsHref(siteId),
       permissions: ['pages.view'],
     },
-    { key: 'domain', label: 'Tên miền', href: `${base}/domain`, permissions: ['domains.manage'] },
+    {
+      key: 'domain',
+      label: 'Tên miền',
+      href: domainsHref(siteId),
+      permissions: ['domains.manage'],
+    },
     {
       key: 'privacy',
       label: 'Dữ liệu & đồng ý',
@@ -131,6 +136,11 @@ export function leadRecipientsHref(siteId: string): string {
 /** "Dữ liệu & đồng ý" (ADR-017). */
 export function privacyHref(siteId: string): string {
   return `${siteHref(siteId)}/privacy`;
+}
+
+/** "Tên miền", board 13 (ADR-022). */
+export function domainsHref(siteId: string): string {
+  return `${siteHref(siteId)}/domain`;
 }
 
 /**

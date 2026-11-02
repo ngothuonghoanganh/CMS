@@ -1,11 +1,13 @@
 import {
   type ActivityListResponse,
+  domainActivityTypes,
   endpoints,
   type LeadCounts,
   type PageListResponse,
   type Role,
   publishingActivityTypes,
   type Site,
+  type SiteAddressStatus,
 } from '@plp/contracts';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
@@ -39,6 +41,8 @@ vi.mock(import('../../lib/api'), async (importOriginal) => ({
 
 const apiMock = vi.mocked(api);
 const DASHBOARD_PATH = `/sites/${SITE_ID}`;
+/** The default address is primary, and no custom domain works yet. */
+const DEFAULT_ADDRESS: SiteAddressStatus = { primaryStatus: null, customDomainActive: false };
 
 const livePage = pageFixture();
 const draftPage = draftPageFixture({ checks: { blocking: 0, warnings: 3 } });
@@ -49,6 +53,7 @@ function renderDashboard(
     activity = { items: [activityFixture()], nextCursor: null },
     filters = { status: null, q: '' },
     leadCounts = NO_LEADS,
+    address = DEFAULT_ADDRESS,
     site = siteFixture(),
     loadedAt = Date.now(),
     role = 'owner',
@@ -57,6 +62,7 @@ function renderDashboard(
     activity?: ActivityListResponse;
     filters?: DashboardFilters;
     leadCounts?: LeadCounts | null;
+    address?: SiteAddressStatus;
     site?: Site;
     loadedAt?: number;
     role?: Role;
@@ -70,6 +76,7 @@ function renderDashboard(
       initialFilters={filters}
       initialPages={pages}
       initialActivity={activity}
+      address={address}
       initialLeadCounts={leadCounts}
       loadedAt={loadedAt}
       role={role}
@@ -316,7 +323,7 @@ describe('Dashboard', () => {
     expect(within(summary).queryByText(/chưa xử lý/)).not.toBeInTheDocument();
   });
 
-  it('asks only for publishing events and page deletions, so uploads never push them out of the activity card', async () => {
+  it('asks only for publishing events, page deletions and domain events, so uploads never push them out of the activity card', async () => {
     apiMock.mockResolvedValue({ items: [], nextCursor: null } satisfies ActivityListResponse);
     const { queryClient } = renderDashboard();
 
@@ -326,7 +333,7 @@ describe('Dashboard', () => {
     expect(call.args).toEqual([SITE_ID]);
     expect(call.options).toHaveProperty('query', {
       limit: 5,
-      types: [...publishingActivityTypes, 'page.deleted'].join(','),
+      types: [...publishingActivityTypes, 'page.deleted', ...domainActivityTypes].join(','),
     });
     // A site that never published shows the empty state instead of "tạo site".
     await vi.waitFor(() => {
@@ -442,13 +449,85 @@ describe('Dashboard', () => {
       'href',
       `${DASHBOARD_PATH}/leads?recipients=open`,
     );
-    expect(screen.getByText('1/4')).toBeInTheDocument();
+    expect(screen.getByText('1/5')).toBeInTheDocument();
+  });
+
+  it('connects a custom domain as a setup step, done once a domain is active (ADR-022)', () => {
+    const { unmount } = renderDashboard();
+    expect(screen.getByRole('link', { name: 'Kết nối tên miền riêng' })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/domain`,
+    );
+    unmount();
+    renderDashboard({ address: { primaryStatus: null, customDomainActive: true } });
+    expect(screen.getByText('Kết nối tên miền riêng')).toHaveClass(/doneLabel/);
+    expect(screen.getByText('2/5')).toBeInTheDocument();
+  });
+
+  it('shows "Đã kết nối · HTTPS" on the live address while its custom domain is active', () => {
+    renderDashboard({
+      site: siteFixture({ publicOrigin: 'https://go.smilecare.vn' }),
+      address: { primaryStatus: 'active', customDomainActive: true },
+    });
+    const summary = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(summary).getByText('go.smilecare.vn')).toBeInTheDocument();
+    expect(within(summary).getByText('Đã kết nối · HTTPS')).toBeInTheDocument();
+    expect(within(summary).queryByText('Luôn hoạt động')).toBeNull();
+    expect(within(summary).getByRole('link', { name: /Quản lý tên miền/ })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/domain`,
+    );
+  });
+
+  it('says a lost primary domain is broken and links to "Tên miền" to fix it', () => {
+    const site = siteFixture({ publicOrigin: 'https://go.smilecare.vn' });
+    const lost: SiteAddressStatus = { primaryStatus: 'lost', customDomainActive: false };
+    const { unmount } = renderDashboard({ site, address: lost });
+    const summary = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(summary).getByText('Mất kết nối')).toBeInTheDocument();
+    expect(within(summary).queryByText('Đã kết nối · HTTPS')).toBeNull();
+    expect(within(summary).getByText(/Khách vẫn mở được trang qua/).textContent).toBe(
+      `Khách vẫn mở được trang qua ${new URL(site.defaultOrigin).host}.`,
+    );
+    expect(within(summary).getByRole('link', { name: /Xem cách sửa/ })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/domain`,
+    );
+    unmount();
+
+    // Who cannot fix it is told who can.
+    renderDashboard({ site, address: lost, role: 'editor', leadCounts: null });
+    const forEditor = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(forEditor).queryByRole('link', { name: /Xem cách sửa/ })).toBeNull();
+    expect(within(forEditor).getByText(/Khách vẫn mở được trang qua/)).toHaveTextContent(
+      'Chủ sở hữu và Quản trị sửa được tên miền.',
+    );
+  });
+
+  it('has nothing to fix while the certificate of the primary domain is being issued', () => {
+    const site = siteFixture({ publicOrigin: 'https://go.smilecare.vn' });
+    const issuing: SiteAddressStatus = { primaryStatus: 'issuing', customDomainActive: false };
+    const { unmount } = renderDashboard({ site, address: issuing });
+    const summary = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(summary).queryByRole('link', { name: /Xem cách sửa/ })).toBeNull();
+    expect(within(summary).getByRole('link', { name: /Quản lý tên miền/ })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/domain`,
+    );
+    unmount();
+
+    renderDashboard({ site, address: issuing, role: 'editor', leadCounts: null });
+    const forEditor = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(forEditor).getByText(/Khách vẫn mở được trang qua/)).not.toHaveTextContent(
+      'sửa được tên miền',
+    );
   });
 
   it('tells a Biên tập who takes the setup steps of the site instead of linking to read-only settings', () => {
     renderDashboard({ role: 'editor', leadCounts: null, pages: pageListFixture([draftPage]) });
     for (const label of [
       'Thêm logo & chọn giao diện',
+      'Kết nối tên miền riêng',
       'Thêm chính sách quyền riêng tư',
       'Chọn nơi nhận lead (email)',
     ]) {
@@ -498,7 +577,7 @@ describe('Dashboard', () => {
     });
     expect(screen.getByText('Thêm chính sách quyền riêng tư')).toHaveClass(/doneLabel/);
     expect(screen.getByText('Chọn nơi nhận lead (email)')).toHaveClass(/doneLabel/);
-    expect(screen.getByText('3/4')).toBeInTheDocument();
+    expect(screen.getByText('3/5')).toBeInTheDocument();
   });
 
   it('invites to create the first page when the site has none', () => {
@@ -513,7 +592,7 @@ describe('Dashboard', () => {
       'href',
       `${DASHBOARD_PATH}/pages/new`,
     );
-    expect(screen.getByText('0/4')).toBeInTheDocument();
+    expect(screen.getByText('0/5')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -529,6 +608,7 @@ describe('Dashboard', () => {
               toVersion: null,
               count: null,
               slug: null,
+              hostname: null,
               revalidationFailed: true,
             },
           }),
@@ -698,6 +778,7 @@ describe('Dashboard', () => {
                   toVersion: 13,
                   count: null,
                   slug: null,
+                  hostname: null,
                   revalidationFailed: false,
                 },
               }),

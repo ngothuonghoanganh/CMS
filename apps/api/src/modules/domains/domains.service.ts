@@ -3,18 +3,22 @@ import {
   type AddDomainRequest,
   CUSTOM_DOMAINS_MAX,
   type Domain,
+  type DomainAvailability,
   type DomainListResponse,
   normalizeHostname,
   type SetPrimaryDomainRequest,
+  type SiteAddressStatus,
 } from '@plp/contracts';
 import { baseDomainOf, type Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { PagesRepository } from '../pages/pages.repository.js';
 import { RevalidationClient } from '../revalidation/revalidation.client.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
@@ -22,12 +26,21 @@ import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { DomainChecker } from './domain-checker.service.js';
 import { DOMAIN_NOT_FOUND, toDomainDto } from './domain-dto.js';
-import { domainStatus, newDomainToken } from './domain/domain-rules.js';
+import {
+  domainStatus,
+  livePagesSummary,
+  newDomainToken,
+  siteAddressStatus,
+} from './domain/domain-rules.js';
 import { type DomainRecord, DOMAINS_SITE_HOSTNAME_INDEX, EMPTY_CHECK } from './domain.schema.js';
 import { DomainsRepository } from './domains.repository.js';
 
 /** "Kiểm tra ngay" more often than this answers with the last check. */
 const RECHECK_AFTER_MS = 5000;
+
+const SYSTEM_ADDRESS_MESSAGE = 'Đây là địa chỉ của hệ thống';
+
+type HostnameValidation = { ok: true; hostname: string } | { ok: false; reason: string };
 
 /** Custom domains of a site for Chủ sở hữu and Quản trị (boards 13, 14; ADR-022). */
 @Injectable()
@@ -38,6 +51,8 @@ export class DomainsService {
     private readonly sites: SitesRepository,
     private readonly domains: DomainsRepository,
     private readonly users: UsersRepository,
+    private readonly pages: PagesRepository,
+    private readonly activity: ActivityRepository,
     private readonly checker: DomainChecker,
     private readonly revalidation: RevalidationClient,
     private readonly transactions: TransactionRunner,
@@ -49,23 +64,40 @@ export class DomainsService {
   }
 
   /**
+   * Whether adding a domain would work, while it is typed on board 14: the same validation as
+   * adding it, then this site's domains, then the verified owners of every site. Which site owns a
+   * taken domain is never told (ADR-022).
+   */
+  async availability(
+    user: AuthenticatedUser,
+    siteId: string,
+    typed: string,
+  ): Promise<DomainAvailability> {
+    const { scope, site } = await this.sitesService.access(user, siteId, 'domains.manage');
+    const valid = this.validate(typed);
+    if (!valid.ok) {
+      return { hostname: typed.trim().toLowerCase(), state: 'invalid', reason: valid.reason };
+    }
+    const { hostname } = valid;
+    const own = await this.domains.listForSite(scope, site._id);
+    if (own.some((domain) => domain.hostname === hostname)) {
+      return { hostname, state: 'already_added', reason: null };
+    }
+    const elsewhere = await this.domains.ownedElsewhere([hostname], site._id);
+    return { hostname, state: elsewhere.has(hostname) ? 'taken' : 'available', reason: null };
+  }
+
+  /**
    * Adds a domain and checks it at once. A domain another site owns is added too: its owner proves
    * it is theirs with the TXT record, which then moves it here (ADR-022).
    */
   async add(user: AuthenticatedUser, siteId: string, input: AddDomainRequest): Promise<Domain> {
     const { scope, site } = await this.sitesService.access(user, siteId, 'domains.manage');
-    const normalized = normalizeHostname(input.hostname, baseDomainOf(this.env));
-    if (!normalized.ok) {
-      throw validationFailed([
-        { path: ['hostname'], code: 'invalid', message: normalized.message },
-      ]);
+    const valid = this.validate(input.hostname);
+    if (!valid.ok) {
+      throw validationFailed([{ path: ['hostname'], code: 'invalid', message: valid.reason }]);
     }
-    const { hostname } = normalized;
-    if (hostname === this.env.CUSTOM_DOMAIN_CNAME_TARGET) {
-      throw validationFailed([
-        { path: ['hostname'], code: 'invalid', message: 'Đây là địa chỉ của hệ thống' },
-      ]);
-    }
+    const { hostname } = valid;
     const now = new Date();
     const record: DomainRecord = {
       _id: newObjectId(),
@@ -95,6 +127,11 @@ export class DomainsService {
           );
         }
         await this.domains.insert(scope, record, tx);
+        await this.activity.record(
+          scope,
+          { siteId: site._id, type: 'domain.added', data: { hostname } },
+          tx,
+        );
       });
     } catch (error) {
       if (isDuplicateKeyError(error, DOMAINS_SITE_HOSTNAME_INDEX)) {
@@ -136,6 +173,11 @@ export class DomainsService {
       if (!(await this.domains.remove(scope, site._id, domain._id, tx))) {
         throw notFound(DOMAIN_NOT_FOUND);
       }
+      await this.activity.record(
+        scope,
+        { siteId: site._id, type: 'domain.removed', data: { hostname: domain.hostname } },
+        tx,
+      );
     });
     await this.revalidation.revalidateSite(site.subdomain);
   }
@@ -169,13 +211,50 @@ export class DomainsService {
         }
         primary = { domainId: held._id, hostname: held.hostname };
       }
-      return this.sites.setPrimaryDomain(scope, site._id, primary, tx);
+      const before = await this.sites.findById(scope, site._id, tx);
+      const after = await this.sites.setPrimaryDomain(scope, site._id, primary, tx);
+      const unchanged =
+        (before?.primaryDomain?.domainId.toHexString() ?? null) ===
+        (primary?.domainId.toHexString() ?? null);
+      if (after !== null && !unchanged) {
+        await this.activity.record(
+          scope,
+          {
+            siteId: site._id,
+            type: 'domain.primary_changed',
+            data: {
+              hostname: primary?.hostname ?? new URL(this.sitesService.defaultOrigin(site)).host,
+            },
+          },
+          tx,
+        );
+      }
+      return after;
     });
     if (!updated) {
       throw notFound(SITE_NOT_FOUND);
     }
     await this.revalidation.revalidateSite(site.subdomain);
     return this.listOf(scope, updated);
+  }
+
+  /** Board 01, for every role that sees the site: the primary address and the setup step. */
+  async addressStatus(user: AuthenticatedUser, siteId: string): Promise<SiteAddressStatus> {
+    const { scope, site } = await this.sitesService.access(user, siteId, 'pages.view');
+    const domains = await this.domains.listForSite(scope, site._id);
+    return siteAddressStatus(domains, site.primaryDomain?.domainId ?? null, new Date());
+  }
+
+  /** The checks of adding a domain: a public domain name that is not one of the system's. */
+  private validate(typed: string): HostnameValidation {
+    const normalized = normalizeHostname(typed, baseDomainOf(this.env));
+    if (!normalized.ok) {
+      return { ok: false, reason: normalized.message };
+    }
+    if (normalized.hostname === this.env.CUSTOM_DOMAIN_CNAME_TARGET) {
+      return { ok: false, reason: SYSTEM_ADDRESS_MESSAGE };
+    }
+    return normalized;
   }
 
   private async find(
@@ -197,12 +276,13 @@ export class DomainsService {
   private async listOf(scope: WorkspaceScope, site: SiteRecord): Promise<DomainListResponse> {
     const domains = await this.domains.listForSite(scope, site._id);
     const now = new Date();
-    const [elsewhere, adders] = await Promise.all([
+    const [elsewhere, adders, livePages] = await Promise.all([
       this.domains.ownedElsewhere(
         domains.filter((domain) => domain.verifiedAt === null).map((domain) => domain.hostname),
         site._id,
       ),
       this.users.findRefs(domains.map((domain) => domain.addedBy)),
+      this.pages.listLiveForSite(scope, site._id),
     ]);
     return {
       items: domains.map((domain) =>
@@ -216,6 +296,7 @@ export class DomainsService {
       ),
       defaultHost: new URL(this.sitesService.defaultOrigin(site)).host,
       primaryDomainId: site.primaryDomain?.domainId.toHexString() ?? null,
+      livePages: livePagesSummary(livePages.map((page) => page.publishedSlug)),
     };
   }
 

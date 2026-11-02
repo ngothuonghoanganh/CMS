@@ -245,7 +245,8 @@ describe('pages and drafts', () => {
       expect(saved.revision).toBe(1);
       expect(saved.page.status.kind).toBe('draft');
       expect(saved.checks).toMatchObject({ revision: 1, blocking: [], warnings: [] });
-      expect(saved.checks.passed).toHaveLength(8);
+      // Eight from the draft, and "HTTPS hoạt động" of the default address (ADR-006).
+      expect(saved.checks.passed).toHaveLength(9);
 
       const again = await saveDraft(client, site.id, page.page.id, { baseRevision: 1, ...draft });
       expect(again.revision).toBe(2);

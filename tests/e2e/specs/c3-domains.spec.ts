@@ -2,6 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoSidewaysScroll, SCAN_VIEWPORTS } from '../support/axe.js';
 import { publishViaApi } from '../support/board.js';
 import { setDnsRecords } from '../support/dns.js';
+import { Editor } from '../support/editor.js';
 import {
   createPageViaApi,
   promoPage,
@@ -15,6 +16,8 @@ import { siteOrigin, urls } from '../urls.js';
  * C3 (ADR-022): a custom domain connected from its DNS records, made the primary address; the
  * page opens there and the default address redirects to it. Domains end in `.e2e.test`, which
  * Chromium sends to this machine, and their DNS answers come from the run's zone file.
+ * E1 (amended 2026-11-02): the dashboard, the activity and the publish checks follow the domain,
+ * and a domain another site has is reported as it is typed.
  */
 
 const port = new URL(urls.renderer).port;
@@ -88,6 +91,43 @@ test.describe('C3 · custom domains', () => {
     await visitor.goto(`${siteOrigin(site.subdomain)}/${slug}?utm_source=fb`);
     expect(visitor.url()).toBe(`${custom}?utm_source=fb`);
     await expect(visitor.locator('link[rel="canonical"]')).toHaveAttribute('href', custom);
+    await visitor.close();
+
+    // Board 01: the live address, the setup step and the activity follow the domain.
+    await page.goto(`/sites/${site.id}`);
+    const summary = page.getByRole('region', { name: 'Tóm tắt site' });
+    // The public address of an E2E run carries the renderer's port.
+    await expect(summary.getByText(`${hostname}:${port}`, { exact: true })).toBeVisible();
+    await expect(summary.getByText('Đã kết nối · HTTPS', { exact: true })).toBeVisible();
+    const setup = page.getByRole('region', { name: 'Thiết lập site' });
+    await expect(
+      setup.getByRole('listitem').filter({ hasText: 'Kết nối tên miền riêng' }),
+    ).toContainText('(đã xong)');
+    const activity = page.getByRole('region', { name: 'Hoạt động xuất bản gần đây' });
+    await expect(activity).toContainText(`Hệ thống cấp chứng chỉ HTTPS cho ${hostname}`);
+    await expect(activity).toContainText(`Ngọc Anh đặt ${hostname} làm địa chỉ chính`);
+
+    // The page search ignores accents and case (ADR-005).
+    const search = page.getByRole('searchbox', { name: 'Tìm trang' });
+    const noMatch = page.getByRole('heading', { name: 'Không có trang nào khớp' });
+    await search.fill('khong co trang nay');
+    await expect(noMatch).toBeVisible();
+    await search.fill('UU DAI nieng');
+    await expect(noMatch).toBeHidden();
+    await expect(page).toHaveURL(/q=UU\+DAI\+nieng/);
+    await expect(
+      page.getByRole('link', { name: 'Ưu đãi niềng răng tháng 11', exact: true }),
+    ).toBeVisible();
+
+    // Board 05: the primary address passes, without blocking or warning.
+    const editor = new Editor(page);
+    await editor.goto(site.id, created.page.id);
+    const dialog = await editor.openPublishDialog();
+    await dialog.getByText(/mục đã đạt$/).click();
+    await expect(
+      dialog.getByText(`Tên miền ${hostname} đã xác minh`, { exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByText('HTTPS hoạt động', { exact: true })).toBeVisible();
   });
 
   test('a domain another site has is shown as taken, without saying whose', async ({
@@ -105,10 +145,24 @@ test.describe('C3 · custom domains', () => {
     try {
       const otherPage = await other.newPage();
       const second = await setUpSite(otherPage.request);
-      await addDomain(otherPage, second.site.id, hostname);
+      // Said as the domain is typed, before it is added (board 14).
+      await otherPage.goto(`/sites/${second.site.id}/domain/connect`);
+      await otherPage.getByRole('textbox', { name: 'Tên miền' }).fill(hostname);
+      await expect(
+        otherPage
+          .getByRole('alert')
+          .filter({ hasText: 'Tên miền này đang được một site khác dùng' }),
+      ).toBeVisible();
+      await otherPage
+        .getByRole('button', { name: 'Tiếp tục để xác minh quyền sở hữu', exact: true })
+        .click();
+      await expect(otherPage.getByRole('row', { name: /^TXT/ })).toBeVisible();
       await expect(otherPage.getByRole('status')).toContainText(
         'Tên miền này đang được một site khác dùng',
       );
+      await expect(
+        otherPage.getByRole('heading', { level: 2, name: 'Xác minh quyền sở hữu' }),
+      ).toBeVisible();
       await expect(otherPage.getByRole('main')).not.toContainText(first.site.name);
     } finally {
       await other.close();
