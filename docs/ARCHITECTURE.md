@@ -472,6 +472,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Logo và Trước & sau có `hasMedia: false`, nên không có thứ tự trên điện thoại.
     - Link chính sách ở chân trang mở tab mới, như link của form, và được suy ra từ `leadCapture` lúc render: trang có form đang live hiện nó mà không phải xuất bản lại, không release nào bị viết lại. Chỉ so trùng với link tuyệt đối người dùng thêm.
     - `styles.spec` thêm quy tắc: màu chữ của section chỉ lấy từ vai trò màu đã kiểm AA.
+  - **Sửa 2026-11-02 (review giao diện):** variant đặt được tên riêng cho mục danh sách (`SectionVariant.listLabels`): "Quy trình 3 bước" gọi mục là "Bước" ở panel, kiểm tra hợp lệ, kiểm tra xuất bản và tóm tắt ("3 bước"). Danh sách bước giữ `role="list"` và một "Bước N:" ẩn cho trình đọc màn hình. Ảnh bắt buộc chưa chọn có nhắc "Cần chọn ảnh trước khi xuất bản." ngay trong panel; logo thiếu tên báo "chưa có tên đối tác". Variant bị chặn vì số mục có kiểu vô hiệu và lý do ở tooltip.
   - **Sửa 2026-11-02:** `hasMedia` nghĩa là ảnh nằm cạnh chữ và đổi chỗ trên điện thoại. Hero "Ảnh nền" có `hasMedia: false`, nên không còn tùy chọn thứ tự trên điện thoại vốn không có tác dụng. `renderSectionContent` trả `ReactElement | null`, nên thiếu một loại section là lỗi biên dịch.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
@@ -1355,6 +1356,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - "Tóm tắt thay đổi" thêm các câu board không có: đổi vai trò, toàn workspace, "Chưa có thay đổi."; site màn hình không biết được đếm là "N site khác".
     - Dòng cuối của màn 15b hiện ở mọi trạng thái của lời mời.
     - Tìm thành viên và lời mời bỏ dấu và không phân biệt hoa thường, bằng cùng `foldVietnamese` (nay ở `@plp/contracts`) với hộp thư lead; lời mời chỉ tìm theo email.
+    - Dán danh bạ dạng `Tên <email>` (Gmail, Outlook) lấy địa chỉ trong ngoặc nhọn. Email có lời mời đã hết hạn báo "Lời mời đã hết hạn — dùng Gửi lại". Lỗi chặn gửi được đọc qua vùng live và focus về ô email.
+    - Màn 15b: link `mailto:` có tiêu đề và nội dung, và hiện email người mời. Từ chối hay tham gia hiện kết quả của chính lựa chọn đó.
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1449,6 +1452,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Kiểm tra trước khi thêm: `already_added` thắng `taken`; màn 14 hỏi sau 400 ms, request mới hủy request cũ, kết quả đọc qua vùng live.
     - Tiêu đề bước cho trạng thái board không vẽ: taken → "Xác minh quyền sở hữu", lost → "Sửa bản ghi DNS", needs_attention → "Chưa bật được HTTPS".
     - Tìm trang so cả slug với dấu gạch ngang là khoảng trắng: "khuyen mai" tìm ra `khuyen-mai`.
+    - "Đặt làm chính" cho địa chỉ mặc định không hứa chuyển hướng 301: renderer chỉ chuyển hướng về tên miền riêng đang là địa chỉ chính. Hộp thoại nói tên miền riêng vẫn mở các trang, còn sitemap và canonical chuyển sang địa chỉ mặc định.
 
 ### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
 
@@ -1826,6 +1830,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Hai lần xóa site cùng lúc: một 204, một 404.
     - Thành viên chỉ có site đó giữ `siteIds: []`.
   - Không có toast sau khi xóa site: màn workspace có khung riêng, toast sẽ mất ngay khi chuyển màn.
+  - Xóa trang xong thì bỏ các query của trang đó trước khi làm mới danh sách, rồi `router.refresh()` để số trang ở Sidebar (render phía server) cập nhật. Mục "Xóa trang" bị vô hiệu vẫn nhận focus (`aria-disabled`, mẫu menu của APG) và không làm gì khi chọn. Ô xác nhận tên của "Xóa site" chỉ đọc khi đang xóa, nên focus không rời hộp thoại.
 - **Amended 2026-11-02 (vòng sửa lỗi sau E1–E6):** lead tới đúng lúc trang bị gỡ rồi xóa.
   - Nhận lead đọc lại release của lead sau khi lưu; release đã mất thì xóa lead và trả 404 "Form này không còn nhận đăng ký", như khi site bị xóa.
   - Lead được lưu trong lúc transaction xóa trang còn mở vẫn có thể giữ một release đã mất. Đọc lead khi đó không lỗi:
