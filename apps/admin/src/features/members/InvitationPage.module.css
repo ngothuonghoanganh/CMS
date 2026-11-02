@@ -56,6 +56,11 @@
   font-weight: 700;
 }
 
+/* Focused only to continue from the answer of a choice; it is not a control. */
+.title:focus {
+  outline: none;
+}
+
 .text {
   margin: 0;
   font-size: var(--text-body);

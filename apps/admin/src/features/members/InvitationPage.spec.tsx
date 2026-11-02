@@ -61,6 +61,9 @@ function serve(lookup: InvitationLookupResponse, me: MeResponse | null) {
     if (endpoint === endpoints.acceptInvitation) {
       return Promise.resolve({ workspaceId: WORKSPACE_ID, slug: 'may-xanh-agency' });
     }
+    if (endpoint === endpoints.declineInvitation) {
+      return Promise.resolve(undefined);
+    }
     return Promise.reject(new Error('unexpected call'));
   });
 }
@@ -115,6 +118,48 @@ describe('InvitationPage', () => {
     });
   });
 
+  it('says the invitation was declined, though the link kept while signing in is gone', async () => {
+    const user = userEvent.setup();
+    // Back from signing in: the link's secret was kept in the session, not in the address.
+    window.location.hash = '';
+    window.sessionStorage.setItem(PENDING_INVITATION_KEY, 'bi-mat-cua-link');
+    serve(invitation, signedIn('thuy.mkt@smilecare.vn'));
+    renderWithProviders(<InvitationPage addresses={null} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Từ chối lời mời' }));
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: 'Bạn đã từ chối lời mời',
+    });
+    expect(heading).toHaveFocus();
+    expect(
+      screen.getByText(
+        'Bạn không tham gia Mây Xanh Agency. Nếu đổi ý, hãy nhờ Ngọc Anh gửi lời mời mới.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Liên kết mời không hợp lệ')).toBeNull();
+    expect(lastCallTo(apiMock, endpoints.declineInvitation).options).toEqual({
+      body: { token: 'bi-mat-cua-link' },
+    });
+    expect(window.sessionStorage.getItem(PENDING_INVITATION_KEY)).toBeNull();
+  });
+
+  it('opens the workspace after "Tham gia" without calling the link invalid meanwhile', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '';
+    window.sessionStorage.setItem(PENDING_INVITATION_KEY, 'bi-mat-cua-link');
+    serve(invitation, signedIn('thuy.mkt@smilecare.vn'));
+    renderWithProviders(<InvitationPage addresses={null} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Tham gia' }));
+    await vi.waitFor(() => {
+      expect(loadPageMock).toHaveBeenCalledWith('/');
+    });
+    // The page loads the workspace; until then it says so.
+    expect(screen.getByText('Đang mở Mây Xanh Agency')).toBeInTheDocument();
+    expect(screen.queryByText('Liên kết mời không hợp lệ')).toBeNull();
+  });
+
   it('opens the joined workspace at its own address when workspaces have one (ADR-025)', async () => {
     const user = userEvent.setup();
     document.cookie = 'plp_ws=; Max-Age=0; Path=/';
@@ -161,10 +206,22 @@ describe('InvitationPage', () => {
       await screen.findByRole('heading', { level: 1, name: 'Lời mời đã hết hạn' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Hãy nhờ Ngọc Anh gửi lại/)).toBeInTheDocument();
-    // The inviter is asked by email for another link (ADR-021).
-    expect(screen.getByRole('link', { name: 'Nhờ Ngọc Anh gửi lại' })).toHaveAttribute(
-      'href',
-      'mailto:ngocanh@mayxanh.vn',
+    // The inviter is asked by email for another link (ADR-021), in an email already written.
+    const ask = new URL(
+      screen.getByRole('link', { name: 'Nhờ Ngọc Anh gửi lại' }).getAttribute('href') ?? '',
+    );
+    expect(ask.protocol).toBe('mailto:');
+    expect(ask.pathname).toBe('ngocanh@mayxanh.vn');
+    expect(ask.search).not.toContain('+');
+    expect(ask.searchParams.get('subject')).toBe('Nhờ gửi lại lời mời vào Mây Xanh Agency');
+    expect(ask.searchParams.get('body')).toBe(
+      'Chào Ngọc Anh,\n\nLời mời vào Mây Xanh Agency gửi tới thuy.mkt@smilecare.vn đã hết hạn. ' +
+        'Nhờ bạn gửi lại giúp mình.\n\nCảm ơn bạn!',
+    );
+    // Without a mail app, the address is there to copy.
+    expect(screen.getByText('ngocanh@mayxanh.vn')).toBeInTheDocument();
+    expect(screen.getByText(/^Email của Ngọc Anh:/)).toHaveTextContent(
+      'Email của Ngọc Anh: ngocanh@mayxanh.vn',
     );
     unmount();
 

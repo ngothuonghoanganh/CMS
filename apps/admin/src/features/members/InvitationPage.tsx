@@ -11,7 +11,14 @@ import {
 } from '@plp/contracts';
 import { Avatar, Button, ButtonLink, Callout, Field, Input, Spinner } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, type SubmitEvent, useState, useSyncExternalStore } from 'react';
+import {
+  type ReactNode,
+  type SubmitEvent,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { ApiError, api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { loadPage } from '../../lib/page-load';
@@ -77,6 +84,25 @@ function openWorkspace(
   }
   document.cookie = workspacePreferenceCookie(workspace.id);
   loadPage('/');
+}
+
+/**
+ * "Nhờ … gửi lại": an email to the inviter, already written, asking for a new link to the same
+ * address (ADR-021). Encoded for `mailto:` (RFC 6068): spaces as %20, never "+".
+ */
+function resendRequestHref(
+  invitation: Pick<InvitationLookupResponse, 'workspaceName' | 'invitedByName' | 'email'>,
+  inviterEmail: string,
+): string {
+  const subject = `Nhờ gửi lại lời mời vào ${invitation.workspaceName}`;
+  const body = [
+    `Chào ${invitation.invitedByName},`,
+    '',
+    `Lời mời vào ${invitation.workspaceName} gửi tới ${invitation.email} đã hết hạn. Nhờ bạn gửi lại giúp mình.`,
+    '',
+    'Cảm ơn bạn!',
+  ].join('\n');
+  return `mailto:${inviterEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 const fieldIds = { name: 'invite-name', password: 'invite-password' } as const;
@@ -205,8 +231,18 @@ export interface InvitationPageProps {
   addresses: WorkspaceAddresses | null;
 }
 
+/**
+ * What the signed-in person chose here. The kept token is forgotten as they choose, so the page
+ * shows this first: read again, it would find no token and call the link invalid.
+ */
+type Outcome =
+  | { kind: 'joining'; workspaceName: string }
+  | { kind: 'declined'; invitation: InvitationLookupResponse };
+
 export function InvitationPage({ addresses }: InvitationPageProps) {
   const queryClient = useQueryClient();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const outcomeHeading = useRef<HTMLHeadingElement>(null);
   // Undefined while rendering on the server, where there is no fragment.
   const token = useSyncExternalStore(subscribe, currentToken, () => undefined);
   const lookup = useQuery({
@@ -231,9 +267,10 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
     retry: false,
   });
   const accept = useMutation({
-    mutationFn: (secret: string) =>
+    mutationFn: ({ secret }: { secret: string; invitation: InvitationLookupResponse }) =>
       api(endpoints.acceptInvitation, [], { body: { token: secret } }),
-    onSuccess: (result) => {
+    onSuccess: (result, { invitation }) => {
+      setOutcome({ kind: 'joining', workspaceName: invitation.workspaceName });
       openWorkspace({ id: result.workspaceId, slug: result.slug }, addresses);
     },
     onError: (error) => {
@@ -241,16 +278,23 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
     },
   });
   const decline = useMutation({
-    mutationFn: (secret: string) =>
+    mutationFn: ({ secret }: { secret: string; invitation: InvitationLookupResponse }) =>
       api(endpoints.declineInvitation, [], { body: { token: secret } }),
-    onSuccess: () => {
+    onSuccess: (_result, { invitation }) => {
+      setOutcome({ kind: 'declined', invitation });
       forgetToken();
-      void queryClient.invalidateQueries({ queryKey: ['invitation'] });
     },
     onError: (error) => {
       reportUnexpected('Declining an invitation failed', error);
     },
   });
+
+  // The buttons go with the card they were on: the focus continues from the answer.
+  useEffect(() => {
+    if (outcome?.kind === 'declined') {
+      outcomeHeading.current?.focus();
+    }
+  }, [outcome]);
   const logout = useMutation({
     mutationFn: () => api(endpoints.logout, []),
     onSuccess: () => {
@@ -261,6 +305,24 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
     },
   });
 
+  if (outcome?.kind === 'joining') {
+    // The workspace page is loading; nothing else is left to do here.
+    return <Spinner label={`Đang mở ${outcome.workspaceName}`} />;
+  }
+  if (outcome?.kind === 'declined') {
+    const { invitation } = outcome;
+    return (
+      <InvitationCard invitation={invitation}>
+        <h1 ref={outcomeHeading} tabIndex={-1} className={styles.title}>
+          Bạn đã từ chối lời mời
+        </h1>
+        <p className={styles.text}>
+          Bạn không tham gia {invitation.workspaceName}. Nếu đổi ý, hãy nhờ{' '}
+          {invitation.invitedByName} gửi lời mời mới.
+        </p>
+      </InvitationCard>
+    );
+  }
   if (token === undefined || (typeof token === 'string' && (lookup.isPending || me.isPending))) {
     return <Spinner label="Đang mở lời mời" />;
   }
@@ -307,9 +369,19 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
         ) : null}
         {/* The API gives the inviter's email for an expired invitation only (ADR-021). */}
         {invitation.state === 'expired' && invitation.inviterEmail !== null ? (
-          <ButtonLink href={`mailto:${invitation.inviterEmail}`} variant="secondary" fullWidth>
-            Nhờ {invitation.invitedByName} gửi lại
-          </ButtonLink>
+          <>
+            <ButtonLink
+              href={resendRequestHref(invitation, invitation.inviterEmail)}
+              variant="secondary"
+              fullWidth
+            >
+              Nhờ {invitation.invitedByName} gửi lại
+            </ButtonLink>
+            {/* Without a mail app the link opens nothing: the address can still be copied. */}
+            <p className={styles.text}>
+              Email của {invitation.invitedByName}: <strong>{invitation.inviterEmail}</strong>
+            </p>
+          </>
         ) : null}
       </InvitationCard>
     );
@@ -371,7 +443,7 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
           loading={accept.isPending}
           disabled={decline.isPending}
           onClick={() => {
-            accept.mutate(token);
+            accept.mutate({ secret: token, invitation });
           }}
         >
           Tham gia
@@ -382,7 +454,7 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
           loading={decline.isPending}
           disabled={accept.isPending}
           onClick={() => {
-            decline.mutate(token);
+            decline.mutate({ secret: token, invitation });
           }}
         >
           Từ chối lời mời
