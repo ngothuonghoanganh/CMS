@@ -1803,6 +1803,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Integration test cho `summary` theo phạm vi site và quyền `leads.view`.
   - E2E: mở Sites từ Sidebar, mở một site.
+- **Chi tiết khi làm (lát E6):**
+  - `GET /workspaces/:id/role-counts` trả thêm `members`, là nguồn của số đếm "Thành viên". Chỉ đếm thành viên, không đếm lời mời, như "Đang hoạt động · N" của màn 15.
+  - `summary` luôn có trong danh sách site, nên bộ chuyển site ở mọi màn chạy cả hai aggregate. Index mới `pages_site_live { workspaceId, siteId, publishedReleaseId }` giúp aggregate của trang chỉ đọc index. Mỗi workspace DB thêm một index (khoảng 46, ADR-025).
+  - `livePages` đếm trang có pointer (`live` và `live_with_changes`). `leadsLast7Days` dùng cùng cửa sổ và quy tắc spam với thẻ "Lead 7 ngày qua", và là số chính xác.
+  - Màn Sites dùng danh sách site khung workspace đã nạp, không gọi thêm. Nút ở đầu màn là "Tạo site"; trạng thái trống là "Tạo site đầu tiên". Thành viên không tạo được site thấy lời giải thích theo phạm vi của họ.
 
 ---
 
@@ -1883,7 +1888,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Xong       |
 | E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Đang làm   |
 | E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Xong       |
-| E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Đang làm   |
+| E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Xong       |
 
 ## 6. Trước khi phát hành
 
