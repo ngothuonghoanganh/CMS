@@ -121,18 +121,19 @@ export class TemplatesRepository {
       .exec();
   }
 
-  /** "Sửa thông tin". Null when the template is gone. */
+  /** "Sửa thông tin", in the transaction that holds its sites. Null when the template is gone. */
   updateInfo(
     scope: WorkspaceScope,
     id: ObjectId,
     info: TemplateInfo,
     now: Date,
+    tx: Tx,
   ): Promise<TemplateRecord | null> {
     return this.templates(scope)
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId },
         { $set: { ...info, updatedAt: now, updatedBy: scope.userId } },
-        { returnDocument: 'after' },
+        { returnDocument: 'after', session: tx },
       )
       .lean<TemplateRecord>()
       .exec();

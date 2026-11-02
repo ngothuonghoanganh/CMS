@@ -56,6 +56,7 @@ export type UpdateWorkspaceTemplateValues = z.output<typeof updateWorkspaceTempl
 const VERSION_NOT_FOUND = 'Không tìm thấy phiên bản';
 const NOT_LIVE = 'Trang chưa có bản live';
 const SITE_NOT_YOURS = 'Chỉ chọn được các site của bạn trong workspace';
+const SITE_GONE = 'Có site không còn trong workspace';
 const KEEPS_EVERY_SITE =
   'Mẫu này đang dùng cho mọi site. Chỉ thành viên của toàn workspace mới giới hạn được nó.';
 /** "Tư vấn niềng răng trả góp (bản sao)", within the name's 120 characters. */
@@ -146,13 +147,7 @@ export class WorkspaceTemplatesService {
   ): Promise<WorkspaceTemplate> {
     const scope = await this.manager(user, workspaceId);
     const source = await this.sourceOf(scope, input.source);
-    const info: TemplateInfo = {
-      name: input.name,
-      description: input.description,
-      goal: input.goal,
-      industry: input.industry,
-      scope: await this.scopeOf(scope, input.scope, null),
-    };
+    const wanted = await this.scopeOf(scope, input.scope, null);
     const prepared = await this.prepare(scope, source, input.content, input.note);
     const id = newObjectId();
     const now = new Date();
@@ -162,6 +157,13 @@ export class WorkspaceTemplatesService {
         if ((await this.templates.countForWorkspace(scope, tx)) >= MAX_WORKSPACE_TEMPLATES) {
           throw limitReached();
         }
+        const info: TemplateInfo = {
+          name: input.name,
+          description: input.description,
+          goal: input.goal,
+          industry: input.industry,
+          scope: await this.heldScope(scope, wanted, chosenSites(input.scope), tx),
+        };
         await this.templates.create(scope, { id, info, now }, tx);
         await this.versions.insert(
           scope,
@@ -169,7 +171,7 @@ export class WorkspaceTemplatesService {
           now,
           tx,
         );
-        await this.recordSaved(scope, source, info.name, 1, tx);
+        await this.recordSaved(scope, source, input.name, 1, tx);
       });
     });
     return this.dtoOf(scope, id);
@@ -227,14 +229,17 @@ export class WorkspaceTemplatesService {
   ): Promise<WorkspaceTemplate> {
     const scope = await this.manager(user, workspaceId);
     const template = await this.visible(scope, templateId);
-    const info: TemplateInfo = {
-      name: input.name,
-      description: input.description,
-      goal: input.goal,
-      industry: input.industry,
-      scope: await this.scopeOf(scope, input.scope, template.scope),
-    };
-    const updated = await this.templates.updateInfo(scope, template._id, info, new Date());
+    const wanted = await this.scopeOf(scope, input.scope, template.scope);
+    const updated = await this.transactions.run(async (tx) => {
+      const info: TemplateInfo = {
+        name: input.name,
+        description: input.description,
+        goal: input.goal,
+        industry: input.industry,
+        scope: await this.heldScope(scope, wanted, chosenSites(input.scope), tx),
+      };
+      return this.templates.updateInfo(scope, template._id, info, new Date(), tx);
+    });
     if (updated === null) {
       throw notFound(TEMPLATE_NOT_FOUND);
     }
@@ -269,7 +274,7 @@ export class WorkspaceTemplatesService {
             description: template.description,
             goal: template.goal,
             industry: template.industry,
-            scope: template.scope,
+            scope: await this.heldScope(scope, template.scope, [], tx),
           },
           now,
         },
@@ -614,6 +619,31 @@ export class WorkspaceTemplatesService {
       ]);
     }
     return next.scope;
+  }
+
+  /**
+   * The scope as the write in `tx` stores it. Each of its sites is written (`dataSeq`), so
+   * deleting one at the same moment either waits and then takes it out of the stored scope, or is
+   * seen here as gone (ADR-027). A site the member chose now that is gone: 422; one kept from
+   * before (a site they do not see, the scope of the template copied) leaves the scope.
+   */
+  private async heldScope(
+    scope: WorkspaceScope,
+    wanted: TemplateScopeRecord,
+    chosen: readonly ObjectId[],
+    tx: Tx,
+  ): Promise<TemplateScopeRecord> {
+    if (wanted.kind === 'workspace') {
+      return wanted;
+    }
+    const left = await this.sites.recordDataWrites(scope, wanted.siteIds, tx);
+    const isLeft = (id: ObjectId) => left.some((site) => site.equals(id));
+    if (!chosen.every(isLeft)) {
+      throw validationFailed([
+        { path: ['scope', 'siteIds'], code: 'site_not_found', message: SITE_GONE },
+      ]);
+    }
+    return { kind: 'sites', siteIds: wanted.siteIds.filter(isLeft) };
   }
 
   private async setArchived(

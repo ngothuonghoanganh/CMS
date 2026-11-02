@@ -19,14 +19,16 @@ import {
 } from '@plp/contracts';
 import { findSystemTemplate, getAtPath } from '@plp/sections/schema';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { cleanSeo, composition, heroSection } from '../../../test/compositions.js';
 import { createPage, getPage, publish, replaceDraft, uniqueSlug } from '../../../test/pages.js';
 import { addMember, createSite, uploadImage } from '../../../test/resources.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { TEMPLATE_VERSION_COLLECTION } from './template.schema.js';
+import { TemplateVersionsRepository } from './template-versions.repository.js';
 
 const HEADING = 'Niềng răng trong suốt cho người bận rộn';
 
@@ -509,6 +511,103 @@ describe('workspace templates', () => {
       })
       .expect(404);
     await owner.post(`/sites/${kitchen.id}/pages`, fromTemplate(limited.id, 1)).expect(201);
+  });
+
+  it('never keeps a site deleted meanwhile among the sites that may use a template', async () => {
+    const { pageId } = await pageWithPhoto(owner, smile);
+    const sitesRepository = t.app.get(SitesRepository);
+    const listForWorkspace = sitesRepository.listForWorkspace.bind(sitesRepository);
+    const deleteSite = (site: Site) =>
+      owner.delete(`/sites/${site.id}`).send({ confirmName: site.name }).expect(204);
+    /** Deletes `site` once the sites chosen were checked, before the template is written. */
+    const deletedOnceChecked = (site: Site) =>
+      vi.spyOn(sitesRepository, 'listForWorkspace').mockImplementationOnce(async (...args) => {
+        const listed = await listForWorkspace(...args);
+        await deleteSite(site);
+        return listed;
+      });
+    const siteGone = [
+      {
+        path: ['scope', 'siteIds'],
+        code: 'site_not_found',
+        message: 'Có site không còn trong workspace',
+      },
+    ];
+
+    // "Lưu trang thành template" for a site deleted meanwhile.
+    const first = await createSite(owner, workspaceId, { name: 'Xóa khi lưu' });
+    let spy = deletedOnceChecked(first);
+    try {
+      const refused = await owner
+        .post(
+          base(),
+          saveBody(smile.id, pageId, { scope: { kind: 'sites', siteIds: [first.id, kitchen.id] } }),
+        )
+        .expect(422);
+      expect(problemSchema.parse(refused.body).issues).toEqual(siteGone);
+    } finally {
+      spy.mockRestore();
+    }
+
+    // "Sửa thông tin" choosing a site deleted meanwhile.
+    const saved = await saveTemplate(
+      owner,
+      saveBody(smile.id, pageId, { scope: { kind: 'sites', siteIds: [kitchen.id] } }),
+    );
+    const second = await createSite(owner, workspaceId, { name: 'Xóa khi sửa' });
+    const info = { name: saved.name, description: '', goal: null, industry: null };
+    spy = deletedOnceChecked(second);
+    try {
+      const refused = await owner
+        .patch(`${base()}/${saved.id}`, {
+          ...info,
+          scope: { kind: 'sites', siteIds: [second.id, kitchen.id] },
+        })
+        .expect(422);
+      expect(problemSchema.parse(refused.body).issues).toEqual(siteGone);
+    } finally {
+      spy.mockRestore();
+    }
+    const stored = (await board(owner)).find((item) => item.id === saved.id);
+    expect(stored?.scope).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+
+    // "Nhân bản" of a template one of whose sites is deleted meanwhile.
+    const third = await createSite(owner, workspaceId, { name: 'Xóa khi nhân bản' });
+    await owner
+      .patch(`${base()}/${saved.id}`, {
+        ...info,
+        scope: { kind: 'sites', siteIds: [third.id, kitchen.id] },
+      })
+      .expect(200);
+    const versions = t.app.get(TemplateVersionsRepository);
+    const find = versions.find.bind(versions);
+    const versionSpy = vi.spyOn(versions, 'find').mockImplementationOnce(async (...args) => {
+      const found = await find(...args);
+      await deleteSite(third);
+      return found;
+    });
+    let copy: WorkspaceTemplate;
+    try {
+      copy = workspaceTemplateSchema.parse(
+        (await owner.post(`${base()}/${saved.id}/duplicate`).expect(201)).body,
+      );
+    } finally {
+      versionSpy.mockRestore();
+    }
+    expect(copy.scope).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+
+    // Every later "Sửa thông tin" saves the sites the board shows.
+    for (const template of [saved, copy]) {
+      const shown = (await board(owner)).find((item) => item.id === template.id);
+      expect(shown?.scope).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+      await owner
+        .patch(`${base()}/${template.id}`, {
+          ...info,
+          name: template.name,
+          scope: shown?.scope ?? { kind: 'workspace' },
+        })
+        .expect(200);
+    }
   });
 
   it('belongs to its workspace: another one finds nothing', async () => {

@@ -406,6 +406,35 @@ export class SitesRepository {
     return this.increment(scope, siteId, 'dataSeq', tx);
   }
 
+  /**
+   * `recordDataWrite` for a document that names several sites: the sites a workspace template may
+   * be used in (ADR-030). Returns those still in the workspace; the others were deleted since they
+   * were read, so the document must not name them.
+   */
+  async recordDataWrites(
+    scope: WorkspaceScope,
+    siteIds: readonly ObjectId[],
+    tx: Tx,
+  ): Promise<ObjectId[]> {
+    if (siteIds.length === 0) {
+      return [];
+    }
+    const filter = { _id: { $in: [...siteIds] }, workspaceId: scope.workspaceId };
+    const result = await this.sites(scope)
+      .updateMany(filter, { $inc: { dataSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount === siteIds.length) {
+      return [...siteIds];
+    }
+    // Rare: a site went. The read in the same transaction names those that are left.
+    const left = await this.sites(scope)
+      .find(filter, { _id: 1 })
+      .session(tx)
+      .lean<Pick<SiteRecord, '_id'>[]>()
+      .exec();
+    return siteIds.filter((id) => left.some((site) => site._id.equals(id)));
+  }
+
   private async increment(
     scope: WorkspaceScope,
     siteId: ObjectId,
