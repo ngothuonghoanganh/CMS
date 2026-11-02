@@ -87,6 +87,17 @@ describe('templateContentOf', () => {
     expect(parseComposition(sample).success).toBe(true);
   });
 
+  it('keeps the sentences the AI wrote to check only with the text itself (ADR-031)', () => {
+    const page = realPage();
+    const [hero, benefits] = page.sections;
+    if (hero === undefined || benefits === undefined) {
+      throw new Error('The page has a Hero and benefits');
+    }
+    const reviewed = composition([{ ...hero, reviewPaths: ['heading'] }, benefits]);
+    expect(templateContentOf(reviewed, 'keep').sections[0]?.reviewPaths).toEqual(['heading']);
+    expect(templateContentOf(reviewed, 'sample').sections[0]?.reviewPaths).toEqual([]);
+  });
+
   it('never changes the page it reads', () => {
     const page = realPage();
     const before = structuredClone(page);

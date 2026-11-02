@@ -71,7 +71,9 @@ export function templateContentOf(
         return section;
       }
       const emptied = withoutImages(section);
-      return { ...emptied, samplePaths: samplePathsOf(emptied) };
+      // Sample text is replaced before publishing anyway: no sentence is left for the user to
+      // check as one the AI wrote (ADR-031).
+      return { ...emptied, samplePaths: samplePathsOf(emptied), reviewPaths: [] };
     }),
   };
 }
