@@ -80,7 +80,8 @@ const fieldIds: Record<BriefField, string> = {
   audience: 'ai-audience',
   differentiators: 'ai-differentiators',
   existingContent: 'ai-existing',
-  title: 'ai-title',
+  // Not "ai-title": that id names the heading of each step.
+  title: 'ai-page-title',
   slug: 'ai-slug',
 };
 
