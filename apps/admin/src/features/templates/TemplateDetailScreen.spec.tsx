@@ -1,4 +1,6 @@
 import { type Access, endpoints, type Membership } from '@plp/contracts';
+import { ToastProvider } from '@plp/ui';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +13,7 @@ import {
   WORKSPACE_ID,
 } from '../dashboard/test-fixtures';
 import { PAGE_ID, pageDetail, sampleComposition } from '../editor/test-fixtures';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { TemplateDetailScreen } from './TemplateDetailScreen';
 import { detailFixture, readinessFixture, WORKSPACE_TEMPLATE_ID } from './test-fixtures';
 
@@ -253,6 +255,81 @@ describe('TemplateDetailScreen', () => {
       `/workspaces/${WORKSPACE_ID}/templates?source=workspace&archived=1`,
     );
     expect(screen.queryByRole('button', { name: 'Tạo trang từ mẫu' })).toBeNull();
+  });
+
+  it('asks only roles with templates.manage to restore an archived template', () => {
+    const archived = detailFixture('nha-khoa-uu-dai', {
+      id: WORKSPACE_TEMPLATE_ID,
+      source: 'workspace',
+      archived: true,
+    });
+    const { unmount } = renderDetail({ template: archived, role: 'editor' });
+    expect(screen.getByText(/Mẫu này đã được lưu trữ\. Khôi phục ở/)).toBeInTheDocument();
+    unmount();
+
+    renderDetail({ template: archived, role: 'contributor' });
+    expect(
+      screen.getByText(
+        'Mẫu này đã được lưu trữ. Chỉ Chủ sở hữu, Quản trị và Biên tập khôi phục được mẫu.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Khôi phục ở/)).toBeNull();
+  });
+
+  it('keeps the apply dialog open to say the template was archived meanwhile', async () => {
+    const user = userEvent.setup();
+    const live = pageFixture({ id: PAGE_ID });
+    const own = detailFixture('nha-khoa-uu-dai', {
+      id: WORKSPACE_TEMPLATE_ID,
+      source: 'workspace',
+    });
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.listPages) {
+        return Promise.resolve(pageListFixture([live]));
+      }
+      if (endpoint === endpoints.getPage) {
+        return Promise.resolve(pageDetail(sampleComposition()));
+      }
+      if (endpoint === endpoints.applyTemplate) {
+        return Promise.reject(
+          apiError(409, 'template_archived', 'Mẫu “Ưu đãi dịch vụ nha khoa” đã được lưu trữ'),
+        );
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    router.refresh.mockReset();
+    const { rerender, queryClient } = renderDetail({ template: own });
+    await user.click(screen.getByRole('button', { name: 'Áp dụng vào trang đang sửa…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Áp dụng mẫu vào trang đang sửa' });
+    const submit = within(dialog).getByRole('button', { name: 'Thay bản nháp và mở editor' });
+    await vi.waitFor(() => {
+      expect(submit).toBeEnabled();
+    });
+    await user.click(submit);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Mẫu “Ưu đãi dịch vụ nha khoa” đã được lưu trữ. Khôi phục mẫu ở “Template của workspace” để dùng lại.',
+    );
+    expect(submit).toBeDisabled();
+    expect(router.refresh).toHaveBeenCalledOnce();
+
+    // The refresh renders the template archived: the dialog stays until the user closes it.
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <TemplateDetailScreen
+            workspace={workspace}
+            role="owner"
+            siteLimited={false}
+            template={{ ...own, archived: true }}
+            sites={[smile]}
+            siteId={SITE_ID}
+          />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole('dialog', { name: 'Áp dụng mẫu vào trang đang sửa' }),
+    ).toHaveTextContent('đã được lưu trữ');
   });
 
   it('offers a template limited to other sites to none of the member’s sites', () => {

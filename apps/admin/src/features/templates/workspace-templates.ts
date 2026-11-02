@@ -1,4 +1,12 @@
-import type { Site, TemplateScope, TemplateVersionItem, WorkspaceTemplate } from '@plp/contracts';
+import {
+  type Access,
+  can,
+  holdersOf,
+  type Site,
+  type TemplateScope,
+  type TemplateVersionItem,
+  type WorkspaceTemplate,
+} from '@plp/contracts';
 
 /*
  * Board 19 (ADR-030) as pure functions: what its columns, its version history and its save dialog
@@ -15,6 +23,16 @@ export function scopeLabel(scope: WorkspaceTemplate['scope'], sites: readonly Si
     return site === undefined ? [] : [site.name];
   });
   return names.length === 0 ? 'Không còn site nào' : names.join(', ');
+}
+
+/**
+ * What a member can do about an archived template: restore it on board 19 with
+ * `templates.manage`, otherwise ask those who can. Nothing is made from it until then.
+ */
+export function archivedHint(role: Access): string {
+  return can(role, 'templates.manage')
+    ? 'Khôi phục mẫu ở “Template của workspace” để dùng lại.'
+    : `Chỉ ${holdersOf('templates.manage')} khôi phục được mẫu.`;
 }
 
 /** "ĐÃ TẠO": "3 trang", or "Chưa dùng". */

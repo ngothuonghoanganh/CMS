@@ -53,8 +53,14 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
     templateUsableIn(template.siteIds, site.id),
   );
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const chosen = usable.find((template) => template.id === templateId) ?? usable[0] ?? null;
+  // The first template until the user picks one; a pick that left the list (archived meanwhile)
+  // is no choice, rather than another template chosen behind their back.
+  const chosen =
+    templateId === null
+      ? (usable[0] ?? null)
+      : (usable.find((template) => template.id === templateId) ?? null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [archivedId, setArchivedId] = useState<string | null>(null);
 
   const prepare = useMutation({
     mutationKey: preparingKey,
@@ -70,7 +76,15 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
       onOpenChange(false);
       announce(`Đã áp dụng mẫu “${result.template.name}”. Nhấn Ctrl+Z để hoàn tác.`);
     },
-    onError: (error) => {
+    onError: (error, template) => {
+      if (error instanceof ApiError && error.code === 'template_archived') {
+        // Out of the library now: it leaves the list read again, and nothing takes its place.
+        setTemplateId(template.id);
+        setArchivedId(template.id);
+        void library.refetch();
+        setFailure(`${error.problem.title}. Đã tải lại danh sách mẫu; hãy chọn mẫu khác.`);
+        return;
+      }
       if (error instanceof ApiError && error.code === 'template_changed') {
         // The list is read again: the newer version is the one chosen now.
         void library.refetch();
@@ -114,6 +128,11 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
               setFailure(null);
             }}
           >
+            {chosen === null ? (
+              <option value="" disabled>
+                Chọn mẫu
+              </option>
+            ) : null}
             <optgroup label="Hệ thống">
               {system.map((template) => (
                 <option key={template.id} value={template.id}>
@@ -165,7 +184,11 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
         >
           Hủy
         </Button>
-        <Button type="submit" loading={prepare.isPending} disabled={chosen === null}>
+        <Button
+          type="submit"
+          loading={prepare.isPending}
+          disabled={chosen === null || chosen.id === archivedId}
+        >
           Áp dụng mẫu
         </Button>
       </div>
