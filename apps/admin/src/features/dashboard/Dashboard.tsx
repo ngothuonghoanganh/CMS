@@ -101,19 +101,19 @@ function sameFilters(a: DashboardFilters, b: DashboardFilters): boolean {
 export function Dashboard(props: DashboardProps) {
   // The filters on screen, as the URL holds them: the search once typing stops.
   const [shown, setShown] = useState(props.initialFilters);
-  const [render, setRender] = useState({ loadedAt: props.loadedAt, screen: 0 });
-  if (render.loadedAt !== props.loadedAt) {
+  const [rendered, setRendered] = useState({ loadedAt: props.loadedAt, screen: 0 });
+  if (rendered.loadedAt !== props.loadedAt) {
     // A server render for other filters than the ones on screen comes from a navigation (the
     // sidebar's "Trang" while filtering): the screen starts again from its filters, as on a visit.
     // A refresh renders the URL the screen wrote (the sidebar's "Trang N" after "Xóa trang"): the
     // screen stays, with its focus, the search being typed and the pages "Xem thêm trang" loaded.
     const navigated = !sameFilters(props.initialFilters, shown);
-    setRender({ loadedAt: props.loadedAt, screen: render.screen + (navigated ? 1 : 0) });
+    setRendered({ loadedAt: props.loadedAt, screen: rendered.screen + (navigated ? 1 : 0) });
     if (navigated) {
       setShown(props.initialFilters);
     }
   }
-  return <DashboardScreen key={render.screen} {...props} onFiltersShown={setShown} />;
+  return <DashboardScreen key={rendered.screen} {...props} onFiltersShown={setShown} />;
 }
 
 function DashboardScreen({
