@@ -93,6 +93,86 @@ describe('ApplyTemplateInEditorDialog ("Áp dụng mẫu…", ADR-030)', () => {
     expect(store.getState().draft).toEqual(before);
   });
 
+  it('cannot be dismissed while the template is prepared, so it never applies unseen', async () => {
+    const user = userEvent.setup();
+    let answer: (value: unknown) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.listTemplates) {
+        return Promise.resolve({ items: templateSummaries });
+      }
+      if (endpoint === endpoints.templateComposition) {
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    const store = makeStore();
+    const onOpenChange = vi.fn();
+    renderEditor(<ApplyTemplateInEditorDialog open onOpenChange={onOpenChange} />, { store });
+    const dialog = screen.getByRole('dialog', { name: 'Áp dụng mẫu' });
+    await within(dialog).findByRole('combobox', { name: 'Mẫu' });
+    await user.click(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' }));
+
+    // Escape and the close button are refused while the answer is on its way.
+    await user.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('button', { name: 'Đóng' }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Hủy' })).toBeDisabled();
+
+    answer({
+      composition: dentalComposition(),
+      assets: [],
+      template: { name: 'Ưu đãi dịch vụ nha khoa', version: 1 },
+    });
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(store.getState().draft.composition.sections).toHaveLength(8);
+  });
+
+  it('reads the library again when the template was archived meanwhile, and changes nothing', async () => {
+    const user = userEvent.setup();
+    const own = workspaceSummaryFixture();
+    let archived = false;
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.listTemplates) {
+        return Promise.resolve({
+          items: archived ? templateSummaries : [own, ...templateSummaries],
+        });
+      }
+      archived = true;
+      return Promise.reject(
+        new ApiError(409, {
+          type: 'about:blank',
+          title: `Mẫu “${own.name}” đã được lưu trữ`,
+          status: 409,
+          code: 'template_archived',
+          detail: 'Khôi phục mẫu ở “Template của workspace” để dùng lại.',
+        }),
+      );
+    });
+    const store = makeStore();
+    const before = store.getState().draft;
+    renderEditor(<ApplyTemplateInEditorDialog open onOpenChange={vi.fn()} />, { store });
+    const dialog = screen.getByRole('dialog', { name: 'Áp dụng mẫu' });
+    const picker = await within(dialog).findByRole('combobox', { name: 'Mẫu' });
+    await user.selectOptions(picker, own.id);
+    await user.click(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      `Mẫu “${own.name}” đã được lưu trữ. Đã tải lại danh sách mẫu; hãy chọn mẫu khác.`,
+    );
+    await vi.waitFor(() => {
+      expect(within(picker).queryByRole('option', { name: /Tư vấn niềng răng/ })).toBeNull();
+    });
+    // Nothing else is chosen in its place behind the user's back.
+    expect(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' })).toBeDisabled();
+    expect(store.getState().draft).toBe(before);
+    await user.selectOptions(picker, 'nha-khoa-uu-dai');
+    expect(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' })).toBeEnabled();
+  });
+
   it('says when the template changed meanwhile, and changes nothing', async () => {
     const user = userEvent.setup();
     apiMock.mockImplementation((endpoint) => {

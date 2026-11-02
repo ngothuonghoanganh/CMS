@@ -97,4 +97,21 @@ describe('RadioCardGroup', () => {
     expect(event).toHaveAccessibleDescription('Chọn mục tiêu của trang');
     expect(lead).toHaveAttribute('aria-invalid', 'true');
   });
+
+  it('never makes a card wider than the group, whatever its minimum width (WCAG 1.4.10)', () => {
+    render(
+      <RadioCardGroup
+        legend="Áp dụng gì"
+        options={goals}
+        value="lead"
+        onChange={vi.fn()}
+        minColumnWidth={320}
+      />,
+    );
+    const grid = screen.getByRole('group', { name: 'Áp dụng gì' }).querySelector('div');
+    // In a 244 px dialog body a 320 px column would scroll sideways: one column as wide as it.
+    expect(grid?.style.gridTemplateColumns).toBe(
+      'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
+    );
+  });
 });

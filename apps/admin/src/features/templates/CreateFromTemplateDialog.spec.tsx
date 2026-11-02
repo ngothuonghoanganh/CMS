@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { CreateFromTemplateDialog } from './CreateFromTemplateDialog';
+import { templateQueryKeys } from './queries';
 import { readinessFixture, summaryFixture } from './test-fixtures';
 
 const { router } = vi.hoisted(() => ({
@@ -98,6 +99,10 @@ describe('CreateFromTemplateDialog', () => {
       'uu-dai-dich-vu-nha-khoa',
     );
     expect(within(dialog).getByText('go.smilecare.vn/')).toBeInTheDocument();
+    // A long site address takes its own line rather than squeeze the slug (PageSlugField).
+    expect(
+      within(dialog).getByRole('textbox', { name: /Đường dẫn/ }).parentElement?.className,
+    ).toMatch(/wrapPrefix/);
     expect(await within(dialog).findByText('Đường dẫn này dùng được.')).toBeInTheDocument();
     // The site has what the form needs: no note.
     expect(within(dialog).queryByRole('note')).toBeNull();
@@ -185,6 +190,59 @@ describe('CreateFromTemplateDialog', () => {
       'true',
     );
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('says what the form cannot show on a field', async () => {
+    const user = userEvent.setup();
+    serve({ [SITE_ID]: readinessFixture() }, () =>
+      Promise.reject(
+        apiError(422, 'validation_failed', 'Dữ liệu không hợp lệ', [
+          { path: ['start', 'templateId'], code: 'custom', message: 'Mã mẫu không hợp lệ' },
+        ]),
+      ),
+    );
+    renderDialog();
+    await screen.findByText('Đường dẫn này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã mẫu không hợp lệ');
+  });
+
+  it('says the template was archived meanwhile, stops, and has the screen read it again', async () => {
+    const user = userEvent.setup();
+    const onTemplateChanged = vi.fn();
+    serve({ [SITE_ID]: readinessFixture() }, () =>
+      Promise.reject(
+        apiError(409, 'template_archived', 'Mẫu “Ưu đãi dịch vụ nha khoa” đã được lưu trữ'),
+      ),
+    );
+    const { queryClient } = renderDialog({ onTemplateChanged });
+    queryClient.setQueryData(templateQueryKeys.all(WORKSPACE_ID), { items: [] });
+    await screen.findByText('Đường dẫn này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Mẫu “Ưu đãi dịch vụ nha khoa” đã được lưu trữ. Khôi phục mẫu ở “Template của workspace” để dùng lại.',
+    );
+    expect(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' })).toBeDisabled();
+    expect(onTemplateChanged).toHaveBeenCalledOnce();
+    expect(queryClient.getQueryState(templateQueryKeys.all(WORKSPACE_ID))?.isInvalidated).toBe(
+      true,
+    );
+  });
+
+  it('tells a role that cannot restore an archived template who can', async () => {
+    const user = userEvent.setup();
+    serve({ [SITE_ID]: readinessFixture() }, () =>
+      Promise.reject(
+        apiError(409, 'template_archived', 'Mẫu “Ưu đãi dịch vụ nha khoa” đã được lưu trữ'),
+      ),
+    );
+    renderDialog({ role: 'contributor' });
+    await screen.findByText('Đường dẫn này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Chỉ Chủ sở hữu, Quản trị và Biên tập khôi phục được mẫu.');
+    expect(alert).not.toHaveTextContent('Khôi phục mẫu');
   });
 
   it('offers the new version when the template changed since it was shown', async () => {

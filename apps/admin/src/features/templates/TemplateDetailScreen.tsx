@@ -37,6 +37,7 @@ import { ApplyTemplateDialog } from './ApplyTemplateDialog';
 import { CreateFromTemplateDialog } from './CreateFromTemplateDialog';
 import { goalLabel } from './library-filters';
 import { type ReadinessItem, readinessItems } from './readiness';
+import { archivedHint } from './workspace-templates';
 import { type PreviewDevice, previewDeviceLabels, TemplatePreview } from './TemplatePreview';
 import styles from './TemplateDetailScreen.module.css';
 
@@ -159,16 +160,20 @@ export function TemplateDetailScreen({
                 </Link>
               </Callout>
             ) : template.archived ? (
-              <Callout tone="info">
-                Mẫu này đã được lưu trữ. Khôi phục ở{' '}
-                <Link
-                  href={workspaceTemplatesHref(workspace.id, true)}
-                  className={styles.inlineLink}
-                >
-                  Template của workspace
-                </Link>{' '}
-                để dùng lại.
-              </Callout>
+              can(role, 'templates.manage') ? (
+                <Callout tone="info">
+                  Mẫu này đã được lưu trữ. Khôi phục ở{' '}
+                  <Link
+                    href={workspaceTemplatesHref(workspace.id, true)}
+                    className={styles.inlineLink}
+                  >
+                    Template của workspace
+                  </Link>{' '}
+                  để dùng lại.
+                </Callout>
+              ) : (
+                <Callout tone="info">Mẫu này đã được lưu trữ. {archivedHint(role)}</Callout>
+              )
             ) : initialSiteId === undefined ? (
               <p className={styles.note}>
                 {!can(role, 'pages.edit')
@@ -254,7 +259,8 @@ export function TemplateDetailScreen({
         </div>
       </div>
 
-      {initialSiteId === undefined || !usable ? null : (
+      {/* An open dialog stays when the template read again was archived meanwhile: it says so. */}
+      {initialSiteId === undefined || !(usable || createOpen || applyOpen) ? null : (
         <>
           <CreateFromTemplateDialog
             workspaceId={workspace.id}
@@ -270,7 +276,9 @@ export function TemplateDetailScreen({
             }}
           />
           <ApplyTemplateDialog
+            workspaceId={workspace.id}
             template={template}
+            role={role}
             sites={targets}
             initialSiteId={initialSiteId}
             open={applyOpen}

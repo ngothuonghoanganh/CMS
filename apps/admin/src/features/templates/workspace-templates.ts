@@ -1,4 +1,12 @@
-import type { Site, TemplateScope, TemplateVersionItem, WorkspaceTemplate } from '@plp/contracts';
+import {
+  type Access,
+  can,
+  holdersOf,
+  type Site,
+  type TemplateScope,
+  type TemplateVersionItem,
+  type WorkspaceTemplate,
+} from '@plp/contracts';
 
 /*
  * Board 19 (ADR-030) as pure functions: what its columns, its version history and its save dialog
@@ -17,6 +25,16 @@ export function scopeLabel(scope: WorkspaceTemplate['scope'], sites: readonly Si
   return names.length === 0 ? 'Không còn site nào' : names.join(', ');
 }
 
+/**
+ * What a member can do about an archived template: restore it on board 19 with
+ * `templates.manage`, otherwise ask those who can. Nothing is made from it until then.
+ */
+export function archivedHint(role: Access): string {
+  return can(role, 'templates.manage')
+    ? 'Khôi phục mẫu ở “Template của workspace” để dùng lại.'
+    : `Chỉ ${holdersOf('templates.manage')} khôi phục được mẫu.`;
+}
+
 /** "ĐÃ TẠO": "3 trang", or "Chưa dùng". */
 export function usedLabel(count: number): string {
   return count === 0 ? 'Chưa dùng' : `${count} trang`;
@@ -27,9 +45,13 @@ export function versionOrigin(version: TemplateVersionItem): string {
   if (version.note !== '') {
     return version.note;
   }
-  return version.reusedFrom === null
-    ? `Lưu từ trang “${version.source.pageTitle}”`
-    : `Dùng lại nội dung v${version.reusedFrom}`;
+  if (version.reusedFrom !== null) {
+    return `Dùng lại nội dung v${version.reusedFrom}`;
+  }
+  // The API names no page of a site the member does not see.
+  return version.source.pageTitle === null
+    ? 'Lưu từ một trang ở site khác'
+    : `Lưu từ trang “${version.source.pageTitle}”`;
 }
 
 /** "Đã tạo 2 trang". */
@@ -56,6 +78,24 @@ export function keptPagesNote(template: Pick<WorkspaceTemplate, 'usedCount' | 'c
 
 /** Who may use a template as the dialogs edit it. */
 export type ScopeDraft = TemplateScope;
+
+/**
+ * The scope "Sửa thông tin" starts from: the template's, without a site the admin does not know,
+ * one deleted since the list was read, so that saving never sends its id back. The API never names
+ * the sites a member does not see, and keeps those as they are (ADR-030).
+ */
+export function editableScope(
+  scope: WorkspaceTemplate['scope'],
+  sites: readonly Site[],
+): ScopeDraft {
+  if (scope.kind === 'workspace') {
+    return scope;
+  }
+  return {
+    kind: 'sites',
+    siteIds: scope.siteIds.filter((id) => sites.some((site) => site.id === id)),
+  };
+}
 
 /** The scope a new template starts with: the site its page is in, or every site. */
 export function initialScope(siteId: string | null): ScopeDraft {

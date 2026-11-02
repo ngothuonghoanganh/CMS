@@ -23,10 +23,11 @@ import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { suggestSlug } from '../onboarding/wizard-state';
 import { finalizeSlug, normalizeSlugTyping } from '../seo/seo-presentation';
 import { leadRecipientsHref, pageHref, privacyHref } from '../shell/navigation';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { keepFieldFocus } from '../shell/use-schema-form';
-import { readinessQuery } from './queries';
+import { readinessQuery, templateQueryKeys } from './queries';
 import { setupGap } from './readiness';
+import { archivedHint } from './workspace-templates';
 import styles from './CreateFromTemplateDialog.module.css';
 
 const TITLE_MAX = 120;
@@ -69,7 +70,10 @@ export interface CreateFromTemplateDialogProps {
   role: Access;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The API has a newer version than the one shown: the screen reads the template again. */
+  /**
+   * The template is not as shown: the API has a newer version ("Xem phiên bản mới"), or it was
+   * archived meanwhile (called at once). The screen reads it again.
+   */
   onTemplateChanged: () => void;
 }
 
@@ -159,6 +163,12 @@ function CreateFromTemplateForm({
       router.push(pageHref(siteId, detail.page.id, 'edit'));
     },
     onError: (error) => {
+      if (error instanceof ApiError && error.code === 'template_archived') {
+        // Every list that offers it is read again, the screen too; the dialog says why.
+        void queryClient.invalidateQueries({ queryKey: templateQueryKeys.all(workspaceId) });
+        onTemplateChanged();
+        return;
+      }
       if (error instanceof ApiError) {
         const fields = error.fieldErrors();
         const slugMessage =
@@ -201,9 +211,12 @@ function CreateFromTemplateForm({
 
   const failure = create.error;
   const templateChanged = failure instanceof ApiError && failure.code === 'template_changed';
-  const fieldProblem =
-    failure instanceof ApiError &&
-    (failure.code === 'slug_taken' || Object.keys(failure.fieldErrors()).length > 0);
+  const templateArchived = failure instanceof ApiError && failure.code === 'template_archived';
+  // A slug another page took shows on its field, as do the issues of the title and the slug.
+  const unshown =
+    failure === null || (failure instanceof ApiError && failure.code === 'slug_taken')
+      ? null
+      : problemBesideFields(failure, ['title', 'slug']);
   const gap =
     template.hasForm && readiness.data !== undefined && site !== undefined
       ? setupGap(true, site.name, readiness.data)
@@ -275,9 +288,13 @@ function CreateFromTemplateForm({
         >
           {failure.problem.title}. {failure.problem.detail}
         </Callout>
-      ) : failure === null || fieldProblem ? null : (
+      ) : templateArchived ? (
+        <Callout tone="warning" role="alert">
+          {failure.problem.title}. {archivedHint(role)}
+        </Callout>
+      ) : unshown === null ? null : (
         <Callout tone="danger" role="alert">
-          {problemMessage(failure)}
+          {unshown}
         </Callout>
       )}
       <div className={styles.actions}>
@@ -293,7 +310,7 @@ function CreateFromTemplateForm({
         <Button
           type="submit"
           loading={create.isPending}
-          disabled={templateChanged}
+          disabled={templateChanged || templateArchived}
           onMouseDown={keepFieldFocus}
         >
           Tạo bản nháp và mở editor

@@ -99,6 +99,15 @@ const statusLabels: Record<AiSectionStatus, string> = {
   kept: 'Bạn tự điền',
 };
 
+/** What a screen reader hears when a section's status changes: one sentence with its name. */
+const progressSentences: Record<AiSectionStatus, (name: string) => string> = {
+  queued: (name) => `${name}: chờ viết.`,
+  writing: (name) => `Đang viết ${name}…`,
+  done: (name) => `Đã viết xong ${name}.`,
+  failed: (name) => `Chưa viết được ${name}.`,
+  kept: (name) => `${name}: bạn tự điền.`,
+};
+
 /** Why the job wrote nothing, in the board's words: what happened, before what it means. */
 const failureReasons: Record<AiFailure, string> = {
   ai_overloaded: 'Dịch vụ AI đang quá tải.',
@@ -119,8 +128,8 @@ type Run =
   | { kind: 'done'; job: AiJob }
   | { kind: 'partial'; job: AiJob }
   | { kind: 'failed'; failure: AiFailure | null }
-  /** The stream broke while the job ran: it goes on on the server. */
-  | { kind: 'lost'; jobId: string; checking: boolean; stillRunning: boolean };
+  /** The stream broke while the job ran: it goes on on the server, `job` as last seen. */
+  | { kind: 'lost'; job: AiJob; checking: boolean; stillRunning: boolean };
 
 function withSectionStatus(job: AiJob, sectionId: string, status: AiSectionStatus): AiJob {
   return {
@@ -243,11 +252,14 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [progressNote, setProgressNote] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const shownStep = useRef(state.step);
+  const shownRun = useRef(run.kind);
   const pendingFocus = useRef<BriefErrors | null>(null);
   const reading = useRef<AbortController | null>(null);
   const focusAfterRemoval = useRef<string | null>(null);
+  const focusAfterMove = useRef<{ key: string; control: 'up' | 'down' } | null>(null);
   const usageQuery = useQuery({
     queryKey: aiQueryKeys.usage(site.id),
     queryFn: () => api(endpoints.aiUsage, [site.id]),
@@ -273,6 +285,20 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     headingRef.current?.focus();
   }, [state.step]);
 
+  // A run that changes within the writing step ("Thử lại", "Thử lại N section", "Xem tiến độ",
+  // the end of a run) removes the button that had the focus, and the step's own effect does not
+  // run: the heading, which says where the run is now, takes the focus instead of <body>.
+  useEffect(() => {
+    if (shownRun.current === run.kind) {
+      return;
+    }
+    shownRun.current = run.kind;
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      headingRef.current?.focus();
+    }
+  }, [run.kind]);
+
   // Once a removed row has left the list, its neighbour's "Bỏ" takes the focus.
   useEffect(() => {
     const key = focusAfterRemoval.current;
@@ -281,6 +307,26 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     }
     focusAfterRemoval.current = null;
     document.querySelector<HTMLButtonElement>(`[data-remove="${key}"]`)?.focus();
+  }, [state.structure]);
+
+  // A move next to the navigation bar or the footer disables the arrow that had the focus, and
+  // reordering may move the row's buttons: keep the focus on that arrow, else the other one, else
+  // the row's "Bỏ", as the editor's section toolbar does.
+  useEffect(() => {
+    const request = focusAfterMove.current;
+    if (request === null) {
+      return;
+    }
+    focusAfterMove.current = null;
+    const other = request.control === 'up' ? 'down' : 'up';
+    const target = [
+      `[data-move="${request.key}:${request.control}"]`,
+      `[data-move="${request.key}:${other}"]`,
+      `[data-remove="${request.key}"]`,
+    ]
+      .map((selector) => document.querySelector<HTMLButtonElement>(selector))
+      .find((button) => button !== null && !button.disabled);
+    target?.focus();
   }, [state.structure]);
 
   // Leaving the screen stops reading the stream; the job itself goes on on the server.
@@ -352,10 +398,19 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
       await start(controller.signal, (event) => {
         if (event.type === 'started') {
           seen.job = event.job;
+          setProgressNote('');
           setRun({ kind: 'running', job: event.job, cancelling: false });
+          // A new run reserved its use as it started (a retry did not): the header reads it now,
+          // and again when the run ends, which gives the use back when nothing was written.
+          void queryClient.invalidateQueries({ queryKey: aiQueryKeys.usage(site.id) });
         } else if (event.type === 'section' && seen.job !== null) {
           const job = withSectionStatus(seen.job, event.sectionId, event.status);
+          const index = job.sections.findIndex((section) => section.id === event.sectionId);
+          const name = state.structure[index]?.name;
           seen.job = job;
+          if (name !== undefined) {
+            setProgressNote(progressSentences[event.status](name));
+          }
           setRun((previous) => (previous.kind === 'running' ? { ...previous, job } : previous));
         } else if (event.type === 'finished') {
           seen.job = event.job;
@@ -370,7 +425,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
         throw error;
       }
       reportUnexpected('Reading the AI job stream failed', error);
-      setRun({ kind: 'lost', jobId: seen.job.id, checking: false, stillRunning: false });
+      setRun({ kind: 'lost', job: seen.job, checking: false, stillRunning: false });
     }
   }
 
@@ -456,23 +511,24 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     }
   }
 
-  async function checkLost(jobId: string) {
-    setRun({ kind: 'lost', jobId, checking: true, stillRunning: false });
+  async function checkLost(last: AiJob) {
+    setRun({ kind: 'lost', job: last, checking: true, stillRunning: false });
     try {
-      const job = await api(endpoints.getAiPageJob, [site.id, jobId]);
+      const job = await api(endpoints.getAiPageJob, [site.id, last.id]);
       if (job.status === 'running') {
-        setRun({ kind: 'lost', jobId, checking: false, stillRunning: true });
+        setRun({ kind: 'lost', job, checking: false, stillRunning: true });
         return;
       }
       finish(job);
     } catch (error) {
       reportUnexpected('Reading the AI job failed', error);
-      setRun({ kind: 'lost', jobId, checking: false, stillRunning: false });
+      setRun({ kind: 'lost', job: last, checking: false, stillRunning: false });
       setProblem(problemMessage(error));
     }
   }
 
   function moveSection(key: string, name: string, index: number, offset: -1 | 1) {
+    focusAfterMove.current = { key, control: offset === -1 ? 'up' : 'down' };
     dispatch({ type: 'section_moved', key, offset });
     setAnnouncement(`Đã đưa ${name} tới vị trí ${index + offset + 1}.`);
   }
@@ -520,8 +576,11 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     job.sections.filter((section) => section.status === 'failed').length;
   const writableCount = (job: AiJob) =>
     job.sections.filter((section) => section.status !== 'kept').length;
+  // The statuses last known; a broken stream keeps those it had.
   const shownJob =
-    run.kind === 'running' || run.kind === 'done' || run.kind === 'partial' ? run.job : null;
+    run.kind === 'running' || run.kind === 'done' || run.kind === 'partial' || run.kind === 'lost'
+      ? run.job
+      : null;
   const writingTitle = run.kind === 'partial' ? 'Gần xong' : 'Đang viết nội dung';
   const writingLead =
     run.kind === 'partial'
@@ -762,6 +821,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                         aria-label={`Đưa ${entry.name} lên`}
                         icon={<ArrowUpIcon size={16} />}
                         size="sm"
+                        data-move={`${entry.key}:up`}
                         disabled={!canShift(state.structure, index, -1)}
                         onClick={() => {
                           moveSection(entry.key, entry.name, index, -1);
@@ -771,6 +831,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                         aria-label={`Đưa ${entry.name} xuống`}
                         icon={<ArrowDownIcon size={16} />}
                         size="sm"
+                        data-move={`${entry.key}:down`}
                         disabled={!canShift(state.structure, index, 1)}
                         onClick={() => {
                           moveSection(entry.key, entry.name, index, 1);
@@ -867,27 +928,36 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                 </h1>
                 <p className={styles.lead}>{writingLead}</p>
               </div>
-              <ol aria-label="Tiến độ viết" aria-live="polite" className={styles.progress}>
-                {state.structure.map((entry, index) => {
-                  const status: AiSectionStatus = shownJob?.sections[index]?.status ?? 'queued';
-                  return (
-                    <li
-                      key={entry.key}
-                      className={cx(styles.progressItem, styles[`progress_${status}`])}
-                    >
-                      <span aria-hidden="true" className={styles.progressMark}>
-                        {status === 'done' ? (
-                          <CheckIcon size={12} strokeWidth={3} />
-                        ) : status === 'failed' ? (
-                          '!'
-                        ) : null}
-                      </span>
-                      <span className={styles.progressName}>{entry.name}</span>
-                      <span className={styles.progressStatus}>{statusLabels[status]}</span>
-                    </li>
-                  );
-                })}
-              </ol>
+              {/* Nothing was written: board 20 shows no progress, where every row would wait. */}
+              {run.kind === 'failed' ? null : (
+                <ol aria-label="Tiến độ viết" className={styles.progress}>
+                  {state.structure.map((entry, index) => {
+                    const status: AiSectionStatus = shownJob?.sections[index]?.status ?? 'queued';
+                    return (
+                      <li
+                        key={entry.key}
+                        className={cx(styles.progressItem, styles[`progress_${status}`])}
+                      >
+                        <span aria-hidden="true" className={styles.progressMark}>
+                          {status === 'done' ? (
+                            <CheckIcon size={12} strokeWidth={3} />
+                          ) : status === 'failed' ? (
+                            '!'
+                          ) : null}
+                        </span>
+                        <span className={styles.progressName}>{entry.name}</span>
+                        <span className={styles.progressStatus}>{statusLabels[status]}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+              {/* One sentence per change, with the section's name; the list itself stays quiet. */}
+              {run.kind === 'starting' || run.kind === 'running' ? (
+                <p role="status" className={styles.visuallyHidden}>
+                  {progressNote}
+                </p>
+              ) : null}
 
               {run.kind === 'starting' || run.kind === 'running' || run.kind === 'done' ? (
                 <div className={styles.actions}>
@@ -979,7 +1049,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                     </Callout>
                   )}
                   <div className={styles.actionGroup}>
-                    <Button loading={run.checking} onClick={() => void checkLost(run.jobId)}>
+                    <Button loading={run.checking} onClick={() => void checkLost(run.job)}>
                       Xem tiến độ
                     </Button>
                     <ButtonLink as={Link} variant="secondary" href={siteHref(site.id)}>

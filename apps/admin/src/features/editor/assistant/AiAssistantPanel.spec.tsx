@@ -319,6 +319,33 @@ describe('the AI assistant panel (board 21)', () => {
     );
     expect(screen.queryByText('Chưa viết được phần này')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Áp dụng 3 thay đổi' })).toBeEnabled();
+    // "Thử lại" went with the failure: the part's new checkbox takes the focus, not <body>.
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Nút chính' })).toHaveFocus();
+    });
+  });
+
+  it('partial: a failed part cannot be retried once the month’s uses are spent', async () => {
+    serve(usage({ used: 99, remaining: 1 }));
+    const { user } = renderAssistant();
+    await user.click(await screen.findByRole('button', { name: 'Viết lại' }));
+    await last().answer(
+      result(
+        [
+          ...REWRITE,
+          {
+            status: 'failed',
+            sectionId: HERO,
+            path: 'primaryCta.label',
+            before: 'Đăng ký tư vấn',
+            failure: 'ai_invalid_output',
+          },
+        ],
+        { usage: usage({ used: 100, remaining: 0 }) },
+      ),
+    );
+    expect(screen.getByRole('button', { name: 'Thử lại Nút chính' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Áp dụng 2 thay đổi' })).toBeEnabled();
   });
 
   it('failed: the draft did not change, no use was spent, “Thử lại” asks again', async () => {
@@ -452,6 +479,42 @@ describe('the AI assistant panel (board 21)', () => {
 });
 
 describe('the right column’s tabs', () => {
+  beforeEach(() => {
+    serve();
+  });
+
+  /** The editor's right column beside its canvas, whose notice carries "Hoàn tác". */
+  function Editor({ store }: { store: EditorStore }) {
+    const [tab, setTab] = useState<SideTab>('assistant');
+    const { announce } = useEditorServices();
+    return (
+      <AiAssistantProvider store={store} siteId={SITE_ID} pageId={PAGE_ID} announce={announce}>
+        <Canvas />
+        <SidePanel tab={tab} onTabChange={setTab} />
+      </AiAssistantProvider>
+    );
+  }
+
+  it('“Hoàn tác” on the canvas leaves focus on a control that shows, with “Thuộc tính” open', async () => {
+    const store = makeStore();
+    store.getState().select(HERO);
+    const user = userEvent.setup();
+    renderEditor(<Editor store={store} />, { store });
+    await user.click(await screen.findByRole('button', { name: 'Viết lại' }));
+    await last().answer(result(REWRITE));
+    await user.click(screen.getByRole('button', { name: 'Áp dụng 2 thay đổi' }));
+    await user.click(screen.getByRole('tab', { name: 'Thuộc tính' }));
+
+    await user.click(screen.getByRole('button', { name: 'Hoàn tác' }));
+    expect(store.getState().history.past).toHaveLength(0);
+    // The assistant's chips are in its hidden panel: its tab takes the focus instead.
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Trợ lý AI' })).toHaveFocus();
+    });
+  });
+});
+
+describe('the right column’s tab list', () => {
   beforeEach(() => {
     serve();
   });

@@ -29,10 +29,10 @@ import {
   useToast,
   VisuallyHidden,
 } from '@plp/ui';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDayMonth } from '../../lib/format';
 import { templateHref, templatesHref, workspaceTemplatesHref } from '../shell/navigation';
@@ -41,6 +41,7 @@ import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ScrollRegion } from '../shell/ScrollRegion';
 import { EditTemplateDialog } from './EditTemplateDialog';
 import { templateTags } from './library-filters';
+import { templateQueryKeys } from './queries';
 import { SaveTemplateDialog } from './SaveTemplateDialog';
 import { TemplateThumb } from './TemplateThumb';
 import { TemplateVersionsDialog } from './TemplateVersionsDialog';
@@ -59,6 +60,9 @@ export interface WorkspaceTemplatesScreenProps {
   /** "Lưu trữ" rather than "Đang dùng". */
   archived: boolean;
 }
+
+/** The tabs "Đang dùng" and "Lưu trữ"; the current one is where focus goes when no row is left. */
+const TABS_LABEL = 'Trạng thái';
 
 type Dialog =
   | { kind: 'save' }
@@ -80,9 +84,14 @@ export function WorkspaceTemplatesScreen({
   archived,
 }: WorkspaceTemplatesScreenProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const canManage = can(role, 'templates.manage');
   const [dialog, setDialog] = useState<{ value: Dialog; open: boolean } | null>(null);
+  // A template archived or restored leaves this tab once the refresh renders the list again; its
+  // "…" button had the focus, which then goes to the next row's, else the previous row's, else
+  // the tab.
+  const focusAfterChange = useRef<{ gone: string; next: readonly string[] } | null>(null);
   const site = sites.find((item) => item.id === initialSiteId) ?? sites[0] ?? null;
   const themePresetId = site?.themePresetId ?? DEFAULT_THEME_PRESET;
   const active = templatesOfTab(templates, false);
@@ -94,6 +103,28 @@ export function WorkspaceTemplatesScreen({
     dialog !== null && dialog.value.kind !== 'save' ? dialog.value.templateId : null;
   // Looked up on every render: after a change the list holds the template as it is now.
   const subject = templates.find((item) => item.id === subjectId) ?? null;
+
+  useEffect(() => {
+    const request = focusAfterChange.current;
+    if (
+      request === null ||
+      templatesOfTab(templates, archived).some(({ id }) => id === request.gone)
+    ) {
+      return;
+    }
+    focusAfterChange.current = null;
+    const active = document.activeElement;
+    // Someone who moved on meanwhile keeps their focus.
+    if (active !== null && active !== document.body && active.isConnected) {
+      return;
+    }
+    const target =
+      request.next
+        .map((id) => document.querySelector<HTMLElement>(`[data-template-menu="${id}"]`))
+        .find((button) => button !== null) ??
+      document.querySelector<HTMLElement>(`nav[aria-label="${TABS_LABEL}"] [aria-current="page"]`);
+    target?.focus();
+  }, [templates, archived]);
 
   function open(value: Dialog) {
     setDialog({ value, open: true });
@@ -115,8 +146,17 @@ export function WorkspaceTemplatesScreen({
           return api(endpoints.restoreWorkspaceTemplate, args);
       }
     },
-    onSuccess: (result, { action }) => {
+    onSuccess: (result, { template, action }) => {
       toast({ tone: 'success', title: doneTitles[action](result.name) });
+      if (action !== 'duplicate') {
+        const index = shown.findIndex(({ id }) => id === template.id);
+        focusAfterChange.current = {
+          gone: template.id,
+          next: [...shown.slice(index + 1), ...shown.slice(0, index).reverse()].map(({ id }) => id),
+        };
+      }
+      // The save dialog's "Phiên bản mới của …" and the editor's "Áp dụng mẫu…" read these.
+      void queryClient.invalidateQueries({ queryKey: templateQueryKeys.all(workspace.id) });
       router.refresh();
     },
     onError: (error, { action }) => {
@@ -158,7 +198,7 @@ export function WorkspaceTemplatesScreen({
       )}
 
       <TabsNav
-        aria-label="Trạng thái"
+        aria-label={TABS_LABEL}
         as={Link}
         items={[
           {
@@ -340,13 +380,15 @@ function TemplateMenu({
   onEdit: () => void;
   onAction: (action: Action) => void;
 }) {
+  // The button stays enabled while a change runs: the menu gives the focus back to it, and a
+  // disabled button would drop it to <body>. The changes wait instead, one at a time.
   return (
     <DropdownMenu
       trigger={
         <IconButton
           aria-label={`Sửa thông tin, nhân bản hoặc lưu trữ ${template.name}`}
           icon={<MoreHorizontalIcon size={18} />}
-          disabled={pending}
+          data-template-menu={template.id}
         />
       }
     >
@@ -355,6 +397,7 @@ function TemplateMenu({
       </DropdownMenuItem>
       <DropdownMenuItem
         icon={<DuplicateIcon size={18} />}
+        disabled={pending}
         onSelect={() => {
           onAction('duplicate');
         }}
@@ -363,6 +406,7 @@ function TemplateMenu({
       </DropdownMenuItem>
       <DropdownMenuItem
         icon={<HistoryIcon size={18} />}
+        disabled={pending}
         onSelect={() => {
           onAction(template.archived ? 'restore' : 'archive');
         }}

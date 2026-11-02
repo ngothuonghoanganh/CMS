@@ -168,7 +168,7 @@ export function TemplateLibrary({
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<LibraryFilters>(NO_FILTERS);
   // The template of the dialog stays after it closes, so its content fades out with it.
-  const [dialog, setDialog] = useState<{ templateId: string; open: boolean } | null>(null);
+  const [dialog, setDialog] = useState<{ template: TemplateSummary; open: boolean } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
   // Where focus goes once a removed chip has left the list: the chip now in its place.
@@ -181,8 +181,12 @@ export function TemplateLibrary({
   const groups = filterGroups(templates, libraryQuery);
   const counts = tabCounts(templates);
   const chips = filterChips(filters);
-  // Looked up on every render: after "Xem phiên bản mới" the list holds the new version.
-  const using = templates.find((template) => template.id === dialog?.templateId) ?? null;
+  // Looked up on every render: after "Xem phiên bản mới" the list holds the new version. One
+  // archived meanwhile is gone from the list; its dialog keeps it to say why.
+  const using =
+    dialog === null
+      ? null
+      : (templates.find((template) => template.id === dialog.template.id) ?? dialog.template);
 
   // After a chip is removed, focus goes to the chip now in its place, or to the search.
   useEffect(() => {
@@ -407,7 +411,7 @@ export function TemplateLibrary({
                     onUse={
                       targets.length > 0 && usable
                         ? () => {
-                            setDialog({ templateId: template.id, open: true });
+                            setDialog({ template, open: true });
                           }
                         : null
                     }

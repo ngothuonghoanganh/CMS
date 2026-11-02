@@ -12,6 +12,11 @@ export interface InputProps extends Omit<
 > {
   /** Fixed text before the value, e.g. "go.smilecare.vn/". It is announced with the input. */
   prefix?: ReactNode;
+  /**
+   * A prefix too long to leave the value 12rem takes its own line above it, both as wide as the
+   * frame, instead of shrinking to an ellipsis: a long site address before a page path.
+   */
+  wrapPrefix?: boolean | undefined;
   /** Decorative icon inside the frame, e.g. a search glass. */
   leadingIcon?: ReactNode;
   /** Monospace value, for slugs and URLs. */
@@ -24,6 +29,7 @@ export interface InputProps extends Omit<
 
 export function Input({
   prefix,
+  wrapPrefix = false,
   leadingIcon,
   mono = false,
   invalid = false,
@@ -40,7 +46,15 @@ export function Input({
   const hasPrefix = hasContent(prefix);
   const tone = toneOf(field?.tone, invalid);
   return (
-    <div className={cx(styles.control, styles[tone], mono && styles.mono, className)}>
+    <div
+      className={cx(
+        styles.control,
+        styles[tone],
+        mono && styles.mono,
+        wrapPrefix && hasPrefix && styles.wrapPrefix,
+        className,
+      )}
+    >
       {leadingIcon ? (
         <span className={styles.leadingIcon} aria-hidden="true">
           {leadingIcon}

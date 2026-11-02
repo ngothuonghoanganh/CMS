@@ -52,6 +52,8 @@ export function PageSlugField({
     >
       <Input
         prefix={`${host}/`}
+        // A long site address takes its own line rather than leave the slug a few characters.
+        wrapPrefix
         mono
         value={value}
         maxLength={SLUG_MAX}

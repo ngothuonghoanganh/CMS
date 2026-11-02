@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type Access,
   endpoints,
   pageStatusLabels,
   type Site,
@@ -16,7 +17,8 @@ import { siteQueryKeys } from '../dashboard/queries';
 import { pageHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { applySummary } from './apply-summary';
-import { pageDetailQuery, sitePagesQuery } from './queries';
+import { pageDetailQuery, sitePagesQuery, templateQueryKeys } from './queries';
+import { archivedHint } from './workspace-templates';
 import styles from './ApplyTemplateDialog.module.css';
 
 /** The template applied: what the request names, and what the dialog says of it. */
@@ -30,19 +32,27 @@ function applyingKey(templateId: string) {
 }
 
 export interface ApplyTemplateDialogProps {
+  workspaceId: string;
   template: ApplyTemplate;
+  /** Who may restore an archived template is told so; others are told who can. */
+  role: Access;
   /** Sites the user may edit pages in and the template may be used in. Never empty. */
   sites: readonly Site[];
   /** The site chosen on the screen; the dialog may change it. */
   initialSiteId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The API has a newer version than the one shown: the screen reads the template again. */
+  /**
+   * The template is not as shown: the API has a newer version ("Xem phiên bản mới"), or it was
+   * archived meanwhile (called at once). The screen reads it again.
+   */
   onTemplateChanged: () => void;
 }
 
 function ApplyTemplateForm({
+  workspaceId,
   template,
+  role,
   sites,
   initialSiteId,
   onOpenChange,
@@ -80,6 +90,12 @@ function ApplyTemplateForm({
         void detail.refetch();
         return;
       }
+      if (error instanceof ApiError && error.code === 'template_archived') {
+        // Every list that offers it is read again, the screen too; the dialog says why.
+        void queryClient.invalidateQueries({ queryKey: templateQueryKeys.all(workspaceId) });
+        onTemplateChanged();
+        return;
+      }
       if (!(error instanceof ApiError)) {
         reportUnexpected('Applying a template to a draft failed', error);
       }
@@ -89,6 +105,7 @@ function ApplyTemplateForm({
   const failure = apply.error;
   const conflict = failure instanceof ApiError && failure.code === 'revision_conflict';
   const templateChanged = failure instanceof ApiError && failure.code === 'template_changed';
+  const templateArchived = failure instanceof ApiError && failure.code === 'template_archived';
   const summary = detail.data === undefined ? null : applySummary(detail.data, template);
 
   return (
@@ -200,6 +217,10 @@ function ApplyTemplateForm({
         >
           {failure.problem.title}. {failure.problem.detail}
         </Callout>
+      ) : templateArchived ? (
+        <Callout tone="warning" role="alert">
+          {failure.problem.title}. {archivedHint(role)}
+        </Callout>
       ) : failure === null ? null : (
         <Callout tone="danger" role="alert">
           {problemMessage(failure)}
@@ -219,7 +240,9 @@ function ApplyTemplateForm({
         <Button
           type="submit"
           loading={apply.isPending}
-          disabled={detail.data === undefined || detail.isFetching || templateChanged}
+          disabled={
+            detail.data === undefined || detail.isFetching || templateChanged || templateArchived
+          }
         >
           Thay bản nháp và mở editor
         </Button>

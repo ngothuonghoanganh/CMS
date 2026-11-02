@@ -1,10 +1,12 @@
 import { type Access, endpoints, type Membership, type TemplateSummary } from '@plp/contracts';
+import { ToastProvider } from '@plp/ui';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
-import { renderWithProviders } from '../shell/test-utils';
+import { apiError, renderWithProviders } from '../shell/test-utils';
 import type { LibraryTab } from './library-filters';
 import { TemplateLibrary } from './TemplateLibrary';
 import { readinessFixture, templateSummaries, workspaceSummaryFixture } from './test-fixtures';
@@ -217,6 +219,54 @@ describe('TemplateLibrary', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
+  });
+
+  it('keeps “Tạo trang từ mẫu” open to say its template was archived meanwhile', async () => {
+    const user = userEvent.setup();
+    const own = workspaceSummaryFixture();
+    apiMock.mockImplementation((endpoint, _args, options) => {
+      if (endpoint === endpoints.slugAvailability) {
+        const { slug } = (options as { query: { slug: string } }).query;
+        return Promise.resolve({ slug, available: true, reason: null, message: null });
+      }
+      if (endpoint === endpoints.getTemplate) {
+        return Promise.resolve({ site: readinessFixture({ siteId: KITCHEN_ID }) });
+      }
+      if (endpoint === endpoints.createPage) {
+        return Promise.reject(
+          apiError(409, 'template_archived', `Mẫu “${own.name}” đã được lưu trữ`),
+        );
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    router.refresh.mockReset();
+    const { rerender, queryClient } = renderLibrary({ templates: [...templateSummaries, own] });
+    await user.click(screen.getByRole('button', { name: `Dùng mẫu ${own.name}` }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tạo trang từ mẫu' });
+    await within(dialog).findByText('Đường dẫn này dùng được.');
+    await user.click(within(dialog).getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('đã được lưu trữ');
+    expect(router.refresh).toHaveBeenCalledOnce();
+
+    // The library read again has no card for it: the dialog still says why.
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <TemplateLibrary
+            workspace={workspace}
+            role="owner"
+            templates={[...templateSummaries]}
+            sites={[smile, kitchen]}
+            initialSiteId={KITCHEN_ID}
+            tab="all"
+          />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole('article', { name: own.name })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Tạo trang từ mẫu' })).toHaveTextContent(
+      'đã được lưu trữ',
+    );
   });
 
   it('lists the workspace’s own templates with their source, and uses them only in their sites (G2)', () => {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../lib/api-core';
-import { problemMessage, reportUnexpected } from './problem-message';
+import { problemBesideFields, problemMessage, reportUnexpected } from './problem-message';
 import { apiError } from './test-utils';
 
 afterEach(() => {
@@ -55,6 +55,37 @@ describe('problemMessage', () => {
     );
     expect(problemMessage(new Error('boom'))).toBe(
       'Đã có lỗi không mong muốn. Hãy tải lại trang rồi thử lại.',
+    );
+  });
+});
+
+describe('problemBesideFields', () => {
+  const refused = (paths: Array<Array<string | number>>) =>
+    apiError(
+      422,
+      'validation_failed',
+      'Dữ liệu không hợp lệ',
+      paths.map((path) => ({ path, code: 'custom', message: `Sai ở ${path.join('.')}` })),
+    );
+
+  it('has nothing to add when every issue shows on a field of the form', () => {
+    expect(
+      problemBesideFields(refused([['name'], ['scope', 'siteIds']]), ['name', 'scope.siteIds']),
+    ).toBeNull();
+  });
+
+  it('says what no field shows, such as a composition the registry refused', () => {
+    expect(
+      problemBesideFields(refused([['name'], ['composition', 'sections', 1, 'content']]), ['name']),
+    ).toBe('Sai ở composition.sections.1.content');
+  });
+
+  it('says the problem itself without issues, and explains other failures', () => {
+    expect(problemBesideFields(apiError(409, 'conflict', 'Dữ liệu đã thay đổi'), ['name'])).toBe(
+      'Dữ liệu đã thay đổi',
+    );
+    expect(problemBesideFields(new TypeError('Failed to fetch'), ['name'])).toBe(
+      'Không kết nối được máy chủ. Kiểm tra kết nối mạng rồi thử lại.',
     );
   });
 });

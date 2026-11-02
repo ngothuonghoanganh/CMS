@@ -142,6 +142,24 @@ describe('Input', () => {
     expect(input).toHaveValue('uu-dai-11');
   });
 
+  it('lets a long prefix take its own line above the value when asked', () => {
+    render(
+      <Field label="Đường dẫn trang">
+        <Input prefix="smilecaremvz5z8da5ee4a6.localhost:3101/" wrapPrefix mono />
+      </Field>,
+    );
+    const input = screen.getByRole('textbox', { name: 'Đường dẫn trang' });
+    expect(input.parentElement?.className).toMatch(/wrapPrefix/);
+    expect(input).toHaveAccessibleDescription('smilecaremvz5z8da5ee4a6.localhost:3101/');
+  });
+
+  it('keeps an input without a prefix as it is, even when asked to wrap one', () => {
+    render(<Input aria-label="Tên site" wrapPrefix />);
+    expect(screen.getByRole('textbox', { name: 'Tên site' }).parentElement?.className).not.toMatch(
+      /wrapPrefix/,
+    );
+  });
+
   it('works without a Field when given its own name', () => {
     render(<Input aria-label="Tên site" invalid />);
     expect(screen.getByRole('textbox', { name: 'Tên site' })).toHaveAttribute(

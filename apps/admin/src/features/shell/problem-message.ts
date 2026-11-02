@@ -33,6 +33,25 @@ export function problemMessage(error: unknown): string {
   return 'Đã có lỗi không mong muốn. Hãy tải lại trang rồi thử lại.';
 }
 
+/**
+ * What a form's callout says about a failed request beside the messages its fields show: null when
+ * every issue is on a field in `shown` (paths as "scope.siteIds"), otherwise the first other issue
+ * (a composition the registry refused) or the problem itself. A 422 never goes unexplained because
+ * one of its issues found a field.
+ */
+export function problemBesideFields(error: unknown, shown: readonly string[]): string | null {
+  if (!(error instanceof ApiError)) {
+    return problemMessage(error);
+  }
+  const issues = error.problem.issues ?? [];
+  const others = issues.filter((issue) => !shown.includes(issue.path.join('.')));
+  if (issues.length > 0 && others.length === 0) {
+    return null;
+  }
+  const issue = others.find((item) => !ZOD_RULE_CODES.has(item.code));
+  return issue?.message ?? error.problem.detail ?? error.problem.title;
+}
+
 /** Logs errors that are not an expected API problem, so they are not silently lost. */
 export function reportUnexpected(context: string, error: unknown): void {
   if (!(error instanceof ApiError)) {

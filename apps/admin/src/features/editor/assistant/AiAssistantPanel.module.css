@@ -26,8 +26,11 @@
   color: var(--color-ink);
 }
 
+/* The right column is 320 px, narrower than board 21's: a label never breaks between its words
+   ("Toàn⏎trang"); the options wrap onto a second row instead. */
 .scopes {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
   border-radius: var(--radius-md);
@@ -35,7 +38,9 @@
 }
 
 .scopeOption {
-  flex: 1;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  max-width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -49,6 +54,14 @@
   color: var(--color-ink-2);
   text-align: center;
   cursor: pointer;
+}
+
+/* A section name too long for the whole row ends in an ellipsis; the radio keeps its full name. */
+.scopeLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scopeOption:has(input:checked) {

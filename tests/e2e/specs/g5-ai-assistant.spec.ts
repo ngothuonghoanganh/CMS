@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 import { expectAccessible, SCAN_VIEWPORTS } from '../support/axe.js';
 import { Editor } from '../support/editor.js';
 import { createPageViaApi, promoPage, setUpSite, uniqueId } from '../support/setup.js';
@@ -33,6 +33,29 @@ async function openAssistant(page: Page) {
   const panel = page.getByRole('tabpanel', { name: 'Trợ lý AI' });
   await expect(panel.getByRole('radio', { name: 'Section Hero' })).toBeChecked();
   return panel;
+}
+
+/**
+ * The scope options' labels, each with the number of lines it takes: the right column is narrower
+ * than board 21's, and a label broken between its words ("Toàn⏎trang") reads badly.
+ */
+async function scopeLabelLines(panel: Locator): Promise<Array<[string, number]>> {
+  return panel
+    .getByRole('group', { name: 'Phạm vi' })
+    .locator('label')
+    .evaluateAll((labels) =>
+      labels.map((label): [string, number] => {
+        // The words only, without the radio beside them.
+        const range = document.createRange();
+        range.selectNodeContents(label.querySelector('span') ?? label);
+        const tops = new Set(
+          Array.from(range.getClientRects())
+            .filter((rect) => rect.width > 0 && rect.height > 0)
+            .map((rect) => Math.round(rect.top)),
+        );
+        return [label.textContent.trim(), tops.size];
+      }),
+    );
 }
 
 test.describe('G5 · AI assistant in the editor', () => {
@@ -82,6 +105,11 @@ test.describe('G5 · AI assistant in the editor', () => {
       const panel = await openAssistant(page);
       await expect(panel.getByRole('button', { name: 'Viết lại' })).toBeEnabled();
       await expectAccessible(page, 'Trợ lý AI · chờ yêu cầu');
+      expect(await scopeLabelLines(panel)).toEqual([
+        ['Đoạn chữ', 1],
+        ['Section Hero', 1],
+        ['Toàn trang', 1],
+      ]);
 
       await panel.getByRole('button', { name: 'Viết lại' }).click();
       await expect(panel.getByRole('region', { name: 'Gợi ý cho Hero' })).toBeVisible();
