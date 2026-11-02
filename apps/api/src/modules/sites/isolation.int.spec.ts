@@ -77,7 +77,10 @@ describe('workspace isolation of sites, activity and assets', () => {
 
   it('leaves workspace A untouched', async () => {
     const sites = await ownerA.get(`/workspaces/${workspaceA}/sites`).expect(200);
-    expect(siteListResponseSchema.parse(sites.body).items).toEqual([siteA]);
+    // Nothing user B did reached the site, nor its counts (ADR-028).
+    expect(siteListResponseSchema.parse(sites.body).items).toEqual([
+      { ...siteA, summary: { pages: 0, livePages: 0, leadsLast7Days: 0 } },
+    ]);
     const asset = await t
       .workspaceDb(workspaceA)
       .collection('assets')

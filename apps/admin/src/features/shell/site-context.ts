@@ -13,6 +13,7 @@ import { ApiError } from '../../lib/api-core';
 import { requireMe, serverApi } from '../../lib/server-api';
 import { requireWorkspaceAddress } from './current-address';
 import { siteHref } from './navigation';
+import { loadMemberCount } from './workspace-context';
 
 /** Everything the workspace frame needs about the current site and the signed-in user. */
 export interface SiteContext {
@@ -24,6 +25,8 @@ export interface SiteContext {
   sites: Site[];
   /** Number of pages of the site, for the sidebar. */
   pageCount: number;
+  /** Members of the workspace for "Thành viên"; null for roles that do not manage members. */
+  memberCount: number | null;
   /**
    * "N mới" in the sidebar and the lead card of the dashboard (ADR-018); null for roles that do
    * not see leads (ADR-020).
@@ -59,10 +62,19 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
   }
   await requireWorkspaceAddress(membership.workspace);
   // The count endpoint skips the page evaluation that `listPages` runs for statuses and checks.
-  const [siteList, pageCount, leadCounts] = await Promise.all([
+  const [siteList, pageCount, memberCount, leadCounts] = await Promise.all([
     serverApi(endpoints.listSites, [site.workspaceId]),
     serverApi(endpoints.countPages, [site.id]),
+    loadMemberCount(membership),
     can(membership.role, 'leads.view') ? serverApi(endpoints.leadCounts, [site.id]) : null,
   ]);
-  return { me, membership, site, sites: siteList.items, pageCount: pageCount.count, leadCounts };
+  return {
+    me,
+    membership,
+    site,
+    sites: siteList.items,
+    pageCount: pageCount.count,
+    memberCount,
+    leadCounts,
+  };
 });

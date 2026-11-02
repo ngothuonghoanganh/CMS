@@ -261,6 +261,9 @@ export const BuildingIcon = createIcon(
   <path d="M4 21V5l8-2v18M12 8h8v13M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01M3 21h18" />,
 );
 
+/** A browser window: the sites of a workspace (Sidebar v2, "Sites"). */
+export const BrowserIcon = createIcon('browser', <path d="M4 5h16v14H4zM4 9h16" />);
+
 /** People of a workspace (Sidebar v2, "Thành viên"). */
 export const UsersIcon = createIcon(
   'users',

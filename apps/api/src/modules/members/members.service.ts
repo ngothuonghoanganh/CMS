@@ -46,11 +46,14 @@ export class MembersService {
     private readonly transactions: TransactionRunner,
   ) {}
 
-  /** Members per role, for the role list of "Vai trò & quyền". */
+  /**
+   * Members per role, for the role list of "Vai trò & quyền", and all of them, for the count of
+   * "Thành viên" in the sidebar (ADR-028).
+   */
   async roleCounts(user: AuthenticatedUser, workspaceId: string): Promise<RoleCounts> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'members.manage');
-    return { counts: await this.workspaces.countByRole(scope) };
+    return this.workspaces.countByRole(scope);
   }
 
   async list(user: AuthenticatedUser, workspaceId: string): Promise<MemberListResponse> {

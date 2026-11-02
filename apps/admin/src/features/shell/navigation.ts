@@ -4,7 +4,7 @@ import type { Permission } from '@plp/contracts';
 export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'privacy' | 'settings';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
-export type WorkspaceNavKey = 'members' | 'roles';
+export type WorkspaceNavKey = 'sites' | 'members' | 'roles';
 
 export interface NavItem<Key extends string> {
   key: Key;
@@ -58,6 +58,16 @@ export function workspaceHref(workspaceId: string): string {
   return `/workspaces/${encodeURIComponent(workspaceId)}`;
 }
 
+/** "Sites": the sites of the workspace the user may open (ADR-028). */
+export function sitesHref(workspaceId: string): string {
+  return `${workspaceHref(workspaceId)}/sites`;
+}
+
+/** "Tạo site khách hàng" in the workspace. */
+export function newSiteHref(workspaceId: string): string {
+  return `/sites/new?workspace=${encodeURIComponent(workspaceId)}`;
+}
+
 /** "Vai trò & quyền" (board 16, ADR-020). */
 export function rolesHref(workspaceId: string): string {
   return `${workspaceHref(workspaceId)}/roles`;
@@ -68,8 +78,13 @@ export function membersHref(workspaceId: string, search = ''): string {
   return `${workspaceHref(workspaceId)}/members${search}`;
 }
 
+/**
+ * Sections of the workspace. "Sites" is for every role, since every role views pages; it lists the
+ * sites each member may open (ADR-028).
+ */
 export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
   return [
+    { key: 'sites', label: 'Sites', href: sitesHref(workspaceId), permissions: ['pages.view'] },
     {
       key: 'members',
       label: 'Thành viên',

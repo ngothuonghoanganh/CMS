@@ -370,8 +370,13 @@ export class WorkspacesRepository {
     });
   }
 
-  /** Members of the workspace per role; one group per role, so the result is bounded. */
-  async countByRole(scope: WorkspaceScope): Promise<Record<Role, number>> {
+  /**
+   * Members of the workspace per system role, and all of them; one group per role, so the result
+   * is bounded.
+   */
+  async countByRole(
+    scope: WorkspaceScope,
+  ): Promise<{ counts: Record<Role, number>; members: number }> {
     const groups = await this.memberships
       .aggregate<{ _id: unknown; count: number }>([
         { $match: { workspaceId: scope.workspaceId } },
@@ -382,7 +387,9 @@ export class WorkspacesRepository {
       Role,
       number
     >;
+    let members = 0;
     for (const group of groups) {
+      members += group.count;
       // Holders of custom roles are counted with their roles (ADR-024).
       if (group._id === 'custom') {
         continue;
@@ -393,7 +400,7 @@ export class WorkspacesRepository {
       }
       counts[role.data] = group.count;
     }
-    return counts;
+    return { counts, members };
   }
 
   /** Members holding each custom role of the workspace, keyed by role id hex (at most 10). */

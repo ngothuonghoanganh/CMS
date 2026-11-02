@@ -6,6 +6,7 @@ import {
   type MeResponse,
   type Membership,
   type Site,
+  type SiteListItem,
 } from '@plp/contracts';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -15,17 +16,30 @@ import { workspaceHref } from './navigation';
 import { pickSite, SITE_PREFERENCE_COOKIE } from './site-preference';
 import { requireWorkspaceAddress } from './current-address';
 
-/** The frame of a workspace screen (Vai trò & quyền): the workspace and a site for the sidebar. */
+/** The frame of a workspace screen (Sites, Vai trò & quyền): the workspace and a site for the sidebar. */
 export interface WorkspaceContext {
   me: MeResponse;
   membership: Membership;
-  /** Sites of the workspace the user may open. */
-  sites: Site[];
+  /** Sites of the workspace the user may open, with their counts (ADR-028). */
+  sites: SiteListItem[];
   /** The site the user opened last, for the sidebar; null in a workspace without one. */
   site: Site | null;
   pageCount: number;
+  /** Members of the workspace for "Thành viên"; null for roles that do not manage members. */
+  memberCount: number | null;
   /** Null without a site, and for roles that do not see leads (ADR-020). */
   leadCounts: LeadCounts | null;
+}
+
+/**
+ * "Thành viên" in the sidebar counts the members of the workspace, for the roles that see it
+ * (ADR-028). Every screen with the sidebar loads it with the rest of its frame.
+ */
+export async function loadMemberCount(membership: Membership): Promise<number | null> {
+  if (!can(membership.role, 'members.manage')) {
+    return null;
+  }
+  return (await serverApi(endpoints.roleCounts, [membership.workspace.id])).members;
 }
 
 /**
@@ -43,15 +57,18 @@ export const loadWorkspaceContext = cache(
       notFound();
     }
     await requireWorkspaceAddress(membership.workspace);
-    const { items: sites } = await serverApi(endpoints.listSites, [workspaceId]);
+    const [{ items: sites }, memberCount] = await Promise.all([
+      serverApi(endpoints.listSites, [workspaceId]),
+      loadMemberCount(membership),
+    ]);
     const site = pickSite(sites, (await cookies()).get(SITE_PREFERENCE_COOKIE)?.value);
     if (site === null) {
-      return { me, membership, sites, site, pageCount: 0, leadCounts: null };
+      return { me, membership, sites, site, pageCount: 0, memberCount, leadCounts: null };
     }
     const [pageCount, leadCounts] = await Promise.all([
       serverApi(endpoints.countPages, [site.id]),
       can(membership.role, 'leads.view') ? serverApi(endpoints.leadCounts, [site.id]) : null,
     ]);
-    return { me, membership, sites, site, pageCount: pageCount.count, leadCounts };
+    return { me, membership, sites, site, pageCount: pageCount.count, memberCount, leadCounts };
   },
 );

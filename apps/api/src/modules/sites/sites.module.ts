@@ -8,13 +8,15 @@ import { RevalidationModule } from '../revalidation/revalidation.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import { SiteDeletionService } from './site-deletion.service.js';
 import { SiteErasureRepository } from './site-erasure.repository.js';
+import { SiteListService } from './site-list.service.js';
 import { SiteManagementService } from './site-management.service.js';
 import { SitesCoreModule } from './sites-core.module.js';
 import { SitesController } from './sites.controller.js';
 
 /**
  * Site HTTP endpoints. Other modules import `SitesCoreModule` for `SitesService.access` and
- * `SitesRepository`; this module re-exports it for convenience.
+ * `SitesRepository`; this module re-exports it for convenience. The site list counts pages and
+ * leads (ADR-028), which build on site access themselves.
  */
 @Module({
   imports: [
@@ -22,14 +24,15 @@ import { SitesController } from './sites.controller.js';
     WorkspacesModule,
     ActivityModule,
     AssetsModule,
-    // Deleting a site (ADR-027): its pages, leads and domains, and the renderer's cache.
+    // The counts of the site list (ADR-028) and deleting a site (ADR-027): its pages, leads and
+    // domains, and the renderer's cache.
     PagesModule,
     LeadsCoreModule,
     DomainsCoreModule,
     RevalidationModule,
   ],
   controllers: [SitesController],
-  providers: [SiteManagementService, SiteDeletionService, SiteErasureRepository],
+  providers: [SiteManagementService, SiteListService, SiteDeletionService, SiteErasureRepository],
   exports: [SitesCoreModule],
 })
 export class SitesModule {}

@@ -1,9 +1,9 @@
-import { siteSchema } from '@plp/contracts';
+import { siteSchema, siteSummarySchema } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { siteOrigin } from '../../config/env.js';
 import { newObjectId } from '../../shared/persistence/object-id.js';
 import { currentSitePresentation } from '../publishing/release-presentation.js';
-import { toSiteDto } from './site-dto.js';
+import { toSiteDto, toSiteSummary } from './site-dto.js';
 import type { SiteRecord } from './site.schema.js';
 
 function siteRecord(overrides: Partial<SiteRecord> = {}): SiteRecord {
@@ -112,5 +112,33 @@ describe('toSiteDto', () => {
         currentSitePresentation(site),
       );
     }
+  });
+});
+
+describe('toSiteSummary', () => {
+  const smile = newObjectId().toHexString();
+  const kitchen = newObjectId().toHexString();
+  const pageCounts = new Map([[smile, { pages: 6, livePages: 3 }]]);
+
+  it('takes the counts of the site, and zero for a site the counts do not name', () => {
+    const recentLeads = new Map([[smile, 48]]);
+    expect(siteSummarySchema.parse(toSiteSummary(smile, pageCounts, recentLeads))).toEqual({
+      pages: 6,
+      livePages: 3,
+      leadsLast7Days: 48,
+    });
+    expect(toSiteSummary(kitchen, pageCounts, recentLeads)).toEqual({
+      pages: 0,
+      livePages: 0,
+      leadsLast7Days: 0,
+    });
+  });
+
+  it('has no lead count for roles that do not see leads (ADR-024)', () => {
+    expect(toSiteSummary(smile, pageCounts, null)).toEqual({
+      pages: 6,
+      livePages: 3,
+      leadsLast7Days: null,
+    });
   });
 });

@@ -844,6 +844,7 @@ describe('SeoScreen', () => {
             site={site}
             sites={[site]}
             pageCount={1}
+            memberCount={1}
             leadCounts={NO_LEADS}
             addresses={null}
           />

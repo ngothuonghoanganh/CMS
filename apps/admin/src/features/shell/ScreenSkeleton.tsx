@@ -4,8 +4,8 @@ import styles from './ScreenSkeleton.module.css';
 const LOADING_LABEL = 'Đang tải trang…';
 
 /**
- * Shown inside the site frame while a site screen renders on the server, so a click on the
- * sidebar, a page tab or "Lịch sử phiên bản" gets feedback at once.
+ * Shown inside the site frame while a site screen (or "Sites" of the workspace) renders on the
+ * server, so a click on the sidebar, a page tab or "Lịch sử phiên bản" gets feedback at once.
  */
 export function SiteScreenSkeleton() {
   return (

@@ -15,7 +15,7 @@ export default async function WorkspaceLayout({
   params: Promise<{ workspaceId: string }>;
 }) {
   const { workspaceId } = await params;
-  const { me, membership, site, sites, pageCount, leadCounts } =
+  const { me, membership, site, sites, pageCount, memberCount, leadCounts } =
     await loadWorkspaceContext(workspaceId);
   return (
     <AppShell
@@ -25,6 +25,7 @@ export default async function WorkspaceLayout({
       site={site}
       sites={sites}
       pageCount={pageCount}
+      memberCount={memberCount}
       leadCounts={leadCounts}
       addresses={workspaceAddresses()}
     >

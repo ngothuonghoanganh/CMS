@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Permission, Site, SiteListResponse, SubdomainAvailability } from '@plp/contracts';
+import type { Permission, Site, SubdomainAvailability } from '@plp/contracts';
 import { customDomainOrigin, type Env, siteOrigin } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { notFound } from '../../shared/errors.js';
@@ -63,15 +63,6 @@ export class SitesService {
       throw notFound(notFoundTitle);
     }
     return { scope, site };
-  }
-
-  /** The sites of the workspace the member may open (ADR-020). */
-  async listForWorkspace(user: AuthenticatedUser, workspaceId: string): Promise<SiteListResponse> {
-    const scope = await this.accessService.scopeForWorkspace(user, workspaceId);
-    const sites = (await this.sites.listForWorkspace(scope)).filter((site) =>
-      this.accessService.coversSite(scope, site._id),
-    );
-    return { items: sites.map((site) => this.toDto(site)) };
   }
 
   availability(subdomain: string): Promise<SubdomainAvailability> {
