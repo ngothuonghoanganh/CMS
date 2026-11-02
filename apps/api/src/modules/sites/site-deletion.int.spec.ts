@@ -35,6 +35,8 @@ import {
 import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addMember, createSite, uploadImage } from '../../../test/resources.js';
+import { testEnvInput } from '../../../test/env.js';
+import { parseEnv } from '../../config/env.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
 import { siteStoragePrefix } from '../assets/asset-storage.js';
 import { DomainChecker } from '../domains/domain-checker.service.js';
@@ -67,23 +69,24 @@ describe('DELETE /sites/:siteId', () => {
   let t: TestApp;
   let owner: TestClient;
   let workspaceId: string;
-  let s3: S3Client;
   const revalidation = new RecordingRevalidationClient();
+  // The storage the API writes to (docker compose), with its credentials: to see what it holds.
+  const storage = parseEnv(testEnvInput({ MONGODB_URI: 'mongodb://localhost:1/unused' }));
+  const s3 = new S3Client({
+    endpoint: storage.S3_ENDPOINT,
+    region: storage.S3_REGION,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: storage.S3_ACCESS_KEY_ID,
+      secretAccessKey: storage.S3_SECRET_ACCESS_KEY,
+    },
+  });
 
   beforeAll(async () => {
     t = await createTestApp('plp_test_site_deletion', withRevalidationRecorder(revalidation));
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
-    s3 = new S3Client({
-      endpoint: t.env.S3_ENDPOINT,
-      region: t.env.S3_REGION,
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: t.env.S3_ACCESS_KEY_ID,
-        secretAccessKey: t.env.S3_SECRET_ACCESS_KEY,
-      },
-    });
   });
 
   afterAll(async () => {
@@ -139,7 +142,7 @@ describe('DELETE /sites/:siteId', () => {
   async function storedKeys(siteId: string): Promise<string[]> {
     const listed = await s3.send(
       new ListObjectsV2Command({
-        Bucket: t.env.S3_BUCKET,
+        Bucket: storage.S3_BUCKET,
         Prefix: siteStoragePrefix({ workspaceId: oid(workspaceId), siteId: oid(siteId) }),
       }),
     );
@@ -254,7 +257,7 @@ describe('DELETE /sites/:siteId', () => {
     expect(await master.collection('domains').countDocuments({ siteId: oid(site.id) })).toBe(0);
     expect(await storedKeys(site.id)).toEqual([]);
     await expect(
-      s3.send(new HeadObjectCommand({ Bucket: t.env.S3_BUCKET, Key: imageKey })),
+      s3.send(new HeadObjectCommand({ Bucket: storage.S3_BUCKET, Key: imageKey })),
     ).rejects.toThrow();
     expect((await fetch(asset.url)).status).toBe(404);
     expect(revalidation.calls).toContain(site.subdomain);
