@@ -91,7 +91,8 @@ const NO_SECTIONS: ReadonlySet<string> = new Set();
 
 /**
  * What the assistant moves focus to after a change of state, the first that can take it: the
- * actions fall back to the "Trợ lý AI" tab while every chip is disabled (no uses left).
+ * actions fall back to the "Trợ lý AI" tab while every chip is disabled (no uses left) or hidden
+ * ("Thuộc tính" open).
  */
 export const AI_FOCUS = {
   actions: ['[data-ai-focus="actions"]:not(:disabled)', '[data-ai-focus="tab"]'],
@@ -104,6 +105,19 @@ export const AI_FOCUS = {
 
 /** The AI tab's panel; focus inside it follows the assistant's state. */
 export const AI_PANEL_ID = 'editor-ai-assistant';
+
+/** A retried part written at last: its checkbox, else the result's heading. */
+function partFocus(key: string): readonly string[] {
+  return [`[data-ai-part="${key}"]`, ...AI_FOCUS.result];
+}
+
+/**
+ * Whether focus may land on the element: not inside a hidden tab panel. The panels stay mounted
+ * when the other tab is chosen, so "Hoàn tác" on the canvas may find the chips there.
+ */
+function shown(element: HTMLElement): boolean {
+  return element.closest('[hidden]') === null;
+}
 
 /**
  * Moves focus once React has drawn the new state, when the control that had it went away (the
@@ -119,7 +133,7 @@ function focusSoon(selectors: readonly string[]): void {
     }
     for (const selector of selectors) {
       const target = document.querySelector<HTMLElement>(selector);
-      if (target !== null) {
+      if (target !== null && shown(target)) {
         target.focus();
         return;
       }
@@ -357,6 +371,10 @@ export function AiAssistantProvider({
               : latest,
           );
           announce(note ?? 'Đã viết được phần này.');
+          // Written, the part's "Thử lại" gives way to its checkbox.
+          if (merged.written) {
+            focusSoon(partFocus(key));
+          }
         },
         (error: unknown) => {
           if (request.signal.aborted) {

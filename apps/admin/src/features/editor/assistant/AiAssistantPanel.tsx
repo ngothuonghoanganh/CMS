@@ -193,11 +193,14 @@ function Change({
   sections,
   excluded,
   retrying,
+  exhausted,
 }: {
   change: AiSuggestionChange;
   sections: readonly SectionInstance[];
   excluded: boolean;
   retrying: boolean;
+  /** No use left: a retry would be refused, as "Thử lại" of a failed request is. */
+  exhausted: boolean;
 }) {
   const assistant = useAiAssistant();
   const key = changeKeyOf(change);
@@ -208,6 +211,7 @@ function Change({
         <Checkbox
           className={styles.changeHead}
           label={<span className={styles.changeLabel}>{label}</span>}
+          data-ai-part={key}
           checked={!excluded}
           onChange={() => {
             assistant.toggle(key);
@@ -232,6 +236,7 @@ function Change({
             size="sm"
             variant="secondary"
             loading={retrying}
+            disabled={exhausted && !retrying}
             aria-label={`Thử lại ${label}`}
             onClick={() => {
               assistant.retryPart(key);
@@ -415,6 +420,7 @@ export function AiAssistantPanel() {
                   sections={sections}
                   excluded={phase.excluded.has(changeKeyOf(change))}
                   retrying={phase.retrying === changeKeyOf(change)}
+                  exhausted={exhausted}
                 />
               ))}
             </ol>
