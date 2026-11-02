@@ -53,6 +53,7 @@ describe('domain events (ADR-022)', () => {
         count: null,
         slug: null,
         hostname: 'go.smilecare.vn',
+        template: null,
         revalidationFailed: false,
       },
       reason: null,

@@ -10,17 +10,7 @@ import {
 } from '@plp/contracts';
 import { setAtPath } from './paths.js';
 import { createSectionInstance, getSectionDefinition, samplePathsOf } from './registry.js';
-import type { BeforeAfterContent } from './sections/before-after.js';
-import type { BenefitsContent, benefitIcons } from './sections/benefits.js';
-import type { CtaBandContent } from './sections/cta-band.js';
-import type { FaqContent } from './sections/faq.js';
-import type { FooterContent } from './sections/footer.js';
-import type { HeroContent } from './sections/hero.js';
-import type { LeadFormContent } from './sections/lead-form.js';
-import type { LogosContent } from './sections/logos.js';
-import type { NavbarContent } from './sections/navbar.js';
-import type { QuickContactContent } from './sections/quick-contact.js';
-import type { TestimonialsContent } from './sections/testimonials.js';
+import { benefit, faq, type SampleSection } from './sample-sections.js';
 
 /* -------------------------------------------------------------------------------------------- */
 /* Goals and styles shown by "Tạo trang theo mục tiêu"                                           */
@@ -125,53 +115,13 @@ export function pageStyleSchemes(style: PageStyle, types: readonly SectionType[]
 /* Blueprints: the sections of each goal and their goal-specific sample copy                     */
 /* -------------------------------------------------------------------------------------------- */
 
-interface ContentByType {
-  navbar: NavbarContent;
-  hero: HeroContent;
-  benefits: BenefitsContent;
-  testimonials: TestimonialsContent;
-  logos: LogosContent;
-  before_after: BeforeAfterContent;
-  faq: FaqContent;
-  lead_form: LeadFormContent;
-  quick_contact: QuickContactContent;
-  cta_band: CtaBandContent;
-  footer: FooterContent;
-}
-
-type BlueprintSection = {
-  [T in SectionType]: {
-    type: T;
-    variant: string;
-    /** What the section does on this page, shown under "Trang sẽ gồm". */
-    label: string;
-    /** Goal-specific sample copy replacing the section's generic sample content. */
-    sample?: Partial<ContentByType[T]>;
-  };
-}[SectionType];
-
 export interface GoalOutlineItem {
   type: SectionType;
   variant: string;
   label: string;
 }
 
-type BenefitItem = BenefitsContent['items'][number];
-type FaqItem = FaqContent['items'][number];
-
-function benefit(
-  icon: (typeof benefitIcons)[number],
-  title: string,
-  description: string,
-): BenefitItem {
-  return { icon, title, description, image: { ...EMPTY_IMAGE } };
-}
-
-function faq(question: string, answer: string): FaqItem {
-  return { question, answer };
-}
-
-function navbar(label: string): BlueprintSection {
+function navbar(label: string): SampleSection {
   return {
     type: 'navbar',
     variant: 'logo-cta',
@@ -180,7 +130,7 @@ function navbar(label: string): BlueprintSection {
   };
 }
 
-const footer: BlueprintSection = {
+const footer: SampleSection = {
   type: 'footer',
   variant: 'basic',
   label: 'Chân trang & liên hệ',
@@ -192,7 +142,7 @@ const footer: BlueprintSection = {
  * the lead form where the board places it, and the Hero button leads to it (ADR-016); the others
  * end with a call-to-action band that calls the phone number from the brief.
  */
-function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[] {
+function blueprint(goal: PageGoal, siteName: string): readonly SampleSection[] {
   const name = siteName.trim();
   switch (goal) {
     case 'lead':

@@ -27,6 +27,7 @@ export * from './privacy.js';
 export * from './public.js';
 export * from './release.js';
 export * from './site.js';
+export * from './templates.js';
 export * from './text.js';
 export * from './themes.js';
 export * from './workspace-address.js';
