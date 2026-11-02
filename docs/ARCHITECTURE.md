@@ -1780,6 +1780,29 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - xóa site xóa đủ mọi collection và bản ghi ở master, giải phóng subdomain và tên miền;
     - phạm vi thành viên và lời mời; quyền; người ngoài workspace nhận 404.
   - E2E: gỡ rồi xóa một trang; xóa một site.
+- **Chi tiết khi làm (lát E4):**
+  - **Bất biến của release và phiên bản đồng ý:**
+    - Guard của schema vẫn từ chối mọi update. Lệnh xóa chỉ được nhận khi mang `ERASURE_COMMENT` (`shared/persistence/erasure.ts`).
+    - Xóa release đi qua `ReleaseErasureRepository` riêng; `ReleasesRepository` vẫn chỉ có `insert` và `find*`.
+    - `releases` có thêm index `siteId`.
+  - **Release được giữ của trang đã xóa** không bao giờ được phục vụ, kể cả qua link xem trước đã ký trước đó: cả hai endpoint xem trước kiểm tra page còn tồn tại.
+  - **Xóa trang mà update có điều kiện trượt:** API đọc lại page sau transaction, trả 404 nếu đã mất, 409 nếu đã live.
+  - **Sau commit của xóa site:**
+    - Quét lại cùng các lệnh xóa, để bắt lead hay lượt xem được ghi trong lúc transaction chạy.
+    - Xóa tiền tố storage bằng `AssetStorage.deletePrefix`, rồi revalidate.
+    - Nhận lead đọc lại cài đặt site sau khi lưu: site đã mất thì xóa lead đó và trả 404.
+  - **Đọc dữ liệu của trang đã xóa:**
+    - Tên trang của lead là `null` trong contract. Admin ghi "Trang đã xóa"; CSV, JSON xuất ra và email lead do API ghi.
+    - "Theo trang" của Hiệu quả giữ dòng của trang đã xóa.
+    - Activity mang cờ `page.deleted`, suy ra bằng một truy vấn. "Hoạt động gần đây" có `page.deleted`, và không dẫn link tới lịch sử của trang đã xóa.
+  - **Xóa site không ghi activity,** vì nhật ký của site bị xóa cùng nó; chỉ log "Site deleted {siteId}".
+  - **`GET /sites/:siteId/deletion-summary`** `{ pages, livePages, leads, domains[] }`: cùng quyền với xóa site, bốn truy vấn, số chính xác.
+  - **So tên** phân biệt hoa thường, bỏ khoảng trắng hai đầu, NFC cả hai phía.
+  - **Ca biên:**
+    - Hoàn tác trên trang đã xóa trả 409 `undo_not_available`; gửi duyệt cho trang đã xóa trả 404.
+    - Hai lần xóa site cùng lúc: một 204, một 404.
+    - Thành viên chỉ có site đó giữ `siteIds: []`.
+  - Không có toast sau khi xóa site: màn workspace có khung riêng, toast sẽ mất ngay khi chuyển màn.
 
 ### ADR-028 — Màn Sites của workspace và số đếm ở Sidebar v2
 
@@ -1881,7 +1904,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | E1  | Khớp thiết kế: bước tên miền và trạng thái địa chỉ ở màn 01, tìm trang không dấu, sự kiện tên miền, chẩn đoán và kiểm tra trùng ở màn 13–14, mục đã đạt về địa chỉ (ADR-005, 006, 022) | 01, 05, 13, 14   | Đang làm   |
 | E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Đang làm   |
 | E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Xong       |
-| E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Đang làm   |
+| E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Xong       |
 | E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Xong       |
 | E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Đang làm   |
 
