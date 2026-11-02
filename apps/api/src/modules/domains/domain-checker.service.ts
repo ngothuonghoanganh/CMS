@@ -110,11 +110,20 @@ export class DomainChecker {
     if (before !== after || verifiedAt !== domain.verifiedAt) {
       await this.revalidate(domain);
     }
-    // Only the check that marks it tells: two checks of one domain at once send one email.
-    if (after === 'active' && (await this.announce(domain, 'activeSince', now))) {
+    // Only the check that marks it tells: two checks of one domain at once send one email. One
+    // that read the mark already set skips the transaction.
+    if (
+      after === 'active' &&
+      domain.activeSince === null &&
+      (await this.announce(domain, 'activeSince', now))
+    ) {
       saved = { ...saved, activeSince: now };
       await this.notify(saved, 'active');
-    } else if (after === 'lost' && (await this.announce(domain, 'lostSince', now))) {
+    } else if (
+      after === 'lost' &&
+      domain.lostSince === null &&
+      (await this.announce(domain, 'lostSince', now))
+    ) {
       saved = { ...saved, lostSince: now };
       await this.notify(saved, 'lost');
     }
