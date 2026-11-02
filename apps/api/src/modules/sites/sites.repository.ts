@@ -386,6 +386,23 @@ export class SitesRepository {
   }
 
   /**
+   * Increments `dataSeq` inside a transaction that stores data of the site without otherwise
+   * writing the site. The write conflicts with the deletion of the site (ADR-027), so either the
+   * deletion waits and deletes the data too, or the data is refused. False when the site is gone:
+   * deleted since it was read, its data already swept, so the transaction must store nothing.
+   */
+  async recordDataWrite(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    const result = await this.sites(scope)
+      .updateOne(
+        { _id: siteId, workspaceId: scope.workspaceId },
+        { $inc: { dataSeq: 1 } },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /**
    * The privacy settings of a site as they are now, for the public lead intake: it reads them
    * again after storing a lead, in case the owner changed the retention period meanwhile. Null
    * when the site was deleted meanwhile (ADR-027).

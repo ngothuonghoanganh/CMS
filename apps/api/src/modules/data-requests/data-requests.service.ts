@@ -22,7 +22,8 @@ import { LeadPersonService } from '../leads/lead-person.service.js';
 import { type LeadPerson, LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
-import { SitesService } from '../sites/sites.service.js';
+import { SitesRepository } from '../sites/sites.repository.js';
+import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   DATA_REQUEST_NOT_FOUND,
@@ -59,6 +60,7 @@ function stepConflict(title: string): AppError {
 export class DataRequestsService {
   constructor(
     private readonly sites: SitesService,
+    private readonly siteRecords: SitesRepository,
     private readonly requests: DataRequestsRepository,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -116,6 +118,10 @@ export class DataRequestsService {
     // already recorded, and "Ghi nhận" pressed again would record it twice.
     const found = await this.leadsOf(scope, site, personOfRequest({ search }));
     const record = await this.transactions.run(async (tx) => {
+      // The request holds personal data: it must not outlive a site deleted meanwhile (ADR-027).
+      if (!(await this.siteRecords.recordDataWrite(scope, site._id, tx))) {
+        throw notFound(SITE_NOT_FOUND);
+      }
       const created = await this.requests.insert(
         scope,
         site._id,

@@ -20,6 +20,7 @@ import { pageView, sendPageView } from '../../../test/analytics.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { publishableDraft } from '../../../test/compositions.js';
+import { gate } from '../../../test/gate.js';
 import {
   createLiveFormPage,
   insertLeads,
@@ -51,15 +52,6 @@ import { ReleasesRepository } from '../publishing/releases.repository.js';
 import { PagesRepository } from './pages.repository.js';
 
 const DAY_MS = 86_400_000;
-
-/** A promise and the function that settles it. */
-function gate(): { opened: Promise<void>; open: () => void } {
-  let open = (): void => undefined;
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return { opened, open };
-}
 
 /** "Xóa trang" (ADR-027): only a page that is not live; leads keep their consent evidence. */
 describe('DELETE /sites/:siteId/pages/:pageId', () => {

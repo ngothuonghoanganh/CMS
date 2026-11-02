@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { PersonDeleteResponse } from '@plp/contracts';
+import { notFound } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
+import { SitesRepository } from '../sites/sites.repository.js';
+import { SITE_NOT_FOUND } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { LeadAccessService, personOfLead } from './lead-access.service.js';
 import { type LeadPerson, LeadsRepository } from './leads.repository.js';
@@ -21,6 +24,7 @@ export class LeadPersonService {
     private readonly leads: LeadsRepository,
     private readonly requests: DataRequestsRepository,
     private readonly activity: ActivityRepository,
+    private readonly sites: SitesRepository,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -41,10 +45,16 @@ export class LeadPersonService {
 
   /**
    * Deletes the person's leads, masks their data requests and records how many leads in the
-   * activity log, in one transaction, so the log never claims a deletion that did not happen.
+   * activity log, in one transaction, so the log never claims a deletion that did not happen. It
+   * writes the site too: the entry never outlives a site deleted meanwhile (ADR-027).
    */
   deletePerson(scope: WorkspaceScope, siteId: ObjectId, person: LeadPerson): Promise<number> {
-    return this.transactions.run((tx) => this.deletePersonIn(scope, siteId, person, tx));
+    return this.transactions.run(async (tx) => {
+      if (!(await this.sites.recordDataWrite(scope, siteId, tx))) {
+        throw notFound(SITE_NOT_FOUND);
+      }
+      return this.deletePersonIn(scope, siteId, person, tx);
+    });
   }
 
   /** `deletePerson` inside the caller's transaction, e.g. completing a request to delete data. */
