@@ -36,7 +36,8 @@ export const heroSection = defineSection<HeroContent>({
       id: 'background',
       label: 'Ảnh nền',
       description: 'Ảnh lớn phía sau, chữ đặt trên lớp phủ đủ tương phản.',
-      hasMedia: true,
+      // The photo sits behind the text: there is no order to change on mobile.
+      hasMedia: false,
     },
   ],
   defaultVariant: 'split',

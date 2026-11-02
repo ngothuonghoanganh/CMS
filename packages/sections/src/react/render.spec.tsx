@@ -249,9 +249,10 @@ describe('section components', () => {
         expect(mediaFirst).toContain(expectedClass);
         expect(auto).not.toContain(expectedClass);
       } else {
-        // Without media (or with a background image behind the text) there is nothing to reorder.
+        // Without media (or with a background image behind the text) there is nothing to reorder,
+        // so the editor does not offer the setting (`hasMedia`).
         expect(mediaFirst).toBe(auto);
-        expect(info.hasMedia && variant !== 'background').toBe(false);
+        expect(info.hasMedia, `${type}:${variant}`).toBe(false);
       }
     }
   });

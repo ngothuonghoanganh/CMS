@@ -67,7 +67,11 @@ export interface SectionVariant {
   id: string;
   label: string;
   description: string;
-  /** The variant shows an image, so the mobile order setting applies. */
+  /**
+   * The variant shows an image beside its text, which stack on mobile, so the mobile order setting
+   * applies (§2.1 rule 1). False for images behind the text (Hero "Ảnh nền") or that are the
+   * content itself (Logo đối tác, Trước & sau): nothing to reorder.
+   */
   hasMedia: boolean;
   /** Field keys this variant does not use; they are hidden in the panel and skipped by checks. */
   hiddenFields?: readonly string[];

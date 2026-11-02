@@ -143,6 +143,23 @@ describe('PropertiesPanel', () => {
     expect(screen.queryByLabelText('Thứ tự trên điện thoại')).toBeNull();
   });
 
+  it('offers the mobile order only where the image and the text swap places on mobile', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().select(HERO);
+    renderEditor(<PropertiesPanel />, { store });
+    const variants = screen.getByRole('group', { name: 'Kiểu bố cục' });
+    // "Ảnh nền" puts the photo behind the text: it keeps its image, with nothing to reorder.
+    await user.click(within(variants).getByRole('button', { name: 'Ảnh nền' }));
+    expect(sectionById(store, HERO).variant).toBe('background');
+    expect(fieldBox('image')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Thứ tự trên điện thoại')).toBeNull();
+    expect(store.getState().setMobileOrder(HERO, 'media-first')).toBe(false);
+
+    await user.click(within(variants).getByRole('button', { name: 'Chữ · Ảnh' }));
+    expect(screen.getByLabelText('Thứ tự trên điện thoại')).toBeInTheDocument();
+  });
+
   it('sets color scheme, spacing and visibility through the commands', async () => {
     const user = userEvent.setup();
     const store = makeStore();
