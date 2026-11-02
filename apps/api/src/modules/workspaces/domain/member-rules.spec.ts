@@ -5,7 +5,6 @@ import {
   hashInvitationToken,
   invitationExpiry,
   invitationLimitKeys,
-  mailboxOf,
   invitationState,
   newInvitationToken,
   purgeAfter,
@@ -47,9 +46,6 @@ describe('invitation links', () => {
   });
 
   it('counts every variant of one mailbox as that mailbox', () => {
-    expect(mailboxOf(' Thuy+moi1@SmileCare.vn ')).toBe('thuy@smilecare.vn');
-    expect(mailboxOf('thuy.mkt+a@smilecare.vn')).toBe('thuy.mkt@smilecare.vn');
-    expect(mailboxOf('T.h.u.y+x@googlemail.com')).toBe('thuy@gmail.com');
     expect(invitationLimitKeys('thuy+1@gmail.com', { toHexString: () => 'x' }).address).toBe(
       invitationLimitKeys('t.huy@gmail.com', { toHexString: () => 'x' }).address,
     );

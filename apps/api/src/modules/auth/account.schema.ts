@@ -64,10 +64,10 @@ passwordResetSchema.index({ userId: 1 }, { unique: true, name: PASSWORD_RESETS_U
 passwordResetSchema.index({ tokenHash: 1 }, { unique: true, name: 'password_resets_token_unique' });
 passwordResetSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-/** Account emails one address received in the current hour (ADR-026). */
+/** Account emails one mailbox received in the current hour (ADR-026). */
 export interface AuthEmailLimitRecord {
   _id: Types.ObjectId;
-  /** HMAC of the normalised email, like the key of `login_attempts` (`loginAccountKey`). */
+  /** HMAC of the email's mailbox (`mailboxOf`), keyed like `login_attempts` (`loginAccountKey`). */
   key: string;
   count: number;
   /** End of the window; the TTL index removes the record afterwards. */

@@ -56,7 +56,7 @@ describe('ForgotPasswordForm (ADR-026)', () => {
   it('says why no email could go, e.g. too many in the hour', async () => {
     const user = userEvent.setup();
     apiMock.mockRejectedValueOnce(
-      apiError(429, 'rate_limited', 'Đã gửi quá nhiều email tới địa chỉ này'),
+      apiError(429, 'rate_limited', 'Đã gửi quá nhiều email tới hộp thư này'),
     );
     renderWithProviders(<ForgotPasswordForm />);
 
@@ -64,7 +64,7 @@ describe('ForgotPasswordForm (ADR-026)', () => {
     await user.click(screen.getByRole('button', { name: 'Gửi link đặt lại mật khẩu' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Đã gửi quá nhiều email tới địa chỉ này',
+      'Đã gửi quá nhiều email tới hộp thư này',
     );
     expect(screen.getByRole('textbox', { name: 'Email' })).toHaveValue('ngocanh@mayxanh.vn');
   });
