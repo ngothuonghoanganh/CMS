@@ -371,7 +371,21 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
           }
         }}
       >
-        {pending?.kind === 'primary' ? (
+        {pending?.kind === 'primary' && pending.domain === null ? (
+          // Back to the default address: the renderer redirects only to an active custom domain
+          // (ADR-022), so the custom domain goes on serving the pages as they are.
+          <ul className={styles.consequences}>
+            <li>{movedPagesLine(list.livePages, pending.host)}</li>
+            <li>
+              <span className={styles.mono}>{primaryHost}</span> vẫn mở các trang như trước, không
+              chuyển hướng sang địa chỉ mặc định.
+            </li>
+            <li>
+              Sitemap và thẻ canonical chuyển sang địa chỉ mặc định. Google có thể mất vài ngày để
+              cập nhật kết quả tìm kiếm.
+            </li>
+          </ul>
+        ) : pending?.kind === 'primary' ? (
           <ul className={styles.consequences}>
             <li>{movedPagesLine(list.livePages, pending.host)}</li>
             <li>

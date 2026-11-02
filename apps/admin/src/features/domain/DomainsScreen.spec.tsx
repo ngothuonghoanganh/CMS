@@ -188,5 +188,11 @@ describe('DomainsScreen', () => {
     expect(dialog).toHaveTextContent(
       '1 trang đang live sẽ có địa chỉ mới, ví dụ smilecare.payload.site.',
     );
+    // Nothing redirects to the default address (ADR-022): the custom domain keeps serving.
+    expect(dialog).toHaveTextContent(
+      'go.smilecare.vn vẫn mở các trang như trước, không chuyển hướng sang địa chỉ mặc định.',
+    );
+    expect(dialog).toHaveTextContent('Sitemap và thẻ canonical chuyển sang địa chỉ mặc định.');
+    expect(dialog).not.toHaveTextContent(/301|chuyển hướng thừa/);
   });
 });
