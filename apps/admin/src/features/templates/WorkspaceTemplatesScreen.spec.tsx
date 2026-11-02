@@ -1,5 +1,7 @@
-import { type Access, endpoints, type Membership } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { type Access, endpoints, type Membership, type WorkspaceTemplate } from '@plp/contracts';
+import { ToastProvider } from '@plp/ui';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -13,6 +15,7 @@ import {
 } from '../dashboard/test-fixtures';
 import { PAGE_ID, pageDetail } from '../editor/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { templateQueryKeys } from './queries';
 import { versionFixtures, WORKSPACE_TEMPLATE_ID, workspaceTemplateFixture } from './test-fixtures';
 import { WorkspaceTemplatesScreen } from './WorkspaceTemplatesScreen';
 
@@ -52,10 +55,10 @@ const stored = workspaceTemplateFixture({
   archived: true,
 });
 
-function renderScreen(
-  options: { role?: Access; archived?: boolean; templates?: (typeof own)[] } = {},
+function screenOf(
+  options: { role?: Access; archived?: boolean; templates?: WorkspaceTemplate[] } = {},
 ) {
-  return renderWithProviders(
+  return (
     <WorkspaceTemplatesScreen
       workspace={workspace}
       role={options.role ?? 'owner'}
@@ -63,9 +66,29 @@ function renderScreen(
       sites={[smile, kitchen]}
       initialSiteId={SITE_ID}
       archived={options.archived ?? false}
-    />,
+    />
   );
 }
+
+function renderScreen(
+  options: { role?: Access; archived?: boolean; templates?: WorkspaceTemplate[] } = {},
+) {
+  const rendered = renderWithProviders(screenOf(options));
+  return {
+    ...rendered,
+    /** The server's render after `router.refresh()`, with the templates as they are now. */
+    refreshed: (templates: WorkspaceTemplate[]) => {
+      rendered.rerender(
+        <QueryClientProvider client={rendered.queryClient}>
+          <ToastProvider>{screenOf({ ...options, templates })}</ToastProvider>
+        </QueryClientProvider>,
+      );
+    },
+  };
+}
+
+const menuOf = (name: string) =>
+  screen.getByRole('button', { name: `Sửa thông tin, nhân bản hoặc lưu trữ ${name}` });
 
 beforeEach(() => {
   apiMock.mockReset();
@@ -174,6 +197,80 @@ describe('WorkspaceTemplatesScreen (board 19)', () => {
       WORKSPACE_ID,
       stored.id,
     ]);
+  });
+
+  it('archiving moves focus to the next row once the list drops the row, and reads lists again', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.archiveWorkspaceTemplate
+        ? Promise.resolve({ ...own, archived: true })
+        : Promise.reject(new Error('unexpected call')),
+    );
+    const { queryClient, refreshed } = renderScreen();
+    // The save dialog's "Phiên bản mới của …" and the editor's "Áp dụng mẫu…" read these.
+    const lists = [
+      templateQueryKeys.all(WORKSPACE_ID),
+      [...templateQueryKeys.all(WORKSPACE_ID), 'workspace'],
+    ];
+    for (const key of lists) {
+      queryClient.setQueryData(key, { items: [] });
+    }
+    await user.click(menuOf(own.name));
+    await user.click(screen.getByRole('menuitem', { name: 'Lưu trữ' }));
+    expect(await screen.findByText(`Đã lưu trữ “${own.name}”`)).toBeInTheDocument();
+    expect(router.refresh).toHaveBeenCalled();
+    for (const key of lists) {
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    }
+
+    refreshed([{ ...own, archived: true }, kitchenMenu, stored]);
+    expect(screen.queryByRole('link', { name: own.name })).toBeNull();
+    expect(menuOf(kitchenMenu.name)).toHaveFocus();
+  });
+
+  it('restoring the last archived template leaves focus on the tab', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.restoreWorkspaceTemplate
+        ? Promise.resolve({ ...stored, archived: false })
+        : Promise.reject(new Error('unexpected call')),
+    );
+    const { refreshed } = renderScreen({ archived: true });
+    await user.click(menuOf(stored.name));
+    await user.click(screen.getByRole('menuitem', { name: 'Khôi phục' }));
+    expect(await screen.findByText(`Đã khôi phục “${stored.name}”`)).toBeInTheDocument();
+
+    refreshed([own, kitchenMenu, { ...stored, archived: false }]);
+    expect(screen.getByText('Chưa có template nào được lưu trữ')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Lưu trữ · 0' })).toHaveFocus();
+  });
+
+  it('keeps focus on the menu button while a duplicate is made', async () => {
+    const user = userEvent.setup();
+    let answer: (value: WorkspaceTemplate) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.duplicateWorkspaceTemplate
+        ? new Promise((resolve) => {
+            answer = resolve;
+          })
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderScreen();
+    await user.click(menuOf(own.name));
+    await user.click(screen.getByRole('menuitem', { name: 'Nhân bản' }));
+    await waitFor(() => {
+      expect(menuOf(own.name)).toHaveFocus();
+    });
+    // One change at a time: the menus offer none while it runs.
+    await user.click(menuOf(kitchenMenu.name));
+    expect(screen.getByRole('menuitem', { name: 'Nhân bản' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await user.keyboard('{Escape}');
+    answer({ ...own, id: '64b0000000000000000000f9', name: `${own.name} (bản sao)` });
+    expect(await screen.findByText(`Đã tạo “${own.name} (bản sao)”`)).toBeInTheDocument();
+    expect(menuOf(kitchenMenu.name)).toHaveFocus();
   });
 
   it('shows the versions, previews an earlier one and reuses it as the next version', async () => {
