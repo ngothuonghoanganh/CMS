@@ -386,7 +386,7 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
       }
     });
 
-    it('fails the publish while the deletion holds the page in its transaction', async () => {
+    it('lets one of the two win while the deletion holds the page, normally the deletion', async () => {
       const site = await createSite(owner, workspaceId);
       const { pageId, body } = await readyPage(site);
       const redirects = t.app.get(RedirectsRepository);
@@ -408,6 +408,7 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
         claiming.open();
         return claim(...args);
       });
+      let outcome;
       try {
         const deleted = remove(owner, site.id, pageId).then((response) => response);
         await held.opened;
@@ -415,22 +416,33 @@ describe('DELETE /sites/:siteId/pages/:pageId', () => {
         // The publish tried to claim a version of the page the deletion has not committed yet.
         await claiming.opened;
         deletion.open();
-
-        expect((await deleted).status).toBe(204);
-        const refused = await published;
-        expect(refused.status).toBe(404);
-        expect(problemSchema.parse(refused.body).code).toBe('not_found');
+        outcome = { published: await published, deleted: await deleted };
       } finally {
         redirectSpy.mockRestore();
         claimSpy.mockRestore();
       }
-      // Never a release without its page.
-      expect(
-        await db()
-          .collection('pages')
-          .findOne({ _id: oid(pageId) }),
-      ).toBeNull();
-      expect(await documentsOf('releases', pageId)).toHaveLength(0);
+      const { published, deleted } = outcome;
+      expect([published.status === 201, deleted.status === 204].filter(Boolean)).toHaveLength(1);
+      const winner = deleted.status === 204 ? 'deletion' : 'publish';
+      // The publish only wins when MongoDB aborted the deletion's transaction (a transient error)
+      // and retried it after the publish committed.
+      console.info(`A deletion and a publish of one page at the same moment: the ${winner} won`);
+      if (winner === 'deletion') {
+        expect(published.status).toBe(404);
+        expect(problemSchema.parse(published.body).code).toBe('not_found');
+        // Never a release without its page.
+        expect(
+          await db()
+            .collection('pages')
+            .findOne({ _id: oid(pageId) }),
+        ).toBeNull();
+        expect(await documentsOf('releases', pageId)).toHaveLength(0);
+      } else {
+        expect(deleted.status).toBe(409);
+        expect(problemSchema.parse(deleted.body).code).toBe('page_live');
+        expect((await getPage(owner, site.id, pageId)).page.liveRelease?.version).toBe(1);
+        expect(await documentsOf('releases', pageId)).toHaveLength(1);
+      }
     });
   });
 

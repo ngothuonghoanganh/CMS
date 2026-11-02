@@ -1,5 +1,6 @@
 import { HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import {
+  dataRequestDetailSchema,
   type Domain,
   domainSchema,
   invitationListResponseSchema,
@@ -678,6 +679,24 @@ describe('DELETE /sites/:siteId', () => {
         expectSiteGone(
           await owner.post(`/sites/${site.id}/data-requests`, dataRequest()).expect(404),
         );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    it('answers 404, not "đã hoàn tất", completing a request of a site deleted meanwhile', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Hoàn tất muộn' });
+      const recorded = await owner
+        .post(`/sites/${site.id}/data-requests`, dataRequest())
+        .expect(201);
+      const requestId = dataRequestDetailSchema.parse(recorded.body).id;
+      const spy = deleteBeforeTransaction(site);
+      try {
+        const refused = await owner
+          .post(`/sites/${site.id}/data-requests/${requestId}/complete`)
+          .expect(404);
+        expect(problemSchema.parse(refused.body).status).toBe(404);
       } finally {
         spy.mockRestore();
       }

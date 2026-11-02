@@ -233,7 +233,11 @@ export class DataRequestsService {
         tx,
       );
       if (!updated) {
-        // Another completion came first: nothing of this one is kept.
+        // Nothing of this one is kept. Either another completion came first, or the request went
+        // with its site (ADR-027): the committed state tells which.
+        if ((await this.requests.findById(scope, request._id)) === null) {
+          throw notFound(DATA_REQUEST_NOT_FOUND);
+        }
         throw stepConflict('Yêu cầu này đã hoàn tất');
       }
       await this.activity.record(
