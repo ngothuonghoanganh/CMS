@@ -514,7 +514,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - danh sách yêu cầu dữ liệu;
       - số đếm lead và báo cáo "Hiệu quả" (đã có từ trước).
     - Danh sách được thay bắt đầu lại từ trang đầu. Server render lại khi màn vẫn đang hiện (`router.refresh()`) thì giữ các trang "Xem thêm" đã nạp và đọc lại chúng (`adoptServerRenderKeepingPages`). (Sửa 2026-11-02, review vòng 2.)
-    - Màn 01 được key theo site, không theo `loadedAt`. Một lần server render với bộ lọc khác bộ lọc đang hiện là một lần điều hướng (link "Trang" ở sidebar khi đang lọc), nên màn bắt đầu lại. Refresh thì màn giữ focus, chữ đang gõ và các trang đã nạp.
+    - Màn 01 được key theo site, không theo `loadedAt`. Một lần server render với bộ lọc khác bộ lọc đang hiện là một lần điều hướng (link "Trang" ở sidebar khi đang lọc), nên màn bắt đầu lại. Refresh thì màn giữ focus, chữ đang gõ và các trang đã nạp. Refresh sau "Xóa trang" render bộ lọc lúc xóa; bộ lọc người dùng chọn trong lúc chờ vẫn được giữ. Chuỗi tìm kiếm được chuẩn hóa sao cho chuẩn hóa lại không đổi (không kết thúc bằng khoảng trắng hay nửa emoji), để lần đọc lại từ URL khớp với màn.
+    - "Xem thêm" và "Tải thêm" chờ lần đọc lại cả danh sách đang chạy rồi mới tải trang tiếp (`fetchNextPageAfterRead`). Mặc định TanStack hủy lần đọc lại đó và nối trang mới vào các dòng cũ, nên một dòng vừa xóa sẽ còn trên màn.
     - Quy tắc so `dataUpdatedAt` của cache (đồng hồ trình duyệt) với `loadedAt` của server, nên đồng hồ trình duyệt lệch nhiều thì có thể chọn sai.
     - Mỗi lần lưu bản nháp thành công, và "Quay về bản live", đánh dấu danh sách trang và các màn của trang đó là cũ. Đổi giao diện site trong editor đánh dấu danh sách trang và màn của mọi trang.
       - Màn đang hiện được đọc lại ngay; màn khác được đọc lại khi hiện ra, kể cả khi nút Back của trình duyệt dựng lại một bản render cũ hơn cache.
