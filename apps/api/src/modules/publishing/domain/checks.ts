@@ -628,9 +628,7 @@ function passedGroups(
     .filter((code) => !PASSED_GROUPS[code].some((failing) => findings.has(failing)))
     .map((code): PassedCheck => ({ code, title: PASSED_CHECK_TITLES[code] }));
   const passed = [...fromFindings, ...addressPassed(address)];
-  return passed.sort(
-    (a, b) => passedCheckCodes.indexOf(a.code) - passedCheckCodes.indexOf(b.code),
-  );
+  return passed.sort((a, b) => passedCheckCodes.indexOf(a.code) - passedCheckCodes.indexOf(b.code));
 }
 
 /**
