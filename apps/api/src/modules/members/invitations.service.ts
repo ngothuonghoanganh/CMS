@@ -25,7 +25,7 @@ import { UsersRepository } from '../auth/users.repository.js';
 import type { CountedHit } from '../leads/lead-limits.repository.js';
 import { EmailQuota, type QuotaUse } from '../notifications/email-quota.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
-import { memberInvitationEmail } from '../notifications/email-templates.js';
+import { memberInvitationEmail } from '../notifications/emails.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { AccessService } from '../workspaces/access.service.js';
 import {
@@ -389,7 +389,7 @@ export class InvitationsService {
   /** Emails the link; `sent` when it went out. A failure keeps the invitation, unsent. */
   private async send(
     scope: WorkspaceScope,
-    invitation: Pick<InvitationRecord, '_id' | 'email' | 'tokenHash'>,
+    invitation: Pick<InvitationRecord, '_id' | 'email' | 'tokenHash' | 'expiresAt'>,
     token: string,
     context: {
       /** The workspace's admin address (ADR-025): the invited person lands in it. */
@@ -402,6 +402,8 @@ export class InvitationsService {
   ): Promise<{ sent: boolean; sentAt: Date | null }> {
     const { adminOrigin, ...content } = context;
     const email = memberInvitationEmail({
+      invitationId: invitation._id.toHexString(),
+      linkExpiresAt: invitation.expiresAt,
       ...content,
       acceptUrl: `${adminOrigin}${INVITATION_PATH}#token=${token}`,
       validDays: INVITATION_VALID_DAYS,

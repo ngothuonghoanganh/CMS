@@ -97,6 +97,7 @@ export async function createTestApp(
     async close() {
       await app.close();
       await dropDatabase(mongoUri);
+      emails.checkContract();
     },
   };
 }

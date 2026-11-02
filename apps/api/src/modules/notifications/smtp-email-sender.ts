@@ -1,7 +1,6 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import { createTransport } from 'nodemailer';
 import type { Env } from '../../config/env.js';
-import { InjectEnv } from '../../shared/env.js';
 import { smtpErrorCode } from './domain/notification-rules.js';
 import {
   type EmailDelivery,
@@ -9,24 +8,26 @@ import {
   EmailSender,
   EmailSendError,
 } from './email-sender.js';
+import { type RenderedEmail, renderEmail } from './email-templates.js';
 
 /** A slow or silent server fails the attempt instead of holding it for minutes. */
 const TIMEOUTS = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000 };
 
+/** A rendered email with its addresses, as the SMTP server takes it. */
+export type RenderedMessage = RenderedEmail & { to: readonly string[] };
+
 /** Sends through the SMTP server of `SMTP_URL` (Mailpit in development and tests, ADR-018). */
-@Injectable()
-export class SmtpEmailSender extends EmailSender implements OnModuleDestroy {
+export class SmtpEmailSender implements OnModuleDestroy {
   private readonly transport;
 
-  constructor(@InjectEnv() env: Env) {
-    super();
+  constructor(env: Env) {
     this.transport = createTransport(
       { url: env.SMTP_URL, ...TIMEOUTS },
       { from: env.LEAD_EMAIL_FROM },
     );
   }
 
-  async send(message: EmailMessage): Promise<EmailDelivery> {
+  async send(message: RenderedMessage): Promise<EmailDelivery> {
     let info;
     try {
       info = await this.transport.sendMail({
@@ -48,5 +49,23 @@ export class SmtpEmailSender extends EmailSender implements OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.transport.close();
+  }
+}
+
+/**
+ * Email over SMTP: renders each email here (`email-templates.ts`), with the API's own texts, then
+ * hands it to `SmtpEmailSender` (ADR-018).
+ */
+export class SmtpTemplateSender extends EmailSender implements OnModuleDestroy {
+  constructor(private readonly smtp: SmtpEmailSender) {
+    super();
+  }
+
+  send(message: EmailMessage): Promise<EmailDelivery> {
+    return this.smtp.send({ to: message.to, ...renderEmail(message) });
+  }
+
+  onModuleDestroy(): void {
+    this.smtp.onModuleDestroy();
   }
 }

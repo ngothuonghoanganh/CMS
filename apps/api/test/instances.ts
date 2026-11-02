@@ -43,6 +43,7 @@ export async function createSecondInstance(first: TestApp): Promise<TestApp> {
     tls: first.tls,
     async close() {
       await app.close();
+      emails.checkContract();
     },
   };
 }

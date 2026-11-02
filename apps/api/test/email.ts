@@ -5,6 +5,11 @@ import {
   EmailSender,
   EmailSendError,
 } from '../src/modules/notifications/email-sender.js';
+import { type RenderedEmail, renderEmail } from '../src/modules/notifications/email-templates.js';
+import { templateDataProblems } from './mail-templates.js';
+
+/** An email as both transports see it: the template and data, and what SMTP would send. */
+export type RecordedEmail = EmailMessage & RenderedEmail;
 
 /** A send held back by `holdNext`. */
 export interface HeldSend {
@@ -19,9 +24,14 @@ export interface HeldSend {
  * `createTestApp`). `failNext` makes the next sends fail, one code per send; `refuse` makes the
  * server refuse an address while it accepts the others, like a deleted mailbox; `holdNext` keeps the
  * next send waiting, so a test can change a lead while its email is on the way.
+ *
+ * Every email must carry data plp-mailer renders (ADR-029), whichever transport the test means: one
+ * it would refuse fails the send and is kept in `contractViolations`.
  */
 export class RecordingEmailSender extends EmailSender {
-  readonly sent: EmailMessage[] = [];
+  readonly sent: RecordedEmail[] = [];
+  /** Emails whose data plp-mailer would refuse, with the problems. */
+  readonly contractViolations: string[] = [];
   private readonly failures: EmailErrorCode[] = [];
   private readonly refused = new Set<string>();
   private held: { begin: () => void; released: Promise<void> } | null = null;
@@ -48,6 +58,13 @@ export class RecordingEmailSender extends EmailSender {
   }
 
   async send(message: EmailMessage): Promise<EmailDelivery> {
+    const problems = templateDataProblems(message.template, message.data);
+    if (problems.length > 0) {
+      // The services log a failed email and go on, so the test app reports these when it closes.
+      const violation = `${message.template}: ${problems.join('; ')}`;
+      this.contractViolations.push(violation);
+      throw new EmailSendError('unknown', { cause: new Error(violation) });
+    }
     const held = this.held;
     this.held = null;
     if (held !== null) {
@@ -62,7 +79,7 @@ export class RecordingEmailSender extends EmailSender {
     if (accepted.length === 0) {
       throw new EmailSendError('smtp_rejected', { cause: new Error('every address refused') });
     }
-    this.sent.push({ ...message, to: accepted });
+    this.sent.push({ ...message, ...renderEmail(message), to: accepted });
     const rejected = message.to.length - accepted.length;
     return {
       accepted: accepted.length,
@@ -71,8 +88,17 @@ export class RecordingEmailSender extends EmailSender {
     };
   }
 
+  /** Fails when an email carried data plp-mailer would refuse; the test apps call it on close. */
+  checkContract(): void {
+    if (this.contractViolations.length > 0) {
+      throw new Error(
+        `Emails plp-mailer would refuse (ADR-029):\n${this.contractViolations.join('\n')}`,
+      );
+    }
+  }
+
   /** The emails one address received, oldest first. */
-  to(address: string): EmailMessage[] {
+  to(address: string): RecordedEmail[] {
     return this.sent.filter((message) => message.to.includes(address));
   }
 
@@ -81,7 +107,7 @@ export class RecordingEmailSender extends EmailSender {
    * helper that signs up through the confirmation email (ADR-026) leaves only the emails a test is
    * about in `sent`. Null when there is none.
    */
-  take(address: string, subject: string): EmailMessage | null {
+  take(address: string, subject: string): RecordedEmail | null {
     const index = this.sent.findLastIndex(
       (message) => message.to.includes(address) && message.subject === subject,
     );

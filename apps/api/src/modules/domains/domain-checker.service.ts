@@ -8,11 +8,7 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
-import {
-  domainActiveEmail,
-  domainLostEmail,
-  domainMovedEmail,
-} from '../notifications/email-templates.js';
+import { domainActiveEmail, domainLostEmail, domainMovedEmail } from '../notifications/emails.js';
 import { RevalidationClient } from '../revalidation/revalidation.client.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { AccessService } from '../workspaces/access.service.js';
@@ -32,6 +28,9 @@ import { DomainsRepository } from './domains.repository.js';
 
 /** Aborts the transaction of a verification that did not happen. */
 class NotVerified extends Error {}
+
+/** What an email about a domain tells. A domain can be lost again, so each loss has its time. */
+type DomainNews = { kind: 'active' } | { kind: 'lost'; since: Date } | { kind: 'moved' };
 
 /**
  * Checks one domain (ADR-022): asks DNS, proves ownership by the TXT record (moving the domain from
@@ -118,14 +117,14 @@ export class DomainChecker {
       (await this.announce(domain, 'activeSince', now))
     ) {
       saved = { ...saved, activeSince: now };
-      await this.notify(saved, 'active');
+      await this.notify(saved, { kind: 'active' });
     } else if (
       after === 'lost' &&
       domain.lostSince === null &&
       (await this.announce(domain, 'lostSince', now))
     ) {
       saved = { ...saved, lostSince: now };
-      await this.notify(saved, 'lost');
+      await this.notify(saved, { kind: 'lost', since: now });
     }
     return saved;
   }
@@ -179,7 +178,7 @@ export class DomainChecker {
       });
       if (previous !== null) {
         await this.revalidate(previous);
-        await this.notify(previous, 'moved');
+        await this.notify(previous, { kind: 'moved' });
       }
       return true;
     } catch (error) {
@@ -245,7 +244,7 @@ export class DomainChecker {
    * Emails the domain's contact. Reading who and where is part of it: any failure is logged, never
    * raised, since the check is stored already and is not repeated for an email.
    */
-  private async notify(domain: DomainRecord, event: 'active' | 'lost' | 'moved'): Promise<void> {
+  private async notify(domain: DomainRecord, news: DomainNews): Promise<void> {
     try {
       const [site, contactId] = await Promise.all([
         this.sites.findSubdomain(domain, domain.siteId),
@@ -256,22 +255,23 @@ export class DomainChecker {
         return;
       }
       const input = {
+        domainId: domain._id.toHexString(),
         hostname: domain.hostname,
         siteName: site.name,
         domainsUrl: `${await this.links.originOf(domain.workspaceId)}/sites/${site._id.toHexString()}/domain`,
       };
       const content =
-        event === 'active'
+        news.kind === 'active'
           ? domainActiveEmail(input)
-          : event === 'lost'
-            ? domainLostEmail(input)
+          : news.kind === 'lost'
+            ? domainLostEmail({ ...input, lostSince: news.since })
             : domainMovedEmail(input);
       await this.sender.send({ to: [contact.email], ...content });
     } catch (error) {
       this.logger.warn(
         {
           domainId: domain._id.toHexString(),
-          event,
+          event: news.kind,
           code: error instanceof EmailSendError ? error.code : 'unknown',
           err: error instanceof EmailSendError ? undefined : error,
         },

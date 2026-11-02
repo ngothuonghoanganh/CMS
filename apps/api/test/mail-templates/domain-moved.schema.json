@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "domain-moved",
+  "description": "Chủ tên miền đã xác minh quyền sở hữu từ một site khác, nay site đó giữ tên miền (ADR-022).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["hostname", "siteName", "domainsUrl"],
+  "properties": {
+    "hostname": { "type": "string", "minLength": 1, "description": "Tên miền riêng, ví dụ \"go.smilecare.vn\"." },
+    "siteName": { "type": "string", "minLength": 1, "description": "Site vừa mất tên miền." },
+    "domainsUrl": { "type": "string", "format": "http-url", "description": "Mục \"Tên miền\" của site đó trong admin." }
+  }
+}

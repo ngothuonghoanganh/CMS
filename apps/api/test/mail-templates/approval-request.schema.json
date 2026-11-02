@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "approval-request",
+  "description": "Báo Chủ sở hữu và Quản trị rằng một trang chờ họ duyệt xuất bản (ADR-023). Liên kết chỉ mở trang; quyền vẫn được kiểm tra khi xuất bản.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requesterName", "pageTitle", "siteName", "note", "resent", "pageUrl"],
+  "properties": {
+    "requesterName": { "type": "string", "minLength": 1 },
+    "pageTitle": { "type": "string", "minLength": 1 },
+    "siteName": { "type": "string", "minLength": 1 },
+    "note": { "type": ["string", "null"], "description": "Ghi chú của người gửi; null khi không có." },
+    "resent": { "type": "boolean", "description": "true khi người gửi gửi lại yêu cầu cho bản nháp mới hơn." },
+    "pageUrl": { "type": "string", "format": "http-url", "description": "Trang trong editor." }
+  }
+}

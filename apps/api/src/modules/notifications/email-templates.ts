@@ -1,5 +1,18 @@
-import { formatLeadPhone, leadSourceLabel, vnDateTimeOf } from '@plp/contracts';
-import type { EmailMessage } from './email-sender.js';
+import type {
+  AccessDecisionData,
+  AccessRequestData,
+  AccountExistsData,
+  ApprovalPublishedData,
+  ApprovalRejectedData,
+  ApprovalRequestData,
+  DomainEmailData,
+  Email,
+  LeadNotificationData,
+  MemberInvitationData,
+  PasswordResetData,
+  RecipientConfirmationData,
+  SignupConfirmationData,
+} from './emails.js';
 
 /** Text for HTML: every character with a meaning in markup is escaped. */
 export function escapeHtml(text: string): string {
@@ -11,8 +24,12 @@ export function escapeHtml(text: string): string {
     .replaceAll("'", '&#39;');
 }
 
-/** An email before it is addressed. */
-export type EmailContent = Omit<EmailMessage, 'to'>;
+/** An email as an SMTP server takes it, before it is addressed. */
+export interface RenderedEmail {
+  subject: string;
+  text: string;
+  html: string;
+}
 
 /** A simple layout every client renders: one column, inline styles, no images. */
 function layout(title: string, body: string): string {
@@ -23,75 +40,50 @@ function row(label: string, value: string): string {
   return `<tr><td style="padding:6px 12px 6px 0;color:#5e6573;vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td><td style="padding:6px 0;white-space:pre-wrap">${escapeHtml(value)}</td></tr>`;
 }
 
-export interface LeadEmailInput {
-  siteName: string;
-  pageTitle: string;
-  releaseVersion: number;
-  lead: {
-    name: string;
-    phone: string;
-    email: string | null;
-    message: string | null;
-    source: { source: string; medium: string; campaign: string | null };
-    createdAt: Date;
-  };
-  /** The lead in the admin inbox. */
-  leadUrl: string;
-}
-
 /** The email confirmed addresses get for a new lead (ADR-018). */
-export function leadNotificationEmail(input: LeadEmailInput): EmailContent {
-  const { lead } = input;
-  const source = leadSourceLabel(lead.source);
+function leadNotification(data: LeadNotificationData): RenderedEmail {
+  const { lead } = data;
   const rows: Array<[string, string]> = [
     ['Họ và tên', lead.name],
-    ['Số điện thoại', formatLeadPhone(lead.phone)],
+    ['Số điện thoại', lead.phone],
     ...(lead.email === null ? [] : ([['Email', lead.email]] as Array<[string, string]>)),
     ...(lead.message === null ? [] : ([['Lời nhắn', lead.message]] as Array<[string, string]>)),
-    ['Trang', `${input.pageTitle} (v${input.releaseVersion})`],
-    ['Nguồn', lead.source.campaign === null ? source : `${source} / ${lead.source.campaign}`],
-    ['Lúc', `${vnDateTimeOf(lead.createdAt)} (giờ Việt Nam)`],
+    ['Trang', `${data.pageTitle} (v${data.releaseVersion})`],
+    ['Nguồn', lead.source],
+    ['Lúc', `${lead.createdAt} (giờ Việt Nam)`],
   ];
-  const footer = `Bạn nhận email này vì địa chỉ này đã được thêm vào "Nơi nhận lead" của ${input.siteName} và đã xác nhận.`;
-  const subject = `[${input.siteName}] Lead mới: ${lead.name}`;
+  const footer = `Bạn nhận email này vì địa chỉ này đã được thêm vào "Nơi nhận lead" của ${data.siteName} và đã xác nhận.`;
+  const subject = `[${data.siteName}] Lead mới: ${lead.name}`;
   const text = [
-    `${input.siteName} vừa nhận một đăng ký mới.`,
+    `${data.siteName} vừa nhận một đăng ký mới.`,
     '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
     '',
-    `Mở lead trong hộp thư: ${input.leadUrl}`,
+    `Mở lead trong hộp thư: ${data.leadUrl}`,
     '',
     footer,
   ].join('\n');
   const html = layout(
-    `Lead mới cho ${input.siteName}`,
+    `Lead mới cho ${data.siteName}`,
     `<table style="border-collapse:collapse;font-size:14px;line-height:1.5">${rows
       .map(([label, value]) => row(label, value))
       .join(
         '',
-      )}</table><p style="margin:20px 0"><a href="${escapeHtml(input.leadUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Mở lead trong hộp thư</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(footer)}</p>`,
+      )}</table><p style="margin:20px 0"><a href="${escapeHtml(data.leadUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Mở lead trong hộp thư</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(footer)}</p>`,
   );
   return { subject, text, html };
 }
 
-export interface ConfirmationEmailInput {
-  siteName: string;
-  /** Who added the address, as the admin shows their name. */
-  invitedBy: string;
-  confirmUrl: string;
-  validDays: number;
-}
-
 /** The email that asks an address to confirm before it receives any lead (ADR-018). */
-export function recipientConfirmationEmail(input: ConfirmationEmailInput): EmailContent {
-  const intro = `${input.invitedBy} đã thêm địa chỉ này vào "Nơi nhận lead" của ${input.siteName}. Sau khi bạn xác nhận, mỗi khi có khách gửi form trên các trang của ${input.siteName}, bạn sẽ nhận một email kèm thông tin của khách.`;
-  const validity = `Liên kết có hiệu lực ${input.validDays} ngày. Nếu bạn không biết việc này, hãy bỏ qua email: địa chỉ sẽ không nhận thông tin nào.`;
+function recipientConfirmation(data: RecipientConfirmationData): RenderedEmail {
+  const intro = `${data.invitedBy} đã thêm địa chỉ này vào "Nơi nhận lead" của ${data.siteName}. Sau khi bạn xác nhận, mỗi khi có khách gửi form trên các trang của ${data.siteName}, bạn sẽ nhận một email kèm thông tin của khách.`;
+  const validity = `Liên kết có hiệu lực ${data.validDays} ngày. Nếu bạn không biết việc này, hãy bỏ qua email: địa chỉ sẽ không nhận thông tin nào.`;
   return {
-    subject: `Xác nhận nhận lead của ${input.siteName}`,
-    text: [intro, '', `Xác nhận tại: ${input.confirmUrl}`, '', validity].join('\n'),
+    subject: `Xác nhận nhận lead của ${data.siteName}`,
+    text: [intro, '', `Xác nhận tại: ${data.confirmUrl}`, '', validity].join('\n'),
     html: layout(
-      `Xác nhận nhận lead của ${input.siteName}`,
-      `<p style="margin:0 0 16px;line-height:1.55">${escapeHtml(intro)}</p><p style="margin:0 0 16px"><a href="${escapeHtml(input.confirmUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Xác nhận nhận lead</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(validity)}</p>`,
+      `Xác nhận nhận lead của ${data.siteName}`,
+      `<p style="margin:0 0 16px;line-height:1.55">${escapeHtml(intro)}</p><p style="margin:0 0 16px"><a href="${escapeHtml(data.confirmUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Xác nhận nhận lead</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(validity)}</p>`,
     ),
   };
 }
@@ -109,27 +101,17 @@ function smallPrint(text: string): string {
   return `<p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(text)}</p>`;
 }
 
-export interface MemberInvitationEmailInput {
-  workspaceName: string;
-  invitedBy: string;
-  roleLabel: string;
-  /** "toàn workspace" or the sites, e.g. "site Nha khoa Smile Care". */
-  scope: string;
-  acceptUrl: string;
-  validDays: number;
-}
-
 /** The invitation to join a workspace (board 15b, ADR-021). */
-export function memberInvitationEmail(input: MemberInvitationEmailInput): EmailContent {
-  const title = `${input.invitedBy} mời bạn vào ${input.workspaceName}`;
-  const intro = `Bạn được mời làm ${input.roleLabel} trên ${input.scope} của ${input.workspaceName}.`;
-  const validity = `Lời mời dùng được một lần, cho đúng địa chỉ email này, trong ${input.validDays} ngày. Không biết người mời? Bạn có thể bỏ qua email này, tài khoản sẽ không được tạo.`;
+function memberInvitation(data: MemberInvitationData): RenderedEmail {
+  const title = `${data.invitedBy} mời bạn vào ${data.workspaceName}`;
+  const intro = `Bạn được mời làm ${data.roleLabel} trên ${data.scope} của ${data.workspaceName}.`;
+  const validity = `Lời mời dùng được một lần, cho đúng địa chỉ email này, trong ${data.validDays} ngày. Không biết người mời? Bạn có thể bỏ qua email này, tài khoản sẽ không được tạo.`;
   return {
     subject: title,
-    text: [intro, '', `Nhận lời mời tại: ${input.acceptUrl}`, '', validity].join('\n'),
+    text: [intro, '', `Nhận lời mời tại: ${data.acceptUrl}`, '', validity].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${button(input.acceptUrl, 'Nhận lời mời')}${smallPrint(validity)}`,
+      `${paragraph(intro)}${button(data.acceptUrl, 'Nhận lời mời')}${smallPrint(validity)}`,
     ),
   };
 }
@@ -138,41 +120,23 @@ function textLink(href: string, label: string): string {
   return `<p style="margin:0 0 16px;line-height:1.55"><a href="${escapeHtml(href)}" style="color:#4338ca;font-weight:600">${escapeHtml(label)}</a></p>`;
 }
 
-export interface SignupConfirmationEmailInput {
-  workspaceName: string;
-  confirmUrl: string;
-  validHours: number;
-}
-
-/**
- * The link that confirms a sign-up's email (ADR-026); its page sets the password, and the account
- * and its workspace exist once it is used. The address may be someone else's, so the email says
- * how to ignore it.
- */
-export function signupConfirmationEmail(input: SignupConfirmationEmailInput): EmailContent {
+/** The link that confirms a sign-up's email (ADR-026). */
+function signupConfirmation(data: SignupConfirmationData): RenderedEmail {
   const title = 'Xác nhận email để tạo workspace';
-  const intro = `Email này vừa được dùng để đăng ký tài khoản và tạo workspace "${input.workspaceName}". Bấm nút dưới đây để xác nhận email và đặt mật khẩu; tài khoản và workspace được tạo ngay sau đó.`;
-  const validity = `Link có hiệu lực ${input.validHours} giờ và chỉ dùng được một lần. Nếu bạn không đăng ký, hãy bỏ qua email này: tài khoản sẽ không được tạo.`;
+  const intro = `Email này vừa được dùng để đăng ký tài khoản và tạo workspace "${data.workspaceName}". Bấm nút dưới đây để xác nhận email và đặt mật khẩu; tài khoản và workspace được tạo ngay sau đó.`;
+  const validity = `Link có hiệu lực ${data.validHours} giờ và chỉ dùng được một lần. Nếu bạn không đăng ký, hãy bỏ qua email này: tài khoản sẽ không được tạo.`;
   return {
     subject: title,
-    text: [intro, '', `Xác nhận tại: ${input.confirmUrl}`, '', validity].join('\n'),
+    text: [intro, '', `Xác nhận tại: ${data.confirmUrl}`, '', validity].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${button(input.confirmUrl, 'Xác nhận và tạo workspace')}${smallPrint(validity)}`,
+      `${paragraph(intro)}${button(data.confirmUrl, 'Xác nhận và tạo workspace')}${smallPrint(validity)}`,
     ),
   };
 }
 
-export interface AccountExistsEmailInput {
-  loginUrl: string;
-  forgotUrl: string;
-}
-
-/**
- * Sent instead of a confirmation when the email signing up has an account already (ADR-026): the
- * sign-up answers the same either way, so only the mailbox learns the account exists.
- */
-export function accountExistsEmail(input: AccountExistsEmailInput): EmailContent {
+/** The email signing up has an account already (ADR-026). */
+function accountExists(data: AccountExistsData): RenderedEmail {
   const title = 'Email này đã có tài khoản';
   const intro =
     'Ai đó, có thể là bạn, vừa dùng email này để đăng ký. Email này đã có tài khoản nên không có tài khoản mới nào được tạo. Hãy đăng nhập bằng mật khẩu hiện có.';
@@ -183,199 +147,176 @@ export function accountExistsEmail(input: AccountExistsEmailInput): EmailContent
     text: [
       intro,
       '',
-      `Đăng nhập: ${input.loginUrl}`,
-      `Quên mật khẩu: ${input.forgotUrl}`,
+      `Đăng nhập: ${data.loginUrl}`,
+      `Quên mật khẩu: ${data.forgotUrl}`,
       '',
       ignore,
     ].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${button(input.loginUrl, 'Đăng nhập')}${textLink(input.forgotUrl, 'Quên mật khẩu? Đặt lại mật khẩu')}${smallPrint(ignore)}`,
+      `${paragraph(intro)}${button(data.loginUrl, 'Đăng nhập')}${textLink(data.forgotUrl, 'Quên mật khẩu? Đặt lại mật khẩu')}${smallPrint(ignore)}`,
     ),
   };
 }
 
-export interface PasswordResetEmailInput {
-  resetUrl: string;
-  validMinutes: number;
-}
-
-/** The link that sets a new password (ADR-026); using it signs out every device. */
-export function passwordResetEmail(input: PasswordResetEmailInput): EmailContent {
+/** The link that sets a new password (ADR-026). */
+function passwordReset(data: PasswordResetData): RenderedEmail {
   const title = 'Đặt lại mật khẩu';
   const intro =
     'Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản dùng email này. Khi bạn đặt mật khẩu mới, mọi thiết bị đang đăng nhập sẽ bị đăng xuất.';
-  const validity = `Link có hiệu lực ${input.validMinutes} phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này: mật khẩu giữ nguyên.`;
+  const validity = `Link có hiệu lực ${data.validMinutes} phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này: mật khẩu giữ nguyên.`;
   return {
     subject: title,
-    text: [intro, '', `Đặt lại mật khẩu tại: ${input.resetUrl}`, '', validity].join('\n'),
+    text: [intro, '', `Đặt lại mật khẩu tại: ${data.resetUrl}`, '', validity].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${button(input.resetUrl, 'Đặt mật khẩu mới')}${smallPrint(validity)}`,
+      `${paragraph(intro)}${button(data.resetUrl, 'Đặt mật khẩu mới')}${smallPrint(validity)}`,
     ),
   };
 }
 
-export interface AccessRequestEmailInput {
-  workspaceName: string;
-  requesterName: string;
-  requesterEmail: string;
-  currentRole: string;
-  requestedRole: string;
-  /** "toàn workspace" or "các site hiện tại". */
-  scope: string;
-  note: string;
-  reviewUrl: string;
-}
-
-/** Tells Chủ sở hữu a member asks for another role; the link only opens the request (ADR-021). */
-export function accessRequestEmail(input: AccessRequestEmailInput): EmailContent {
-  const title = `${input.requesterName} xin đổi quyền trong ${input.workspaceName}`;
-  const intro = `${input.requesterName} (${input.requesterEmail}) đang là ${input.currentRole} và xin làm ${input.requestedRole} trên ${input.scope}.`;
-  const note = input.note === '' ? null : `Lời nhắn: ${input.note}`;
+/** Tells Chủ sở hữu a member asks for another role (ADR-021). */
+function accessRequest(data: AccessRequestData): RenderedEmail {
+  const title = `${data.requesterName} xin đổi quyền trong ${data.workspaceName}`;
+  const intro = `${data.requesterName} (${data.requesterEmail}) đang là ${data.currentRole} và xin làm ${data.requestedRole} trên ${data.scope}.`;
+  const note = data.note === null ? null : `Lời nhắn: ${data.note}`;
   const action =
     'Mở yêu cầu để chấp nhận, chỉnh vai trò và site trước khi lưu, hoặc từ chối. Quyền chỉ đổi khi bạn lưu trên màn Thành viên.';
   return {
     subject: title,
-    text: [intro, ...(note === null ? [] : ['', note]), '', action, input.reviewUrl].join('\n'),
+    text: [intro, ...(note === null ? [] : ['', note]), '', action, data.reviewUrl].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(input.reviewUrl, 'Xem yêu cầu')}${smallPrint(action)}`,
+      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(data.reviewUrl, 'Xem yêu cầu')}${smallPrint(action)}`,
     ),
   };
 }
 
-export interface AccessDecisionEmailInput {
-  workspaceName: string;
-  accepted: boolean;
-  /** The role and sites decided, for an accepted request. */
-  roleLabel: string;
-  scope: string;
-  openUrl: string;
-}
-
 /** Tells the member how Chủ sở hữu decided their request (ADR-021). */
-export function accessDecisionEmail(input: AccessDecisionEmailInput): EmailContent {
-  const title = input.accepted
-    ? `Yêu cầu đổi quyền trong ${input.workspaceName} đã được chấp nhận`
-    : `Yêu cầu đổi quyền trong ${input.workspaceName} chưa được chấp nhận`;
-  const body = input.accepted
-    ? `Bạn là ${input.roleLabel} trên ${input.scope}. Quyền mới có hiệu lực ngay.`
+function accessDecision(data: AccessDecisionData): RenderedEmail {
+  const title = data.accepted
+    ? `Yêu cầu đổi quyền trong ${data.workspaceName} đã được chấp nhận`
+    : `Yêu cầu đổi quyền trong ${data.workspaceName} chưa được chấp nhận`;
+  const body = data.accepted
+    ? `Bạn là ${data.roleLabel} trên ${data.scope}. Quyền mới có hiệu lực ngay.`
     : 'Chủ sở hữu đã từ chối yêu cầu. Quyền của bạn giữ nguyên; bạn có thể gửi yêu cầu khác.';
   return {
     subject: title,
-    text: [body, '', input.openUrl].join('\n'),
-    html: layout(title, `${paragraph(body)}${button(input.openUrl, `Mở ${input.workspaceName}`)}`),
+    text: [body, '', data.openUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(data.openUrl, `Mở ${data.workspaceName}`)}`),
   };
-}
-
-export interface DomainEmailInput {
-  hostname: string;
-  siteName: string;
-  /** "Tên miền" of the site in the admin. */
-  domainsUrl: string;
 }
 
 /** The domain serves the site's pages (ADR-022). */
-export function domainActiveEmail(input: DomainEmailInput): EmailContent {
-  const title = `${input.hostname} đã hoạt động`;
-  const body = `Các trang đang live của ${input.siteName} mở được qua ${input.hostname}. Bạn có thể đặt tên miền này làm địa chỉ chính ở mục "Tên miền".`;
+function domainActive(data: DomainEmailData): RenderedEmail {
+  const title = `${data.hostname} đã hoạt động`;
+  const body = `Các trang đang live của ${data.siteName} mở được qua ${data.hostname}. Bạn có thể đặt tên miền này làm địa chỉ chính ở mục "Tên miền".`;
   return {
     subject: title,
-    text: [body, '', input.domainsUrl].join('\n'),
-    html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Mở mục Tên miền')}`),
+    text: [body, '', data.domainsUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(data.domainsUrl, 'Mở mục Tên miền')}`),
   };
 }
 
-/** The domain no longer points here; visitors following it get an error (ADR-022). */
-export function domainLostEmail(input: DomainEmailInput): EmailContent {
-  const title = `${input.hostname} đang không truy cập được`;
-  const body = `Bản ghi DNS của ${input.hostname} không còn trỏ tới hệ thống, nên khách mở link tới ${input.siteName} qua tên miền này sẽ gặp lỗi. Các trang vẫn mở được ở địa chỉ mặc định.`;
+/** The domain no longer points here (ADR-022). */
+function domainLost(data: DomainEmailData): RenderedEmail {
+  const title = `${data.hostname} đang không truy cập được`;
+  const body = `Bản ghi DNS của ${data.hostname} không còn trỏ tới hệ thống, nên khách mở link tới ${data.siteName} qua tên miền này sẽ gặp lỗi. Các trang vẫn mở được ở địa chỉ mặc định.`;
   return {
     subject: title,
-    text: [body, '', input.domainsUrl].join('\n'),
-    html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Xem cách sửa')}`),
+    text: [body, '', data.domainsUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(data.domainsUrl, 'Xem cách sửa')}`),
   };
 }
 
-/** Its owner proved the domain is theirs from another site, which now has it (ADR-022). */
-export function domainMovedEmail(input: DomainEmailInput): EmailContent {
-  const title = `${input.hostname} đã chuyển khỏi ${input.siteName}`;
-  const body = `Chủ tên miền ${input.hostname} đã xác minh quyền sở hữu bằng bản ghi TXT ở một site khác, nên tên miền không còn dùng cho ${input.siteName}. Các trang vẫn mở được ở địa chỉ mặc định.`;
+/** Another site proved the domain is its own (ADR-022). */
+function domainMoved(data: DomainEmailData): RenderedEmail {
+  const title = `${data.hostname} đã chuyển khỏi ${data.siteName}`;
+  const body = `Chủ tên miền ${data.hostname} đã xác minh quyền sở hữu bằng bản ghi TXT ở một site khác, nên tên miền không còn dùng cho ${data.siteName}. Các trang vẫn mở được ở địa chỉ mặc định.`;
   return {
     subject: title,
-    text: [body, '', input.domainsUrl].join('\n'),
-    html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Mở mục Tên miền')}`),
+    text: [body, '', data.domainsUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(data.domainsUrl, 'Mở mục Tên miền')}`),
   };
-}
-
-export interface ApprovalRequestEmailInput {
-  requesterName: string;
-  pageTitle: string;
-  siteName: string;
-  note: string;
-  /** True when the sender asks again for a newer draft. */
-  resent: boolean;
-  /** The page in the editor; publishing still checks the approver's role. */
-  pageUrl: string;
 }
 
 /** Tells Chủ sở hữu and Quản trị a page waits for their approval (ADR-023). */
-export function approvalRequestEmail(input: ApprovalRequestEmailInput): EmailContent {
-  const title = `${input.requesterName} ${input.resent ? 'gửi lại' : 'gửi'} yêu cầu xuất bản "${input.pageTitle}"`;
-  const intro = `Trang "${input.pageTitle}" của ${input.siteName} đang chờ bạn duyệt.`;
-  const note = input.note === '' ? null : `Ghi chú: ${input.note}`;
+function approvalRequest(data: ApprovalRequestData): RenderedEmail {
+  const title = `${data.requesterName} ${data.resent ? 'gửi lại' : 'gửi'} yêu cầu xuất bản "${data.pageTitle}"`;
+  const intro = `Trang "${data.pageTitle}" của ${data.siteName} đang chờ bạn duyệt.`;
+  const note = data.note === null ? null : `Ghi chú: ${data.note}`;
   const action =
     'Mở trang, xem trước và kiểm tra, rồi chọn "Duyệt và xuất bản" hoặc "Từ chối". Trang chỉ live khi bạn xuất bản.';
   return {
     subject: title,
-    text: [intro, ...(note === null ? [] : ['', note]), '', action, input.pageUrl].join('\n'),
+    text: [intro, ...(note === null ? [] : ['', note]), '', action, data.pageUrl].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(input.pageUrl, 'Xem và duyệt')}${smallPrint(action)}`,
+      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(data.pageUrl, 'Xem và duyệt')}${smallPrint(action)}`,
     ),
   };
-}
-
-export interface ApprovalPublishedEmailInput {
-  pageTitle: string;
-  publisherName: string;
-  /** The publisher decides requests: they approved it. A Biên tập only published it. */
-  approved: boolean;
-  version: number;
-  liveUrl: string;
 }
 
 /** Tells the sender their page went live (ADR-023). */
-export function approvalPublishedEmail(input: ApprovalPublishedEmailInput): EmailContent {
-  const title = `"${input.pageTitle}" đã được xuất bản`;
-  const body = `${input.publisherName} đã ${input.approved ? 'duyệt và xuất bản' : 'xuất bản'} phiên bản v${input.version}. Khách truy cập đang thấy phiên bản mới.`;
+function approvalPublished(data: ApprovalPublishedData): RenderedEmail {
+  const title = `"${data.pageTitle}" đã được xuất bản`;
+  const body = `${data.publisherName} đã ${data.approved ? 'duyệt và xuất bản' : 'xuất bản'} phiên bản v${data.version}. Khách truy cập đang thấy phiên bản mới.`;
   return {
     subject: title,
-    text: [body, '', input.liveUrl].join('\n'),
-    html: layout(title, `${paragraph(body)}${button(input.liveUrl, 'Mở trang live')}`),
+    text: [body, '', data.liveUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(data.liveUrl, 'Mở trang live')}`),
   };
-}
-
-export interface ApprovalRejectedEmailInput {
-  pageTitle: string;
-  rejecterName: string;
-  reason: string;
-  pageUrl: string;
 }
 
 /** Tells the sender why their page was not published (ADR-023). */
-export function approvalRejectedEmail(input: ApprovalRejectedEmailInput): EmailContent {
-  const title = `Yêu cầu xuất bản "${input.pageTitle}" chưa được duyệt`;
-  const body = `${input.rejecterName} chưa duyệt yêu cầu. Trang live giữ nguyên.`;
-  const reason = `Lý do: ${input.reason}`;
+function approvalRejected(data: ApprovalRejectedData): RenderedEmail {
+  const title = `Yêu cầu xuất bản "${data.pageTitle}" chưa được duyệt`;
+  const body = `${data.rejecterName} chưa duyệt yêu cầu. Trang live giữ nguyên.`;
+  const reason = `Lý do: ${data.reason}`;
   const next = 'Sửa bản nháp theo góp ý rồi gửi lại yêu cầu.';
   return {
     subject: title,
-    text: [body, '', reason, '', next, input.pageUrl].join('\n'),
+    text: [body, '', reason, '', next, data.pageUrl].join('\n'),
     html: layout(
       title,
-      `${paragraph(body)}${paragraph(reason)}${paragraph(next)}${button(input.pageUrl, 'Mở trang')}`,
+      `${paragraph(body)}${paragraph(reason)}${paragraph(next)}${button(data.pageUrl, 'Mở trang')}`,
     ),
   };
+}
+
+/**
+ * The subject and both parts of an email, as SMTP sends it (ADR-018). plp-mailer renders the same
+ * data with its own copy of these texts (ADR-029).
+ */
+export function renderEmail(email: Email): RenderedEmail {
+  switch (email.template) {
+    case 'lead-notification':
+      return leadNotification(email.data);
+    case 'recipient-confirmation':
+      return recipientConfirmation(email.data);
+    case 'member-invitation':
+      return memberInvitation(email.data);
+    case 'access-request':
+      return accessRequest(email.data);
+    case 'access-decision':
+      return accessDecision(email.data);
+    case 'signup-confirmation':
+      return signupConfirmation(email.data);
+    case 'account-exists':
+      return accountExists(email.data);
+    case 'password-reset':
+      return passwordReset(email.data);
+    case 'domain-active':
+      return domainActive(email.data);
+    case 'domain-lost':
+      return domainLost(email.data);
+    case 'domain-moved':
+      return domainMoved(email.data);
+    case 'approval-request':
+      return approvalRequest(email.data);
+    case 'approval-published':
+      return approvalPublished(email.data);
+    case 'approval-rejected':
+      return approvalRejected(email.data);
+  }
 }

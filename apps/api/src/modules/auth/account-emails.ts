@@ -5,7 +5,7 @@ import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import { mailboxOf } from '../../shared/mailbox.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
-import type { EmailContent } from '../notifications/email-templates.js';
+import type { KeyedEmail } from '../notifications/emails.js';
 import { AuthEmailLimitsRepository } from './auth-email-limits.repository.js';
 import type { AttemptWindow } from './login-attempts.repository.js';
 import { loginAccountKey } from './login-attempts.repository.js';
@@ -51,14 +51,14 @@ export class AccountEmails {
     email: string,
     now: Date,
     what: string,
-    prepare: () => Promise<EmailContent | null>,
+    prepare: () => Promise<KeyedEmail | null>,
   ): Promise<void> {
     const key = loginAccountKey(this.env.LOGIN_ATTEMPT_SECRET, mailboxOf(email));
     const counted = await this.limits.count(key, now, new Date(now.getTime() + HOUR_MS));
     if (counted.count > ACCOUNT_EMAILS_PER_HOUR) {
       throw tooManyEmails();
     }
-    let content: EmailContent | null;
+    let content: KeyedEmail | null;
     try {
       content = await prepare();
       if (content !== null) {

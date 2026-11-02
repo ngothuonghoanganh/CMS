@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "account-exists",
+  "description": "Gửi thay thư xác nhận khi email đăng ký đã có tài khoản (ADR-026): chỉ hộp thư biết tài khoản đã có. Không link nào trong thư làm thay đổi gì.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["loginUrl", "forgotUrl"],
+  "properties": {
+    "loginUrl": { "type": "string", "format": "http-url" },
+    "forgotUrl": { "type": "string", "format": "http-url", "description": "Trang \"Quên mật khẩu\"." }
+  }
+}
