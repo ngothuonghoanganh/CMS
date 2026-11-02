@@ -18,12 +18,14 @@ import { AiTextModel } from './ai-text-model.js';
 import { AI_USAGE_COLLECTION } from './ai-usage.schema.js';
 import { AiUsageRepository } from './ai-usage.repository.js';
 import { AiController } from './ai.controller.js';
+import { AiSuggestionsController } from './ai-suggestions.controller.js';
+import { AiSuggestionsService } from './ai-suggestions.service.js';
 import { SectionWriter } from './section-writer.service.js';
 
 /**
- * AI (ADR-031): the `AiTextModel` port with the adapter `AI_PROVIDER` names, the monthly quota and
- * creating a page from a brief. Exports the port, the section writer and the quota, which the
- * editor assistant reuses.
+ * AI (ADR-031): the `AiTextModel` port with the adapter `AI_PROVIDER` names, the monthly quota,
+ * creating a page from a brief, and the assistant of the editor. Exports the port, the section
+ * writer and the quota.
  */
 @Module({
   imports: [
@@ -35,7 +37,7 @@ import { SectionWriter } from './section-writer.service.js';
     SitesCoreModule,
     WorkspacesModule,
   ],
-  controllers: [AiController],
+  controllers: [AiController, AiSuggestionsController],
   providers: [
     { provide: AiTextModel, inject: [ENV], useFactory: (env: Env) => createAiTextModel(env) },
     AiClock,
@@ -46,6 +48,7 @@ import { SectionWriter } from './section-writer.service.js';
     SectionWriter,
     AiJobRunner,
     AiPageJobsService,
+    AiSuggestionsService,
   ],
   exports: [AiTextModel, SectionWriter, AiQuota],
 })

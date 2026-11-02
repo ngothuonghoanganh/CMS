@@ -3,9 +3,14 @@ import {
   type AiJobEvent,
   aiJobEventSchema,
   type AiPageJobRequest,
+  type AiScopeSection,
+  aiSuggestionEventSchema,
+  type AiSuggestionRequest,
+  type AiSuggestionResult,
   type AiStructureItem,
+  type SectionInstance,
 } from '@plp/contracts';
-import { goalOutline } from '@plp/sections/schema';
+import { aiWritablePaths, getAtPath, goalOutline } from '@plp/sections/schema';
 import type { Response } from 'supertest';
 import { expect } from 'vitest';
 import { FakeAiTextModel } from '../src/modules/ai/adapters/fake-ai-text-model.js';
@@ -82,6 +87,54 @@ export async function runAiJob(
   const response = await postAiJob(client, siteId, body).expect(200);
   const events = streamEvents(response);
   return { events, job: finishedJob(events) };
+}
+
+/** What the editor sends of a section for the assistant: the text the AI may write there. */
+export function scopeTextOf(section: SectionInstance): AiScopeSection {
+  return {
+    id: section.id,
+    type: section.type,
+    variant: section.variant,
+    texts: Object.fromEntries(
+      aiWritablePaths(section).map((path) => {
+        const value = getAtPath(section.content, path);
+        return [path, typeof value === 'string' ? value : ''];
+      }),
+    ),
+  };
+}
+
+/** Asks the assistant; a refusal keeps its problem as `body`, the stream is read as `text`. */
+export function postSuggestion(
+  client: TestClient,
+  siteId: string,
+  pageId: string,
+  body: AiSuggestionRequest,
+) {
+  return client.post(`/sites/${siteId}/pages/${pageId}/ai/suggestions`, body).buffer(true);
+}
+
+/** The result line that ends a suggestion's stream, after its heartbeats. */
+export function suggestionResultOf(response: Response): AiSuggestionResult {
+  const lines = response.text
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => aiSuggestionEventSchema.parse(JSON.parse(line)));
+  const last = lines.at(-1);
+  if (last?.type !== 'result') {
+    throw new Error(`The suggestion did not end with its result: ${response.text}`);
+  }
+  return last.result;
+}
+
+/** Asks the assistant and reads its result. */
+export async function suggest(
+  client: TestClient,
+  siteId: string,
+  pageId: string,
+  body: AiSuggestionRequest,
+): Promise<AiSuggestionResult> {
+  return suggestionResultOf(await postSuggestion(client, siteId, pageId, body).expect(200));
 }
 
 /** The fake AI of an app started with `AI_PROVIDER=fake`. */

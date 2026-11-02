@@ -19,8 +19,15 @@ import {
 import { Types } from 'mongoose';
 import type { Response } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aiJobBody, postAiJob, postAiRetry } from '../../../test/ai.js';
+import {
+  aiJobBody,
+  postAiJob,
+  postAiRetry,
+  postSuggestion,
+  scopeTextOf,
+} from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
+import { heroSection } from '../../../test/compositions.js';
 import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
@@ -464,6 +471,21 @@ const ROWS: Row[] = [
     scope: 'site',
     status: 404,
     call: (client, { site }) => client.post(`/sites/${site.id}/ai/page-jobs/${NO_AI_JOB}/cancel`),
+  },
+  // The assistant of the editor (board 21): the text the editor holds, saved or not.
+  {
+    action: 'Gợi ý của trợ lý AI',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: (client, { site, pageId }) => {
+      const hero = heroSection();
+      return postSuggestion(client, site.id, pageId, {
+        scope: { kind: 'section', sectionId: hero.id },
+        action: 'rewrite',
+        sections: [scopeTextOf(hero)],
+      });
+    },
   },
   // Publishing
   {
