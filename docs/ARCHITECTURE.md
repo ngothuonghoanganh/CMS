@@ -355,6 +355,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-02 (khớp thiết kế màn 01):** tìm trang theo tên hoặc đường dẫn không phân biệt dấu và hoa thường, cùng cách chuẩn hóa với hộp thư lead (ADR-018): "uu dai" tìm ra "Ưu đãi tháng 11".
 - **Amended 2026-11-02 (ADR-027):** activity có thêm `page.deleted`, và các sự kiện tên miền của ADR-022.
 - **Amended 2026-11-02 (ADR-030, lát G1):** activity có thêm `page.created_from_template`; trang có thêm `createdFrom`.
+- **Amended 2026-11-02 (ADR-030, lát G2, G3):** activity có thêm `template.saved` và `page.template_applied`.
 
 ### ADR-006 — Kiểm tra, publish, rollback, gỡ trang
 
@@ -725,6 +726,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Không đọc được policy, ACL, CORS, location.
   - Không PUT hay DELETE được, kể cả dưới `public/`.
   - Storage production phải giữ đúng chính sách này.
+- **Amended 2026-11-02 (ADR-030, lát G2):** ảnh của template của workspace nằm ở `public/{workspaceId}/templates/`, ngoài tiền tố của mọi site, và được chép bằng `CopyObject` (`AssetStorage.copy`), không tải lại qua API. Trang tạo từ mẫu và bản nháp áp mẫu nhận bản chép thành asset của chính site đó.
 
 ### ADR-013 — Boundary, lỗi, logging, quality gate
 
@@ -1285,6 +1287,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - `role-matrix.int.spec.ts` gọi mọi endpoint có session với sáu vai trò, một thành viên chỉ được vào site khác và người ngoài workspace. Lời gọi bị từ chối không đổi dữ liệu.
   - Thêm một endpoint theo site mà không chọn quyền thì không biên dịch được. Thêm một quyền thì phải thêm dòng của nó trên màn 16 (`permissionGroups`) và vào ma trận test.
   - E2E của các vai trò khác Chủ sở hữu chờ lời mời (C2); C1 có E2E của màn 16 và test giao diện theo từng vai trò.
+- **Amended 2026-11-02 (ADR-030, lát G2):** bảng quyền có thêm `templates.manage` ("Lưu và quản lý template của workspace", nhóm Nội dung): Chủ sở hữu, Quản trị và Biên tập.
 
 ### ADR-021 — Thành viên, lời mời, yêu cầu đổi quyền và chuyển quyền sở hữu
 
@@ -1608,6 +1611,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Cột "LEAD 7 NGÀY" chỉ có với `leads.view`; API trả `leadsLast7Days: null` cho các vai trò khác, như thẻ "Lead 7 ngày qua". "Hiệu quả" vẫn theo `pages.view` (ADR-019).
   - Nhật ký hoạt động của site chỉ trả sự kiện `lead.*` cho vai trò có `leads.view`, và `data_request.*` cho vai trò có `personalData.manage`: chúng mang số lead và việc xử lý dữ liệu cá nhân.
   - Thông báo từ chối (`holdersOf`) vẫn chỉ nêu vai trò hệ thống, kể cả với quyền chọn được cho vai trò tùy chỉnh.
+- **Amended 2026-11-02 (ADR-030, lát G2):** dòng "Lưu và quản lý template" (`templates.manage`) nay là quyền chọn được, không ràng buộc với quyền nào khác. Dòng "Dùng trợ lý AI" vẫn chờ tính năng của nó (ADR-031).
 
 ### ADR-025 — Master DB và một database cho mỗi workspace
 
@@ -1694,6 +1698,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Nhận lời mời** trả thêm `slug`; admin mở workspace vừa tham gia ở địa chỉ của nó, kể cả khi link được mở ở địa chỉ chung.
   - **Admin:** thành viên không tạo được site có lối ra ở màn tạo site: quay về site đầu tiên nếu workspace có site; một địa chỉ thì nút "Mở {workspace}" cho từng workspace khác; có địa chỉ workspace thì "Xem tất cả workspace" khi còn workspace khác; workspace chưa có site thì "Đăng xuất". Sidebar chỉ có "Xem tất cả workspace" khi thuộc từ hai workspace; thẻ "Chưa có workspace" có "Đăng xuất". Màn 35 và 36 có tiêu đề trang; màn 35 ghi "· toàn workspace" như board.
 - **Amended 2026-11-02 (ADR-026):** đăng ký có hai bước. Database của workspace chỉ được tạo khi email đã xác nhận, lúc `POST /auth/signup/verify`, theo đúng thứ tự ở trên.
+- **Amended 2026-11-02 (ADR-030, lát G2):** workspace DB có thêm `templates` và `template_versions`; `workspaces` ở master có thêm bộ đếm `templateSeq`.
 
 ### ADR-026 — Tài khoản: xác nhận email khi đăng ký, quên mật khẩu, đổi mật khẩu
 
@@ -1892,6 +1897,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - `sites.dataSeq` và `site_addresses.grantSeq` có ở document cũ từ lần `$inc` đầu; không cần migration.
   - Chấp nhận: lượt xem (`analytics_daily`, `analytics_seen`) ghi sau lượt quét vẫn còn tới khi TTL xóa; chúng chỉ có số đếm và hash.
   - Hai test chạy đua giữa xuất bản và xóa trang kiểm "đúng một bên thắng, không bao giờ có release mất trang", vì MongoDB có thể hủy tạm transaction đang giữ trang và chạy lại nó.
+- **Amended 2026-11-02 (ADR-030, lát G2):** xóa site bỏ site đó khỏi `scope.siteIds` của các template của workspace trong cùng transaction. Template, phiên bản và ảnh của chúng (tiền tố `templates/` của workspace) không bị xóa.
 
 ### ADR-028 — Màn Sites của workspace và số đếm ở Sidebar v2
 
@@ -2112,6 +2118,55 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - 409 `template_changed` khóa nút tạo và có "Xem phiên bản mới", đọc lại màn.
     - **Sidebar v2:** "Templates" (`GridIcon`) ngay sau "Sites", với mọi vai trò; `aria-current="true"` trên màn 18.
   - **Để lại cho G2–G4:** tab "Của workspace", `templates.manage` và hàng của màn 16; "Áp dụng vào trang đang sửa…"; "Tạo bằng AI"; mọi phần Marketplace.
+- **Chi tiết khi làm (lát G2):**
+  - **Dữ liệu** (workspace DB, ADR-025):
+    - `templates` có thêm `createdAt` và `updatedBy` (cột "CẬP NHẬT": ngày và người). `scope` lưu `{ kind: 'workspace' }` hoặc `{ kind: 'sites', siteIds }` với ObjectId.
+    - `template_versions` có thêm `source.siteId` và `source.pageTitle` (tên trang lúc lưu), `reusedFrom` ("Dùng lại vN"), `assets` (ảnh của phiên bản), `sections` và `hasForm` (suy ra lúc lưu, để danh sách không đọc composition).
+    - Index `templates_list { workspaceId, updatedAt, _id }` và `template_versions_version_unique { templateId, version }`: mỗi workspace DB thêm 2 collection và 4 index kể cả `_id` (khoảng 51, ADR-025).
+    - Phiên bản bất biến: guard của schema từ chối mọi update và mọi delete, như release (ADR-005). Không có lối xóa template hay phiên bản.
+    - **Giới hạn:** 100 template mỗi workspace, tính cả template lưu trữ, đếm trong transaction tăng `workspaces.templateSeq` ở master (như vai trò tùy chỉnh, ADR-024): 409 `template_limit_reached`, kể cả khi "Nhân bản". 50 phiên bản mỗi template: 409 `template_version_limit_reached`.
+    - Phiên bản mới ghi có điều kiện `currentVersion = baseVersion`; lệch thì 409 `template_changed` kèm `currentVersion`, như khi tạo trang.
+  - **Lưu trang thành template:**
+    - `POST /workspaces/:id/workspace-templates` (template mới, v1) và `POST …/workspace-templates/:templateId/versions` (phiên bản mới; tên đổi được cùng lúc).
+    - Thứ tự kiểm tra: membership (404), `templates.manage` (403), site nguồn trong phạm vi của thành viên và `pages.view` (404), trang thuộc site đó (404), rồi bản live (409 `page_not_live` khi trang không live) hoặc bản nháp.
+    - "Đánh dấu toàn bộ chữ là chữ mẫu": `samplePaths` của mỗi section là `samplePathsOf` (mọi field chữ và nhãn nút có nội dung, kể cả field variant đang ẩn), và khung ảnh để trống, như mẫu hệ thống: hai lựa chọn của board khác nhau đúng ở "chữ và ảnh". "Giữ chữ và ảnh như hiện tại" giữ nguyên chữ, dấu chữ mẫu và ảnh.
+    - Không bao giờ lưu: lead, tên miền, nơi nhận lead, nội dung đồng ý, slug, SEO (không nằm trong composition), và đích của nút dẫn tới một trang khác của site: nút thành "chưa chọn đích", vì trang thuộc một site như ảnh (ADR-012), và checklist xuất bản nhắc chọn lại.
+    - Composition được parse bằng registry. Activity `template.saved` ("lưu template “X”, phiên bản N từ trang “…”") ghi ở site nguồn, trong transaction tăng `sites.dataSeq`, nên xung đột với xóa site (ADR-027).
+  - **Ảnh:**
+    - Lưu một phiên bản chép mỗi asset composition dùng (kể cả field ẩn) bằng `CopyObject` (`AssetStorage.copy`, không tải xuống) sang `public/{workspaceId}/templates/{id}.{ext}`, ngoài tiền tố của mọi site (`templates` không bao giờ là id site). Phiên bản ghi `assets` (key, loại, kích thước, mô tả mặc định), và composition của nó trỏ tới id ảnh của mẫu, không bao giờ tới asset của site.
+    - Tạo trang và áp mẫu chép lại các ảnh đó thành asset mới của site đích (`public/{workspaceId}/{siteId}/…`), ghi trong cùng transaction với trang hay bản nháp. Transaction lỗi thì xóa các object vừa chép; xóa lỗi thì chỉ log, như ảnh tải lên bị từ chối.
+    - "Nhân bản" và "Dùng lại" dùng chung object của mẫu: ảnh của mẫu không bao giờ đổi hay bị xóa.
+    - Xóa site (ADR-027) bỏ site đó khỏi `scope.siteIds` của mọi template trong cùng transaction; template, phiên bản và ảnh của nó còn nguyên.
+  - **Phạm vi site:**
+    - Thành viên toàn workspace thấy mọi template, để quản lý được cả template không còn site nào. Thành viên bị giới hạn thấy template toàn workspace và template có một site của họ; template khác: 404.
+    - Template giới hạn site chỉ dùng được ở các site đó, kể cả với Chủ sở hữu: tạo trang hay áp mẫu ở site khác trả 404 "Không tìm thấy mẫu".
+    - API chỉ nêu các site thành viên thấy được trong `scope` và `siteIds`. "Sửa thông tin" của thành viên bị giới hạn giữ các site họ không thấy; chọn một site không phải của họ: 422.
+    - Template lưu trữ không có trong thư viện nhưng vẫn xem được ở màn 18 và 19; tạo trang hay áp mẫu trả 409 `template_archived`. Lưu trữ và khôi phục lặp lại không đổi gì.
+  - **API khác:** `GET /workspaces/:id/workspace-templates` (màn 19, có template lưu trữ, số trang đã tạo trong các site của thành viên bằng một aggregation trên index `pages_created_from_template`); `PATCH …/:templateId` (Sửa thông tin); `POST …/:templateId/duplicate` ("… (bản sao)", v1 là nội dung phiên bản hiện tại); `POST …/archive`, `…/restore`; `GET …/versions` (mới nhất trước, số trang đã tạo của từng phiên bản); `POST …/versions/:version/reuse { baseVersion }`. Danh sách và lịch sử phiên bản cần `pages.view`; mọi thao tác khác `templates.manage`.
+  - **Thư viện và chi tiết:**
+    - `GET /workspaces/:id/templates` thêm các template của workspace chưa lưu trữ mà thành viên thấy, sau 12 mẫu hệ thống, mới đổi trước. `goal` và `industry` của thẻ có thể null (template của workspace); `siteIds` là các site được dùng (null: mọi site).
+    - `GET …/templates/:templateId` nhận id 24 hex là template của workspace, kèm `?version=` cho phiên bản cũ; trả thêm `currentVersion`, `archived` và `images` (bản chép ảnh của mẫu, công khai như ảnh của trang).
+  - **Quyền `templates.manage`:** Chủ sở hữu, Quản trị và Biên tập (bảng ADR-020 thêm một hàng); hàng "Lưu và quản lý template của workspace" ở nhóm Nội dung của màn 16; vai trò tùy chỉnh bật tắt được, không phụ thuộc quyền nào khác (ADR-024).
+  - **Admin:**
+    - Tab "Của workspace · N" của màn 17 là `?source=workspace`, tức màn 19; `&archived=1` là tab "Lưu trữ".
+    - Màn 19: bảng (ảnh thu nhỏ, tên, mục tiêu · ngành, phiên bản, "Ai được dùng", "Đã tạo", "Cập nhật"), "Phiên bản" cho mọi thành viên; menu "…" (Sửa thông tin, Nhân bản, Lưu trữ hoặc Khôi phục) và "Lưu trang thành template" chỉ với `templates.manage`. Bảng cuộn ngang trong vùng của nó ở màn hẹp.
+    - Hộp lưu chọn site và trang nguồn, "Lấy từ" (bản live mặc định khi có), "Lưu thành" (template mới hoặc phiên bản mới của một template đang dùng). Template mới có thêm "Mô tả ngắn", "Mục tiêu" (mặc định mục tiêu của trang) và "Ngành", vì thẻ thư viện và bộ lọc của màn 17 cần chúng. Ảnh thu nhỏ vẽ từ bản nháp; với bản live nó được vẽ khi lưu. "Tải ảnh khác" vẫn chưa có.
+    - Lịch sử phiên bản: "Xem trước" mở màn 18 ở `?version=N` (không tạo trang hay áp mẫu từ phiên bản cũ, có link về phiên bản đang dùng); "Dùng lại vN" với `templates.manage`.
+    - Thẻ thư viện của template của workspace có chip "WORKSPACE" và meta "… · {tên workspace}". Khi site ở "Tạo trang cho" không được dùng mẫu, thẻ không có "Dùng mẫu" và ghi "Mẫu này chỉ dùng cho các site đã chọn khi lưu."; hộp tạo trang chỉ liệt kê các site được dùng.
+    - Menu "…" của editor có "Lưu thành template" (với `templates.manage`): lưu bản nháp đang mở trước, rồi mở hộp lưu với trang này làm nguồn.
+- **Chi tiết khi làm (lát G3):**
+  - **Từ màn 18:** `POST /sites/:siteId/pages/:pageId/draft/template { baseRevision, template }`, quyền `pages.edit`.
+    - Revision lệch trả 409 `revision_conflict` trước khi chép ảnh; lần ghi trong transaction kiểm lại, như autosave.
+    - Chỉ thay `composition`: slug, SEO, tên trang và trang live giữ nguyên. Ảnh của mẫu thành asset của site; activity `page.template_applied` ("áp dụng mẫu “X” vào bản nháp của “…”") trong cùng transaction.
+    - Hộp thoại chọn site (khi có nhiều), trang của site với trạng thái, và đọc bản nháp của trang được chọn: "Thay toàn bộ section" ghi số section thật của bản nháp và của mẫu; "Giữ nguyên" ghi phiên bản live thật.
+    - **Lệch board:** bản nháp được lưu trên server trước khi editor mở, nên Ctrl+Z của editor không lấy lại nó. Ô thứ hai vì vậy ghi đúng đường quay lại: "Quay về bản live" với trang đang live, "Sao chép vào bản nháp" ở Lịch sử phiên bản với trang đã gỡ, và "Không hoàn tác được" với trang chưa từng xuất bản.
+    - 409 `revision_conflict` đọc lại bản nháp và cho xác nhận lần nữa; 409 `template_changed` có "Xem phiên bản mới".
+  - **"Chỉ đổi theme" của board không làm:** theme thuộc site và chỉ người có `sites.manage` đổi (ADR-004).
+  - **Trong editor ("Áp dụng mẫu…"):**
+    - `POST /sites/:siteId/pages/:pageId/template-composition` (`pages.edit`) kiểm mẫu như khi tạo trang, chép ảnh thành asset của site và trả composition cùng các asset đó; không ghi bản nháp.
+    - Activity `page.template_applied` ghi lúc này, khi mẫu đến bản nháp; hoàn tác trong editor là một lần sửa như mọi lần sửa khác, không xóa activity hay ảnh đã chép.
+    - Store có thêm một command, `applyTemplate(composition)`: id section mới (duy nhất trong trang, nút dẫn tới section của mẫu theo id mới, `withFreshSectionIds` của `@plp/sections/schema` dùng chung với API), kiểm bằng registry, rồi đúng một bước hoàn tác. Autosave lưu như mọi command.
+    - Hộp thoại liệt kê mẫu hệ thống và template của workspace dùng được cho site, với ảnh thu nhỏ và số section thật.
 
 ### ADR-031 — AI: cổng adapter, tạo trang từ brief, trợ lý trong editor
 
@@ -2297,8 +2352,8 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                               | Màn                | Trạng thái |
 | --- | ---------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
 | G1  | 12 mẫu hệ thống, thư viện, chi tiết và preview, tạo trang từ mẫu, mục Templates của Sidebar v2 (ADR-030)               | 17, 18, Sidebar v2 | Xong       |
-| G2  | Template của workspace: lưu trang thành template, phiên bản, phạm vi site, lưu trữ, chép ảnh, quyền `templates.manage` | 19, 17, 16         | Chưa làm   |
-| G3  | Áp dụng mẫu vào bản nháp: từ màn 18 và từ editor, một bước hoàn tác (ADR-030)                                          | 18, 03             | Chưa làm   |
+| G2  | Template của workspace: lưu trang thành template, phiên bản, phạm vi site, lưu trữ, chép ảnh, quyền `templates.manage` | 19, 17, 16         | Xong       |
+| G3  | Áp dụng mẫu vào bản nháp: từ màn 18 và từ editor, một bước hoàn tác (ADR-030)                                          | 18, 03             | Xong       |
 | G4  | Cổng AI và adapter `openai-compatible`/`fake`, hạn mức, job, tạo trang bằng AI, `reviewPaths` và cảnh báo `ai_review`  | 20, 05             | Chưa làm   |
 | G5  | Trợ lý AI trong editor: phạm vi, tác vụ, gợi ý có so sánh, áp dụng là một bước hoàn tác, xung đột (ADR-031)            | 21, 03             | Chưa làm   |
 
