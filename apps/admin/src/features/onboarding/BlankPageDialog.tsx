@@ -9,7 +9,7 @@ import { api, ApiError } from '../../lib/api';
 import { siteQueryKeys } from '../dashboard/queries';
 import { finalizeSlug, normalizeSlugTyping } from '../seo/seo-presentation';
 import { pageHref } from '../shell/navigation';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { keepFieldFocus } from '../shell/use-schema-form';
 import { PageSlugField } from './PageSlugField';
 import { useSlugAvailability } from './use-slug-availability';
@@ -105,9 +105,12 @@ function BlankPageForm({ site, host, onOpenChange }: Omit<BlankPageDialogProps, 
     create.mutate();
   }
 
-  const fieldProblem =
-    create.error instanceof ApiError &&
-    (create.error.code === 'slug_taken' || Object.keys(create.error.fieldErrors()).length > 0);
+  // Said above the form unless every problem is already beside its field; a taken slug is.
+  const formError =
+    create.error === null ||
+    (create.error instanceof ApiError && create.error.code === 'slug_taken')
+      ? null
+      : problemBesideFields(create.error, ['title', 'slug']);
 
   return (
     <form id={FORM_ID} noValidate onSubmit={submit} className={styles.blankForm}>
@@ -141,9 +144,9 @@ function BlankPageForm({ site, host, onOpenChange }: Omit<BlankPageDialogProps, 
           setSlug((current) => finalizeSlug(current));
         }}
       />
-      {create.error === null || fieldProblem ? null : (
+      {formError === null ? null : (
         <Callout tone="danger" role="alert">
-          {problemMessage(create.error)}
+          {formError}
         </Callout>
       )}
       <div className={styles.blankActions}>

@@ -74,6 +74,21 @@ describe('EditLeadContactDialog', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Máy chủ đang bận');
   });
 
+  it('says a refusal the form has no field for, besides those it shows on a field', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValue(
+      apiError(422, 'validation_failed', 'Dữ liệu không hợp lệ', [
+        { path: ['email'], code: 'invalid_format', message: 'Email không hợp lệ' },
+        { path: ['consent'], code: 'custom', message: 'Lead này đã bị xóa dữ liệu' },
+      ]),
+    );
+    const { dialog } = renderDialog();
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu thông tin' }));
+
+    expect(await within(dialog).findByText('Email không hợp lệ')).toBeInTheDocument();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Lead này đã bị xóa dữ liệu');
+  });
+
   it('starts from the lead as it is and saves the corrected contact', async () => {
     const user = userEvent.setup();
     const saved = leadDetail({ phone: '+84901234568', email: null });

@@ -11,7 +11,7 @@ import { Button, Callout, Card, Field, Input, Select, useToast } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import {
   LIVE_FORMS_KEEP_CONSENT,
@@ -40,6 +40,9 @@ export interface PrivacySettingsFormProps {
   canEdit: boolean;
   onSaved: (settings: PrivacySettings) => void;
 }
+
+/** The fields a problem of the API can be shown beside. */
+const SHOWN_FIELDS = ['controllerName', 'requestEmail', 'policyUrl'];
 
 /** "Đơn vị thu thập dữ liệu", the privacy policy link and "Thời gian lưu lead" (ADR-017). */
 export function PrivacySettingsForm({
@@ -95,9 +98,8 @@ export function PrivacySettingsForm({
     save.mutate({ ...form.values, retentionMonths: retention });
   }
 
-  const fieldRejected =
-    save.error instanceof ApiError && Object.keys(save.error.fieldErrors()).length > 0;
-  const formError = save.error === null || fieldRejected ? null : problemMessage(save.error);
+  // Said above the form unless every problem is already beside its field.
+  const formError = save.error === null ? null : problemBesideFields(save.error, SHOWN_FIELDS);
   const disabled = !canEdit;
 
   return (
