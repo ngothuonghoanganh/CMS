@@ -48,6 +48,7 @@ export class SessionGuard implements CanActivate {
       throw unauthenticated();
     }
     request.user = { id: user._id, name: user.name, email: user.email };
+    request.sessionId = session._id;
     return true;
   }
 }

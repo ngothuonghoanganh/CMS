@@ -11,7 +11,8 @@ export function escapeHtml(text: string): string {
     .replaceAll("'", '&#39;');
 }
 
-type EmailContent = Omit<EmailMessage, 'to'>;
+/** An email before it is addressed. */
+export type EmailContent = Omit<EmailMessage, 'to'>;
 
 /** A simple layout every client renders: one column, inline styles, no images. */
 function layout(title: string, body: string): string {
@@ -129,6 +130,87 @@ export function memberInvitationEmail(input: MemberInvitationEmailInput): EmailC
     html: layout(
       title,
       `${paragraph(intro)}${button(input.acceptUrl, 'Nhận lời mời')}${smallPrint(validity)}`,
+    ),
+  };
+}
+
+function textLink(href: string, label: string): string {
+  return `<p style="margin:0 0 16px;line-height:1.55"><a href="${escapeHtml(href)}" style="color:#4338ca;font-weight:600">${escapeHtml(label)}</a></p>`;
+}
+
+export interface SignupConfirmationEmailInput {
+  workspaceName: string;
+  confirmUrl: string;
+  validHours: number;
+}
+
+/**
+ * The link that confirms a sign-up's email (ADR-026); the account and its workspace exist once it
+ * is used. The address may be someone else's, so the email says how to ignore it.
+ */
+export function signupConfirmationEmail(input: SignupConfirmationEmailInput): EmailContent {
+  const title = 'Xác nhận email để tạo workspace';
+  const intro = `Email này vừa được dùng để đăng ký tài khoản và tạo workspace "${input.workspaceName}". Bấm nút dưới đây để xác nhận email, workspace được tạo ngay sau đó.`;
+  const validity = `Link có hiệu lực ${input.validHours} giờ và chỉ dùng được một lần. Nếu bạn không đăng ký, hãy bỏ qua email này: tài khoản sẽ không được tạo.`;
+  return {
+    subject: title,
+    text: [intro, '', `Xác nhận tại: ${input.confirmUrl}`, '', validity].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(intro)}${button(input.confirmUrl, 'Xác nhận và tạo workspace')}${smallPrint(validity)}`,
+    ),
+  };
+}
+
+export interface AccountExistsEmailInput {
+  loginUrl: string;
+  forgotUrl: string;
+}
+
+/**
+ * Sent instead of a confirmation when the email signing up has an account already (ADR-026): the
+ * sign-up answers the same either way, so only the mailbox learns the account exists.
+ */
+export function accountExistsEmail(input: AccountExistsEmailInput): EmailContent {
+  const title = 'Email này đã có tài khoản';
+  const intro =
+    'Ai đó, có thể là bạn, vừa dùng email này để đăng ký. Email này đã có tài khoản nên không có tài khoản mới nào được tạo. Hãy đăng nhập bằng mật khẩu hiện có.';
+  const ignore =
+    'Nếu không phải bạn đăng ký, hãy bỏ qua email này: tài khoản của bạn không thay đổi.';
+  return {
+    subject: title,
+    text: [
+      intro,
+      '',
+      `Đăng nhập: ${input.loginUrl}`,
+      `Quên mật khẩu: ${input.forgotUrl}`,
+      '',
+      ignore,
+    ].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(intro)}${button(input.loginUrl, 'Đăng nhập')}${textLink(input.forgotUrl, 'Quên mật khẩu? Đặt lại mật khẩu')}${smallPrint(ignore)}`,
+    ),
+  };
+}
+
+export interface PasswordResetEmailInput {
+  resetUrl: string;
+  validMinutes: number;
+}
+
+/** The link that sets a new password (ADR-026); using it signs out every device. */
+export function passwordResetEmail(input: PasswordResetEmailInput): EmailContent {
+  const title = 'Đặt lại mật khẩu';
+  const intro =
+    'Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản dùng email này. Khi bạn đặt mật khẩu mới, mọi thiết bị đang đăng nhập sẽ bị đăng xuất.';
+  const validity = `Link có hiệu lực ${input.validMinutes} phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này: mật khẩu giữ nguyên.`;
+  return {
+    subject: title,
+    text: [intro, '', `Đặt lại mật khẩu tại: ${input.resetUrl}`, '', validity].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(intro)}${button(input.resetUrl, 'Đặt mật khẩu mới')}${smallPrint(validity)}`,
     ),
   };
 }

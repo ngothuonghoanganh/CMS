@@ -22,7 +22,7 @@ import { CommittedInput } from './CommittedInput';
 import { type ControlProps, sampleNote } from './field-shared';
 import styles from './fields.module.css';
 
-const linkKinds: readonly LinkKind[] = ['none', 'section', 'page', 'url', 'phone', 'zalo'];
+const allLinkKinds: readonly LinkKind[] = ['none', 'section', 'page', 'url', 'phone', 'zalo'];
 
 const EMPTY_CTA: Cta = { label: '', link: { kind: 'none' } };
 
@@ -38,7 +38,10 @@ function validatePhone(phone: string): string | null {
   return firstIssue(phoneSchema.safeParse(phone));
 }
 
-/** "Nút chính": the label ("Chữ trên nút") and where it leads ("Khi bấm, đưa tới"). */
+/**
+ * "Nút chính": the label ("Chữ trên nút") and where it leads ("Khi bấm, đưa tới"). A button that
+ * leads to one kind of link only (the quick contact's call button) asks for that value alone.
+ */
 export function CtaControl({ section, field, path }: ControlProps<CtaField>) {
   const store = useEditorStoreApi();
   const { sitePages, pageId } = useEditorServices();
@@ -50,6 +53,15 @@ export function CtaControl({ section, field, path }: ControlProps<CtaField>) {
   const targets = sections.filter((candidate) => candidate.id !== section.id);
   const labelPath = `${path}.label`;
   const linkPath = `${path}.link`;
+  const linkKinds: readonly LinkKind[] = field.linkKinds ?? allLinkKinds;
+  // The quick contact needs one of its buttons, either one: both labels say so while none is used.
+  const buttonGroup = getSectionDefinition(section.type).oneButtonRequired ?? [];
+  const noButtonInGroup =
+    buttonGroup.includes(path) &&
+    !buttonGroup.some((key) => {
+      const other = ctaSchema.safeParse(getAtPath(section.content, key));
+      return other.success && isCtaUsed(other.data);
+    });
 
   function setLink(next: Link) {
     store.getState().updateContent(section.id, linkPath, next);
@@ -95,7 +107,13 @@ export function CtaControl({ section, field, path }: ControlProps<CtaField>) {
           label="Chữ trên nút"
           labelNote={sampleNote(section, labelPath)}
           required={field.required}
-          warning={labelMissing ? 'Cần nhập trước khi xuất bản.' : undefined}
+          warning={
+            labelMissing
+              ? 'Cần nhập trước khi xuất bản.'
+              : noButtonInGroup
+                ? 'Cần ít nhất một nút trước khi xuất bản.'
+                : undefined
+          }
           counter={{ length: cta.label.length, max: field.labelMaxLength }}
         >
           <Input
@@ -113,35 +131,41 @@ export function CtaControl({ section, field, path }: ControlProps<CtaField>) {
         </Field>
       </div>
       <div data-field-path={linkPath} className={styles.stack}>
-        <Field
-          label="Khi bấm, đưa tới"
-          warning={
-            brokenSection
-              ? 'Section đích đã bị xóa. Chọn section khác.'
-              : linkMissing && link.kind === 'none'
-                ? 'Chọn nơi nút đưa tới trước khi xuất bản.'
-                : undefined
-          }
-        >
-          <Select
-            value={link.kind}
-            onChange={(event) => {
-              const kind = linkKinds.find((candidate) => candidate === event.target.value);
-              const next = kind ? linkOfKind(kind) : null;
-              if (next) {
-                setLink(next);
-              }
-            }}
+        {linkKinds.length > 1 ? (
+          <Field
+            label="Khi bấm, đưa tới"
+            warning={
+              brokenSection
+                ? 'Section đích đã bị xóa. Chọn section khác.'
+                : linkMissing && link.kind === 'none'
+                  ? 'Chọn nơi nút đưa tới trước khi xuất bản.'
+                  : undefined
+            }
           >
-            {linkKinds.map((kind) => (
-              <option key={kind} value={kind} disabled={kind === 'page' && otherPages.length === 0}>
-                {kind === 'page' && otherPages.length === 0
-                  ? `${linkKindLabels.page} (site chưa có trang khác)`
-                  : linkKindLabels[kind]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+            <Select
+              value={link.kind}
+              onChange={(event) => {
+                const kind = linkKinds.find((candidate) => candidate === event.target.value);
+                const next = kind ? linkOfKind(kind) : null;
+                if (next) {
+                  setLink(next);
+                }
+              }}
+            >
+              {linkKinds.map((kind) => (
+                <option
+                  key={kind}
+                  value={kind}
+                  disabled={kind === 'page' && otherPages.length === 0}
+                >
+                  {kind === 'page' && otherPages.length === 0
+                    ? `${linkKindLabels.page} (site chưa có trang khác)`
+                    : linkKindLabels[kind]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
         {link.kind === 'section' ? (
           <Field
             label="Section đích"
@@ -209,6 +233,10 @@ export function CtaControl({ section, field, path }: ControlProps<CtaField>) {
             placeholder="0901 234 567"
             value={link.phone}
             validate={validatePhone}
+            // With no kind to choose, this number is all the button needs: say when it is missing.
+            warning={
+              linkKinds.length === 1 && linkMissing ? 'Nhập số trước khi xuất bản.' : undefined
+            }
             onCommit={(phone) => {
               setLink({ kind: link.kind, phone });
             }}

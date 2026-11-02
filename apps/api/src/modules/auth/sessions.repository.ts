@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
 import { SESSION_MODEL, type SessionRecord } from './user.schema.js';
 
 @Injectable()
@@ -51,6 +52,13 @@ export class SessionsRepository {
       }
     }
     return null;
+  }
+
+  /** Ends every session of the user, but the one of `keep` when given (ADR-026). */
+  async deleteForUser(userId: ObjectId, tx: Tx, keep?: ObjectId): Promise<void> {
+    await this.sessions
+      .deleteMany(keep === undefined ? { userId } : { userId, _id: { $ne: keep } }, { session: tx })
+      .exec();
   }
 
   async deleteAll(tokenHashes: readonly string[]): Promise<void> {

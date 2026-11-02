@@ -2,7 +2,7 @@ import { problemSchema } from '@plp/contracts';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../test/app.js';
-import { signedUpClient, signupInput, TestClient } from '../../test/client.js';
+import { signedUpClient, signUp, signupInput, TestClient } from '../../test/client.js';
 import { createSecondInstance } from '../../test/instances.js';
 import { createLiveFormPage, leadBody, submitLead } from '../../test/leads.js';
 import {
@@ -40,7 +40,7 @@ describe('two API instances on one database', () => {
 
   it('limits failed logins per account across instances', async () => {
     const user = signupInput();
-    await new TestClient(a.app).post('/auth/signup', user).expect(201);
+    await signUp(a.app, user);
     await login(a, user.email, 'wrong-password').expect(401);
     await login(b, user.email, 'wrong-password').expect(401);
     await login(a, user.email, 'wrong-password').expect(401);

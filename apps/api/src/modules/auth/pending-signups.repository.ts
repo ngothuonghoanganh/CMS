@@ -1,0 +1,81 @@
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
+import {
+  PENDING_SIGNUP_MODEL,
+  PENDING_SIGNUPS_EMAIL_INDEX,
+  type PendingSignupRecord,
+} from './account.schema.js';
+
+export type PendingSignupInput = Omit<PendingSignupRecord, '_id' | 'createdAt'>;
+
+/** Sign-ups waiting for their email to be confirmed, in the master DB (ADR-026). */
+@Injectable()
+export class PendingSignupsRepository {
+  constructor(
+    @InjectModel(PENDING_SIGNUP_MODEL) private readonly pending: Model<PendingSignupRecord>,
+  ) {}
+
+  /** The sign-up of `input.email`, replacing an earlier one: its link stops working. */
+  async replace(input: PendingSignupInput, now: Date): Promise<void> {
+    const write = () =>
+      this.pending
+        .updateOne({ email: input.email }, { $set: { ...input, createdAt: now } }, { upsert: true })
+        .exec();
+    try {
+      await write();
+    } catch (error) {
+      // Two sign-ups of one email raced to insert; the loser now replaces the winner's.
+      if (isDuplicateKeyError(error, PENDING_SIGNUPS_EMAIL_INDEX)) {
+        await write();
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /** The sign-up whose link carries `tokenHash`, while that link works. */
+  findActiveByTokenHash(tokenHash: string, now: Date): Promise<PendingSignupRecord | null> {
+    return this.pending
+      .findOne({ tokenHash, expiresAt: { $gt: now } })
+      .lean<PendingSignupRecord>()
+      .exec();
+  }
+
+  /**
+   * A new link for the sign-up of `email` still waiting, valid from now on: the old link stops
+   * working. Null when there is none.
+   */
+  renew(
+    email: string,
+    tokenHash: string,
+    expiresAt: Date,
+    now: Date,
+  ): Promise<PendingSignupRecord | null> {
+    return this.pending
+      .findOneAndUpdate(
+        { email, expiresAt: { $gt: now } },
+        { $set: { tokenHash, expiresAt } },
+        { returnDocument: 'after' },
+      )
+      .lean<PendingSignupRecord>()
+      .exec();
+  }
+
+  /**
+   * Removes the sign-up while its link is still the one confirmed; false when it was used, sent
+   * again or replaced meanwhile. In the transaction that creates the account, so a link creates
+   * one account at most.
+   */
+  async claim(id: ObjectId, tokenHash: string, tx: Tx): Promise<boolean> {
+    const result = await this.pending.deleteOne({ _id: id, tokenHash }, { session: tx }).exec();
+    return result.deletedCount === 1;
+  }
+
+  async delete(id: ObjectId): Promise<void> {
+    await this.pending.deleteOne({ _id: id }).exec();
+  }
+}

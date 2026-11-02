@@ -464,6 +464,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Ảnh của Trước & sau và Logo đối tác đi qua kiểm tra như mọi ảnh: thiếu ảnh bắt buộc là lỗi chặn, thiếu mô tả là cảnh báo (ADR-006).
   - Vẫn ẩn (§2.1, quy tắc 9): nhóm Bảng giá, "Form + bản đồ", "Section đã lưu".
   - **Chân trang có link chính sách:** release có `leadCapture` (trang có form, ADR-017) thì chân trang luôn hiện "Chính sách quyền riêng tư" trỏ tới `leadCapture.policyUrl`, sau các link người dùng tự thêm và không lặp nếu trùng URL. Canvas dùng cài đặt hiện tại của site, như form. Trang không có form không có link tự động.
+  - **Chi tiết khi làm (lát E5):**
+    - Variant có `listMax`, cưỡng chế như `listMin` (`too_big`). Variant không chứa nổi số mục hiện có thì bị vô hiệu kèm lý do; không bao giờ bỏ mục.
+    - `sampleContent` và `newItem` nhận id variant, nên quy trình mới có chữ mẫu của bước. Mục tiêu "Sản phẩm" dùng variant `steps` như board 02; trang đã tạo không đổi.
+    - Nút chỉ gọi, chỉ Zalo: `CtaField.linkKinds` cùng `phoneLinkSchema`, `zaloLinkSchema` trong contracts. `oneButtonRequired` dùng lại mã `required_field_empty`. Một nút "đang dùng" khi nhãn không trống, như mọi nút không bắt buộc.
+    - Trước & sau: tiêu đề và hai chú thích bắt buộc, lưu ý không bắt buộc. Logo đối tác: tiêu đề không bắt buộc, ô mô tả ảnh ghi "Tên đối tác" (`ImageField.altLabel`). Logo vẫn đánh dấu "trang trí" được như mọi ảnh.
+    - Logo và Trước & sau có `hasMedia: false`, nên không có thứ tự trên điện thoại.
+    - Link chính sách ở chân trang mở tab mới, như link của form, và được suy ra từ `leadCapture` lúc render: trang có form đang live hiện nó mà không phải xuất bản lại, không release nào bị viết lại. Chỉ so trùng với link tuyệt đối người dùng thêm.
+    - `styles.spec` thêm quy tắc: màu chữ của section chỉ lấy từ vai trò màu đã kiểm AA.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -1701,6 +1709,24 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - giới hạn 3 thư mỗi giờ; SMTP lỗi trả 503 và trả lượt.
   - E2E: đăng ký qua form, mở thư trong Mailpit, xác nhận; quên mật khẩu; đổi mật khẩu.
   - Helper đăng ký của integration test và E2E đi qua bước xác nhận.
+- **Chi tiết khi làm (lát E3):**
+  - **Mã trả về:**
+    - verify: 201 kèm `MeResponse`; reset: 200 kèm `MeResponse`.
+    - resend và forgot: 202, cùng body `{ email }` với đăng ký.
+    - Đổi mật khẩu: 204. `PATCH /auth/me`: 200 kèm `MeResponse`.
+  - **Mật khẩu hiện tại sai** trả 422 `invalid_credentials` kèm lỗi ở `currentPassword`, vì 401 đã có nghĩa là không có phiên. Vượt giới hạn trả 429, dùng chung bộ đếm với đăng nhập. Mật khẩu đúng xóa bộ đếm, như đăng nhập thành công.
+  - **Giới hạn email** đếm mọi request có thể gửi thư tài khoản, kể cả forgot cho email không có tài khoản và resend khi không có gì đang chờ, để 429 không lộ email nào có tài khoản.
+  - **Resend hay forgot lỗi 503** vẫn giữ token mới chưa gửi được, nên link cũ hết tác dụng; "Gửi lại" gửi link dùng được.
+  - **Token** là chuỗi không rỗng tối đa 200 ký tự. Sai định dạng là link không hợp lệ (410); thiếu hoặc rỗng là 422.
+  - **Reset** xóa bộ đếm đăng nhập sai ngay trong transaction.
+  - **Index:** `sessions` có thêm index `userId`, để xóa phiên của một user không quét cả collection. Ba collection mới có TTL index (ADR-013).
+  - **Admin:**
+    - Sau xác nhận, admin mở `/` như đăng ký trước đây; `?next=` của trang đăng ký không đi qua email.
+    - `/signup/verify` mở ở địa chỉ workspace thì chuyển về địa chỉ chung, giữ fragment.
+    - `/account` là trang riêng ngoài khung workspace, mở được ở mọi địa chỉ. Mục menu ghi "Cài đặt tài khoản", vì menu đã tên là "Tài khoản".
+  - **Giới hạn đã biết:**
+    - Body của forgot giống hệt nhau, nhưng thời gian trả lời có thể khác, vì chỉ email có tài khoản mới ghi bản ghi và gửi thư. Đăng ký băm mật khẩu ở cả hai nhánh để thu hẹp chênh lệch.
+    - Khi SMTP hỏng, chỉ email có tài khoản mới nhận 503, nên lúc đó forgot lộ được email nào có tài khoản. Chấp nhận, vì chỉ xảy ra khi SMTP hỏng và vẫn có rate limit.
 
 ### ADR-027 — Xóa trang và xóa site
 
@@ -1854,9 +1880,9 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------- |
 | E1  | Khớp thiết kế: bước tên miền và trạng thái địa chỉ ở màn 01, tìm trang không dấu, sự kiện tên miền, chẩn đoán và kiểm tra trùng ở màn 13–14, mục đã đạt về địa chỉ (ADR-005, 006, 022) | 01, 05, 13, 14   | Đang làm   |
 | E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Đang làm   |
-| E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Đang làm   |
+| E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Xong       |
 | E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Đang làm   |
-| E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Đang làm   |
+| E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Xong       |
 | E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Đang làm   |
 
 ## 6. Trước khi phát hành

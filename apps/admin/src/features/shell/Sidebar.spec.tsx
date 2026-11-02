@@ -401,6 +401,16 @@ describe('Sidebar', () => {
     });
   });
 
+  it('opens the account page from the account menu (ADR-026)', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Cài đặt tài khoản' }));
+
+    expect(router.push).toHaveBeenCalledWith('/account');
+  });
+
   it('signs out and opens the login page', async () => {
     const user = userEvent.setup();
     apiMock.mockResolvedValueOnce(undefined);

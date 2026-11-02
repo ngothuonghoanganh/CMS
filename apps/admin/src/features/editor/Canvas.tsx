@@ -2,6 +2,7 @@
 
 import type { PublicImage, SectionInstance } from '@plp/contracts';
 import { PageView, type RenderContext } from '@plp/sections/react';
+import { pageCapturesLeads } from '@plp/sections/schema';
 import { Button, EmptyState, PlusIcon } from '@plp/ui';
 import {
   type MouseEvent,
@@ -58,8 +59,10 @@ export function Canvas() {
   const site = useEditor((state) => state.site);
   const assetsById = useEditor((state) => state.assetsById);
   const page = useEditor((state) => state.page);
-  // Current settings: the canvas shows what the next publish will freeze (ADR-017).
-  const leadCapture = useEditor((state) => state.leadCapture);
+  // Current settings: the canvas shows what the next publish will freeze (ADR-017). Like a
+  // release, a page without a form has none, so its footer links no privacy policy (ADR-007).
+  const siteLeadCapture = useEditor((state) => state.leadCapture);
+  const leadCapture = pageCapturesLeads(composition) ? siteLeadCapture : null;
   const selectedId = useEditor((state) => state.selection.sectionId);
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLElement>(null);

@@ -3,13 +3,13 @@ import { Types } from 'mongoose';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 import { describe, expect, it, vi } from 'vitest';
 import { createTestApp } from '../../../test/app.js';
-import { signupInput, TestClient } from '../../../test/client.js';
+import { requestSignup, signupInput, TestClient } from '../../../test/client.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 
 /**
- * A sign-up that fails, and whose new database cannot be dropped either (ADR-025). A file of its
- * own: the first app of a test file decides where the process logs.
+ * A sign-up whose confirmation fails, and whose new database cannot be dropped either (ADR-025,
+ * ADR-026). A file of its own: the first app of a test file decides where the process logs.
  */
 describe('a sign-up whose database cannot be dropped either', () => {
   it('logs both failures without the personal data of the first', async () => {
@@ -26,6 +26,8 @@ describe('a sign-up whose database cannot be dropped either', () => {
     // Service logs go through the app's pino logger, with its serializers, as in production.
     logged.app.useLogger(logged.app.get(PinoNestLogger));
     const email = `rieng-tu-${Types.ObjectId.createFromTime(1).toHexString()}@example.com`;
+    const input = signupInput({ email });
+    const token = await requestSignup(logged.app, input);
     const create = vi
       .spyOn(WorkspacesRepository.prototype, 'createWithOwner')
       // Shaped like MongoDB's: the duplicate value sits in enumerable fields a logger copies.
@@ -40,7 +42,7 @@ describe('a sign-up whose database cannot be dropped either', () => {
       .spyOn(WorkspaceDatabases.prototype, 'drop')
       .mockRejectedValueOnce(new Error('MongoDB went away'));
     try {
-      await new TestClient(logged.app).post('/auth/signup', signupInput()).expect(500);
+      await new TestClient(logged.app).post('/auth/signup/verify', { token }).expect(500);
     } finally {
       create.mockRestore();
       drop.mockRestore();

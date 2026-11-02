@@ -13,7 +13,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTestApp, type TestApp } from '../../test/app.js';
-import { signupInput, TestClient } from '../../test/client.js';
+import { requestSignup, signupInput, TestClient } from '../../test/client.js';
 import { formDraft, leadFormSection } from '../../test/compositions.js';
 import { TEST_ADMIN_ORIGIN } from '../../test/env.js';
 import { createLiveFormPage, leadBody, PHONE_UA, submitLead } from '../../test/leads.js';
@@ -65,6 +65,8 @@ describe('request log', () => {
   let t: TestApp;
   let owner: TestClient;
   let sessionToken: string;
+  /** The secret of the sign-up link, sent in a body (ADR-026). */
+  let signupToken: string;
   let workspaceId: string;
   let site: Site;
   let pageId: string;
@@ -82,8 +84,10 @@ describe('request log', () => {
       }),
     });
     owner = new TestClient(t.app);
+    // The confirmation of a sign-up sets the session cookie (ADR-026).
+    signupToken = await requestSignup(t.app, signupInput(), owner);
     const signup = await owner
-      .post('/auth/signup', signupInput())
+      .post('/auth/signup/verify', { token: signupToken })
       .set('x-request-id', 'log-signup')
       .expect(201);
     const token = /plp_session=([^;]+)/.exec(String(signup.headers['set-cookie']))?.[1];
@@ -136,7 +140,7 @@ describe('request log', () => {
     }
   }
 
-  it('keeps the session cookie, Authorization and a search in the Referer out of the log', async () => {
+  it('keeps the session cookie, Authorization, a link secret and a search in the Referer out of the log', async () => {
     const referer = `${TEST_ADMIN_ORIGIN}/sites/${site.id}/leads?status=new&q=${SEARCH}&lead=abc`;
     await owner
       .get('/auth/me')
@@ -151,7 +155,7 @@ describe('request log', () => {
       authorization: CENSORED,
       referer: `${TEST_ADMIN_ORIGIN}/sites/${site.id}/leads?status=new&q=${REDACTED}&lead=abc`,
     });
-    expectNotLogged(AUTHORIZATION_SECRET, SEARCH);
+    expectNotLogged(AUTHORIZATION_SECRET, SEARCH, signupToken);
   });
 
   it('keeps the visitor address, user agent, channel signature and lead fields out of the log', async () => {

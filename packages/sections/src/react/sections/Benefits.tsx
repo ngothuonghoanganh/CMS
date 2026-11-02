@@ -126,6 +126,26 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
     );
   }
 
+  if (section.variant === 'steps') {
+    // A numbered process: the list is ordered, so the visible number only repeats what assistive
+    // technology already announces. The variant hides the icon and image fields.
+    return (
+      <div className={styles.root}>
+        {header}
+        <ol className={styles.steps}>
+          {content.items.map((item, index) => (
+            <li key={index} className={styles.step}>
+              <span className={styles.stepNumber} aria-hidden="true">
+                {index + 1}
+              </span>
+              <div className={styles.stepText}>{itemText(index, item.title, item.description)}</div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
   // Grid: the variant hides the image field.
   return (
     <div className={styles.root}>

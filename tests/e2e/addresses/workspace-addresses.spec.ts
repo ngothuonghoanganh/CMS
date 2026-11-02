@@ -1,20 +1,29 @@
 import { type Browser, expect, type Page, test } from '@playwright/test';
-import { meResponseSchema } from '@plp/contracts';
-import { createSiteThroughForm, logInThroughForm } from '../support/flows.js';
-import { waitForEmail } from '../support/mailpit.js';
+import { meResponseSchema, RESET_PASSWORD_PATH, SIGNUP_VERIFY_PATH } from '@plp/contracts';
+import { createSiteThroughForm, fillSignupForm, logInThroughForm } from '../support/flows.js';
+import {
+  accountLink,
+  RESET_EMAIL_SUBJECT,
+  SIGNUP_EMAIL_SUBJECT,
+  waitForEmail,
+} from '../support/mailpit.js';
 import { type Account, newAccount, newSubdomain, uniqueId } from '../support/setup.js';
 import { COMMON_ORIGIN, slugOf, workspaceAt } from './origins.js';
 
 const NOT_MEMBER = 'Tài khoản này không thuộc workspace ở địa chỉ này';
 
-/** Signs up at the common address; the new workspace opens at its own address. */
+/**
+ * Signs up at the common address and confirms the email there (ADR-026); the new workspace opens
+ * at its own address.
+ */
 async function signUpAtCommon(page: Page, account: Account): Promise<string> {
-  await page.goto(`${COMMON_ORIGIN}/signup`);
-  await page.getByLabel('Họ và tên').fill(account.name);
-  await page.getByLabel('Email').fill(account.email);
-  await page.getByLabel('Mật khẩu').fill(account.password);
-  await page.getByLabel('Tên workspace').fill(account.workspaceName);
-  await page.getByRole('button', { name: 'Tạo tài khoản' }).click();
+  await fillSignupForm(page, account, COMMON_ORIGIN);
+  const email = await waitForEmail(page.request, account.email, SIGNUP_EMAIL_SUBJECT);
+  const link = accountLink(email, SIGNUP_VERIFY_PATH);
+  // The link leads to the common address, where a new account starts.
+  expect(link.startsWith(`${COMMON_ORIGIN}${SIGNUP_VERIFY_PATH}#token=`)).toBe(true);
+  await page.goto(link);
+  await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
   await expect(page).toHaveURL(/^http:\/\/[a-z0-9-]+\.app\.e2e\.test:3100\/sites\/new/);
   return slugOf(page.url());
 }
@@ -128,6 +137,42 @@ test.describe('workspace addresses (ADR-025)', () => {
     await stranger.getByRole('button', { name: 'Tham gia', exact: true }).click();
     await expect(stranger).toHaveURL(`${workspaceAt(ownerSlug)}/sites/${siteId}`);
     await stranger.context().close();
+  });
+
+  test('a password reset starts at a workspace’s address and links to the common one (ADR-026)', async ({
+    page,
+    browser,
+  }) => {
+    const owner = newAccount('Ngọc Anh', `Hoa Sen ${uniqueId()}`);
+    const slug = await signUpAtCommon(page, owner);
+
+    const visitor = await newPage(browser);
+    await visitor.goto(`${workspaceAt(slug)}/login`);
+    await visitor.getByRole('link', { name: 'Quên mật khẩu?' }).click();
+    await expect(visitor).toHaveURL(`${workspaceAt(slug)}/forgot-password`);
+    await visitor.getByLabel('Email').fill(owner.email);
+    await visitor.getByRole('button', { name: 'Gửi link đặt lại mật khẩu' }).click();
+    await expect(visitor.getByRole('status')).toContainText('Nếu email này có tài khoản');
+
+    const email = await waitForEmail(visitor.request, owner.email, RESET_EMAIL_SUBJECT);
+    const link = accountLink(email, RESET_PASSWORD_PATH);
+    expect(link.startsWith(`${COMMON_ORIGIN}${RESET_PASSWORD_PATH}#token=`)).toBe(true);
+    await visitor.goto(link);
+    await visitor.getByLabel('Mật khẩu mới', { exact: true }).fill('MatKhau-moi-e2e-2027');
+    await visitor.getByLabel('Nhập lại mật khẩu mới').fill('MatKhau-moi-e2e-2027');
+    await visitor.getByRole('button', { name: 'Đặt mật khẩu mới' }).click();
+    // Signed in on the cookie domain: the workspace opens at its own address.
+    await expect(visitor).toHaveURL(new RegExp(`^${workspaceAt(slug)}/sites/new`));
+
+    // The account page belongs to no workspace: it opens at the workspace's address too.
+    await visitor.goto(`${workspaceAt(slug)}/account`);
+    await expect(visitor.getByRole('heading', { level: 1, name: 'Tài khoản' })).toBeVisible();
+    await expect(visitor.getByRole('textbox', { name: 'Email' })).toHaveValue(owner.email);
+    await visitor.context().close();
+
+    // The session of the sign-up ended with the reset.
+    await page.goto(`${workspaceAt(slug)}/`);
+    await expect(page).toHaveURL(`${workspaceAt(slug)}/login`);
   });
 
   test('signing in at a workspace’s address opens that workspace', async ({ page, browser }) => {

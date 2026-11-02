@@ -131,6 +131,64 @@ describe('AddSectionDialog', () => {
     expect(store.getState().draft.composition.sections[0]?.type).toBe('navbar');
   });
 
+  it('offers the cards of the board: steps, partner logos, before and after, quick contact', async () => {
+    const user = userEvent.setup();
+    renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
+      store: makeStore(),
+    });
+    const cards = [
+      ['Lợi ích & tính năng', 3, 'Quy trình 3 bước', 'Khách biết điều gì xảy ra sau khi đăng ký.'],
+      ['Bằng chứng xã hội', 4, 'Logo đối tác', 'Hàng logo đơn sắc, tự xuống dòng trên điện thoại.'],
+      ['Bằng chứng xã hội', 4, 'Trước & sau', 'Hai ảnh so sánh, có chú thích và mô tả ảnh.'],
+      ['Form & liên hệ', 2, 'Gọi / Zalo nhanh', 'Hai nút liên hệ trực tiếp, không cần form.'],
+    ] as const;
+    for (const [category, count, name, description] of cards) {
+      const group = categoryNav().getByRole('button', { name: new RegExp(`^${category}`) });
+      expect(group).toHaveTextContent(String(count));
+      await user.click(group);
+      const card = screen.getByRole('button', { name: new RegExp(`^${name}`) });
+      expect(card).toHaveTextContent(description);
+    }
+    // Pricing, "Form + bản đồ" and saved sections stay hidden (§2.1, rule 9).
+    expect(screen.queryByRole('button', { name: /^Form \+ bản đồ/ })).toBeNull();
+  });
+
+  it.each([
+    ['zalo', 'Gọi / Zalo nhanh'],
+    ['lien he truc tiep', 'Gọi / Zalo nhanh'],
+    ['logo', 'Logo đối tác'],
+    ['truoc', 'Trước & sau'],
+    ['quy trinh', 'Quy trình 3 bước'],
+  ])('finds “%s” by search', async (query, name) => {
+    const user = userEvent.setup();
+    renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
+      store: makeStore(),
+    });
+    await user.type(screen.getByRole('searchbox', { name: 'Tìm section' }), query);
+    expect(screen.getByRole('button', { name: new RegExp(`^${name}`) })).toBeInTheDocument();
+  });
+
+  it('inserts a quick contact with its two buttons waiting for a number', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
+      store,
+    });
+    await user.click(categoryNav().getByRole('button', { name: /^Form & liên hệ/ }));
+    await user.click(screen.getByRole('button', { name: /^Gọi \/ Zalo nhanh/ }));
+    await user.click(screen.getByRole('button', { name: 'Thêm “Gọi / Zalo nhanh”' }));
+    const added = store.getState().draft.composition.sections[2];
+    expect(added).toMatchObject({
+      type: 'quick_contact',
+      variant: 'buttons',
+      content: {
+        call: { label: 'Gọi ngay', link: { kind: 'phone', phone: '' } },
+        zalo: { label: 'Nhắn Zalo', link: { kind: 'zalo', phone: '' } },
+      },
+    });
+    expect(screen.getByText('Đã thêm Gọi / Zalo nhanh ở vị trí 3.')).toBeInTheDocument();
+  });
+
   it('opens the first category with something to add', () => {
     renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
       store: makeStore(),

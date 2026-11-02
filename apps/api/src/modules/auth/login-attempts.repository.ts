@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
 import {
   LOGIN_ATTEMPT_MODEL,
   LOGIN_ATTEMPTS_ACCOUNT_INDEX,
@@ -47,9 +48,9 @@ export class LoginAttemptsRepository {
     }
   }
 
-  /** A successful login ends the window. */
-  async clear(accountKey: string): Promise<void> {
-    await this.attempts.deleteOne({ accountKey }).exec();
+  /** A successful login ends the window, and so does a reset password, in its transaction. */
+  async clear(accountKey: string, tx?: Tx): Promise<void> {
+    await this.attempts.deleteOne({ accountKey }, tx === undefined ? {} : { session: tx }).exec();
   }
 
   /**

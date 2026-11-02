@@ -4,6 +4,7 @@ import {
   problemSchema,
   SESSION_COOKIE,
   type MeResponse,
+  type SignupRequest,
   type Site,
   siteSchema,
 } from '@plp/contracts';
@@ -11,7 +12,7 @@ import { Types } from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { signupInput } from '../../../test/client.js';
+import { requestSignup, signupInput } from '../../../test/client.js';
 import { TEST_ADMIN_ORIGIN } from '../../../test/env.js';
 import { publishableDraft } from '../../../test/compositions.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
@@ -60,9 +61,15 @@ class AddressClient {
   }
 
   async signUp(workspaceName: string): Promise<MeResponse> {
-    const response = await this.post('/auth/signup', signupInput({ workspaceName })).expect(201);
+    const response = await this.confirmSignup(signupInput({ workspaceName }), 201);
     this.keep(response.headers['set-cookie']);
     return meResponseSchema.parse(response.body);
+  }
+
+  /** Both steps of a sign-up (ADR-026): the form, then its emailed link, which signs in. */
+  async confirmSignup(input: SignupRequest, status: number): Promise<request.Response> {
+    const token = await requestSignup(this.t.app, input, this);
+    return this.post('/auth/signup/verify', { token }).expect(status);
   }
 
   async createSite(workspaceId: string): Promise<Site> {
@@ -185,9 +192,7 @@ describe('workspace addresses', () => {
   });
 
   it('signs in on the parent domain of every address, and signs out there too', async () => {
-    const response = await new AddressClient(t, COMMON)
-      .post('/auth/signup', signupInput())
-      .expect(201);
+    const response = await new AddressClient(t, COMMON).confirmSignup(signupInput(), 201);
     const session = (response.headers['set-cookie'] as unknown as string[]).find((item) =>
       item.startsWith(`${SESSION_COOKIE}=`),
     );
@@ -204,7 +209,7 @@ describe('workspace addresses', () => {
 
   it('takes any session the browser still holds, and signing out ends them all', async () => {
     const user = signupInput();
-    await new AddressClient(t, COMMON).post('/auth/signup', user).expect(201);
+    await new AddressClient(t, COMMON).confirmSignup(user, 201);
     const logIn = async () => {
       const response = await request(t.app.getHttpServer())
         .post('/auth/login')
@@ -309,7 +314,7 @@ describe('workspace addresses', () => {
       throw new Error('The commit answer was lost');
     });
     try {
-      await new AddressClient(t, COMMON).post('/auth/signup', input).expect(500);
+      await new AddressClient(t, COMMON).confirmSignup(input, 500);
     } finally {
       lost.mockRestore();
     }

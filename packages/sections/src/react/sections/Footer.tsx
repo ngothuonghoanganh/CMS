@@ -1,11 +1,19 @@
 import { isCtaUsed, isLinkComplete, linkHref } from '../../schema/links.js';
 import type { FooterContent } from '../../schema/sections/footer.js';
+import frame from '../frame.module.css';
 import { CtaButton, Text } from '../primitives.js';
 import type { SectionProps } from '../types.js';
 import styles from './Footer.module.css';
 
+const POLICY_LABEL = 'Chính sách quyền riêng tư';
+
 function filled(value: string): boolean {
   return value.trim() !== '';
+}
+
+/** Two addresses of the same page, whatever the case of the host or a bare origin's slash. */
+function sameAddress(a: string, b: string): boolean {
+  return URL.canParse(a) && URL.canParse(b) ? new URL(a).href === new URL(b).href : a === b;
 }
 
 /** `tel:` href of the footer phone, or null when the text is not a usable number yet. */
@@ -26,6 +34,15 @@ export function FooterSection({ section, content, ctx }: SectionProps<FooterCont
   const links = content.links
     .map((item, index) => ({ cta: item.link, index }))
     .filter(({ cta }) => isCtaUsed(cta));
+  // A page with a form always links its privacy policy (ADR-007, ADR-017), after the owner's own
+  // links and only once: an owner's link to the same address already is that link.
+  const policyUrl = ctx.leadCapture?.policyUrl ?? null;
+  const showPolicy =
+    policyUrl !== null &&
+    !links.some(({ cta }) => {
+      const href = linkHref(cta.link, ctx.pagePaths);
+      return href !== null && sameAddress(href, policyUrl);
+    });
   return (
     <div className={styles.root}>
       <div className={styles.main}>
@@ -79,7 +96,7 @@ export function FooterSection({ section, content, ctx }: SectionProps<FooterCont
             </address>
           )}
         </div>
-        {links.length > 0 && (
+        {(links.length > 0 || showPolicy) && (
           <ul className={styles.links}>
             {links.map(({ cta, index }) => (
               <li key={index}>
@@ -92,6 +109,23 @@ export function FooterSection({ section, content, ctx }: SectionProps<FooterCont
                 />
               </li>
             ))}
+            {showPolicy && (
+              <li>
+                {editing ? (
+                  // Site settings, not content: nothing to edit here, and the canvas never navigates.
+                  <span className={frame.textLink}>{POLICY_LABEL}</span>
+                ) : (
+                  <a
+                    className={frame.textLink}
+                    href={policyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {POLICY_LABEL}
+                  </a>
+                )}
+              </li>
+            )}
           </ul>
         )}
       </div>

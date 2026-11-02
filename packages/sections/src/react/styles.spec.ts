@@ -17,6 +17,7 @@ function declarations(file: string): Map<string, string> {
 const frame = declarations('./frame.module.css');
 const hero = declarations('./sections/Hero.module.css');
 const leadForm = declarations('./sections/LeadForm.module.css');
+const logos = declarations('./sections/Logos.module.css');
 
 /** Every rule of the canvas frame and of each section, by selector. */
 const everyRule = [
@@ -57,6 +58,42 @@ describe('placeholder of an empty text on the canvas', () => {
         /(?<![\w-])color:\s*inherit;/,
       );
     }
+  });
+});
+
+describe('text colors', () => {
+  // themes.spec holds these roles to AA on the background and the surface of every scheme, and the
+  // text on a button to AA on the accent: a section drawing text in any other color escapes it.
+  const CHECKED =
+    /^(inherit|currentColor|var\(--plp-(heading|text|muted|link|danger|accent-text)\))$/;
+
+  it('come from the scheme roles the theme test holds to AA', () => {
+    const colors = everyRule.flatMap(([selector, body]) =>
+      [...body.matchAll(/(?<![\w-])color:\s*([^;]+);/g)].map(([, value = '']) => ({
+        selector,
+        value: value.trim(),
+      })),
+    );
+    expect(colors.length).toBeGreaterThanOrEqual(40);
+    for (const { selector, value } of colors) {
+      // Over a Hero photo the text is white on a dark overlay, at least 5.4:1 (Hero.module.css).
+      if (selector.startsWith('.overPhoto ') && value === '#ffffff') {
+        continue;
+      }
+      expect(value, selector).toMatch(CHECKED);
+    }
+  });
+});
+
+describe('partner logos', () => {
+  it('turn monochrome by CSS, leaving the uploaded files as they are', () => {
+    expect(logos.get('.logo .image') ?? '').toMatch(/(?<![\w-])filter:\s*grayscale\(1\);/);
+  });
+
+  it('wrap onto more rows on a narrow page instead of scrolling sideways', () => {
+    const list = logos.get('.logos') ?? '';
+    expect(list).toMatch(/(?<![\w-])display:\s*flex;/);
+    expect(list).toMatch(/(?<![\w-])flex-wrap:\s*wrap;/);
   });
 });
 

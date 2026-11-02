@@ -1,4 +1,4 @@
-import type { ColorSchemeId, SectionType } from '@plp/contracts';
+import type { ColorSchemeId, LinkKind, SectionType } from '@plp/contracts';
 import type { z } from 'zod';
 
 interface FieldBase {
@@ -21,12 +21,20 @@ export interface TextField extends FieldBase {
 export interface CtaField extends FieldBase {
   kind: 'cta';
   labelMaxLength: number;
+  /**
+   * Where the button may lead, when not everywhere: the quick contact's call button only calls.
+   * The content schema enforces it; the panel offers only these.
+   */
+  linkKinds?: readonly Exclude<LinkKind, 'none'>[];
 }
 
 export interface ImageField extends FieldBase {
   kind: 'image';
   /** Shown as guidance, e.g. "1200 × 800 px". */
   recommendedSize?: string;
+  /** What the description says for this image, when more precise: a logo's is the partner name. */
+  altLabel?: string;
+  altPlaceholder?: string;
 }
 
 export interface SelectField extends FieldBase {
@@ -49,8 +57,8 @@ export interface ListField extends FieldBase {
   itemFields: readonly LeafField[];
   /** Key of the item field used as the item's title in the panel. */
   itemTitleKey: string;
-  /** A fresh item with sample text, used by "Thêm" in the panel. */
-  newItem(): Record<string, unknown>;
+  /** A fresh item with sample text for a variant, used by "Thêm" in the panel. */
+  newItem(variantId: string): Record<string, unknown>;
 }
 
 export type FieldDescriptor = LeafField | ListField;
@@ -68,6 +76,8 @@ export interface SectionVariant {
    * by list key: a grid needs at least 3 items, while the alternating layout works with 2.
    */
   listMin?: Readonly<Record<string, number>>;
+  /** Item maximums of list fields that are lower in this variant: at most 5 steps. */
+  listMax?: Readonly<Record<string, number>>;
 }
 
 export type SectionCategory =
@@ -110,8 +120,13 @@ export interface SectionDefinition<C extends Record<string, unknown> = Record<st
    * settings, and its releases snapshot them (ADR-016, ADR-017).
    */
   capturesLeads?: true;
-  /** Fresh sample content for a newly added section. */
-  sampleContent(): C;
+  /**
+   * Keys of button fields of which at least one must be in use before publishing: the quick
+   * contact needs a call or a Zalo button, either one will do.
+   */
+  oneButtonRequired?: readonly string[];
+  /** Fresh sample content for a newly added section in a variant (a process has steps). */
+  sampleContent(variantId: string): C;
   /** One line for the page structure list, e.g. the heading or "3 nhận xét". */
   summarize(content: C): string;
 }
