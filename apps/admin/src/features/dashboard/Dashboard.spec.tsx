@@ -113,6 +113,7 @@ beforeAll(() => {
 beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
+  router.refresh.mockReset();
   window.history.replaceState(null, '', DASHBOARD_PATH);
 });
 
@@ -714,6 +715,8 @@ describe('Dashboard', () => {
     expect(await screen.findByText(`Đã xóa trang “${draftPage.title}”`)).toBeInTheDocument();
     expect(lastCallTo(apiMock, endpoints.deletePage).args).toEqual([SITE_ID, draftPage.id]);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: siteQueryKeys.site(SITE_ID) });
+    // The sidebar's "Trang N" comes from the server render of the site's frame.
+    expect(router.refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alertdialog')).toBeNull();
     // Its row and menu are gone: the focus waits in the search.
     await vi.waitFor(() => {

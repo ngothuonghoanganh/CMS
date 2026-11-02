@@ -39,6 +39,7 @@ beforeAll(() => {
 beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
+  router.refresh.mockReset();
 });
 
 /** A page screen around the header, like "SEO & chia sẻ": its page follows an unpublish at once. */
@@ -125,6 +126,12 @@ describe('PageDetailHeader', () => {
     await vi.waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
     });
+    // Then the server renders the page list's frame again, sidebar count included: after the
+    // navigation, which a refresh started first would cancel.
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(router.push.mock.invocationCallOrder[0]).toBeLessThan(
+      router.refresh.mock.invocationCallOrder[0] ?? 0,
+    );
     expect(apiMock).toHaveBeenCalledWith(endpoints.deletePage, [page.siteId, page.id]);
     expect(await screen.findByText(`Đã xóa trang “${page.title}”`)).toBeInTheDocument();
   });
