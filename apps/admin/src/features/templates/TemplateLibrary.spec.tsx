@@ -85,6 +85,11 @@ describe('TemplateLibrary', () => {
       `/workspaces/${WORKSPACE_ID}/templates?source=system&site=${KITCHEN_ID}`,
     );
     expect(screen.getByRole('combobox', { name: 'Tạo trang cho' })).toHaveValue(KITCHEN_ID);
+    // AI drafts the page for the site chosen instead (ADR-031).
+    expect(screen.getByRole('link', { name: 'Tạo bằng AI' })).toHaveAttribute(
+      'href',
+      `/sites/${KITCHEN_ID}/pages/new/ai`,
+    );
     expect(cardNames()).toEqual(templateSummaries.map((template) => template.name));
     expect(screen.getByRole('status')).toHaveTextContent('12 mẫu');
 
@@ -167,6 +172,8 @@ describe('TemplateLibrary', () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('0 mẫu');
+    // Or the AI drafts it, as board 17 offers when nothing fits.
+    expect(screen.getAllByRole('link', { name: 'Tạo bằng AI' })).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'Xóa bộ lọc' }));
     expect(cardNames()).toHaveLength(12);
     expect(screen.getByRole('searchbox', { name: 'Tìm template' })).toHaveFocus();
@@ -175,6 +182,7 @@ describe('TemplateLibrary', () => {
   it('lets roles that do not edit pages browse, and says who creates', () => {
     renderLibrary({ role: 'viewer' });
     expect(screen.queryByRole('combobox', { name: 'Tạo trang cho' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Tạo bằng AI' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Dùng mẫu/ })).toBeNull();
     expect(
       screen.getByText(

@@ -23,13 +23,14 @@ import {
   Input,
   SearchIcon,
   Select,
+  SparklesIcon,
   TabsNav,
   VisuallyHidden,
 } from '@plp/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
-import { newSiteHref, templateHref, templatesHref } from '../shell/navigation';
+import { newAiPageHref, newSiteHref, templateHref, templatesHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { CreateFromTemplateDialog } from './CreateFromTemplateDialog';
 import {
@@ -209,6 +210,14 @@ export function TemplateLibrary({
                   </option>
                 ))}
               </Select>
+              <ButtonLink
+                as={Link}
+                href={newAiPageHref(siteId)}
+                variant="secondary"
+                leadingIcon={<SparklesIcon size={16} />}
+              >
+                Tạo bằng AI
+              </ButtonLink>
             </div>
           ) : undefined
         }
@@ -346,18 +355,26 @@ export function TemplateLibrary({
               title={empty.title}
               description={empty.description}
               action={
-                hasFilters(filters) || query.trim() !== '' ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setFilters(NO_FILTERS);
-                      setQuery('');
-                      searchRef.current?.focus();
-                    }}
-                  >
-                    Xóa bộ lọc
-                  </Button>
-                ) : undefined
+                <div className={styles.emptyActions}>
+                  {hasFilters(filters) || query.trim() !== '' ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setFilters(NO_FILTERS);
+                        setQuery('');
+                        searchRef.current?.focus();
+                      }}
+                    >
+                      Xóa bộ lọc
+                    </Button>
+                  ) : null}
+                  {/* No template fits: the AI drafts the page from a brief (board 17, ADR-031). */}
+                  {canCreate && siteId !== null ? (
+                    <ButtonLink as={Link} href={newAiPageHref(siteId)}>
+                      Tạo bằng AI
+                    </ButtonLink>
+                  ) : null}
+                </div>
               }
             />
           ) : (

@@ -2246,8 +2246,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Adapter `openai-compatible`:** `response_format` là `json_schema`, `max_tokens` theo độ dài các field (tối đa 4096), `stream: false`. HTTP 429, 503, 529 là quá tải; 408, 504 là hết giờ; 5xx khác là không dùng được; 4xx khác là bị từ chối.
   - **Màn 20:**
     - Bước Brief có thêm "Tên trang" và "Đường dẫn" (board không vẽ chỗ nhập); tên trang theo sản phẩm cho tới khi được sửa.
-    - "Tạo bằng AI" nằm ở header của màn 02, cạnh "Bắt đầu trống".
-    - Khi thư viện template (G1) chưa có, "Chọn template thay vì AI" và "Dùng template" dẫn tới "Tạo trang theo mục tiêu".
+    - "Tạo bằng AI" nằm ở header của màn 02 (cạnh "Bắt đầu trống"), và ở màn 17 như board: cạnh "Tạo trang cho" (cho site đang chọn) và ở trạng thái không có mẫu nào khớp.
+    - "Chọn template thay vì AI" và "Dùng template" mở thư viện template cho site đó. Màn "AI chưa được bật" có thêm "Tạo trang theo mục tiêu".
     - Viết đủ mọi section thì mở thẳng editor; viết được một phần thì hiện "Gần xong" với số section viết được trên số section AI viết. "Hủy" đưa về bước cấu trúc.
   - **Kiểm thử thật với Ollama `qwen3:4b-instruct`** (2026-11-02): cả 6 section của trang thu lead viết và qua registry ngay lần đầu, mỗi section 3–40 giây chạy lần lượt; FAQ chậm nhất. Model vẫn bịa chi tiết (chính sách hủy, thời gian điều trị) và hay đánh dấu thừa: cảnh báo `ai_review` là lưới an toàn, không thay người đọc lại.
 

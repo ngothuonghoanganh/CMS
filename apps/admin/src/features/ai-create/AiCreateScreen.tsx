@@ -52,7 +52,7 @@ import { siteQueryKeys } from '../dashboard/queries';
 import { PageSlugField } from '../onboarding/PageSlugField';
 import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { cx } from '../shell/cx';
-import { newPageHref, pageHref, siteHref } from '../shell/navigation';
+import { newPageHref, pageHref, siteHref, templatesHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
   addBlockedReason,
@@ -84,9 +84,9 @@ const fieldIds: Record<BriefField, string> = {
   slug: 'ai-slug',
 };
 
-/** Where to go instead of AI: the goal wizard, until the templates library (G1) exists. */
-function alternativeOf(siteId: string): { href: string; label: string } {
-  return { href: newPageHref(siteId), label: 'Tạo trang theo mục tiêu' };
+/** "Dùng template" (boards 17, 20): the library, making pages for this site. */
+function templatesFor(site: Site): string {
+  return templatesHref(site.workspaceId, `?site=${encodeURIComponent(site.id)}`);
 }
 
 /** "01/12" of a day "2026-12-01". */
@@ -250,7 +250,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   const shownStep = useRef(state.step);
   const pendingFocus = useRef<BriefErrors | null>(null);
   const reading = useRef<AbortController | null>(null);
-  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const focusAfterRemoval = useRef<string | null>(null);
   const usageQuery = useQuery({
     queryKey: aiQueryKeys.usage(site.id),
     queryFn: () => api(endpoints.aiUsage, [site.id]),
@@ -260,7 +260,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   const exhausted = usage.remaining === 0;
   const slugCheck = useSlugAvailability(site.id, state.slug);
   const host = hostOf(site.publicOrigin);
-  const alternative = alternativeOf(site.id);
+  const templates = templatesFor(site);
 
   useEffect(() => {
     if (shownStep.current === state.step) {
@@ -275,6 +275,16 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     }
     headingRef.current?.focus();
   }, [state.step]);
+
+  // Once a removed row has left the list, its neighbour's "Bỏ" takes the focus.
+  useEffect(() => {
+    const key = focusAfterRemoval.current;
+    if (key === null) {
+      return;
+    }
+    focusAfterRemoval.current = null;
+    document.querySelector<HTMLButtonElement>(`[data-remove="${key}"]`)?.focus();
+  }, [state.structure]);
 
   // Leaving the screen stops reading the stream; the job itself goes on on the server.
   useEffect(
@@ -472,16 +482,10 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
 
   function removeSection(key: string, name: string, index: number) {
     const next = state.structure[index + 1] ?? state.structure[index - 1];
+    // The removed row's buttons are gone: focus moves to the row that takes its place.
+    focusAfterRemoval.current = next?.key ?? null;
     dispatch({ type: 'section_removed', key });
     setAnnouncement(`Đã bỏ ${name}.`);
-    // The removed row's buttons are gone: focus moves to the row that takes its place.
-    requestAnimationFrame(() => {
-      const target =
-        next === undefined
-          ? addButtonRef.current
-          : document.querySelector<HTMLButtonElement>(`[data-remove="${next.key}"]`);
-      target?.focus();
-    });
   }
 
   if (!usage.enabled) {
@@ -496,12 +500,15 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
               </h1>
               <p className={styles.lead}>
                 Hệ thống chưa nối dịch vụ AI, nên chưa tạo được trang bằng AI. Bạn vẫn tạo trang
-                nhanh theo mục tiêu, với chữ mẫu để thay trong editor.
+                nhanh từ một mẫu, hoặc theo mục tiêu, với chữ mẫu để thay trong editor.
               </p>
             </div>
-            <div>
-              <ButtonLink as={Link} href={alternative.href}>
-                {alternative.label}
+            <div className={styles.actionGroup}>
+              <ButtonLink as={Link} href={templates}>
+                Dùng template
+              </ButtonLink>
+              <ButtonLink as={Link} href={newPageHref(site.id)} variant="secondary">
+                Tạo trang theo mục tiêu
               </ButtonLink>
             </div>
           </section>
@@ -545,8 +552,8 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   role="alert"
                   title={`Workspace đã dùng hết ${usage.limit} lượt AI tháng này.`}
                   action={
-                    <ButtonLink as={Link} href={alternative.href} variant="secondary" size="sm">
-                      {alternative.label}
+                    <ButtonLink as={Link} href={templates} variant="secondary" size="sm">
+                      Dùng template
                     </ButtonLink>
                   }
                 >
@@ -718,8 +725,8 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                 />
               </div>
               <div className={styles.actions}>
-                <Link href={alternative.href} className={styles.textLink}>
-                  {alternative.label} thay vì AI
+                <Link href={templates} className={styles.textLink}>
+                  Chọn template thay vì AI
                 </Link>
                 <Button disabled={exhausted} onClick={proposeStructure}>
                   Đề xuất cấu trúc trang
@@ -793,11 +800,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                 <DropdownMenu
                   align="start"
                   trigger={
-                    <Button
-                      ref={addButtonRef}
-                      variant="secondary"
-                      leadingIcon={<PlusIcon size={14} />}
-                    >
+                    <Button variant="secondary" leadingIcon={<PlusIcon size={14} />}>
                       Thêm section
                     </Button>
                   }
@@ -960,8 +963,8 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                     >
                       Sửa cấu trúc
                     </Button>
-                    <ButtonLink as={Link} variant="secondary" href={alternative.href}>
-                      {alternative.label}
+                    <ButtonLink as={Link} variant="secondary" href={templates}>
+                      Dùng template
                     </ButtonLink>
                   </div>
                 </div>

@@ -9,7 +9,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, streamEndpoint } from '../../lib/api';
-import { SITE_ID, siteFixture } from '../dashboard/test-fixtures';
+import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { apiError, renderWithProviders } from '../shell/test-utils';
 import { AiCreateScreen } from './AiCreateScreen';
 
@@ -156,6 +156,10 @@ describe('AiCreateScreen (board 20)', () => {
       'href',
       `/sites/${SITE_ID}`,
     );
+    expect(screen.getByRole('link', { name: 'Chọn template thay vì AI' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/templates?site=${SITE_ID}`,
+    );
   });
 
   it('points at the first missing field', async () => {
@@ -190,6 +194,8 @@ describe('AiCreateScreen (board 20)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Đã đưa Câu hỏi thường gặp tới vị trí 4.');
     await user.click(screen.getByRole('button', { name: 'Bỏ Cảm nhận khách hàng' }));
     expect(within(list).queryByText('Cảm nhận khách hàng')).not.toBeInTheDocument();
+    // Focus goes to the row that took its place.
+    expect(screen.getByRole('button', { name: 'Bỏ Form đăng ký tư vấn' })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: 'Thêm section' }));
     await screen.findByRole('menu');
     expect(
@@ -361,9 +367,9 @@ describe('AiCreateScreen (board 20)', () => {
     expect(alert).toHaveTextContent('Lượt mới có vào 01/12. Brief bạn nhập vẫn được giữ lại.');
     // No "Xem gói" before Phase 4.
     expect(within(alert).queryByText('Xem gói')).not.toBeInTheDocument();
-    expect(within(alert).getByRole('link', { name: 'Tạo trang theo mục tiêu' })).toHaveAttribute(
+    expect(within(alert).getByRole('link', { name: 'Dùng template' })).toHaveAttribute(
       'href',
-      `/sites/${SITE_ID}/pages/new`,
+      `/workspaces/${WORKSPACE_ID}/templates?site=${SITE_ID}`,
     );
     fillBrief();
     expect(screen.getByRole('button', { name: 'Đề xuất cấu trúc trang' })).toBeDisabled();
@@ -399,6 +405,10 @@ describe('AiCreateScreen (board 20)', () => {
     serve();
     renderScreen(usage({ enabled: false }));
     expect(screen.getByRole('heading', { level: 1, name: 'AI chưa được bật' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dùng template' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/templates?site=${SITE_ID}`,
+    );
     expect(screen.getByRole('link', { name: 'Tạo trang theo mục tiêu' })).toHaveAttribute(
       'href',
       `/sites/${SITE_ID}/pages/new`,
