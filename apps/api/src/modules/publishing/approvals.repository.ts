@@ -48,7 +48,7 @@ export class ApprovalsRepository {
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, requestedBy: scope.userId, status: 'pending' },
         { $set: { revision: change.revision, note: change.note, sentAt: change.at } },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<ApprovalRecord>()
       .exec();
@@ -89,7 +89,7 @@ export class ApprovalsRepository {
             purgeAt: approvalPurgeAt(change.at),
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<ApprovalRecord>()
       .exec();
@@ -118,7 +118,7 @@ export class ApprovalsRepository {
             purgeAt: approvalPurgeAt(at),
           },
         },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<ApprovalRecord>()
       .exec();

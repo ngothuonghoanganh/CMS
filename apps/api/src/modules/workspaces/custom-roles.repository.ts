@@ -63,7 +63,7 @@ export class CustomRolesRepository {
       .findOneAndUpdate(
         { _id: id, workspaceId },
         { $inc: { grantSeq: 1 } },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<CustomRoleRecord>()
       .exec();
@@ -101,7 +101,7 @@ export class CustomRolesRepository {
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId },
         { $set: change },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<CustomRoleRecord>()
       .exec();
