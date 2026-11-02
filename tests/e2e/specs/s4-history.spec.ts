@@ -83,7 +83,7 @@ test.describe('S4 · history, rollback, undo and unpublish', () => {
     // Unpublish from the row menu, with a reason: the public URL answers 404 again.
     const menu = page.getByRole('button', { name: `Tùy chọn khác cho ${TITLE}` });
     await menu.click();
-    await page.getByRole('menuitem', { name: 'Gỡ xuất bản' }).click();
+    await page.getByRole('menuitem', { name: 'Gỡ xuất bản', exact: true }).click();
     const unpublish = page.getByRole('alertdialog');
     await unpublish.getByRole('textbox').fill('Hết chương trình');
     await unpublish.getByRole('button', { name: 'Gỡ xuất bản' }).click();

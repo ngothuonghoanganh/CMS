@@ -194,9 +194,8 @@ describe('PageDetailHeader', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
-    const item = screen.getByRole('menuitem', { name: 'Xóa trang' });
+    const item = screen.getByRole('menuitem', { name: 'Xóa trang Gỡ xuất bản trước khi xóa' });
     expect(item).toHaveAttribute('aria-disabled', 'true');
-    expect(item).toHaveAccessibleDescription('Gỡ xuất bản trước khi xóa');
     await user.click(item);
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });

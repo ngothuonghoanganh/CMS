@@ -98,7 +98,7 @@ describe('DropdownMenu', () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  it('says under a disabled item why, as its description, and does not run it', async () => {
+  it('says under a disabled item why, in its name, and does not run it', async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();
     render(
@@ -116,8 +116,8 @@ describe('DropdownMenu', () => {
       </DropdownMenu>,
     );
     await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
-    const item = screen.getByRole('menuitem', { name: 'Xóa trang' });
-    expect(item).toHaveAccessibleDescription('Gỡ xuất bản trước khi xóa');
+    // Everything visible is in the name (WCAG 2.5.3).
+    const item = screen.getByRole('menuitem', { name: 'Xóa trang Gỡ xuất bản trước khi xóa' });
     expect(item).toHaveAttribute('aria-disabled', 'true');
     await user.click(item);
     expect(onDelete).not.toHaveBeenCalled();
