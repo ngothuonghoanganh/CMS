@@ -110,6 +110,32 @@
   min-width: 120px;
 }
 
+/*
+ * `wrapPrefix`: the value keeps 12rem beside the prefix, or goes to a line of its own under it;
+ * either line then takes the frame's full width (the prefix grows only when alone on its line).
+ * The separator is a shadow on the prefix's right and bottom, which the frame clips where it would
+ * double the frame's own border: on the right when wrapped, at the bottom when not.
+ */
+.wrapPrefix {
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.wrapPrefix .prefix {
+  flex: 1 1 auto;
+  min-height: 32px;
+  border-right: 0;
+  border-radius: 0;
+  box-shadow:
+    1px 0 0 var(--color-border),
+    0 1px 0 var(--color-border);
+}
+
+.wrapPrefix .prefix + .native {
+  flex: 1000 1 12rem;
+  min-height: calc(var(--target-min) - 2px);
+}
+
 .leadingIcon {
   display: flex;
   align-items: center;

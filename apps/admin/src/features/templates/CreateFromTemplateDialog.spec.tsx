@@ -99,6 +99,10 @@ describe('CreateFromTemplateDialog', () => {
       'uu-dai-dich-vu-nha-khoa',
     );
     expect(within(dialog).getByText('go.smilecare.vn/')).toBeInTheDocument();
+    // A long site address takes its own line rather than squeeze the slug (PageSlugField).
+    expect(
+      within(dialog).getByRole('textbox', { name: /Đường dẫn/ }).parentElement?.className,
+    ).toMatch(/wrapPrefix/);
     expect(await within(dialog).findByText('Đường dẫn này dùng được.')).toBeInTheDocument();
     // The site has what the form needs: no note.
     expect(within(dialog).queryByRole('note')).toBeNull();
