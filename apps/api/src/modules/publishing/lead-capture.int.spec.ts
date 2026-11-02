@@ -1,5 +1,6 @@
 import {
   checksResultSchema,
+  historyResponseSchema,
   type PageSummary,
   previewLinkResponseSchema,
   problemSchema,
@@ -113,6 +114,7 @@ describe('consent settings snapshotted into releases', () => {
     const { published } = await createLivePage(client, site.id, uniqueSlug('khong-form'));
     const stored = await storedRelease(published.release.id);
     expect(stored).toHaveProperty('leadCapture', null);
+    expect(published.release.capturesLeads).toBe(false);
   });
 
   it('reminds about each consent setting that differs from the live snapshot', async () => {
@@ -285,6 +287,18 @@ describe('consent settings snapshotted into releases', () => {
     expect((await resolvePage(site, slug)).leadCapture?.requiredText).toBe(
       `Bản 2: ${PRIVACY_SETTINGS.controllerName}.`,
     );
+    // Screen 06 tells that a rollback to either keeps the site's lead recipients (ADR-006).
+    const history = historyResponseSchema.parse(
+      (await client.get(`/sites/${site.id}/pages/${pageId}/history`).expect(200)).body,
+    );
+    expect(
+      history.items.map((item) =>
+        item.kind === 'release' ? [item.release.version, item.release.capturesLeads] : null,
+      ),
+    ).toEqual([
+      [2, true],
+      [1, true],
+    ]);
 
     await client
       .post(`/sites/${site.id}/pages/${pageId}/pointer`, {

@@ -311,9 +311,9 @@ export class InvitationsService {
   /** What the invitation page shows to whoever holds the link; no session (board 15b). */
   async lookup(token: string): Promise<InvitationLookupResponse> {
     const invitation = await this.byToken(token);
-    const [workspace, inviter, account, siteNames, custom] = await Promise.all([
+    const [workspace, [inviter], account, siteNames, custom] = await Promise.all([
       this.workspaces.findWorkspaceForInvitation(invitation.workspaceId),
-      this.users.findRefs([invitation.invitedBy]),
+      this.users.findContacts([invitation.invitedBy]),
       this.users.findContactsByEmail([invitation.email]),
       invitation.siteIds === null
         ? null
@@ -325,10 +325,13 @@ export class InvitationsService {
     if (!workspace) {
       throw notFound(LINK_INVALID);
     }
+    const state = invitationState(invitation, new Date());
     return {
-      state: invitationState(invitation, new Date()),
+      state,
       workspaceName: workspace.name,
-      invitedByName: inviter.get(invitation.invitedBy.toHexString())?.name ?? '',
+      invitedByName: inviter?.name ?? '',
+      // Only to ask for the link again (ADR-021): the holder of a usable link has no need of it.
+      inviterEmail: state === 'expired' ? (inviter?.email ?? null) : null,
       email: invitation.email,
       role: accessOf(invitation, new Map(custom ? [[custom._id.toHexString(), custom]] : [])),
       siteNames,

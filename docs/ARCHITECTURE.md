@@ -1341,6 +1341,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Lời mời hết hạn có nút "Nhờ {người mời} gửi lại", là link `mailto:` tới email người mời.
     - `lookup` trả `inviterEmail` chỉ khi lời mời đã hết hạn. Người cầm link chính là người được mời, và email đó đã gửi thư cho họ.
     - Có ô chữ cái đầu của workspace, và dòng cuối "Không biết người mời? Bạn có thể bỏ qua email này. Lời mời tự hết hạn sau 7 ngày."
+  - **Chi tiết khi làm (lát E2):**
+    - Màn 06: "Đã xuất bản · N" là nhãn chữ cạnh tiêu đề "Phiên bản đã xuất bản", không phải tiêu đề thứ hai. Tóm tắt release có `capturesLeads` (suy ra từ `leadCapture`), để panel rollback biết release đích có form.
+    - Hộp thoại mời:
+      - Dấu chấm phẩy và xuống dòng cũng tách email. Email đang gõ được tính, và thành thẻ khi rời ô hay khi gửi.
+      - Thẻ "Email không hợp lệ" chặn gửi cho tới khi bị bỏ. Thành viên và email đang có lời mời được bỏ qua, không gửi. Không còn email nào mời được thì báo "Các email này đã là thành viên hoặc đang có lời mời".
+      - Giới hạn 10 email áp cho số email mời được.
+    - "Tóm tắt thay đổi" thêm các câu board không có: đổi vai trò, toàn workspace, "Chưa có thay đổi."; site màn hình không biết được đếm là "N site khác".
+    - Dòng cuối của màn 15b hiện ở mọi trạng thái của lời mời.
+    - Tìm thành viên vẫn so chuỗi con không phân biệt hoa thường, chưa bỏ dấu; lời mời chỉ tìm theo email.
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1879,7 +1888,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                                                                                               | Màn              | Trạng thái |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------- |
 | E1  | Khớp thiết kế: bước tên miền và trạng thái địa chỉ ở màn 01, tìm trang không dấu, sự kiện tên miền, chẩn đoán và kiểm tra trùng ở màn 13–14, mục đã đạt về địa chỉ (ADR-005, 006, 022) | 01, 05, 13, 14   | Đang làm   |
-| E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Đang làm   |
+| E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Xong       |
 | E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Xong       |
 | E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Đang làm   |
 | E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Xong       |

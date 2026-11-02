@@ -16,6 +16,7 @@ import {
   Field,
   GlobeIcon,
   HistoryIcon,
+  InboxIcon,
   Input,
 } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
@@ -164,6 +165,13 @@ export function RollbackPanel({
             <span>v{live.version} vẫn nằm trong lịch sử, bạn có thể hoàn tác ngay sau đó.</span>
           </li>
         )}
+        {/* Where leads go is a setting of the site, not part of a release (ADR-018). */}
+        {release.capturesLeads ? (
+          <li>
+            <InboxIcon size={18} className={styles.bulletIcon} />
+            <span>Form trong v{release.version} gửi lead về cùng nơi nhận như hiện tại.</span>
+          </li>
+        ) : null}
       </ul>
 
       <Field

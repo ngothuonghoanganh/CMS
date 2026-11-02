@@ -35,6 +35,7 @@ test.describe('S4 · history, rollback, undo and unpublish', () => {
     // History: v2 is live; v1 is restored after a confirmation that needs a reason.
     await editor.topBar.getByRole('link', { name: 'Lịch sử phiên bản' }).click();
     await expect(page.getByRole('heading', { name: 'Phiên bản đã xuất bản' })).toBeVisible();
+    await expect(page.getByText('Đã xuất bản · 2', { exact: true })).toBeVisible();
     const release = (version: string) =>
       page
         .getByRole('listitem')
@@ -50,6 +51,8 @@ test.describe('S4 · history, rollback, undo and unpublish', () => {
     ).toBeFocused();
     await expect(panel).toContainText('Live bây giờ');
     await expect(panel).toContainText('Sẽ live');
+    // Leads go to the site's recipients, which no release holds (ADR-006, ADR-018).
+    await expect(panel).toContainText('Form trong v1 gửi lead về cùng nơi nhận như hiện tại.');
     const confirm = panel.getByRole('button', { name: 'Khôi phục v1' });
     await expect(confirm).toBeDisabled();
     await panel.getByRole('textbox', { name: /^Lý do/ }).fill('Bản 2 sai giá');
