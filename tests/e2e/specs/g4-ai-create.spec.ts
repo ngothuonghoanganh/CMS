@@ -65,7 +65,8 @@ test.describe('G4 · create a page with AI', () => {
 
     // The Hero's figure is a sentence to check: the panel says so, and so does the checklist.
     await editor.heroRow.click();
-    const subheading = editor.heroPanel.getByRole('textbox', { name: /^Mô tả/ });
+    // "Mô tả", with its "AI viết · cần kiểm tra" badge while it lasts; not "Mô tả ảnh…".
+    const subheading = editor.heroPanel.getByRole('textbox', { name: /^Mô tả(?: ·|$)/ });
     await expect(editor.heroPanel.getByText('AI viết · cần kiểm tra')).toBeVisible();
     let dialog = await editor.openPublishDialog();
     const review = dialog

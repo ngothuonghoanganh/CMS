@@ -29,6 +29,8 @@ import { WorkspaceDatabases } from './workspace-databases.js';
 /** Every collection a workspace's database holds; the master holds none of them (ADR-025). */
 const WORKSPACE_COLLECTIONS = [
   'activity',
+  'ai_jobs',
+  'ai_usage',
   'analytics_daily',
   'analytics_seen',
   'assets',

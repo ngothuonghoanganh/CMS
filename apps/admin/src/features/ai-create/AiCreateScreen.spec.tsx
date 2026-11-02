@@ -145,6 +145,9 @@ describe('AiCreateScreen (board 20)', () => {
     expect(screen.getByRole('radio', { name: 'Thân thiện' })).toBeChecked();
     expect(screen.getByRole('combobox', { name: 'Ngôn ngữ' })).toHaveValue('vi');
     expect(screen.getByRole('textbox', { name: /Nội dung bạn đã có/ })).toBeInTheDocument();
+    // Its label names the field, not the heading of the step.
+    expect(screen.getByRole('textbox', { name: /^Tên trang/ })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /^Đường dẫn/ })).toBeInTheDocument();
     // Pasted text only: no file attachments (ADR-031).
     expect(screen.queryByText('Thêm tệp hoặc ảnh')).not.toBeInTheDocument();
     const aside = screen.getByRole('complementary', { name: 'AI làm gì với trang của bạn' });
