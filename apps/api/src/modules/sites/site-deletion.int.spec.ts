@@ -166,6 +166,31 @@ describe('DELETE /sites/:siteId', () => {
     };
   }
 
+  /**
+   * Deletes the site, the sweep after its commit included, the first time it is called. Later
+   * calls, the deletion's own among them, go on at once.
+   */
+  function deletionOf(site: Site): () => Promise<void> {
+    let started = false;
+    return async () => {
+      if (!started) {
+        started = true;
+        await remove(owner, site, site.name).expect(204);
+      }
+    };
+  }
+
+  /** Deletes the site just before the next transaction starts, once what it needs was read. */
+  function deleteBeforeTransaction(site: Site) {
+    const transactions = t.app.get(TransactionRunner);
+    const run = transactions.run.bind(transactions);
+    const deleteSite = deletionOf(site);
+    return vi.spyOn(transactions, 'run').mockImplementation(async (work) => {
+      await deleteSite();
+      return run(work);
+    });
+  }
+
   async function storedKeys(siteId: string): Promise<string[]> {
     const listed = await s3.send(
       new ListObjectsV2Command({
@@ -385,6 +410,87 @@ describe('DELETE /sites/:siteId', () => {
     await remove(elsewhere, site, 'Cà phê Sáng').expect(204);
   });
 
+  /**
+   * A grant read or checked before the site was deleted, and stored after: the deletion took the
+   * site out of what it saw, so the grant must not bring it back (ADR-027).
+   */
+  describe('grants that name a site deleted meanwhile', () => {
+    it('makes a member of an invitation with the sites it has now, not those read before', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Mời rồi xóa' });
+      const other = await createSite(owner, workspaceId, { name: 'Còn lại' });
+      const someone = await signedUpClient(t.app);
+      const token = await invite(t, owner, workspaceId, someone.me.user.email, {
+        role: 'viewer',
+        siteIds: [site.id, other.id],
+      });
+      // The invitation was read from the link; the site goes before the membership is stored.
+      const spy = deleteBeforeTransaction(site);
+      try {
+        await someone.client.post('/invitations/accept', { token }).expect(200);
+      } finally {
+        spy.mockRestore();
+      }
+      const me = meResponseSchema.parse((await someone.client.get('/auth/me').expect(200)).body);
+      expect(me.memberships.find((item) => item.workspace.id === workspaceId)?.siteIds).toEqual([
+        other.id,
+      ]);
+    });
+
+    it('refuses to give a member a site deleted once the grant was checked', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Giao rồi xóa' });
+      const other = await createSite(owner, workspaceId, { name: 'Đang có' });
+      const { me } = await addMember(t, workspaceId, 'editor', [other.id]);
+      const spy = deleteBeforeTransaction(site);
+      try {
+        const refused = await owner
+          .patch(`/workspaces/${workspaceId}/members/${me.user.id}`, {
+            role: 'editor',
+            siteIds: [other.id, site.id],
+          })
+          .expect(422);
+        expect(problemSchema.parse(refused.body).issues).toEqual([
+          {
+            path: ['siteIds'],
+            code: 'site_not_found',
+            message: 'Có site không thuộc workspace này',
+          },
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+      const stored = await t.connection
+        .collection<{ siteIds: Types.ObjectId[] | null }>('memberships')
+        .findOne({ workspaceId: oid(workspaceId), userId: oid(me.user.id) });
+      expect(stored?.siteIds?.map(String)).toEqual([other.id]);
+    });
+
+    it('invites nobody to a site deleted once the grant was checked', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Mời muộn' });
+      const email = newEmail('xoa-muon');
+      const spy = deleteBeforeTransaction(site);
+      try {
+        const refused = await owner
+          .post(`/workspaces/${workspaceId}/invitations`, {
+            emails: [email],
+            role: 'editor',
+            siteIds: [site.id],
+          })
+          .expect(422);
+        expect(problemSchema.parse(refused.body).issues?.map((issue) => issue.code)).toEqual([
+          'site_not_found',
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(
+        await t.connection
+          .collection('invitations')
+          .countDocuments({ workspaceId: oid(workspaceId), email }),
+      ).toBe(0);
+      expect(t.emails.to(email)).toEqual([]);
+    });
+  });
+
   it('deletes a site once when two deletions race', async () => {
     const site = await createSite(owner, workspaceId, { name: 'Hai lần' });
     const statuses = await Promise.all([
@@ -545,31 +651,6 @@ describe('DELETE /sites/:siteId', () => {
    * and its sweep are over: nothing would ever delete it, so it is refused (ADR-027).
    */
   describe('work that stores data of a site already deleted', () => {
-    /**
-     * Deletes the site, the sweep after its commit included, the first time it is called. Later
-     * calls, the deletion's own among them, go on at once.
-     */
-    function deletionOf(site: Site): () => Promise<void> {
-      let started = false;
-      return async () => {
-        if (!started) {
-          started = true;
-          await remove(owner, site, site.name).expect(204);
-        }
-      };
-    }
-
-    /** Deletes the site just before the next transaction starts. */
-    function deleteBeforeTransaction(site: Site) {
-      const transactions = t.app.get(TransactionRunner);
-      const run = transactions.run.bind(transactions);
-      const deleteSite = deletionOf(site);
-      return vi.spyOn(transactions, 'run').mockImplementation(async (work) => {
-        await deleteSite();
-        return run(work);
-      });
-    }
-
     function expectSiteGone(response: { body: unknown }): void {
       expect(problemSchema.parse(response.body)).toMatchObject({
         status: 404,

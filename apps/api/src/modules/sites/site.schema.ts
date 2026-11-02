@@ -167,12 +167,19 @@ export interface SiteAddressRecord {
   workspaceId: Types.ObjectId;
   /** Lowercase and immutable, like the site's. */
   subdomain: string;
+  /**
+   * Grants naming the site (a member's sites, an invitation's) stored so far. Writing the address
+   * in their transaction makes them conflict with the deletion of the site, which removes it: a
+   * grant never keeps a site that is gone (ADR-027). Addresses created before lack the field.
+   */
+  grantSeq?: number;
 }
 
 export const siteAddressSchema = new Schema<SiteAddressRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     subdomain: { type: String, required: true, lowercase: true, immutable: true },
+    grantSeq: { type: Number, default: 0 },
   },
   { collection: 'site_addresses', versionKey: false },
 );

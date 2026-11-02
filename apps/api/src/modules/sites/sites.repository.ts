@@ -182,6 +182,31 @@ export class SitesRepository {
     return result.deletedCount === 1;
   }
 
+  /**
+   * Increments `grantSeq` of the sites a grant names, in the transaction that stores the grant.
+   * The write conflicts with the deletion of any of them, which removes the address: either the
+   * deletion waits and then takes the site out of the stored grant, or the grant finds the site
+   * gone. False when one of them is not a site of the workspace any more.
+   */
+  async holdForGrant(
+    scope: WorkspaceScope,
+    siteIds: readonly ObjectId[],
+    tx: Tx,
+  ): Promise<boolean> {
+    if (siteIds.length === 0) {
+      return true;
+    }
+    const result = await this.addresses
+      .updateMany(
+        { _id: { $in: [...siteIds] }, workspaceId: scope.workspaceId },
+        { $inc: { grantSeq: 1 } },
+        { session: tx },
+      )
+      .exec();
+    // The contract names each site once.
+    return result.matchedCount === siteIds.length;
+  }
+
   /** Applies a settings patch and returns the updated site, or null when it is not in scope. */
   update(scope: WorkspaceScope, siteId: ObjectId, patch: SitePatch): Promise<SiteRecord | null> {
     return this.sites(scope)

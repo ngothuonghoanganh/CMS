@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { type Access, type AccessGrant, can, customRoleIdOf, type Member } from '@plp/contracts';
-import { validationFailed } from '../../shared/errors.js';
+import { type AppError, validationFailed } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { UserContact } from '../auth/users.repository.js';
@@ -14,6 +14,13 @@ import type { MembershipRecord } from '../workspaces/workspace.schema.js';
 import { type StoredGrant, storedGrant } from '../workspaces/workspaces.repository.js';
 
 export const MEMBER_NOT_FOUND = 'Không tìm thấy thành viên';
+
+/** A grant names a site that is not, or no longer, one of the workspace's. */
+function foreignSiteError(): AppError {
+  return validationFailed([
+    { path: ['siteIds'], code: 'site_not_found', message: 'Có site không thuộc workspace này' },
+  ]);
+}
 
 /** Quản trị changes roles and invites; a custom role never does (ADR-024). */
 function managesMembers(grant: StoredGrant): boolean {
@@ -91,10 +98,14 @@ export class MemberGrants {
   }
 
   /**
-   * In the transaction that stores a checked grant: holds its custom role (ADR-024), so the role
-   * is not deleted, nor made "Toàn workspace" under a grant with a site list, at the same moment.
+   * In the transaction that stores a checked grant: holds its sites, so none is deleted at the
+   * same moment and left in the grant (ADR-027), and its custom role (ADR-024), so the role is not
+   * deleted, nor made "Toàn workspace" under a grant with a site list.
    */
   async holdGrant(scope: WorkspaceScope, grant: StoredGrant, tx: Tx): Promise<void> {
+    if (grant.siteIds !== null && !(await this.sites.holdForGrant(scope, grant.siteIds, tx))) {
+      throw foreignSiteError();
+    }
     if (grant.customRoleId === null) {
       return;
     }
@@ -126,13 +137,7 @@ export class MemberGrants {
     }
     const own = (await this.sites.listForWorkspace(scope)).map((site) => site._id.toHexString());
     if (foreignSites(grant.siteIds, own).length > 0) {
-      throw validationFailed([
-        {
-          path: ['siteIds'],
-          code: 'site_not_found',
-          message: 'Có site không thuộc workspace này',
-        },
-      ]);
+      throw foreignSiteError();
     }
   }
 

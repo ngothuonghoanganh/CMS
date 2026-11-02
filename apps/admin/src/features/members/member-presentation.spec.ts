@@ -38,7 +38,11 @@ describe('member presentation', () => {
   it('names the scope', () => {
     expect(scopeLabel(null, [smile])).toBe('Toàn workspace');
     expect(scopeLabel([smile.id, spa.id], [smile, spa])).toBe('Nha khoa Smile Care, Spa Lá Xanh');
-    expect(scopeLabel(['64b0000000000000000000ff'], [smile])).toBe('1 site');
+    // An id of no site of the workspace is a site deleted since (ADR-027): it gives nothing.
+    expect(scopeLabel(['64b0000000000000000000ff'], [smile])).toBe('0 site');
+    expect(scopeLabel([smile.id, '64b0000000000000000000ff'], [smile, spa])).toBe(
+      'Nha khoa Smile Care',
+    );
   });
 
   it('tells how long an invitation still works', () => {
