@@ -192,10 +192,9 @@ describe('HistoryScreen', () => {
       `/sites/${SITE_ID}/pages/${PAGE_ID}/edit`,
     );
     expect(screen.getByText('4 thay đổi chưa xuất bản')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Đã xuất bản · 2' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    // Releases only, so a label rather than a switch with one choice (ADR-006).
+    expect(screen.getByText('Đã xuất bản · 2')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Loại lịch sử' })).not.toBeInTheDocument();
 
     const live = card('v12');
     expect(within(live).getByText('ĐANG LIVE')).toBeInTheDocument();
@@ -870,7 +869,7 @@ describe('HistoryScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('1 thay đổi chưa xuất bản')).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Đã xuất bản · 3' })).toBeInTheDocument();
+    expect(screen.getByText('Đã xuất bản · 3')).toBeInTheDocument();
     expect(within(card('v13')).getByText('ĐANG LIVE')).toBeInTheDocument();
     expect(apiMock).not.toHaveBeenCalled();
   });

@@ -16,7 +16,6 @@ import {
   EmptyState,
   ExternalLinkIcon,
   HistoryIcon,
-  SegmentedControl,
   useToast,
   VisuallyHidden,
 } from '@plp/ui';
@@ -344,12 +343,8 @@ export function HistoryScreen({
             <h2 id="releases-heading" ref={headingRef} tabIndex={-1} className={styles.heading}>
               Phiên bản đã xuất bản
             </h2>
-            <SegmentedControl
-              aria-label="Loại lịch sử"
-              options={[{ value: 'releases', label: `Đã xuất bản · ${releaseCount}` }]}
-              value="releases"
-              onChange={() => undefined}
-            />
+            {/* A label, not a switch: the draft keeps no savepoints to list beside (ADR-005). */}
+            <p className={styles.count}>Đã xuất bản · {releaseCount}</p>
           </div>
           <p className={styles.explainer}>
             Mỗi lần xuất bản tạo một phiên bản cố định, không bị sửa sau đó. Khôi phục là chuyển

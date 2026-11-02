@@ -8,7 +8,17 @@ services:
     image: mongo:9.0.4
     # Single-node replica set: publish and rollback need multi-document transactions.
     # Port 27117 avoids clashing with a native mongod on 27017; the member host matches the published port.
-    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27117']
+    # A 1 GB cache: integration tests create a database per workspace (ADR-025), hundreds per run, and
+    # the default cache (half of the Docker VM's memory) got mongod killed for lack of memory.
+    command:
+      - 'mongod'
+      - '--replSet'
+      - 'rs0'
+      - '--bind_ip_all'
+      - '--port'
+      - '27117'
+      - '--wiredTigerCacheSizeGB'
+      - '1'
     ports:
       - '127.0.0.1:27117:27117'
     volumes:

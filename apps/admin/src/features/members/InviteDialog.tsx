@@ -3,20 +3,26 @@
 import {
   type CreateInvitationsResponse,
   type CustomRole,
-  emailSchema,
   endpoints,
   INVITATION_VALID_DAYS,
   INVITE_EMAILS_MAX,
   type RoleChoice,
   type Site,
 } from '@plp/contracts';
-import { Button, Callout, Dialog, Field, Input, RadioCardGroup } from '@plp/ui';
+import { Button, Callout, Dialog, Field, RadioCardGroup } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
 import { api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { PermissionSummary, SiteScopeFields } from './ChangeAccessDialog';
-import { parseEmails, permissionSummary, roleOptions } from './member-presentation';
+import { EmailChips, type EmailChipsValue } from './EmailChips';
+import {
+  inviteEmailProblem,
+  knownEmails,
+  normalizeEmail,
+  permissionSummary,
+  roleOptions,
+} from './member-presentation';
 import styles from './Members.module.css';
 
 export interface InviteDialogProps {
@@ -24,6 +30,9 @@ export interface InviteDialogProps {
   sites: readonly Site[];
   /** The workspace's custom roles, offered after the system ones (ADR-024). */
   customRoles: readonly CustomRole[];
+  /** Screen 15's members and pending invitations: their emails need no invitation. */
+  members: readonly { email: string }[];
+  invitations: readonly { email: string }[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInvited: (result: CreateInvitationsResponse) => void;
@@ -37,11 +46,13 @@ export function InviteDialog({
   workspaceId,
   sites,
   customRoles,
+  members,
+  invitations,
   open,
   onOpenChange,
   onInvited,
 }: InviteDialogProps) {
-  const [emailsText, setEmailsText] = useState('');
+  const [chips, setChips] = useState<EmailChipsValue>({ emails: [], draft: '' });
   const [emailsError, setEmailsError] = useState<string | null>(null);
   const [role, setRole] = useState<RoleChoice>('editor');
   const options = roleOptions(customRoles);
@@ -50,7 +61,14 @@ export function InviteDialog({
   const [scope, setScope] = useState<'all' | 'sites'>(sites.length > 1 ? 'sites' : 'all');
   const [chosen, setChosen] = useState<string[]>([]);
   const [sitesError, setSitesError] = useState<string | null>(null);
-  const emails = parseEmails(emailsText);
+  const known = knownEmails(members, invitations);
+  // What is still being typed counts as well: sending makes it a chip first.
+  const draft = normalizeEmail(chips.draft);
+  const emails =
+    draft === '' || chips.emails.includes(draft) ? chips.emails : [...chips.emails, draft];
+  const invalid = emails.filter((email) => inviteEmailProblem(email, known) === 'invalid');
+  // Only these are sent: someone already a member or invited needs no new link.
+  const invitable = emails.filter((email) => inviteEmailProblem(email, known) === null);
 
   const send = useMutation({
     mutationFn: (body: { emails: string[]; role: RoleChoice; siteIds: string[] | null }) =>
@@ -63,15 +81,17 @@ export function InviteDialog({
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    const invalid = emails.filter((email) => !emailSchema.safeParse(email).success);
+    setChips({ emails, draft: '' });
     const emailProblem =
       emails.length === 0
         ? 'Nhập ít nhất một email'
         : invalid.length > 0
           ? `Email không hợp lệ: ${invalid.join(', ')}`
-          : emails.length > INVITE_EMAILS_MAX
-            ? `Mỗi lần mời tối đa ${INVITE_EMAILS_MAX} email`
-            : null;
+          : invitable.length === 0
+            ? 'Các email này đã là thành viên hoặc đang có lời mời'
+            : invitable.length > INVITE_EMAILS_MAX
+              ? `Mỗi lần mời tối đa ${INVITE_EMAILS_MAX} email`
+              : null;
     const wholeWorkspace = option?.wholeWorkspace === true || scope === 'all';
     const sitesProblem = !wholeWorkspace && chosen.length === 0 ? 'Chọn ít nhất một site' : null;
     setEmailsError(emailProblem);
@@ -79,10 +99,8 @@ export function InviteDialog({
     if (option === null || emailProblem !== null || sitesProblem !== null || send.isPending) {
       return;
     }
-    send.mutate({ emails, role, siteIds: wholeWorkspace ? null : chosen });
+    send.mutate({ emails: invitable, role, siteIds: wholeWorkspace ? null : chosen });
   }
-
-  const count = Math.max(emails.length, 1);
 
   return (
     <Dialog
@@ -114,7 +132,7 @@ export function InviteDialog({
             loading={send.isPending}
             disabled={option === null}
           >
-            Gửi {count} lời mời
+            {invitable.length === 0 ? 'Gửi lời mời' : `Gửi ${invitable.length} lời mời`}
           </Button>
         </>
       }
@@ -123,19 +141,12 @@ export function InviteDialog({
         <Field
           label="Email"
           id="invite-emails"
-          help="Cách nhau bằng dấu phẩy hoặc xuống dòng."
+          help={`Cách nhau bằng dấu phẩy, khoảng trắng hoặc Enter. Tối đa ${INVITE_EMAILS_MAX} email mỗi lần.`}
           error={emailsError ?? undefined}
         >
-          <Input
-            type="text"
-            inputMode="email"
-            autoComplete="off"
-            placeholder="ten@congty.vn, nguoi-khac@congty.vn"
-            value={emailsText}
-            onChange={(event) => {
-              setEmailsText(event.target.value);
-            }}
-          />
+          {(control) => (
+            <EmailChips control={control} value={chips} known={known} onChange={setChips} />
+          )}
         </Field>
         <RadioCardGroup<RoleChoice>
           legend="Vai trò"

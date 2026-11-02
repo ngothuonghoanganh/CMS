@@ -25,6 +25,7 @@ function release(version: number, id: string): HistoryEntry {
       note: '',
       changeSummary: [],
       sourceRevision: version,
+      capturesLeads: false,
       createdBy: ngocAnh,
       createdAt: '2026-10-22T02:40:00.000Z',
     },

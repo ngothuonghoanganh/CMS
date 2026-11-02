@@ -71,6 +71,13 @@
   font-weight: 600;
 }
 
+.count {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-ink-2);
+}
+
 .explainer {
   margin: 0;
   font-size: var(--text-body-sm);
