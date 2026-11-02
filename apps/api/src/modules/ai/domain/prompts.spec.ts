@@ -38,7 +38,9 @@ describe('the prompt of a section (ADR-031)', () => {
         'Page sections, in order: 1. Thanh điều hướng, 2. Hero, 3. Lợi ích, 4. Chân trang',
         'Section type: benefits',
         '- heading: Tiêu đề, required, at most 80 characters',
-        '- items: 3 to 6 items "Lợi ích", each with:',
+        // As many items as the section has now, unless the brief needs more.
+        '- items: 3 to 6 items "Lợi ích", usually 3, each with:',
+        'Section to write: Lợi ích: Vì sao khách hàng nên chọn bạn: biểu tượng, tiêu đề ngắn và một câu mô tả.',
         '  - title: Tiêu đề, required, at most 60 characters',
       ]),
     );
@@ -66,12 +68,13 @@ describe('the prompt of a section (ADR-031)', () => {
 
   it('writes English when asked, in the tone asked', () => {
     const hero = createSectionInstance('hero', 'split', 'abcdefgh1234');
-    const { system } = buildSectionPrompt(
+    const { system, prompt } = buildSectionPrompt(
       { ...CONTEXT, brief: { ...BRIEF, language: 'en', tone: 'professional' } },
       hero,
       copyPlanOf(hero),
     );
     expect(system).toContain('Write in English. Tone: clear, professional and trustworthy.');
+    expect(prompt.endsWith('Write every field in English.')).toBe(true);
   });
 
   it('retries with what was wrong, never with the refused answer', () => {

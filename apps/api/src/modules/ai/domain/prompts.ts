@@ -1,5 +1,5 @@
 import type { AiBrief, AiLanguage, AiTone, SectionInstance } from '@plp/contracts';
-import { getSectionDefinition, getVariant, goalDefinitions } from '@plp/sections/schema';
+import { getSectionDefinition, goalDefinitions } from '@plp/sections/schema';
 import type { CopyIssue, CopyPlan, CopySlot } from './section-copy.js';
 import { currentCopyOf } from './section-copy.js';
 
@@ -38,7 +38,7 @@ function systemText(brief: AiBrief): string {
     `- Write in ${LANGUAGES[brief.language]}. Tone: ${TONES[brief.tone]}.`,
     '- Plain text only: no HTML, no Markdown, no emoji.',
     '- Keep every field within its maximum length.',
-    '- Use only facts from the brief. Never invent prices, discounts, figures, durations, guarantees, awards or medical claims.',
+    '- Use only facts from the brief. Never invent prices, discounts, figures, durations, guarantees, awards, policies, or claims about health, safety or results.',
     '- Never write phone numbers, addresses, email addresses, links or the names of real people.',
     '- In "review", list the field of every sentence you wrote that states a figure, a price, a promise or a health claim, e.g. "subheading" or "items.1.answer".',
     '- Answer with one JSON object that matches the JSON Schema you are given, and nothing else.',
@@ -49,13 +49,21 @@ function slotLine(slot: CopySlot, indent: string): string {
   return `${indent}- ${slot.key}: ${slot.label}, ${slot.required ? 'required' : 'optional'}, at most ${slot.maxLength} characters`;
 }
 
-function fieldLines(plan: CopyPlan): string[] {
+/**
+ * The fields to write. A list suggests as many items as the section has now: allowed up to twelve
+ * FAQ answers, a small model writes all twelve, a minute of output and twelve claims to check.
+ */
+function fieldLines(plan: CopyPlan, current: Record<string, unknown>): string[] {
   return [
     ...plan.fields.map((slot) => slotLine(slot, '')),
-    ...plan.lists.flatMap((list) => [
-      `- ${list.key}: ${list.min} to ${list.max} items "${list.itemLabel}", each with:`,
-      ...list.fields.map((slot) => slotLine(slot, '  ')),
-    ]),
+    ...plan.lists.flatMap((list) => {
+      const items = current[list.key];
+      const usual = Array.isArray(items) && items.length > 0 ? `, usually ${items.length}` : '';
+      return [
+        `- ${list.key}: ${list.min} to ${list.max} items "${list.itemLabel}"${usual}, each with:`,
+        ...list.fields.map((slot) => slotLine(slot, '  ')),
+      ];
+    }),
   ];
 }
 
@@ -67,8 +75,8 @@ export function buildSectionPrompt(
 ): SectionPrompt {
   const { brief } = context;
   const definition = getSectionDefinition(section.type);
-  const variant = getVariant(definition, section.variant);
   const goal = goalDefinitions[brief.goal];
+  const current = currentCopyOf(section, plan);
   const prompt = [
     `Site: ${context.siteName}`,
     `Page goal: ${goal.title} (${goal.description})`,
@@ -78,12 +86,14 @@ export function buildSectionPrompt(
     `- Key message and differentiators: ${brief.differentiators}`,
     `- Content the business already has: ${brief.existingContent === '' ? '(none)' : brief.existingContent}`,
     `Page sections, in order: ${context.outline.map((name, index) => `${index + 1}. ${name}`).join(', ')}`,
-    `Section to write: ${definition.label}${variant ? `, layout "${variant.label}"` : ''}: ${definition.description}`,
+    `Section to write: ${definition.label}: ${definition.description}`,
     `Section type: ${section.type}`,
     'Fields:',
-    ...fieldLines(plan),
+    ...fieldLines(plan, current),
     'Current text of this section, sample copy to replace:',
-    JSON.stringify(currentCopyOf(section, plan)),
+    JSON.stringify(current),
+    // Said last too: a small model otherwise writes in the language of the brief and the sample.
+    `Write every field in ${LANGUAGES[brief.language]}.`,
   ].join('\n');
   return { system: systemText(brief), prompt };
 }
