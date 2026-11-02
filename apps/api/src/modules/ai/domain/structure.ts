@@ -4,6 +4,7 @@ import type {
   PageGoal,
   ProblemIssue,
   SectionInstance,
+  SectionType,
 } from '@plp/contracts';
 import {
   buildCompositionFromGoal,
@@ -55,6 +56,12 @@ function variantIssues(structure: readonly AiStructureItem[]): ProblemIssue[] {
   });
 }
 
+/** Link paths of the buttons, besides the Hero's, that lead to the page's form. */
+const formLedCtaPaths: Partial<Record<SectionType, string>> = {
+  navbar: 'cta.link',
+  cta_band: 'cta.link',
+};
+
 /**
  * The composition of a structure, as the registry parses it, or the issues of the structure with
  * paths into the request ("structure.3.type"). A section the goal's blueprint also has takes its
@@ -98,14 +105,23 @@ export function compositionFromStructure(input: StructureInput): StructureResult
       id,
       colorScheme: schemes[index] ?? base.colorScheme,
     };
-    return item.type === 'hero'
+    if (item.type === 'hero') {
+      return {
+        ...section,
+        content: setAtPath(
+          section.content,
+          'primaryCta.link',
+          formId === null ? { kind: 'none' } : { kind: 'section', sectionId: formId },
+        ),
+      };
+    }
+    // The brief has no phone for these buttons to call, as a goal page's brief may: with a form on
+    // the page they lead to it, so a new page is not blocked by a button without a target.
+    const ctaPath = formLedCtaPaths[item.type];
+    return ctaPath !== undefined && formId !== null
       ? {
           ...section,
-          content: setAtPath(
-            section.content,
-            'primaryCta.link',
-            formId === null ? { kind: 'none' } : { kind: 'section', sectionId: formId },
-          ),
+          content: setAtPath(section.content, ctaPath, { kind: 'section', sectionId: formId }),
         }
       : section;
   });

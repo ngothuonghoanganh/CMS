@@ -44,7 +44,34 @@ describe('the draft an AI job starts from (ADR-031)', () => {
     expect(hero?.content['primaryCta']).toMatchObject({
       link: { kind: 'section', sectionId: form?.id },
     });
+    // The brief has no phone to call: the navigation bar's button leads to the form too, so a new
+    // AI page is not blocked by a button without a target.
+    const navbar = sections.find((section) => section.type === 'navbar');
+    expect(navbar?.content['cta']).toMatchObject({
+      link: { kind: 'section', sectionId: form?.id },
+    });
     expect(sections.every((section) => section.reviewPaths.length === 0)).toBe(true);
+  });
+
+  it('leads a call-to-action band to the form, wherever the user placed it', () => {
+    const result = compositionFromStructure({
+      structure: [
+        { type: 'navbar', variant: 'logo-cta' },
+        { type: 'hero', variant: 'split' },
+        { type: 'lead_form', variant: 'stacked' },
+        { type: 'cta_band', variant: 'band' },
+        { type: 'footer', variant: 'basic' },
+      ],
+      goal: 'lead',
+      siteName: 'Smile Care',
+      newId: ids(),
+    });
+    if (!result.ok) {
+      throw new Error(JSON.stringify(result.issues));
+    }
+    const form = result.composition.sections.find((section) => section.type === 'lead_form');
+    const band = result.composition.sections.find((section) => section.type === 'cta_band');
+    expect(band?.content['cta']).toMatchObject({ link: { kind: 'section', sectionId: form?.id } });
   });
 
   it('takes the section’s own sample for a section the goal does not have, and no form link', () => {
