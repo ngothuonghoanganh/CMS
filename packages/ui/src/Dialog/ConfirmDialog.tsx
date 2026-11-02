@@ -28,8 +28,9 @@ export interface ConfirmDialogProps {
   trigger?: ReactElement | undefined;
   /**
    * Element to focus when the dialog closes and the element that opened it no longer exists, e.g.
-   * the confirmed action removed it. Focus otherwise returns to the opener (for a menu item, to
-   * its menu's trigger).
+   * the confirmed action removed it, also once the list holding it has read itself again. Focus
+   * otherwise returns to the opener (for a menu item, to its menu's trigger). Without it, the
+   * page's `<main>` takes focus.
    */
   fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
   title: ReactNode;

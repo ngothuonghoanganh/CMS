@@ -36,7 +36,8 @@ export interface DialogProps {
   initialFocusRef?: RefObject<HTMLElement | null> | undefined;
   /**
    * Element to focus when the dialog closes and the element that opened it no longer exists, e.g.
-   * what was chosen in it replaced the opener. Focus otherwise returns to the opener.
+   * what was chosen in it replaced the opener, or when the opener goes later with focus on it.
+   * Focus otherwise returns to the opener. Without it, the page's `<main>` takes focus.
    */
   fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
   /** Accessible name of the close button. Defaults to "Đóng". */
