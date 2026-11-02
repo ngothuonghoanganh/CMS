@@ -162,8 +162,13 @@ export const permissionGroups: readonly PermissionGroup[] = [
   },
 ];
 
-/** Members per role in a workspace, for the role list of board 16. */
+/**
+ * Members per role in a workspace, for the role list of board 16. `counts` leaves out the holders
+ * of custom roles, which board 16 counts with each custom role (ADR-024); `members` is everyone,
+ * the count of "Thành viên" in the sidebar (ADR-028).
+ */
 export const roleCountsSchema = z.object({
   counts: z.record(roleSchema, z.number().int().nonnegative()),
+  members: z.number().int().nonnegative(),
 });
 export type RoleCounts = z.infer<typeof roleCountsSchema>;

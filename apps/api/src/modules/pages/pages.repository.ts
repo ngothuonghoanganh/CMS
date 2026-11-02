@@ -32,6 +32,12 @@ export interface PageTitleRow {
   title: string;
 }
 
+/** How many pages a site has, and how many of them are live. */
+export interface SitePageCounts {
+  pages: number;
+  livePages: number;
+}
+
 export interface CreatePageInput {
   siteId: ObjectId;
   title: string;
@@ -181,6 +187,36 @@ export class PagesRepository {
       .countDocuments({ workspaceId: scope.workspaceId, siteId })
       .session(tx ?? null)
       .exec();
+  }
+
+  /**
+   * Pages and live pages of each site, in one aggregation keyed by site id hex, for the Sites
+   * screen (ADR-028). It reads `pages_site_live` only, never the pages themselves. Sites without
+   * pages are absent.
+   */
+  async countBySite(
+    scope: WorkspaceScope,
+    siteIds: readonly ObjectId[],
+  ): Promise<Map<string, SitePageCounts>> {
+    if (siteIds.length === 0) {
+      return new Map();
+    }
+    const groups = await this.pages(scope)
+      .aggregate<{ _id: ObjectId } & SitePageCounts>([
+        { $match: { workspaceId: scope.workspaceId, siteId: { $in: [...siteIds] } } },
+        {
+          $group: {
+            _id: '$siteId',
+            pages: { $sum: 1 },
+            // Live, with or without unpublished changes: the pointer is set (rule 2).
+            livePages: { $sum: { $cond: [{ $ifNull: ['$publishedReleaseId', false] }, 1, 0] } },
+          },
+        },
+      ])
+      .exec();
+    return new Map(
+      groups.map(({ _id, pages, livePages }) => [_id.toHexString(), { pages, livePages }]),
+    );
   }
 
   /** Pages of the site that are live right now. */

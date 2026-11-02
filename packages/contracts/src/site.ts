@@ -79,7 +79,21 @@ export type Site = z.infer<typeof siteSchema>;
  */
 export const MAX_SITES_PER_WORKSPACE = 100;
 
-export const siteListResponseSchema = z.object({ items: z.array(siteSchema) });
+/** What the Sites screen counts of a site (ADR-028). */
+export const siteSummarySchema = z.object({
+  pages: z.number().int().nonnegative(),
+  /** Pages live now, with or without changes that are not published yet. */
+  livePages: z.number().int().nonnegative(),
+  /** Leads of the last 7 days, spam excluded; null for roles without `leads.view` (ADR-024). */
+  leadsLast7Days: z.number().int().nonnegative().nullable(),
+});
+export type SiteSummary = z.infer<typeof siteSummarySchema>;
+
+/** A site of the workspace's list: the site and its counts (ADR-028). */
+export const siteListItemSchema = siteSchema.extend({ summary: siteSummarySchema });
+export type SiteListItem = z.infer<typeof siteListItemSchema>;
+
+export const siteListResponseSchema = z.object({ items: z.array(siteListItemSchema) });
 export type SiteListResponse = z.infer<typeof siteListResponseSchema>;
 
 export const createSiteRequestSchema = z.object({

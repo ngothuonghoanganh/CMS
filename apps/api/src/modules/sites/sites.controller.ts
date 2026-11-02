@@ -12,6 +12,7 @@ import type { z } from 'zod';
 import { ZodPipe } from '../../shared/zod.pipe.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
+import { SiteListService } from './site-list.service.js';
 import { type CreateSiteValues, SiteManagementService } from './site-management.service.js';
 import { SitesService } from './sites.service.js';
 
@@ -21,6 +22,7 @@ type SubdomainAvailabilityQuery = z.output<typeof subdomainAvailabilityQuerySche
 export class SitesController {
   constructor(
     private readonly sites: SitesService,
+    private readonly siteList: SiteListService,
     private readonly management: SiteManagementService,
   ) {}
 
@@ -29,7 +31,7 @@ export class SitesController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId') workspaceId: string,
   ): Promise<SiteListResponse> {
-    return this.sites.listForWorkspace(user, workspaceId);
+    return this.siteList.list(user, workspaceId);
   }
 
   @Post('workspaces/:workspaceId/sites')
