@@ -349,7 +349,7 @@ describe('composition validation on the server', () => {
           {
             path: ['composition', 'sections', 0, 'content', 'items'],
             code: 'too_big',
-            message: 'Bố cục “Quy trình 3 bước” có tối đa 5 lợi ích',
+            message: 'Bố cục “Quy trình 3 bước” có tối đa 5 bước',
           },
         ],
       );

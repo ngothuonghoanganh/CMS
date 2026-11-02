@@ -97,6 +97,15 @@ describe('partner logos', () => {
   });
 });
 
+describe('steps of a process', () => {
+  it('say "Bước N:" to screen readers only, beside the drawn number', () => {
+    const label = declarations('./sections/Benefits.module.css').get('.stepLabel') ?? '';
+    expect(label).toMatch(/(?<![\w-])position:\s*absolute;/);
+    expect(label).toMatch(/(?<![\w-])clip-path:\s*inset\(50%\);/);
+    expect(label).toMatch(/(?<![\w-])overflow:\s*hidden;/);
+  });
+});
+
 describe('send button of the lead form', () => {
   it('shows that a lead is on its way, since it stays enabled while sending', () => {
     const busy = leadForm.get(".submit[aria-busy='true']") ?? '';

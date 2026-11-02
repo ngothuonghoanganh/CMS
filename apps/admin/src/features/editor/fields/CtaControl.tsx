@@ -182,7 +182,7 @@ export function CtaControl({ section, field, path }: ControlProps<CtaField>) {
                 const definition = getSectionDefinition(target.type);
                 return (
                   <option key={target.id} value={target.id}>
-                    {`${index + 1}. ${definition.label} · ${definition.summarize(target.content)}`}
+                    {`${index + 1}. ${definition.label} · ${definition.summarize(target.content, target.variant)}`}
                   </option>
                 );
               })}

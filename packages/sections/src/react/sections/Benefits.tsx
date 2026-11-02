@@ -47,6 +47,7 @@ function BenefitIconSvg({ icon }: { icon: BenefitIcon }) {
 
 export function BenefitsSection({ section, content, ctx, leading }: SectionProps<BenefitsContent>) {
   const alternate = section.variant === 'alternate';
+  const steps = section.variant === 'steps';
   const header = (
     <div className={styles.header}>
       <Text
@@ -80,7 +81,7 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
         value={title}
         as="h3"
         className={styles.title}
-        placeholder="Tiêu đề lợi ích"
+        placeholder={steps ? 'Tiêu đề bước' : 'Tiêu đề lợi ích'}
       />
       <Text
         ctx={ctx}
@@ -126,15 +127,17 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
     );
   }
 
-  if (section.variant === 'steps') {
-    // A numbered process: the list is ordered, so the visible number only repeats what assistive
-    // technology already announces. The variant hides the icon and image fields.
+  if (steps) {
+    // A numbered process. WebKit drops the list semantics of a list without bullets, and does not
+    // announce the position of an item: `role="list"` keeps the list, and each step says its number
+    // in words, once, in place of the drawn circle. The variant hides the icon and image fields.
     return (
       <div className={styles.root}>
         {header}
-        <ol className={styles.steps}>
+        <ol className={styles.steps} role="list">
           {content.items.map((item, index) => (
             <li key={index} className={styles.step}>
+              <span className={styles.stepLabel}>{`Bước ${index + 1}:`}</span>
               <span className={styles.stepNumber} aria-hidden="true">
                 {index + 1}
               </span>
