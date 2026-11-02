@@ -1922,28 +1922,52 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
 ### ADR-029 — Gửi email qua plp-mailer (SQS), sửa ADR-018
 
-- **Date:** 2026-11-01 · **Status:** Accepted
+- **Date:** 2026-11-01; đưa vào `main` và phủ 14 email ngày 2026-11-02 · **Status:** Accepted
 - **Context:**
-  - ADR-018 gửi email bằng SMTP (`nodemailer`), và ADR-021 dùng cùng đường gửi cho lời mời và yêu cầu đổi quyền. API tự dựng chủ đề, phần chữ và phần HTML.
+  - ADR-018 gửi email bằng SMTP (`nodemailer`). ADR-021, ADR-022, ADR-023 và ADR-026 dùng cùng đường gửi cho thư của chúng. API tự dựng chủ đề, phần chữ và phần HTML.
   - Ngày 2026-11-01, chủ sản phẩm yêu cầu một dịch vụ gửi thư riêng: repo `plp-mailer`, gồm AWS Lambda và Amazon SES, dựng và test bằng SAM.
     - Nhận `{ template, to[], replyTo?, data, idempotencyKey }` qua hàng đợi SQS, có dead-letter queue, và chống trùng bằng idempotency trên DynamoDB trong 14 ngày.
     - Template Handlebars nằm trong `templates/emails/<template>/` của chính repo đó, mỗi template có một `schema.json` cho `data`. Repo `plp-mail-templates` riêng lúc đầu đã được gộp vào đây.
   - Chưa deploy được: tài khoản AWS đang bị tạm khóa và domain gửi chưa được chọn. Vì vậy SMTP vẫn là mặc định.
+  - Quyết định này được viết trên nhánh `feat/mailer-sqs-transport` với số ADR-023, khi API mới gửi 5 loại email. Lúc đưa vào `main`, số ADR-023 đã thuộc về duyệt xuất bản và API gửi 14 loại email, nên ADR này mang số ADR-029 và phủ cả 14.
 - **Decision:**
   - **Công tắc `MAIL_TRANSPORT`:** `smtp` (mặc định) hoặc `sqs`, validate bằng Zod lúc khởi động.
     - `smtp` cần `SMTP_URL` và `LEAD_EMAIL_FROM` như ADR-018. Dev, integration test và E2E vẫn dùng Mailpit.
     - `sqs` cần `MAIL_QUEUE_URL` (http hoặc https) và `MAIL_QUEUE_REGION`, và không đọc `SMTP_URL`, `LEAD_EMAIL_FROM`. Địa chỉ gửi do plp-mailer quyết (`SenderDomain`).
     - Credentials lấy theo chuỗi mặc định của AWS SDK, tức role của máy chạy API, được gắn `MailProducerPolicy`. Không có biến môi trường riêng cho key.
-  - **Một dạng thư cho cả hai đường:** mọi nơi gửi email dựng `{ to, template, data, idempotencyKey }`.
+  - **Một dạng thư cho cả hai đường:** mọi nơi gửi email (tài khoản, thành viên, tên miền, duyệt xuất bản, nơi nhận lead, thông báo lead) dựng `{ to, template, data, idempotencyKey }` (`notifications/emails.ts`) và gửi qua cùng một `EmailSender`.
     - `template` là tên một thư mục trong `templates/emails/` của plp-mailer.
-    - `data` khớp `schema.json` của template đó. Mọi giá trị đã được định dạng để hiển thị: số điện thoại dạng Việt Nam, giờ Việt Nam, nhãn nguồn, và `note: null` khi không có lời nhắn.
-    - Với `smtp`, API dựng chủ đề, phần chữ và phần HTML từ `data` rồi gửi qua SMTP. Nội dung thư giữ nguyên như trước.
+    - `data` khớp `schema.json` của template đó. Mọi giá trị đã được định dạng để hiển thị: số điện thoại dạng Việt Nam, giờ Việt Nam, nhãn nguồn, nhãn vai trò và phạm vi. Lời nhắn hay ghi chú trống là `null`. Phần thư đổi theo tình huống là cờ boolean mà template đọc: `accepted`, `resent`, `approved`.
+    - Với `smtp`, `SmtpTemplateSender` dựng chủ đề, phần chữ và phần HTML từ `data` (`email-templates.ts`), rồi giao cho `SmtpEmailSender`, vẫn là lớp gửi qua SMTP như trước. Nội dung thư giữ nguyên từng byte; test gửi qua SMTP (`smtp-email-sender.int.spec.ts`, `smtp-failures.int.spec.ts`) không đổi, và test chữ của thư (`email-templates.spec.ts`) giữ mọi kỳ vọng cũ.
     - Với `sqs`, API gửi một message SQS cho mỗi email. Body là request của plp-mailer, được kiểm bằng một schema Zod chép từ `plp-mailer/src/contracts.ts` trước khi gửi.
-  - **Năm template:** `lead-notification`, `recipient-confirmation`, `member-invitation`, `access-request`, `access-decision`.
-  - **Idempotency key** không chứa dữ liệu cá nhân hay hash của token:
+  - **14 template**, mỗi loại email một template, chữ tiếng Việt giống thư SMTP:
+
+    | Template                 | Email                                         | ADR     | Idempotency key                               |
+    | ------------------------ | --------------------------------------------- | ------- | --------------------------------------------- |
+    | `lead-notification`      | lead mới, tới các địa chỉ đã xác nhận         | ADR-018 | `lead-notification:{leadId}`                  |
+    | `recipient-confirmation` | xác nhận một địa chỉ nhận lead                | ADR-018 | `recipient-confirmation:{recipientId}:{hạn}`  |
+    | `member-invitation`      | lời mời vào workspace                         | ADR-021 | `member-invitation:{invitationId}:{hạn}`      |
+    | `access-request`         | yêu cầu đổi quyền, tới Chủ sở hữu             | ADR-021 | `access-request:{requestId}`                  |
+    | `access-decision`        | kết quả yêu cầu đổi quyền                     | ADR-021 | `access-decision:{requestId}`                 |
+    | `domain-active`          | tên miền riêng đã hoạt động                   | ADR-022 | `domain-active:{domainId}`                    |
+    | `domain-lost`            | tên miền riêng mất kết nối                    | ADR-022 | `domain-lost:{domainId}:{lostSince}`          |
+    | `domain-moved`           | tên miền chuyển sang site khác                | ADR-022 | `domain-moved:{domainId}`                     |
+    | `approval-request`       | yêu cầu xuất bản, tới người duyệt             | ADR-023 | `approval-request:{approvalId}:{sentAt}`      |
+    | `approval-published`     | trang đã được xuất bản, tới người gửi yêu cầu | ADR-023 | `approval-published:{approvalId}`             |
+    | `approval-rejected`      | yêu cầu bị từ chối, kèm lý do                 | ADR-023 | `approval-rejected:{approvalId}`              |
+    | `signup-confirmation`    | xác nhận email khi đăng ký                    | ADR-026 | `signup-confirmation:{pendingSignupId}:{hạn}` |
+    | `account-exists`         | email đăng ký đã có tài khoản                 | ADR-026 | `account-exists:{userId}:{lúc yêu cầu}`       |
+    | `password-reset`         | link đặt lại mật khẩu                         | ADR-026 | `password-reset:{userId}:{hạn}`               |
+
+  - **Idempotency key** không chứa dữ liệu cá nhân, token hay hash của token: id của bản ghi, cộng thời điểm (mili giây) của liên kết hay sự kiện khi một bản ghi gửi được nhiều thư.
     - `lead-notification:{leadId}` giữ nguyên qua mọi lần thử, kể cả "Gửi lại". Một lần thử tưởng là lỗi (timeout) nhưng thực ra message đã vào hàng đợi sẽ không thành thư thứ hai.
-    - `recipient-confirmation:{recipientId}:{tokenExpiresAt}` và `member-invitation:{invitationId}:{expiresAt}` (mili giây): mỗi liên kết một key, vì "Gửi lại" tạo liên kết mới và phải đi một thư mới.
-    - `access-request:{requestId}` và `access-decision:{requestId}`.
+    - Mỗi liên kết một key (`{hạn}` là `expiresAt` của liên kết), vì "Gửi lại", đăng ký lại hay quên mật khẩu lần nữa tạo liên kết mới và phải đi một thư mới. `pending_signups` trả id của bản ghi khi ghi, để có key này.
+    - `domain-active` và `domain-moved` một lần cho mỗi bản ghi tên miền: `activeSince` không bao giờ bị xóa, và bản ghi mất tên miền bị gỡ. Một tên miền mất kết nối được nhiều lần, nên `domain-lost` mang `lostSince`.
+    - `approval-request` mang `sentAt`, vì "Gửi lại yêu cầu" là một thư mới. Một yêu cầu chỉ được xuất bản hay từ chối một lần.
+    - `account-exists` không có liên kết nào: mỗi lần đăng ký là một thư.
+  - **Liên kết mang token** (xác nhận nơi nhận lead, lời mời, xác nhận đăng ký, đặt lại mật khẩu) chỉ nằm trong `data` của message.
+    - Không log nào của API ghi người nhận, `data` hay body của message. Lỗi gửi chỉ ghi mã, tên lỗi của AWS hoặc mã lỗi mạng, và request id (ADR-013); lỗi kiểm request trước khi gửi chỉ ghi tên trường.
+    - plp-mailer cũng không log người nhận hay `data`. Hàng đợi của nó mã hóa message (`SqsManagedSseEnabled`) và giữ tối đa 14 ngày.
   - **Kết quả gửi với `sqs`:** SQS nhận message là gửi thành công. Lead thành `sent`, với `recipients` bằng số địa chỉ và `rejectedRecipients` bằng 0.
   - **Lỗi gửi message** dùng các mã sẵn có:
     - timeout → `timeout`;
@@ -1951,8 +1975,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - lỗi 4xx khác, ví dụ thiếu quyền hay queue không tồn tại → `smtp_rejected`;
     - còn lại → `unknown`.
     - Tên mã giữ nguyên vì đó là giá trị đã lưu và nằm trong contract. Nhãn ở màn 10 nói "máy chủ gửi thư", vẫn đúng.
-    - Log ghi mã, tên lỗi của AWS và request id; không ghi người nhận hay `data`.
-  - **Không đổi:** `EmailQuota` và các giới hạn thư mỗi ngày (đếm trước khi gửi, trả lại khi không gửi được), lịch thử lại 0/1/5 phút, cách giành lead, và lượt quét lúc khởi động.
+    - Mọi chỗ ADR-021, ADR-022, ADR-023 và ADR-026 nói "SMTP không nhận thư" nay là "đường gửi không nhận thư": hàng đợi từ chối thì thư tài khoản trả 503 `email_unavailable` và trả lượt, lời mời và địa chỉ nhận lead ở trạng thái chưa gửi, email duyệt xuất bản, yêu cầu đổi quyền và tên miền chỉ được log.
+  - **Không đổi:** `EmailQuota` và các giới hạn thư (đếm trước khi gửi, trả lại khi không gửi được), lịch thử lại 0/1/5 phút, cách giành lead, và lượt quét lúc khởi động.
   - **Thư viện:** `@aws-sdk/client-sqs` cho API, `ajv` chỉ dùng trong test (ADR-002).
 - **Reason:**
   - Hai đường gửi dùng chung một dạng thư (template và data), nên đổi đường gửi chỉ là đổi biến môi trường. Test đối chiếu `data` với `schema.json` phủ cả hai đường.
@@ -1965,11 +1989,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Việc này chỉ xảy ra khi một lần thử tưởng là lỗi thực ra đã vào hàng đợi, rồi nơi nhận lead đổi trước lần thử sau.
     - Thư đầu đã đi, nên người nhận không bị trùng thư.
   - Template trong API (cho `smtp`) và template trong plp-mailer là hai bản phải giữ khớp nhau.
-    - `apps/api/test/mail-templates/*.schema.json` được chép nguyên từ `plp-mailer/templates/emails/*/schema.json` (commit `9866baa`). Prettier bỏ qua thư mục này để bản chép giữ đúng từng byte.
-    - Unit test kiểm `data` của từng email theo các schema đó, và bộ ghi thư của integration test kiểm mọi thư mà test gửi.
+    - `apps/api/test/mail-templates/*.schema.json` (14 file) được chép nguyên từ `plp-mailer/templates/emails/*/schema.json`, nhánh `feat/cms-emails` (commit `169d6dd`, PR plp-mailer#1). Prettier bỏ qua thư mục này để bản chép giữ đúng từng byte.
+    - Unit test kiểm `data` của mọi email, ở mọi dạng (có và không có ghi chú, chấp nhận và từ chối…), theo các schema đó. Bộ ghi thư của integration test kiểm mọi thư mà test gửi, và test app thất bại lúc đóng nếu có thư plp-mailer sẽ từ chối.
+    - Integration test chạy cả API với `MAIL_TRANSPORT=sqs` qua AWS SDK thật và một SQS stub: 14 loại thư vào hàng đợi, mỗi key một lần, và không log nào chứa liên kết.
     - Đổi một schema ở plp-mailer thì chép lại file và sửa mapping trong cùng một PR.
   - Ví dụ giờ trong `lead-notification/schema.json` ("09:15 01/11/2026") khác định dạng giờ Việt Nam của ADR-018 ("2026-10-24 16:42:07"). Schema chỉ yêu cầu một chuỗi không rỗng, nên API giữ định dạng của ADR-018.
-  - Bật `sqs` ở production cần tài khoản AWS hoạt động và plp-mailer đã deploy (domain gửi, DKIM, quyền gửi production của SES), rồi gắn `MailProducerPolicy` cho role của API (§6).
+  - Bật `sqs` ở production cần tài khoản AWS hoạt động, PR plp-mailer#1 đã merge, và plp-mailer đã deploy (domain gửi, DKIM, quyền gửi production của SES), rồi gắn `MailProducerPolicy` cho role của API (§6).
 
 ### ADR-030 — Template: mẫu hệ thống, template của workspace, áp dụng mẫu
 
@@ -2272,7 +2297,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
-- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 14 template (PR plp-mailer#1 đã merge) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):
