@@ -3,34 +3,47 @@ import { SIGNUP_VERIFY_PATH } from '@plp/contracts';
 import { accountLink, SIGNUP_EMAIL_SUBJECT, waitForEmail } from './mailpit.js';
 import type { Account } from './setup.js';
 
-/** Fills and sends the sign-up form at `origin`; the card then says to check the email. */
+/**
+ * Fills and sends the sign-up form at `origin`; the card then says to check the email. No password:
+ * the link's page sets it (ADR-026).
+ */
 export async function fillSignupForm(page: Page, account: Account, origin = ''): Promise<void> {
   await page.goto(`${origin}/signup`);
   await page.getByLabel('Họ và tên').fill(account.name);
   await page.getByLabel('Email').fill(account.email);
-  await page.getByLabel('Mật khẩu').fill(account.password);
   await page.getByLabel('Tên workspace').fill(account.workspaceName);
   await page.getByRole('button', { name: 'Tạo tài khoản' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Kiểm tra email' })).toBeVisible();
 }
 
 /**
- * Opens the confirmation link Mailpit received for `email` and confirms it (ADR-026): the new
- * workspace opens.
+ * On the page of a sign-up's link, which shows the email it proves: sets the account's password
+ * and creates the account with the names the form stored (ADR-026).
  */
-export async function confirmSignupFromEmail(page: Page, email: string): Promise<void> {
-  const message = await waitForEmail(page.request, email, SIGNUP_EMAIL_SUBJECT);
-  await page.goto(accountLink(message, SIGNUP_VERIFY_PATH));
-  await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
+export async function createAccountOnLinkPage(page: Page, account: Account): Promise<void> {
+  await expect(page.getByRole('textbox', { name: 'Email' })).toHaveValue(account.email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill(account.password);
+  await page.getByLabel('Nhập lại mật khẩu').fill(account.password);
+  await page.getByRole('button', { name: 'Tạo tài khoản và workspace' }).click();
 }
 
 /**
- * Signs up through the form and the confirmation email, as a person would; a new account goes
- * straight to site creation.
+ * Opens the confirmation link Mailpit received for the account's email and creates the account
+ * there (ADR-026): the new workspace opens.
+ */
+export async function confirmSignupFromEmail(page: Page, account: Account): Promise<void> {
+  const message = await waitForEmail(page.request, account.email, SIGNUP_EMAIL_SUBJECT);
+  await page.goto(accountLink(message, SIGNUP_VERIFY_PATH));
+  await createAccountOnLinkPage(page, account);
+}
+
+/**
+ * Signs up through the form and the confirmation email, whose page sets the password, as a person
+ * would; a new account goes straight to site creation.
  */
 export async function signUpThroughForm(page: Page, account: Account): Promise<void> {
   await fillSignupForm(page, account);
-  await confirmSignupFromEmail(page, account.email);
+  await confirmSignupFromEmail(page, account);
   await expect(page).toHaveURL(/\/sites\/new$/);
 }
 

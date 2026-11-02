@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 };
 
 /**
- * The page a sign-up's confirmation email links to (ADR-026). No session is needed, and nothing
- * happens by merely opening it: a link scanner does not use the link up.
+ * The page a sign-up's confirmation email links to (ADR-026), where the password is chosen. No
+ * session is needed, and opening it only looks the sign-up up: a link scanner does not use it up.
  */
 export default async function VerifySignupPage() {
   // Like signing up, at the common address: the new workspace opens from there at its own. The
@@ -25,7 +25,7 @@ export default async function VerifySignupPage() {
   return (
     <FormCard
       title="Xác nhận email"
-      description="Bấm nút dưới đây để xác nhận email. Workspace của bạn được tạo ngay sau đó."
+      description="Đặt mật khẩu để xác nhận email. Tài khoản và workspace của bạn được tạo ngay sau đó."
     >
       <VerifySignup />
     </FormCard>

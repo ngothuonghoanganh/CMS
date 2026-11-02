@@ -4,7 +4,13 @@ import { problemSchema, type Site } from '@plp/contracts';
 import { type Connection, Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { requestSignup, signedUpClient, signupInput, TestClient } from '../../../test/client.js';
+import {
+  requestSignup,
+  signedUpClient,
+  signupInput,
+  signupVerifyBody,
+  TestClient,
+} from '../../../test/client.js';
 import { RecordingEmailSender } from '../../../test/email.js';
 import { createSecondInstance } from '../../../test/instances.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
@@ -81,10 +87,12 @@ describe('workspace databases', () => {
       await own.collection('pages').countDocuments({ _id: new Types.ObjectId(page.page.id) }),
     ).toBe(1);
     expect(await t.workspaceDb(b.workspaceId).collection('sites').countDocuments()).toBe(0);
+    // The address and the counter grants write to serialize with a deletion (ADR-027): no data.
     expect(await t.connection.collection('site_addresses').findOne({ _id: siteId })).toEqual({
       _id: siteId,
       workspaceId: new Types.ObjectId(a.workspaceId),
       subdomain: site.subdomain,
+      grantSeq: 0,
     });
     const master = await collectionsOf(t.connection);
     expect(master.filter((name) => WORKSPACE_COLLECTIONS.includes(name))).toEqual([]);
@@ -124,7 +132,7 @@ describe('workspace databases', () => {
       });
     try {
       const response = await new TestClient(t.app)
-        .post('/auth/signup/verify', { token })
+        .post('/auth/signup/verify', signupVerifyBody(token, input))
         .expect(500);
       expect(problemSchema.parse(response.body).code).toBe('internal');
     } finally {

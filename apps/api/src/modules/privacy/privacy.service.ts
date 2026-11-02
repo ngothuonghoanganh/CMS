@@ -118,7 +118,9 @@ export class PrivacyService {
   /**
    * Saves the texts as the next version, with its activity, in one transaction. The owner edited
    * `baseVersion`; when another version was saved meanwhile the request answers 409 instead of
-   * replacing it, also when both raced for the same number (the unique index decides).
+   * replacing it, also when both raced for the same number (the unique index decides). The
+   * transaction writes the site first, so a version never outlives a site deleted meanwhile
+   * (ADR-027).
    */
   async createVersion(
     user: AuthenticatedUser,
@@ -129,6 +131,9 @@ export class PrivacyService {
     let created: ConsentVersionRecord;
     try {
       created = await this.transactions.run(async (tx) => {
+        if (!(await this.sites.recordDataWrite(scope, site._id, tx))) {
+          throw notFound(SITE_NOT_FOUND);
+        }
         const currentVersion = (await this.versions.findCurrent(scope, site._id, tx))?.version ?? 0;
         if (currentVersion !== input.baseVersion) {
           throw consentVersionConflict(currentVersion);

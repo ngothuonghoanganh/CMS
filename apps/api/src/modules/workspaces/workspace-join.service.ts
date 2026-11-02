@@ -22,19 +22,22 @@ export class WorkspaceJoin {
   ) {}
 
   async join(invitation: InvitationRecord, userId: ObjectId, now: Date, tx: Tx): Promise<void> {
-    if (!(await this.invitations.claim(invitation, 'accepted', now, tx))) {
+    // The grant is the claimed invitation's, not the one read before: a site deleted meanwhile
+    // was taken out of it, and the membership must not name it (ADR-027).
+    const claimed = await this.invitations.claim(invitation, 'accepted', now, tx);
+    if (claimed === null) {
       throw new AppError(409, 'invitation_unavailable', INVITATION_UNAVAILABLE, {
         detail: 'Lời mời đã được dùng, bị thu hồi hoặc đã hết hạn. Hãy nhờ người mời gửi lại.',
       });
     }
     // A member already keeps their role: an invitation never lowers or raises it.
     await this.workspaces.joinByInvitation(
-      invitation.workspaceId,
+      claimed.workspaceId,
       userId,
       {
-        role: invitation.role,
-        customRoleId: invitation.customRoleId ?? null,
-        siteIds: invitation.siteIds,
+        role: claimed.role,
+        customRoleId: claimed.customRoleId ?? null,
+        siteIds: claimed.siteIds,
       },
       now,
       tx,

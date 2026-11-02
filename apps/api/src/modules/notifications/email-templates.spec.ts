@@ -174,6 +174,8 @@ describe('account emails (ADR-026)', () => {
     });
     expect(email.subject).toBe('Xác nhận email để tạo workspace');
     expect(email.text).toContain('tạo workspace "Mây Xanh <b>Agency</b>"');
+    // The password is chosen on the link's page, not in the form (ADR-026).
+    expect(email.text).toContain('xác nhận email và đặt mật khẩu');
     expect(email.text).toContain('Xác nhận tại: http://localhost:3100/signup/verify#token=abc');
     expect(email.text).toContain('Link có hiệu lực 24 giờ và chỉ dùng được một lần.');
     expect(email.html).toContain('Mây Xanh &lt;b&gt;Agency&lt;/b&gt;');

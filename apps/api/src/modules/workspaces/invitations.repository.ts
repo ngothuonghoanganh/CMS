@@ -211,17 +211,27 @@ export class InvitationsRepository {
   /**
    * Closes the invitation of a link as accepted or declined, once: only while it is pending, still
    * has that link (`tokenHash`: "Gửi lại" at the same moment ends the old one) and, for an
-   * acceptance, is not expired. False when it was not.
+   * acceptance, is not expired. Returns the invitation as it was closed, null when it was not.
+   * What it gives is read by the same write: a site deleted since the link was opened is no
+   * longer among its sites (ADR-027).
    */
   claim(
     invitation: Pick<InvitationRecord, '_id' | 'tokenHash'>,
     status: Extract<InvitationStatus, 'accepted' | 'declined'>,
     now: Date,
     tx?: Tx,
-  ): Promise<boolean> {
+  ): Promise<InvitationRecord | null> {
     const link = { _id: invitation._id, tokenHash: invitation.tokenHash };
     const filter = status === 'accepted' ? { ...link, expiresAt: { $gt: now } } : link;
-    return this.close(filter, status, now, tx);
+    return this.invitations
+      .findOneAndUpdate(
+        { ...filter, status: 'pending' },
+        { $set: { status, closedAt: now, purgeAt: purgeAfter(now) } },
+        { returnDocument: 'after' },
+      )
+      .session(tx ?? null)
+      .lean<InvitationRecord>()
+      .exec();
   }
 
   private async close(

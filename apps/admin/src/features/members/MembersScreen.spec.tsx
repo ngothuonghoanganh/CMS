@@ -367,6 +367,70 @@ describe('MembersScreen', () => {
     expect(within(summary()).getByText('Bếp Nhà Mây').tagName).toBe('STRONG');
   });
 
+  describe('a member given a site deleted since (ADR-027)', () => {
+    const GONE = '64b0000000000000000000ff';
+    const stale = member({
+      userId: '64b0000000000000000000c5',
+      name: 'Thu Hà',
+      email: 'ha@smilecare.vn',
+      role: 'viewer',
+      siteIds: [smile.id, GONE],
+    });
+    const lost = member({
+      userId: '64b0000000000000000000c6',
+      name: 'Gia Huy',
+      email: 'huy@smilecare.vn',
+      role: 'viewer',
+      siteIds: [GONE],
+    });
+    const list: MemberListResponse = { items: [owner, stale, lost] };
+
+    beforeEach(() => {
+      const served = apiMock.getMockImplementation();
+      apiMock.mockImplementation((endpoint, ...rest) => {
+        if (endpoint === endpoints.listMembers) {
+          return Promise.resolve(list);
+        }
+        if (endpoint === endpoints.updateMember) {
+          return Promise.resolve({ ...stale, siteIds: [smile.id] });
+        }
+        return served?.(endpoint, ...rest) ?? Promise.reject(new Error('unexpected call'));
+      });
+    });
+
+    it('shows only the sites of the workspace', () => {
+      renderScreen({ initialMembers: list });
+      const scopeOf = (name: RegExp) =>
+        within(screen.getByRole('row', { name })).getAllByRole('cell')[1];
+      expect(scopeOf(/Thu Hà/)).toHaveTextContent(/^Nha khoa Smile Care$/);
+      expect(scopeOf(/Gia Huy/)).toHaveTextContent(/^0 site$/);
+    });
+
+    it('saves the sites the boxes show, without the one no box can untick', async () => {
+      const user = userEvent.setup();
+      renderScreen({ initialMembers: list });
+      await user.click(screen.getByRole('button', { name: 'Đổi quyền của Thu Hà' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Quyền của Thu Hà' });
+      await user.click(within(dialog).getByRole('button', { name: 'Lưu quyền' }));
+      expect(lastCallTo(apiMock, endpoints.updateMember)).toEqual({
+        args: [WORKSPACE_ID, stale.userId],
+        options: { body: { role: 'viewer', siteIds: [smile.id] } },
+      });
+    });
+
+    it('asks for a site when the deleted one was all the member had', async () => {
+      const user = userEvent.setup();
+      renderScreen({ initialMembers: list });
+      await user.click(screen.getByRole('button', { name: 'Đổi quyền của Gia Huy' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Quyền của Gia Huy' });
+      await user.click(within(dialog).getByRole('button', { name: 'Lưu quyền' }));
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('Chọn ít nhất một site');
+      expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).not.toContain(
+        endpoints.updateMember,
+      );
+    });
+  });
+
   it('opens the request of the email, and accepts it with the sites decided', async () => {
     const user = userEvent.setup();
     renderScreen({ openRequestId: request.id });

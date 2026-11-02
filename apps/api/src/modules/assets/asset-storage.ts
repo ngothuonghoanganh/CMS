@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
   PutObjectCommand,
@@ -12,6 +13,8 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 /** Object storage for uploaded images. Only keys under `public/` are anonymously readable. */
 export interface AssetStorage {
   put(key: string, body: Buffer, contentType: string): Promise<void>;
+  /** Deletes one object; a key that holds nothing is not an error. */
+  delete(key: string): Promise<void>;
   /** Deletes every object whose key starts with `prefix`; returns how many went. */
   deletePrefix(prefix: string): Promise<number>;
   /** URL a browser or the renderer can load the object from. */
@@ -76,6 +79,16 @@ export class S3AssetStorage implements AssetStorage, OnModuleDestroy {
       );
     } catch (error) {
       throw new Error(`Could not store asset object "${key}" in bucket "${this.bucket}"`, {
+        cause: error,
+      });
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    try {
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    } catch (error) {
+      throw new Error(`Could not delete asset object "${key}" in bucket "${this.bucket}"`, {
         cause: error,
       });
     }

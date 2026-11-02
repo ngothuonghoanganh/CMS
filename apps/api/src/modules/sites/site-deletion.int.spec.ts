@@ -1,5 +1,6 @@
 import { HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import {
+  dataRequestDetailSchema,
   type Domain,
   domainSchema,
   invitationListResponseSchema,
@@ -15,6 +16,7 @@ import { pageView, sendPageView } from '../../../test/analytics.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { pointHere } from '../../../test/domains.js';
+import { gate } from '../../../test/gate.js';
 import {
   createLiveFormPage,
   insertLeads,
@@ -32,13 +34,21 @@ import {
   uniqueSlug,
   withRevalidationRecorder,
 } from '../../../test/pages.js';
-import { configurePrivacy } from '../../../test/privacy.js';
+import { configurePrivacy, CONSENT_TEXTS } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
-import { addMember, createSite, uploadImage } from '../../../test/resources.js';
+import {
+  addMember,
+  createSite,
+  pngImage,
+  uploadImage,
+  uploadRequest,
+} from '../../../test/resources.js';
 import { testEnvInput } from '../../../test/env.js';
 import { parseEnv } from '../../config/env.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
-import { siteStoragePrefix } from '../assets/asset-storage.js';
+import { ASSET_STORAGE, type AssetStorage, siteStoragePrefix } from '../assets/asset-storage.js';
+import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
 import { DomainChecker } from '../domains/domain-checker.service.js';
 import type { DomainRecord } from '../domains/domain.schema.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
@@ -139,6 +149,49 @@ describe('DELETE /sites/:siteId', () => {
     return counts;
   }
 
+  /** The collections of the workspace database that still hold documents of the site. */
+  async function leftOf(siteId: string): Promise<string[]> {
+    return Object.entries(await siteDocuments(siteId)).flatMap(([collection, count]) =>
+      count > 0 ? [collection] : [],
+    );
+  }
+
+  /** A request to delete their data, as the owner records it from an email. */
+  function dataRequest() {
+    return {
+      name: 'Nguyễn Thu Hà',
+      phone: '0901 234 567',
+      email: '',
+      type: 'delete',
+      receivedAt: new Date(Date.now() - DAY_MS).toISOString(),
+    };
+  }
+
+  /**
+   * Deletes the site, the sweep after its commit included, the first time it is called. Later
+   * calls, the deletion's own among them, go on at once.
+   */
+  function deletionOf(site: Site): () => Promise<void> {
+    let started = false;
+    return async () => {
+      if (!started) {
+        started = true;
+        await remove(owner, site, site.name).expect(204);
+      }
+    };
+  }
+
+  /** Deletes the site just before the next transaction starts, once what it needs was read. */
+  function deleteBeforeTransaction(site: Site) {
+    const transactions = t.app.get(TransactionRunner);
+    const run = transactions.run.bind(transactions);
+    const deleteSite = deletionOf(site);
+    return vi.spyOn(transactions, 'run').mockImplementation(async (work) => {
+      await deleteSite();
+      return run(work);
+    });
+  }
+
   async function storedKeys(siteId: string): Promise<string[]> {
     const listed = await s3.send(
       new ListObjectsV2Command({
@@ -196,15 +249,7 @@ describe('DELETE /sites/:siteId', () => {
       })
       .expect(200);
     const asset = await uploadImage(owner, site.id);
-    await owner
-      .post(`/sites/${site.id}/data-requests`, {
-        name: 'Nguyễn Thu Hà',
-        phone: '0901 234 567',
-        email: '',
-        type: 'delete',
-        receivedAt: new Date(Date.now() - DAY_MS).toISOString(),
-      })
-      .expect(201);
+    await owner.post(`/sites/${site.id}/data-requests`, dataRequest()).expect(201);
     const active = await activeDomain(owner, site.id);
     const pending = await addDomain(owner, site.id, newDomain());
     return { site, slug, asset, active, pending };
@@ -366,6 +411,87 @@ describe('DELETE /sites/:siteId', () => {
     await remove(elsewhere, site, 'Cà phê Sáng').expect(204);
   });
 
+  /**
+   * A grant read or checked before the site was deleted, and stored after: the deletion took the
+   * site out of what it saw, so the grant must not bring it back (ADR-027).
+   */
+  describe('grants that name a site deleted meanwhile', () => {
+    it('makes a member of an invitation with the sites it has now, not those read before', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Mời rồi xóa' });
+      const other = await createSite(owner, workspaceId, { name: 'Còn lại' });
+      const someone = await signedUpClient(t.app);
+      const token = await invite(t, owner, workspaceId, someone.me.user.email, {
+        role: 'viewer',
+        siteIds: [site.id, other.id],
+      });
+      // The invitation was read from the link; the site goes before the membership is stored.
+      const spy = deleteBeforeTransaction(site);
+      try {
+        await someone.client.post('/invitations/accept', { token }).expect(200);
+      } finally {
+        spy.mockRestore();
+      }
+      const me = meResponseSchema.parse((await someone.client.get('/auth/me').expect(200)).body);
+      expect(me.memberships.find((item) => item.workspace.id === workspaceId)?.siteIds).toEqual([
+        other.id,
+      ]);
+    });
+
+    it('refuses to give a member a site deleted once the grant was checked', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Giao rồi xóa' });
+      const other = await createSite(owner, workspaceId, { name: 'Đang có' });
+      const { me } = await addMember(t, workspaceId, 'editor', [other.id]);
+      const spy = deleteBeforeTransaction(site);
+      try {
+        const refused = await owner
+          .patch(`/workspaces/${workspaceId}/members/${me.user.id}`, {
+            role: 'editor',
+            siteIds: [other.id, site.id],
+          })
+          .expect(422);
+        expect(problemSchema.parse(refused.body).issues).toEqual([
+          {
+            path: ['siteIds'],
+            code: 'site_not_found',
+            message: 'Có site không thuộc workspace này',
+          },
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+      const stored = await t.connection
+        .collection<{ siteIds: Types.ObjectId[] | null }>('memberships')
+        .findOne({ workspaceId: oid(workspaceId), userId: oid(me.user.id) });
+      expect(stored?.siteIds?.map(String)).toEqual([other.id]);
+    });
+
+    it('invites nobody to a site deleted once the grant was checked', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Mời muộn' });
+      const email = newEmail('xoa-muon');
+      const spy = deleteBeforeTransaction(site);
+      try {
+        const refused = await owner
+          .post(`/workspaces/${workspaceId}/invitations`, {
+            emails: [email],
+            role: 'editor',
+            siteIds: [site.id],
+          })
+          .expect(422);
+        expect(problemSchema.parse(refused.body).issues?.map((issue) => issue.code)).toEqual([
+          'site_not_found',
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(
+        await t.connection
+          .collection('invitations')
+          .countDocuments({ workspaceId: oid(workspaceId), email }),
+      ).toBe(0);
+      expect(t.emails.to(email)).toEqual([]);
+    });
+  });
+
   it('deletes a site once when two deletions race', async () => {
     const site = await createSite(owner, workspaceId, { name: 'Hai lần' });
     const statuses = await Promise.all([
@@ -442,6 +568,46 @@ describe('DELETE /sites/:siteId', () => {
       expect(await leads()).toBe(0);
     });
 
+    it('makes the deletion wait for a data request being stored, and deletes it too', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Chờ yêu cầu' });
+      const requests = t.app.get(DataRequestsRepository);
+      const erasure = t.app.get(SiteErasureRepository);
+      const insert = requests.insert.bind(requests);
+      const erase = erasure.erase.bind(erasure);
+      const held = gate();
+      const release = gate();
+      const tried = gate();
+      // The request has written the site in its transaction, and waits before storing itself.
+      const insertSpy = vi.spyOn(requests, 'insert').mockImplementation(async (...args) => {
+        held.open();
+        await release.opened;
+        return insert(...args);
+      });
+      // The deletion reached the site while the request's write on it was not committed yet.
+      const eraseSpy = vi.spyOn(erasure, 'erase').mockImplementation((scope, siteId, tx) => {
+        if (tx !== undefined) {
+          tried.open();
+        }
+        return erase(scope, siteId, tx);
+      });
+      try {
+        const recorded = owner
+          .post(`/sites/${site.id}/data-requests`, dataRequest())
+          .then((response) => response);
+        await held.opened;
+        const deleted = remove(owner, site, 'Chờ yêu cầu').then((response) => response);
+        await tried.opened;
+        release.open();
+
+        expect((await recorded).status).toBe(201);
+        expect((await deleted).status).toBe(204);
+      } finally {
+        insertSpy.mockRestore();
+        eraseSpy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
     it('lets the domain checks, the lead emails and the startup sweep go on', async () => {
       const site = await createSite(owner, workspaceId, { name: 'Nền' });
       await configurePrivacy(owner, site.id);
@@ -478,6 +644,178 @@ describe('DELETE /sites/:siteId', () => {
       await t.app.get(LeadNotifier).onApplicationBootstrap();
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(t.emails.sent.slice(sent).filter((email) => email.to.includes(recipient))).toEqual([]);
+    });
+  });
+
+  /**
+   * Work that read the site before it was deleted and stores something of it once the deletion
+   * and its sweep are over: nothing would ever delete it, so it is refused (ADR-027).
+   */
+  describe('work that stores data of a site already deleted', () => {
+    function expectSiteGone(response: { body: unknown }): void {
+      expect(problemSchema.parse(response.body)).toMatchObject({
+        status: 404,
+        title: 'Không tìm thấy site',
+      });
+    }
+
+    /** A site with one lead in its inbox. */
+    async function siteWithLead(name: string) {
+      const site = await createSite(owner, workspaceId, { name });
+      const lead = storedLead({
+        workspaceId,
+        siteId: site.id,
+        pageId: new Types.ObjectId().toHexString(),
+        releaseId: new Types.ObjectId().toHexString(),
+      });
+      await insertLeads(t, [lead]);
+      return { site, leadId: idOf(lead).toHexString() };
+    }
+
+    it('refuses a data request, which would keep personal data of a deleted site', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Yêu cầu muộn' });
+      const spy = deleteBeforeTransaction(site);
+      try {
+        expectSiteGone(
+          await owner.post(`/sites/${site.id}/data-requests`, dataRequest()).expect(404),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    it('answers 404, not "đã hoàn tất", completing a request of a site deleted meanwhile', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Hoàn tất muộn' });
+      const recorded = await owner
+        .post(`/sites/${site.id}/data-requests`, dataRequest())
+        .expect(201);
+      const requestId = dataRequestDetailSchema.parse(recorded.body).id;
+      const spy = deleteBeforeTransaction(site);
+      try {
+        const refused = await owner
+          .post(`/sites/${site.id}/data-requests/${requestId}/complete`)
+          .expect(404);
+        expect(problemSchema.parse(refused.body).status).toBe(404);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    it('refuses an image stored once its site was deleted, and deletes the public file', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Ảnh muộn' });
+      const storage = t.app.get<AssetStorage>(ASSET_STORAGE);
+      const put = storage.put.bind(storage);
+      const deleteSite = deletionOf(site);
+      // The image was checked and re-encoded; the site and its images go before it is stored.
+      const spy = vi.spyOn(storage, 'put').mockImplementation(async (...args) => {
+        await deleteSite();
+        return put(...args);
+      });
+      try {
+        expectSiteGone(await uploadRequest(owner, site.id, await pngImage()).expect(404));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+      expect(await storedKeys(site.id)).toEqual([]);
+    });
+
+    it('answers a page or a custom domain added to a deleted site with 404, not 500', async () => {
+      const pages = await createSite(owner, workspaceId, { name: 'Trang muộn' });
+      let spy = deleteBeforeTransaction(pages);
+      try {
+        expectSiteGone(
+          await owner
+            .post(`/sites/${pages.id}/pages`, {
+              title: 'Ưu đãi niềng răng',
+              slug: uniqueSlug('muon'),
+              start: { kind: 'blank' },
+            })
+            .expect(404),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(pages.id)).toEqual([]);
+
+      const domains = await createSite(owner, workspaceId, { name: 'Tên miền muộn' });
+      const hostname = newDomain();
+      spy = deleteBeforeTransaction(domains);
+      try {
+        expectSiteGone(await owner.post(`/sites/${domains.id}/domains`, { hostname }).expect(404));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await t.connection.collection('domains').countDocuments({ hostname })).toBe(0);
+    });
+
+    it('refuses a consent version of a deleted site', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'Đồng ý muộn' });
+      const spy = deleteBeforeTransaction(site);
+      try {
+        expectSiteGone(
+          await owner
+            .post(`/sites/${site.id}/consent-versions`, { baseVersion: 0, ...CONSENT_TEXTS })
+            .expect(404),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    it('logs no deletion of a person in the activity of a deleted site', async () => {
+      const { site, leadId } = await siteWithLead('Xóa người muộn');
+      const spy = deleteBeforeTransaction(site);
+      try {
+        expectSiteGone(await owner.delete(`/sites/${site.id}/leads/${leadId}/person`).expect(404));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    // Each export reads its leads, then logs itself before the file goes out.
+    it('logs no export of the inbox in the activity of a deleted site', async () => {
+      const { site } = await siteWithLead('Xuất muộn');
+      const leads = t.app.get(LeadsRepository);
+      const countMatching = leads.countMatching.bind(leads);
+      const deleteSite = deletionOf(site);
+      const spy = vi.spyOn(leads, 'countMatching').mockImplementation(async (...args) => {
+        await deleteSite();
+        return countMatching(...args);
+      });
+      try {
+        expectSiteGone(
+          await owner.post(`/sites/${site.id}/leads/export`, { range: 'all' }).expect(404),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    it('logs no export of a person in the activity of a deleted site', async () => {
+      const { site, leadId } = await siteWithLead('Xuất người muộn');
+      const leads = t.app.get(LeadsRepository);
+      const listPerson = leads.listPerson.bind(leads);
+      const deleteSite = deletionOf(site);
+      const spy = vi.spyOn(leads, 'listPerson').mockImplementation(async (...args) => {
+        await deleteSite();
+        return listPerson(...args);
+      });
+      try {
+        expectSiteGone(
+          await owner
+            .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'json' })
+            .expect(404),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
     });
   });
 });

@@ -6,7 +6,12 @@ import {
   SIGNUP_VERIFY_PATH,
 } from '@plp/contracts';
 import { expectAccessible } from '../support/axe.js';
-import { fillSignupForm, logInThroughForm } from '../support/flows.js';
+import {
+  confirmSignupFromEmail,
+  createAccountOnLinkPage,
+  fillSignupForm,
+  logInThroughForm,
+} from '../support/flows.js';
 import {
   accountLink,
   RESET_EMAIL_SUBJECT,
@@ -19,13 +24,15 @@ import { urls } from '../urls.js';
 const NEW_PASSWORD = 'MatKhau-moi-e2e-2027';
 
 test.describe('E3 · account (ADR-026)', () => {
-  test('sign up, check the email, send it again, confirm the newest link', async ({ page }) => {
+  test('sign up, check the email, send it again, set the password on the newest link', async ({
+    page,
+  }) => {
     const account = newAccount('Ngọc Anh', 'Mây Xanh Agency');
     await fillSignupForm(page, account);
     await expect(page.getByText(account.email)).toBeVisible();
     await expectAccessible(page, 'Đăng ký · Kiểm tra email');
 
-    // Nothing exists before the email is confirmed: the password does not open anything yet.
+    // Nothing exists before the email is confirmed: no password opens anything yet.
     const first = await waitForEmail(page.request, account.email, SIGNUP_EMAIL_SUBJECT);
     const login = await page.request.post(`${urls.admin}/api${endpoints.login.path()}`, {
       data: { email: account.email, password: account.password },
@@ -38,18 +45,32 @@ test.describe('E3 · account (ADR-026)', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Đã gửi lại email' })).toBeVisible();
     const second = await waitForEmail(page.request, account.email, SIGNUP_EMAIL_SUBJECT, first);
 
-    // Opening the link does nothing by itself, as a mail scanner may open it.
+    // The first link says at once that it no longer works, and offers to log in in case the
+    // email was confirmed already.
     await page.goto(accountLink(first, SIGNUP_VERIFY_PATH));
     await expect(page.getByRole('heading', { level: 1, name: 'Xác nhận email' })).toBeVisible();
-    await expectAccessible(page, 'Xác nhận email');
-    await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
     await expect(
       page.getByRole('alert').filter({ hasText: 'Link xác nhận không còn dùng được' }),
     ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Đăng ký lại' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Đăng nhập' })).toBeVisible();
+    await expectAccessible(page, 'Xác nhận email · link không còn dùng được');
 
+    // The newest link shows the email and the names typed in the form; opening it creates
+    // nothing, as a mail scanner may open it. Whoever opens it chooses the password.
     await page.goto(accountLink(second, SIGNUP_VERIFY_PATH));
-    await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
+    await expect(page.getByRole('textbox', { name: 'Email' })).toHaveValue(account.email);
+    await expect(page.getByRole('textbox', { name: 'Họ và tên' })).toHaveValue(account.name);
+    await expect(page.getByRole('textbox', { name: 'Tên workspace' })).toHaveValue(
+      account.workspaceName,
+    );
+    await expectAccessible(page, 'Xác nhận email');
+    await page.getByLabel('Mật khẩu', { exact: true }).fill(account.password);
+    await page.getByLabel('Nhập lại mật khẩu').fill('MatKhau-khac-2027');
+    await page.getByRole('button', { name: 'Tạo tài khoản và workspace' }).click();
+    await expect(page.getByText('Hai mật khẩu chưa khớp')).toBeVisible();
+    await expectAccessible(page, 'Xác nhận email · mật khẩu chưa khớp');
+    await createAccountOnLinkPage(page, account);
     await expect(page).toHaveURL(/\/sites\/new$/);
     await expect(
       page.getByRole('heading', { level: 1, name: 'Tạo site khách hàng' }),
@@ -57,10 +78,39 @@ test.describe('E3 · account (ADR-026)', () => {
 
     // The link works once.
     await page.goto(accountLink(second, SIGNUP_VERIFY_PATH));
-    await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
     await expect(
       page.getByRole('alert').filter({ hasText: 'Link xác nhận không còn dùng được' }),
     ).toBeVisible();
+  });
+
+  test('the password is set on the link’s page, so filling the form with an email gives nothing', async ({
+    page,
+    browser,
+  }) => {
+    // Someone fills the form with an email that is not theirs.
+    const account = newAccount();
+    await fillSignupForm(page, account);
+
+    // The owner of the mailbox opens the link on another device and chooses the password.
+    const phone = await browser.newContext();
+    try {
+      const owner = await phone.newPage();
+      await confirmSignupFromEmail(owner, { ...account, password: NEW_PASSWORD });
+      await expect(owner).toHaveURL(/\/sites\/new$/);
+    } finally {
+      await phone.close();
+    }
+
+    // The browser that filled the form holds no session, and only the owner's password works.
+    const me = await page.request.get(`${urls.admin}/api${endpoints.me.path()}`);
+    expect(me.status()).toBe(401);
+    await page.goto('/login');
+    await logInThroughForm(page, account);
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Email hoặc mật khẩu không đúng' }),
+    ).toBeVisible();
+    await logInThroughForm(page, { ...account, password: NEW_PASSWORD });
+    await expect(page).toHaveURL(/\/sites\/new$/);
   });
 
   test('"Đổi email" goes back to the form with what was typed', async ({ page }) => {

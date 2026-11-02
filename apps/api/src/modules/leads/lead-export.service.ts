@@ -9,12 +9,16 @@ import {
   type PersonExportRequest,
   vnDayOf,
 } from '@plp/contracts';
+import { notFound } from '../../shared/errors.js';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
-import { SitesService } from '../sites/sites.service.js';
+import { SitesRepository } from '../sites/sites.repository.js';
+import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   CSV_BOM,
@@ -71,6 +75,8 @@ export class LeadExportService {
     private readonly pages: PagesRepository,
     private readonly releases: ReleasesRepository,
     private readonly activity: ActivityRepository,
+    private readonly siteRecords: SitesRepository,
+    private readonly transactions: TransactionRunner,
   ) {}
 
   /**
@@ -92,11 +98,7 @@ export class LeadExportService {
     ]);
     const count = Math.min(matched, LEAD_EXPORT_MAX_ROWS);
     // Before the file streams: a download that breaks halfway still counts as an export.
-    await this.activity.record(scope, {
-      siteId: site._id,
-      type: 'lead.exported',
-      data: { count },
-    });
+    await this.recordExport(scope, site._id, count);
     const titles = new Map(pages.map((page) => [page._id.toHexString(), page.title]));
     const rows = this.leads.streamMatching(scope, site._id, criteria, now, LEAD_EXPORT_MAX_ROWS);
     return {
@@ -147,11 +149,7 @@ export class LeadExportService {
         included.map((item) => item.releaseId),
       ),
     ]);
-    await this.activity.record(scope, {
-      siteId: site._id,
-      type: 'lead.exported',
-      data: { count: included.length },
-    });
+    await this.recordExport(scope, site._id, included.length);
     const filename = `du-lieu-ca-nhan-${site.subdomain}-${vnDayOf(now)}`;
     const truncated = leads.length > LEAD_PERSON_EXPORT_MAX;
     if (request.format === 'csv') {
@@ -195,5 +193,22 @@ export class LeadExportService {
       },
       count: included.length,
     };
+  }
+
+  /**
+   * `lead.exported`, in a transaction that writes the site: the entry never outlives a site
+   * deleted meanwhile (ADR-027), whose export answers 404 instead.
+   */
+  private async recordExport(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    count: number,
+  ): Promise<void> {
+    await this.transactions.run(async (tx) => {
+      if (!(await this.siteRecords.recordDataWrite(scope, siteId, tx))) {
+        throw notFound(SITE_NOT_FOUND);
+      }
+      await this.activity.record(scope, { siteId, type: 'lead.exported', data: { count } }, tx);
+    });
   }
 }
