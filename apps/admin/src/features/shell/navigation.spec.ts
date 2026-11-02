@@ -8,6 +8,7 @@ import {
   openPageHref,
   pageHref,
   siteNavItems,
+  templateHref,
   workspaceNavItems,
 } from './navigation';
 
@@ -51,12 +52,18 @@ describe('siteNavItems', () => {
     ]);
   });
 
-  it('lists the workspace sections, "Sites" first for every role, each behind its permission', () => {
+  it('lists the workspace sections, "Sites" and "Templates" first for every role, each behind its permission', () => {
     expect(workspaceNavItems('64b0000000000000000000aa')).toEqual([
       {
         key: 'sites',
         label: 'Sites',
         href: '/workspaces/64b0000000000000000000aa/sites',
+        permissions: ['pages.view'],
+      },
+      {
+        key: 'templates',
+        label: 'Templates',
+        href: '/workspaces/64b0000000000000000000aa/templates',
         permissions: ['pages.view'],
       },
       {
@@ -99,6 +106,27 @@ describe('navCurrent', () => {
     expect(navCurrent('/workspaces/64b0000000000000000000aa/sites', sites)).toBe('page');
     expect(navCurrent('/workspaces/64b0000000000000000000aa/members', sites)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}`, sites)).toBeUndefined();
+  });
+
+  it('marks "Templates" on the library and, as a part of it, on a template', () => {
+    const [, templates] = workspaceNavItems('64b0000000000000000000aa');
+    if (!templates) {
+      throw new Error('missing nav items');
+    }
+    expect(navCurrent('/workspaces/64b0000000000000000000aa/templates', templates)).toBe('page');
+    expect(
+      navCurrent('/workspaces/64b0000000000000000000aa/templates/nha-khoa-uu-dai', templates),
+    ).toBe('true');
+    expect(navCurrent('/workspaces/64b0000000000000000000aa/sites', templates)).toBeUndefined();
+  });
+
+  it('links a template, previewed for a site when one is chosen', () => {
+    expect(templateHref('64b0000000000000000000aa', 'nha-khoa-uu-dai')).toBe(
+      '/workspaces/64b0000000000000000000aa/templates/nha-khoa-uu-dai',
+    );
+    expect(templateHref('64b0000000000000000000aa', 'nha-khoa-uu-dai', siteId)).toBe(
+      `/workspaces/64b0000000000000000000aa/templates/nha-khoa-uu-dai?site=${siteId}`,
+    );
   });
 
   it('keeps "Trang" current on the SEO and history pages of a page', () => {

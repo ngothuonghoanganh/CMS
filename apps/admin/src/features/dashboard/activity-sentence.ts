@@ -51,6 +51,15 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
       return { text: `gỡ xuất bản ${quoted(item)}`, tone: 'muted' };
     case 'page.created':
       return { text: `tạo trang ${quoted(item)}`, tone: 'primary' };
+    case 'page.created_from_template':
+      // "từ mẫu “Ưu đãi dịch vụ nha khoa” v1" (ADR-030).
+      return {
+        text:
+          data.template === null
+            ? `tạo trang ${quoted(item)} từ mẫu`
+            : `tạo trang ${quoted(item)} từ mẫu “${data.template}”${data.version === null ? '' : ` v${data.version}`}`,
+        tone: 'primary',
+      };
     case 'page.deleted':
       return { text: `xóa trang ${quoted(item)}`, tone: 'muted' };
     case 'page.draft_restored':

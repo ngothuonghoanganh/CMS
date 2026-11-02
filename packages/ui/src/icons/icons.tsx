@@ -269,3 +269,9 @@ export const UsersIcon = createIcon(
   'users',
   <path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M21 20c0-2.6-1.6-4.9-4-5.7" />,
 );
+
+/** Four tiles: the template library (Sidebar v2, "Templates"). */
+export const GridIcon = createIcon(
+  'grid',
+  <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
+);

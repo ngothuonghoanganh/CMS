@@ -138,6 +138,10 @@ describe('Sidebar', () => {
       'href',
       `/workspaces/${WORKSPACE_ID}/sites`,
     );
+    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/templates`,
+    );
     expect(screen.getByRole('link', { name: 'Thành viên 7 thành viên' })).toHaveAttribute(
       'href',
       `/workspaces/${WORKSPACE_ID}/members`,
@@ -173,7 +177,7 @@ describe('Sidebar', () => {
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Sites 2 site', 'Trang 6 trang', 'Hiệu quả', 'Cài đặt site']);
+    ).toEqual(['Sites 2 site', 'Templates', 'Trang 6 trang', 'Hiệu quả', 'Cài đặt site']);
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Biên tập · 2 site');
     unmount();
 
@@ -184,7 +188,7 @@ describe('Sidebar', () => {
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Sites 1 site', 'Trang 6 trang', 'Leads', 'Hiệu quả']);
+    ).toEqual(['Sites 1 site', 'Templates', 'Trang 6 trang', 'Leads', 'Hiệu quả']);
     support.unmount();
 
     // A custom role answering data requests finds them under "Dữ liệu & đồng ý" (ADR-024).
@@ -201,7 +205,14 @@ describe('Sidebar', () => {
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Sites 2 site', 'Trang 6 trang', 'Leads', 'Hiệu quả', 'Dữ liệu & đồng ý']);
+    ).toEqual([
+      'Sites 2 site',
+      'Templates',
+      'Trang 6 trang',
+      'Leads',
+      'Hiệu quả',
+      'Dữ liệu & đồng ý',
+    ]);
   });
 
   it('offers a first site on a workspace screen of a workspace without one', () => {
@@ -234,6 +245,7 @@ describe('Sidebar', () => {
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
     ).toEqual([
       'Sites 2 site',
+      'Templates',
       'Thành viên 7 thành viên',
       'Vai trò & quyền',
       'Trang 6 trang',
@@ -256,7 +268,19 @@ describe('Sidebar', () => {
       leadCounts: null,
     });
     expect(screen.getByRole('link', { name: 'Sites 2 site' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Templates' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Thành viên/ })).not.toBeInTheDocument();
+  });
+
+  it('marks "Templates" on the library and on a template of it (ADR-030)', () => {
+    pathname.current = `/workspaces/${WORKSPACE_ID}/templates/nha-khoa-uu-dai`;
+    renderSidebar({
+      membership: { ...agency, role: 'viewer' },
+      memberCount: null,
+      leadCounts: null,
+    });
+    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('link', { name: 'Sites 2 site' })).not.toHaveAttribute('aria-current');
   });
 
   it('counts the members again after a change on "Thành viên" (ADR-028)', async () => {

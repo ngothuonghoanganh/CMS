@@ -4,7 +4,7 @@ import type { Permission } from '@plp/contracts';
 export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'privacy' | 'settings';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
-export type WorkspaceNavKey = 'sites' | 'members' | 'roles';
+export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles';
 
 export interface NavItem<Key extends string> {
   key: Key;
@@ -68,6 +68,17 @@ export function sitesHref(workspaceId: string): string {
   return `${workspaceHref(workspaceId)}/sites`;
 }
 
+/** "Templates" (board 17, ADR-030), optionally with a tab or the site to create for. */
+export function templatesHref(workspaceId: string, search = ''): string {
+  return `${workspaceHref(workspaceId)}/templates${search}`;
+}
+
+/** One template (board 18), previewed for a site when one is given. */
+export function templateHref(workspaceId: string, templateId: string, siteId?: string): string {
+  const search = siteId === undefined ? '' : `?site=${encodeURIComponent(siteId)}`;
+  return templatesHref(workspaceId, `/${encodeURIComponent(templateId)}${search}`);
+}
+
 /** "Tạo site khách hàng" in the workspace. */
 export function newSiteHref(workspaceId: string): string {
   return `/sites/new?workspace=${encodeURIComponent(workspaceId)}`;
@@ -84,12 +95,19 @@ export function membersHref(workspaceId: string, search = ''): string {
 }
 
 /**
- * Sections of the workspace. "Sites" is for every role, since every role views pages; it lists the
- * sites each member may open (ADR-028).
+ * Sections of the workspace. "Sites" and "Templates" are for every role, since every role views
+ * pages; "Sites" lists the sites each member may open (ADR-028), "Templates" the library every
+ * member browses (ADR-030).
  */
 export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
   return [
     { key: 'sites', label: 'Sites', href: sitesHref(workspaceId), permissions: ['pages.view'] },
+    {
+      key: 'templates',
+      label: 'Templates',
+      href: templatesHref(workspaceId),
+      permissions: ['pages.view'],
+    },
     {
       key: 'members',
       label: 'Thành viên',

@@ -1,0 +1,29 @@
+/* The page scrolls inside a frame of the board's height; the frame keeps the device's width. */
+.viewport {
+  height: min(620px, 72vh);
+  box-sizing: border-box;
+  overflow: auto;
+  border-radius: var(--radius-md);
+}
+
+.viewport:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+/* The bezel is inside the device width, so the page is laid out narrower, never wider. */
+.frame {
+  box-sizing: border-box;
+  margin: 0 auto;
+  overflow: clip;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+}
+
+/* A phone: dark bezel and round corners, as on board 18. */
+.viewport[data-device='mobile'] .frame {
+  border: 8px solid var(--color-ink);
+  border-radius: 28px;
+}
