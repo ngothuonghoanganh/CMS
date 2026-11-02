@@ -7,7 +7,7 @@ import {
   templateUsableIn,
 } from '@plp/contracts';
 import { Button, Callout, Dialog, Field, Select } from '@plp/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -15,6 +15,9 @@ import { templateQueryKeys } from '../templates/queries';
 import { TemplateThumb } from '../templates/TemplateThumb';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import styles from './ApplyTemplateInEditorDialog.module.css';
+
+/** The template being prepared, which keeps the dialog open meanwhile. */
+const preparingKey = ['editor-apply-template'] as const;
 
 /** The library the editor applies from: the templates this site may use (ADR-030). */
 function libraryQuery(workspaceId: string) {
@@ -54,6 +57,7 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
   const [failure, setFailure] = useState<string | null>(null);
 
   const prepare = useMutation({
+    mutationKey: preparingKey,
     mutationFn: (template: TemplateSummary) =>
       api(endpoints.templateComposition, [site.id, pageId], { body: refOf(template) }),
     onSuccess: (result) => {
@@ -181,10 +185,18 @@ export function ApplyTemplateInEditorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const preparing = useIsMutating({ mutationKey: preparingKey }) > 0;
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // Its answer replaces every section: closed half-way, it would land on a draft the user
+        // thought they had left alone.
+        if (!next && preparing) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       title="Áp dụng mẫu"
       description="Các section của bản nháp được thay bằng các section của mẫu."
     >

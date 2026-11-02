@@ -93,6 +93,44 @@ describe('ApplyTemplateInEditorDialog ("Áp dụng mẫu…", ADR-030)', () => {
     expect(store.getState().draft).toEqual(before);
   });
 
+  it('cannot be dismissed while the template is prepared, so it never applies unseen', async () => {
+    const user = userEvent.setup();
+    let answer: (value: unknown) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.listTemplates) {
+        return Promise.resolve({ items: templateSummaries });
+      }
+      if (endpoint === endpoints.templateComposition) {
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    const store = makeStore();
+    const onOpenChange = vi.fn();
+    renderEditor(<ApplyTemplateInEditorDialog open onOpenChange={onOpenChange} />, { store });
+    const dialog = screen.getByRole('dialog', { name: 'Áp dụng mẫu' });
+    await within(dialog).findByRole('combobox', { name: 'Mẫu' });
+    await user.click(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' }));
+
+    // Escape and the close button are refused while the answer is on its way.
+    await user.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('button', { name: 'Đóng' }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Hủy' })).toBeDisabled();
+
+    answer({
+      composition: dentalComposition(),
+      assets: [],
+      template: { name: 'Ưu đãi dịch vụ nha khoa', version: 1 },
+    });
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(store.getState().draft.composition.sections).toHaveLength(8);
+  });
+
   it('says when the template changed meanwhile, and changes nothing', async () => {
     const user = userEvent.setup();
     apiMock.mockImplementation((endpoint) => {
