@@ -1,5 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
-import { endpoints, type Site, workspaceTemplateSchema } from '@plp/contracts';
+import {
+  endpoints,
+  type Site,
+  type WorkspaceTemplate,
+  workspaceTemplateSchema,
+} from '@plp/contracts';
 import { expectAccessible, expectNoSidewaysScroll, SCAN_VIEWPORTS } from '../support/axe.js';
 import { publishViaApi, saveDraftViaApi, uploadImageViaApi } from '../support/board.js';
 import { Editor } from '../support/editor.js';
@@ -58,6 +63,26 @@ async function pageWithPhoto(page: Page, site: Site) {
     },
   }));
   return created;
+}
+
+/** "Lưu trang thành template" through the API: v1 of a template for every site, texts kept. */
+function saveTemplateViaApi(page: Page, site: Site, pageId: string): Promise<WorkspaceTemplate> {
+  return call(
+    page.request,
+    'POST',
+    endpoints.createWorkspaceTemplate.path(site.workspaceId),
+    workspaceTemplateSchema,
+    {
+      source: { siteId: site.id, pageId, kind: 'draft' },
+      content: 'keep',
+      note: 'Bản đầu tiên',
+      name: TEMPLATE,
+      description: 'Bản đã dùng cho Smile Care.',
+      goal: 'lead',
+      industry: 'dental_health',
+      scope: { kind: 'workspace' },
+    },
+  );
 }
 
 test.describe('G2 · G3 · Workspace templates and applying a template', () => {
@@ -204,6 +229,69 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
     );
   });
 
+  test('previews an earlier version from the version history, with nothing made from it', async ({
+    page,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    const source = await pageWithPhoto(page, site);
+    const template = await saveTemplateViaApi(page, site, source.page.id);
+    await call(
+      page.request,
+      'POST',
+      endpoints.createTemplateVersion.path(site.workspaceId, template.id),
+      workspaceTemplateSchema,
+      {
+        source: { siteId: site.id, pageId: source.page.id, kind: 'draft' },
+        content: 'sample',
+        note: 'Chữ mẫu',
+        name: TEMPLATE,
+        baseVersion: 1,
+      },
+    );
+
+    await page.goto(workspaceTemplates(site.workspaceId));
+    await page.getByRole('button', { name: `Phiên bản của ${TEMPLATE}` }).click();
+    const versions = page.getByRole('dialog', { name: TEMPLATE });
+    await versions.getByRole('link', { name: 'Xem trước v1' }).click();
+    await expect(page).toHaveURL(new RegExp(`/templates/${template.id}\\?site=${site.id}&version=1$`));
+    // Board 18 in "Bạn đang xem v1": the photo of v1, and no way to make a page from it.
+    await expect(page.getByText('Bạn đang xem v1. Trang mới được tạo từ phiên bản đang dùng, v2.')).toBeVisible();
+    await expect(page.getByText(/^v1 · cập nhật /)).toBeVisible();
+    const preview = page.getByRole('region', { name: /^Bản xem trước/ });
+    await expect(preview.getByRole('img', { name: PHOTO_ALT })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tạo trang từ mẫu' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Áp dụng vào trang đang sửa…' })).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Xem v2' }).click();
+    await expect(page).toHaveURL(new RegExp(`/templates/${template.id}\\?site=${site.id}$`));
+    await expect(page.getByText(/^v2 · cập nhật /)).toBeVisible();
+    // v2 marked every text as sample, which empties the image frames.
+    await expect(preview.getByRole('img', { name: PHOTO_ALT })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Tạo trang từ mẫu' })).toBeVisible();
+  });
+
+  test('board 18’s dialogs reflow at 320 px, the page address in full', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    const { site } = await setUpSite(page.request);
+    await createPageViaApi(page.request, site.id, promoPage(`uu-dai-${uniqueId()}`, OFFER));
+    await page.goto(`/workspaces/${site.workspaceId}/templates/nha-khoa-uu-dai?site=${site.id}`);
+
+    await page.getByRole('button', { name: 'Áp dụng vào trang đang sửa…' }).click();
+    const apply = page.getByRole('dialog', { name: 'Áp dụng mẫu vào trang đang sửa' });
+    await expect(apply.getByRole('status').filter({ hasText: 'Giữ nguyên' })).toBeVisible();
+    await expectNoSidewaysScroll(page, 'Áp dụng mẫu vào trang đang sửa at 320 px', apply);
+    await page.keyboard.press('Escape');
+    await expect(apply).toBeHidden();
+
+    // The site's address takes its own line rather than squeeze the page's to a few characters.
+    await page.getByRole('button', { name: 'Tạo trang từ mẫu' }).click();
+    const create = page.getByRole('dialog', { name: 'Tạo trang từ mẫu' });
+    const slug = create.getByRole('textbox', { name: /^Đường dẫn/ });
+    await expect(slug).toHaveValue('uu-dai-dich-vu-nha-khoa');
+    await expectNoSidewaysScroll(page, 'Tạo trang từ mẫu at 320 px', create);
+    expect(await slug.evaluate((input) => input.clientWidth)).toBeGreaterThanOrEqual(200);
+  });
+
   for (const viewport of SCAN_VIEWPORTS) {
     test(`board 19, its dialogs and the apply dialogs are accessible at ${viewport.width} px`, async ({
       page,
@@ -211,22 +299,7 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       const { site } = await setUpSite(page.request);
       const source = await pageWithPhoto(page, site);
-      await call(
-        page.request,
-        'POST',
-        endpoints.createWorkspaceTemplate.path(site.workspaceId),
-        workspaceTemplateSchema,
-        {
-          source: { siteId: site.id, pageId: source.page.id, kind: 'draft' },
-          content: 'keep',
-          note: 'Bản đầu tiên',
-          name: TEMPLATE,
-          description: 'Bản đã dùng cho Smile Care.',
-          goal: 'lead',
-          industry: 'dental_health',
-          scope: { kind: 'workspace' },
-        },
-      );
+      await saveTemplateViaApi(page, site, source.page.id);
 
       await page.goto(workspaceTemplates(site.workspaceId));
       await expect(page.getByRole('table', { name: 'Template đang dùng' })).toBeVisible();

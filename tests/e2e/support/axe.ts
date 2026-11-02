@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /** WCAG 2.2 level A and AA, the bar of ADR-013 and AGENTS.md. */
 export const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -61,11 +61,34 @@ export async function animationsSettled(page: Page): Promise<void> {
   );
 }
 
-/** The page never scrolls sideways (WCAG 1.4.10 at a 320 px viewport). */
-export async function expectNoSidewaysScroll(page: Page, screen: string): Promise<void> {
+/**
+ * The page never scrolls sideways (WCAG 1.4.10 at a 320 px viewport). With `within` (a dialog),
+ * no box inside it does either: a dialog's body scrolls on its own, so content too wide for it
+ * scrolls there and never widens the page.
+ */
+export async function expectNoSidewaysScroll(
+  page: Page,
+  screen: string,
+  within?: Locator,
+): Promise<void> {
   const widths = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     client: document.documentElement.clientWidth,
   }));
   expect.soft(widths.scroll, `${screen} scrolls sideways`).toBeLessThanOrEqual(widths.client);
+  if (within === undefined) {
+    return;
+  }
+  const scrolling = await within.evaluate((root) =>
+    [root, ...Array.from(root.querySelectorAll('*'))]
+      .filter((element) => {
+        const { overflowX } = getComputedStyle(element);
+        return (
+          (overflowX === 'auto' || overflowX === 'scroll') &&
+          element.scrollWidth > element.clientWidth
+        );
+      })
+      .map((element) => `${element.tagName.toLowerCase()}.${element.className}`),
+  );
+  expect.soft(scrolling, `${screen} has boxes that scroll sideways`).toEqual([]);
 }
