@@ -187,6 +187,21 @@ describe('CreateFromTemplateDialog', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('says what the form cannot show on a field', async () => {
+    const user = userEvent.setup();
+    serve({ [SITE_ID]: readinessFixture() }, () =>
+      Promise.reject(
+        apiError(422, 'validation_failed', 'Dữ liệu không hợp lệ', [
+          { path: ['start', 'templateId'], code: 'custom', message: 'Mã mẫu không hợp lệ' },
+        ]),
+      ),
+    );
+    renderDialog();
+    await screen.findByText('Đường dẫn này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã mẫu không hợp lệ');
+  });
+
   it('offers the new version when the template changed since it was shown', async () => {
     const user = userEvent.setup();
     const onTemplateChanged = vi.fn();

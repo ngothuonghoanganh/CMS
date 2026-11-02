@@ -14,7 +14,7 @@ import {
   WORKSPACE_ID,
 } from '../dashboard/test-fixtures';
 import { PAGE_ID, pageDetail } from '../editor/test-fixtures';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { templateQueryKeys } from './queries';
 import { versionFixtures, WORKSPACE_TEMPLATE_ID, workspaceTemplateFixture } from './test-fixtures';
 import { WorkspaceTemplatesScreen } from './WorkspaceTemplatesScreen';
@@ -305,6 +305,69 @@ describe('WorkspaceTemplatesScreen (board 19)', () => {
       options: { body: { baseVersion: 2 } },
     });
     expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it('says when the registry refused the page saved, which no field shows', async () => {
+    const user = userEvent.setup();
+    const live = pageFixture({ id: PAGE_ID, title: 'Niềng răng tháng 9' });
+    apiMock.mockImplementation((endpoint) => {
+      switch (endpoint) {
+        case endpoints.listPages:
+          return Promise.resolve(pageListFixture([live]));
+        case endpoints.getPage:
+          return Promise.resolve(
+            pageDetail(undefined, { title: 'Niềng răng tháng 9', liveRelease: live.liveRelease }),
+          );
+        case endpoints.listWorkspaceTemplates:
+          return Promise.resolve({ items: [] });
+        case endpoints.createWorkspaceTemplate:
+          return Promise.reject(
+            apiError(422, 'validation_failed', 'Dữ liệu không hợp lệ', [
+              {
+                path: ['composition', 'sections', 1, 'content', 'heading'],
+                code: 'custom',
+                message: 'Tiêu đề của Hero quá dài',
+              },
+            ]),
+          );
+        default:
+          return Promise.reject(new Error('unexpected call'));
+      }
+    });
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Lưu trang thành template' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Lưu trang thành template' });
+    expect(await within(dialog).findByRole('combobox', { name: 'Trang nguồn' })).toHaveValue(
+      PAGE_ID,
+    );
+    await within(dialog).findByRole('option', { name: /^Bản live/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu template' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Tiêu đề của Hero quá dài');
+  });
+
+  it('says when a site picked in “Sửa thông tin” was refused, which no field shows', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.updateWorkspaceTemplate
+        ? Promise.reject(
+            apiError(422, 'validation_failed', 'Dữ liệu không hợp lệ', [
+              {
+                path: ['scope', 'siteIds', 0],
+                code: 'custom',
+                message: 'Bạn không chọn được site này',
+              },
+            ]),
+          )
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderScreen();
+    await user.click(menuOf(own.name));
+    await user.click(screen.getByRole('menuitem', { name: 'Sửa thông tin' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Sửa thông tin template' });
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu thông tin' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Bạn không chọn được site này',
+    );
   });
 
   it('saves a page of a site as a new template, its texts marked as sample', async () => {

@@ -23,7 +23,7 @@ import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { suggestSlug } from '../onboarding/wizard-state';
 import { finalizeSlug, normalizeSlugTyping } from '../seo/seo-presentation';
 import { leadRecipientsHref, pageHref, privacyHref } from '../shell/navigation';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { keepFieldFocus } from '../shell/use-schema-form';
 import { readinessQuery } from './queries';
 import { setupGap } from './readiness';
@@ -201,9 +201,11 @@ function CreateFromTemplateForm({
 
   const failure = create.error;
   const templateChanged = failure instanceof ApiError && failure.code === 'template_changed';
-  const fieldProblem =
-    failure instanceof ApiError &&
-    (failure.code === 'slug_taken' || Object.keys(failure.fieldErrors()).length > 0);
+  // A slug another page took shows on its field, as do the issues of the title and the slug.
+  const unshown =
+    failure === null || (failure instanceof ApiError && failure.code === 'slug_taken')
+      ? null
+      : problemBesideFields(failure, ['title', 'slug']);
   const gap =
     template.hasForm && readiness.data !== undefined && site !== undefined
       ? setupGap(true, site.name, readiness.data)
@@ -275,9 +277,9 @@ function CreateFromTemplateForm({
         >
           {failure.problem.title}. {failure.problem.detail}
         </Callout>
-      ) : failure === null || fieldProblem ? null : (
+      ) : unshown === null ? null : (
         <Callout tone="danger" role="alert">
-          {problemMessage(failure)}
+          {unshown}
         </Callout>
       )}
       <div className={styles.actions}>

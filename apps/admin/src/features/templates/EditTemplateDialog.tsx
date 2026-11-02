@@ -12,7 +12,7 @@ import { Button, Callout, Dialog, Field, Input } from '@plp/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { keepFieldFocus } from '../shell/use-schema-form';
 import { templateQueryKeys } from './queries';
 import { GoalIndustryFields, TemplateScopeField } from './TemplateInfoFields';
@@ -94,7 +94,7 @@ function EditTemplateForm({
   }
 
   const failure = save.error;
-  const fieldProblem = failure instanceof ApiError && Object.keys(failure.fieldErrors()).length > 0;
+  const unshown = failure === null ? null : problemBesideFields(failure, ['name', 'scope.siteIds']);
 
   return (
     <form noValidate onSubmit={submit} className={styles.form}>
@@ -134,9 +134,9 @@ function EditTemplateForm({
           setErrors((current) => ({ ...current, scope: undefined }));
         }}
       />
-      {failure === null || fieldProblem ? null : (
+      {unshown === null ? null : (
         <Callout tone="danger" role="alert">
-          {problemMessage(failure)}
+          {unshown}
         </Callout>
       )}
       <div className={styles.actions}>

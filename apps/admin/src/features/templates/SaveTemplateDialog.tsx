@@ -16,7 +16,7 @@ import { Button, Callout, Dialog, Field, Input, RadioCardGroup, Select } from '@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, problemMessage, reportUnexpected } from '../shell/problem-message';
 import { keepFieldFocus } from '../shell/use-schema-form';
 import { pageDetailQuery, sitePagesQuery, templateQueryKeys } from './queries';
 import { GoalIndustryFields, TemplateScopeField } from './TemplateInfoFields';
@@ -169,7 +169,11 @@ function SaveTemplateForm({
   }
 
   const failure = save.error;
-  const fieldProblem = failure instanceof ApiError && Object.keys(failure.fieldErrors()).length > 0;
+  // The scope is chosen for a new template only.
+  const unshown =
+    failure === null
+      ? null
+      : problemBesideFields(failure, asVersion ? ['name'] : ['name', 'scope.siteIds']);
   const outline =
     page === undefined || kind === 'live' ? null : compositionOutline(page.draft.composition);
   const site = sites.find((item) => item.id === siteId);
@@ -372,12 +376,12 @@ function SaveTemplateForm({
         </div>
       </div>
 
-      {failure === null || fieldProblem ? null : (
+      {unshown === null ? null : (
         <Callout
           tone={failure instanceof ApiError && failure.status === 409 ? 'warning' : 'danger'}
           role="alert"
         >
-          {problemMessage(failure)}
+          {unshown}
         </Callout>
       )}
 
