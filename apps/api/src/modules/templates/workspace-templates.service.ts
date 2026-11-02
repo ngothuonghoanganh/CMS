@@ -18,7 +18,11 @@ import { compositionHasForm, compositionOutline, parseComposition } from '@plp/s
 import type { z } from 'zod';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
-import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
+import {
+  commitMayHaveApplied,
+  type Tx,
+  TransactionRunner,
+} from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
@@ -35,6 +39,7 @@ import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { templateContentOf } from './domain/template-content.js';
 import {
   scopeAfterChange,
+  type ScopeChange,
   scopeDto,
   type TemplateScopeRecord,
   templateVisibleTo,
@@ -55,6 +60,9 @@ export type UpdateWorkspaceTemplateValues = z.output<typeof updateWorkspaceTempl
 const VERSION_NOT_FOUND = 'Không tìm thấy phiên bản';
 const NOT_LIVE = 'Trang chưa có bản live';
 const SITE_NOT_YOURS = 'Chỉ chọn được các site của bạn trong workspace';
+const SITE_GONE = 'Có site không còn trong workspace';
+const KEEPS_EVERY_SITE =
+  'Mẫu này đang dùng cho mọi site. Chỉ thành viên của toàn workspace mới giới hạn được nó.';
 /** "Tư vấn niềng răng trả góp (bản sao)", within the name's 120 characters. */
 const COPY_SUFFIX = ' (bản sao)';
 const NAME_MAX = 120;
@@ -93,6 +101,11 @@ function versionLimitReached(name: string): AppError {
 
 function copyName(name: string): string {
   return `${name.slice(0, NAME_MAX - COPY_SUFFIX.length).trimEnd()}${COPY_SUFFIX}`;
+}
+
+/** The sites the member chose for "Ai được dùng", as ids. */
+function chosenSites(requested: TemplateScope): ObjectId[] {
+  return requested.kind === 'workspace' ? [] : requested.siteIds.map((id) => toObjectId(id));
 }
 
 /**
@@ -138,13 +151,7 @@ export class WorkspaceTemplatesService {
   ): Promise<WorkspaceTemplate> {
     const scope = await this.manager(user, workspaceId);
     const source = await this.sourceOf(scope, input.source);
-    const info: TemplateInfo = {
-      name: input.name,
-      description: input.description,
-      goal: input.goal,
-      industry: input.industry,
-      scope: await this.scopeOf(scope, input.scope, null),
-    };
+    const wanted = await this.scopeOf(scope, input.scope, null);
     const prepared = await this.prepare(scope, source, input.content, input.note);
     const id = newObjectId();
     const now = new Date();
@@ -154,6 +161,13 @@ export class WorkspaceTemplatesService {
         if ((await this.templates.countForWorkspace(scope, tx)) >= MAX_WORKSPACE_TEMPLATES) {
           throw limitReached();
         }
+        const info: TemplateInfo = {
+          name: input.name,
+          description: input.description,
+          goal: input.goal,
+          industry: input.industry,
+          scope: await this.heldScope(scope, wanted, chosenSites(input.scope), tx),
+        };
         await this.templates.create(scope, { id, info, now }, tx);
         await this.versions.insert(
           scope,
@@ -161,7 +175,7 @@ export class WorkspaceTemplatesService {
           now,
           tx,
         );
-        await this.recordSaved(scope, source, info.name, 1, tx);
+        await this.recordSaved(scope, source, input.name, 1, tx);
       });
     });
     return this.dtoOf(scope, id);
@@ -219,14 +233,17 @@ export class WorkspaceTemplatesService {
   ): Promise<WorkspaceTemplate> {
     const scope = await this.manager(user, workspaceId);
     const template = await this.visible(scope, templateId);
-    const info: TemplateInfo = {
-      name: input.name,
-      description: input.description,
-      goal: input.goal,
-      industry: input.industry,
-      scope: await this.scopeOf(scope, input.scope, template.scope),
-    };
-    const updated = await this.templates.updateInfo(scope, template._id, info, new Date());
+    const wanted = await this.scopeOf(scope, input.scope, template.scope);
+    const updated = await this.transactions.run(async (tx) => {
+      const info: TemplateInfo = {
+        name: input.name,
+        description: input.description,
+        goal: input.goal,
+        industry: input.industry,
+        scope: await this.heldScope(scope, wanted, chosenSites(input.scope), tx),
+      };
+      return this.templates.updateInfo(scope, template._id, info, new Date(), tx);
+    });
     if (updated === null) {
       throw notFound(TEMPLATE_NOT_FOUND);
     }
@@ -261,7 +278,7 @@ export class WorkspaceTemplatesService {
             description: template.description,
             goal: template.goal,
             industry: template.industry,
-            scope: template.scope,
+            scope: await this.heldScope(scope, template.scope, [], tx),
           },
           now,
         },
@@ -312,11 +329,15 @@ export class WorkspaceTemplatesService {
       items: versions.map((version) => ({
         version: version.version,
         note: version.note,
-        source: {
-          pageId: version.source.pageId.toHexString(),
-          pageTitle: version.source.pageTitle,
-          kind: version.source.kind,
-        },
+        // The page is named only to members who open its site (ADR-020): a template every site
+        // uses may come from a site the member does not see.
+        source: this.access.coversSite(scope, version.source.siteId)
+          ? {
+              pageId: version.source.pageId.toHexString(),
+              pageTitle: version.source.pageTitle,
+              kind: version.source.kind,
+            }
+          : { pageId: null, pageTitle: null, kind: version.source.kind },
         reusedFrom: version.reusedFrom,
         createdBy: refOf(users, version.createdBy),
         createdAt: version.createdAt.toISOString(),
@@ -518,7 +539,10 @@ export class WorkspaceTemplatesService {
     };
   }
 
-  /** Writes a version whose images were copied; when the write fails, they are deleted. */
+  /**
+   * Writes a version whose images were copied; when the write fails, they are deleted, unless its
+   * commit may have applied: the version would then name deleted images.
+   */
   private async writing(
     prepared: { images: TemplateImages },
     siteId: ObjectId,
@@ -527,10 +551,12 @@ export class WorkspaceTemplatesService {
     try {
       await write();
     } catch (error) {
-      await this.templateAssets.discard(
-        prepared.images.assets.map((asset) => asset.storageKey),
-        siteId,
-      );
+      if (!commitMayHaveApplied(error)) {
+        await this.templateAssets.discard(
+          prepared.images.assets.map((asset) => asset.storageKey),
+          siteId,
+        );
+      }
       throw error;
     }
   }
@@ -576,33 +602,61 @@ export class WorkspaceTemplatesService {
 
   /**
    * "Ai được dùng" as stored: every requested site must be a site of the workspace the member
-   * opens (422 otherwise); the template's sites the member does not see stay.
+   * opens (422 otherwise); the template's sites the member does not see stay. A member kept to
+   * some sites cannot limit a template of the whole workspace (422 `narrows_workspace`), which
+   * would take it away from the sites they do not see (ADR-030).
    */
   private async scopeOf(
     scope: WorkspaceScope,
     requested: TemplateScope,
     current: TemplateScopeRecord | null,
   ): Promise<TemplateScopeRecord> {
-    const siteIds =
-      requested.kind === 'workspace' ? [] : requested.siteIds.map((id) => toObjectId(id));
+    const siteIds = chosenSites(requested);
     const known = new Set(
       siteIds.length === 0
         ? []
         : (await this.sites.listForWorkspace(scope)).map((site) => site._id.toHexString()),
     );
-    const next = siteIds.every((id) => known.has(id.toHexString()))
+    const next: ScopeChange = siteIds.every((id) => known.has(id.toHexString()))
       ? scopeAfterChange(
           requested.kind === 'workspace' ? requested : { kind: 'sites', siteIds },
           current,
           scope.siteIds,
         )
-      : null;
-    if (next === null) {
+      : { ok: false, reason: 'site_not_yours' };
+    if (!next.ok) {
       throw validationFailed([
-        { path: ['scope', 'siteIds'], code: 'site_not_found', message: SITE_NOT_YOURS },
+        next.reason === 'site_not_yours'
+          ? { path: ['scope', 'siteIds'], code: 'site_not_found', message: SITE_NOT_YOURS }
+          : { path: ['scope', 'siteIds'], code: 'narrows_workspace', message: KEEPS_EVERY_SITE },
       ]);
     }
-    return next;
+    return next.scope;
+  }
+
+  /**
+   * The scope as the write in `tx` stores it. Each of its sites is written (`dataSeq`), so
+   * deleting one at the same moment either waits and then takes it out of the stored scope, or is
+   * seen here as gone (ADR-027). A site the member chose now that is gone: 422; one kept from
+   * before (a site they do not see, the scope of the template copied) leaves the scope.
+   */
+  private async heldScope(
+    scope: WorkspaceScope,
+    wanted: TemplateScopeRecord,
+    chosen: readonly ObjectId[],
+    tx: Tx,
+  ): Promise<TemplateScopeRecord> {
+    if (wanted.kind === 'workspace') {
+      return wanted;
+    }
+    const left = await this.sites.recordDataWrites(scope, wanted.siteIds, tx);
+    const isLeft = (id: ObjectId) => left.some((site) => site.equals(id));
+    if (!chosen.every(isLeft)) {
+      throw validationFailed([
+        { path: ['scope', 'siteIds'], code: 'site_not_found', message: SITE_GONE },
+      ]);
+    }
+    return { kind: 'sites', siteIds: wanted.siteIds.filter(isLeft) };
   }
 
   private async setArchived(

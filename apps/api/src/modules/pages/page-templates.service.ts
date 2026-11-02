@@ -6,7 +6,7 @@ import type {
   TemplateRef,
 } from '@plp/contracts';
 import { notFound } from '../../shared/errors.js';
-import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { commitMayHaveApplied, TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsService } from '../assets/assets.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -92,7 +92,10 @@ export class PageTemplatesService {
         return updated;
       });
     } catch (error) {
-      await this.templates.discardImages(template, site._id);
+      // A commit that may have applied keeps them: the draft would name deleted images.
+      if (!commitMayHaveApplied(error)) {
+        await this.templates.discardImages(template, site._id);
+      }
       throw error;
     }
     if (outcome === 'gone' || outcome === 'moved') {
@@ -140,7 +143,10 @@ export class PageTemplatesService {
         return inserted;
       });
     } catch (error) {
-      await this.templates.discardImages(template, site._id);
+      // A commit that may have applied keeps them: their asset records would name deleted files.
+      if (!commitMayHaveApplied(error)) {
+        await this.templates.discardImages(template, site._id);
+      }
       throw error;
     }
     const uploader = { id: user.id.toHexString(), name: user.name };

@@ -19,7 +19,8 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { PAGE_LIMIT_MESSAGE } from '../pages/pages.service.js';
 import { newSectionId } from '../pages/section-id.js';
 import type { SiteRecord } from '../sites/site.schema.js';
-import { SitesService } from '../sites/sites.service.js';
+import { SitesRepository } from '../sites/sites.repository.js';
+import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { toAiJob } from './ai-job-dto.js';
@@ -66,6 +67,7 @@ export class AiPageJobsService implements OnApplicationBootstrap {
   constructor(
     @InjectEnv() private readonly env: Env,
     private readonly sites: SitesService,
+    private readonly siteRecords: SitesRepository,
     private readonly pages: PagesRepository,
     private readonly jobs: AiJobsRepository,
     private readonly ledger: AiJobLedger,
@@ -112,8 +114,8 @@ export class AiPageJobsService implements OnApplicationBootstrap {
       status: isEmptyPlan(copyPlanOf(section)) ? 'kept' : 'queued',
       failure: null,
     }));
-    const queued = sections.filter((section) => section.status === 'queued').length;
-    if (queued === 0) {
+    const queued = sections.filter((section) => section.status === 'queued');
+    if (queued.length === 0) {
       throw validationFailed(
         [
           {
@@ -130,6 +132,11 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     const month = await this.quota.prepare(scope);
     const now = this.clock.now();
     const job = await this.transactions.run(async (tx) => {
+      // The job and its use belong to the site: deleting it at the same moment either waits and
+      // gives the use back as it deletes the job, or finds the job refused (ADR-027).
+      if (!(await this.siteRecords.recordDataWrite(scope, site._id, tx))) {
+        throw notFound(SITE_NOT_FOUND);
+      }
       await this.quota.reserve(scope, month, tx);
       return this.jobs.insert(
         scope,
@@ -139,7 +146,7 @@ export class AiPageJobsService implements OnApplicationBootstrap {
           slug: input.slug,
           brief: input.brief,
           sections,
-          run: this.newRun(queued),
+          run: this.newRun(queued.map((section) => section.id)),
           month,
           now,
           expiresAt: new Date(now.getTime() + AI_JOB_RETENTION_DAYS * DAY_MS),
@@ -196,7 +203,7 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     const started = await this.jobs.startRetry(
       scope,
       job,
-      this.newRun(failed.length),
+      this.newRun(failed.map((section) => section.id)),
       job.sections.map((section) =>
         section.status === 'failed' ? { ...section, status: 'queued', failure: null } : section,
       ),
@@ -213,7 +220,10 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     });
   }
 
-  /** "Hủy": a first run writes no draft and gives its use back; a "Thử lại" run leaves it. */
+  /**
+   * "Hủy": a first run writes no draft and gives its use back; a "Thử lại" run leaves the draft as
+   * it was. A run on another instance learns of it at its next write (`AiJobRunner`).
+   */
   async cancel(user: AuthenticatedUser, siteId: string, jobId: string): Promise<AiJob> {
     const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
     const job = await this.find(scope, site, jobId);
@@ -265,12 +275,12 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     ref: WorkspaceRef,
     job: AiJobRecord,
     runId: string,
-    reason: Exclude<RunStopReason, 'shutdown'>,
+    reason: Extract<RunStopReason, 'cancelled' | 'deadline'>,
   ): Promise<boolean> {
     const cancelled = reason === 'cancelled';
     return this.ledger.endWithoutWriting(ref, job, runId, {
       status: cancelled ? 'cancelled' : 'failed',
-      sections: stoppedSections(job.sections, 'interrupted'),
+      sections: stoppedSections(job, 'interrupted'),
       // A cancelled first run is no failure; a stopped "Thử lại" leaves its sections to write.
       failure: cancelled && job.pageId === null ? null : 'interrupted',
     });
@@ -301,12 +311,10 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     }
   }
 
-  /** A run for `sections` sections: its id, and its deadline past the budget and the grace. */
-  private newRun(sections: number): AiJobRunRecord {
-    return {
-      id: randomUUID(),
-      deadline: new Date(Date.now() + runBudgetMs(sections, this.env.AI_TIMEOUT_MS) + RUN_GRACE_MS),
-    };
+  /** A run that writes these sections: its id, and its deadline past the budget and the grace. */
+  private newRun(sectionIds: string[]): AiJobRunRecord {
+    const budget = runBudgetMs(sectionIds.length, this.env.AI_TIMEOUT_MS, this.env.AI_CONCURRENCY);
+    return { id: randomUUID(), deadline: new Date(Date.now() + budget + RUN_GRACE_MS), sectionIds };
   }
 
   private contextOf(site: SiteRecord, job: AiJobRecord): PromptContext {

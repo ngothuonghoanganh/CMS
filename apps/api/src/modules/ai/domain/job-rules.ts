@@ -1,9 +1,6 @@
 import type { AiFailure } from '@plp/contracts';
 import type { AiErrorKind } from '../ai-text-model.js';
 
-/** Sections of one job written at the same time. */
-export const SECTION_CONCURRENCY = 3;
-
 /** AI requests one user may send per minute, across workspaces (ADR-031). */
 export const AI_REQUESTS_PER_MINUTE = 10;
 
@@ -17,16 +14,19 @@ export const AI_JOB_RETENTION_DAYS = 30;
 export const RUN_GRACE_MS = 60_000;
 
 /**
- * How long a run may take: every section in rounds of `SECTION_CONCURRENCY`, each with its one
- * retry, each request up to `timeoutMs`. A run that has not ended by then is stopped.
+ * How long a run may take: every section in rounds of `concurrency` (`AI_CONCURRENCY`), each with
+ * its one retry, each request up to `timeoutMs`. A run that has not ended by then is stopped.
  */
-export function runBudgetMs(sectionCount: number, timeoutMs: number): number {
-  const rounds = Math.max(1, Math.ceil(sectionCount / SECTION_CONCURRENCY));
+export function runBudgetMs(sectionCount: number, timeoutMs: number, concurrency: number): number {
+  const rounds = Math.max(1, Math.ceil(sectionCount / concurrency));
   return rounds * 2 * timeoutMs;
 }
 
-/** Why a run stopped a request early. */
-export type RunStopReason = 'cancelled' | 'deadline' | 'shutdown';
+/**
+ * Why a run stopped a request early. `superseded`: its job was ended another way (a cancel or a
+ * reader past its deadline), maybe on another instance (ADR-004), so whatever it writes is lost.
+ */
+export type RunStopReason = 'cancelled' | 'deadline' | 'shutdown' | 'superseded';
 
 /** What a failed AI request means for its section. */
 export function failureOfError(kind: AiErrorKind, stop: RunStopReason | null): AiFailure {

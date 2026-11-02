@@ -34,6 +34,34 @@ function realPage(): Composition {
   return composition([hero, withPhoto]);
 }
 
+/** A page whose buttons call, chat on Zalo, open a web page and go to its quick contact. */
+function contactPage(): Composition {
+  const contact = sampleSection('quick_contact');
+  const withNumbers = {
+    ...contact,
+    content: {
+      ...contact.content,
+      call: { label: 'Gọi ngay', link: { kind: 'phone', phone: '0901234567' } },
+      zalo: { label: 'Nhắn Zalo', link: { kind: 'zalo', phone: '0901234567' } },
+    },
+  };
+  const hero = heroSection({
+    heading: 'Niềng răng trong suốt cho người bận rộn',
+    ctaLink: { kind: 'section', sectionId: contact.id },
+    secondaryLabel: 'Gọi ngay',
+    secondaryLink: { kind: 'phone', phone: '0901234567' },
+  });
+  const band = sampleSection('cta_band');
+  const withSite = {
+    ...band,
+    content: {
+      ...band.content,
+      cta: { label: 'Xem bảng giá', link: { kind: 'url', url: 'https://smilecare.vn/bang-gia' } },
+    },
+  };
+  return composition([hero, withNumbers, withSite]);
+}
+
 describe('templateContentOf', () => {
   it('keeps texts, marks and images with "Giữ chữ và ảnh như hiện tại"', () => {
     const page = realPage();
@@ -57,12 +85,32 @@ describe('templateContentOf', () => {
         label: 'Đặt lịch tư vấn',
         link: { kind: 'none' },
       });
-      // Links that are not to a page stay.
-      expect(getAtPath(hero?.content, 'secondaryCta.link')).toEqual({
-        kind: 'phone',
-        phone: '0901234567',
-      });
     }
+  });
+
+  it('keeps the phone, Zalo and web targets with the texts, and drops them with "chữ mẫu"', () => {
+    const page = contactPage();
+    const kept = templateContentOf(page, 'keep');
+    expect(kept.sections.map((section) => section.content)).toEqual(
+      page.sections.map((section) => section.content),
+    );
+
+    const [hero, contact, band] = templateContentOf(page, 'sample').sections;
+    // No target: the page made from it shows where to choose one, as for a page link.
+    expect(getAtPath(hero?.content, 'secondaryCta')).toEqual({
+      label: 'Gọi ngay',
+      link: { kind: 'none' },
+    });
+    expect(getAtPath(band?.content, 'cta.link')).toEqual({ kind: 'none' });
+    // The quick contact's buttons only call and chat: they keep their kind, with no number.
+    expect(getAtPath(contact?.content, 'call.link')).toEqual({ kind: 'phone', phone: '' });
+    expect(getAtPath(contact?.content, 'zalo.link')).toEqual({ kind: 'zalo', phone: '' });
+    // A button to a section of the page stays: the section comes with the template.
+    expect(getAtPath(hero?.content, 'primaryCta.link')).toEqual({
+      kind: 'section',
+      sectionId: contact?.id,
+    });
+    expect(parseComposition(templateContentOf(page, 'sample')).success).toBe(true);
   });
 
   it('marks every text and button label as sample and empties the frames for "chữ mẫu"', () => {

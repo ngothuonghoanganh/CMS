@@ -48,7 +48,7 @@ export function versionOrigin(version: TemplateVersionItem): string {
   if (version.reusedFrom !== null) {
     return `Dùng lại nội dung v${version.reusedFrom}`;
   }
-  // The API names no page of a site the member does not see.
+  // The API names no page of a site the member does not open.
   return version.source.pageTitle === null
     ? 'Lưu từ một trang ở site khác'
     : `Lưu từ trang “${version.source.pageTitle}”`;

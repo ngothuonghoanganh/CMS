@@ -1827,7 +1827,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Cần cả `sites.manage` và `personalData.manage` (Chủ sở hữu, Quản trị), vì xóa cả lead. `confirmName` phải đúng tên site (so sau chuẩn hóa NFC); sai thì 422.
     - **Một transaction ghi cả master và workspace DB** (ADR-025):
       - Master: xóa `site_addresses` (subdomain được giải phóng) và mọi `domains` của site (biên không cấp chứng chỉ cho chúng nữa). Bỏ `siteId` khỏi `memberships.siteIds` và `invitations.siteIds`.
-      - Workspace DB: xóa `sites` và mọi document có `siteId` đó trong `pages`, `releases`, `redirects`, `assets`, `leads`, `activity`, `consent_versions`, `data_requests`, `publish_approvals`, `analytics_daily`, `analytics_seen`.
+      - Workspace DB: xóa `sites` và mọi document có `siteId` đó trong `pages`, `releases`, `redirects`, `assets`, `leads`, `activity`, `consent_versions`, `data_requests`, `publish_approvals`, `analytics_daily`, `analytics_seen`, `ai_jobs`.
       - Bộ đếm ở master (`lead_limits`, `analytics_salts`) tự hết hạn.
     - **Phạm vi còn rỗng:**
       - Thành viên có phạm vi chỉ gồm site đó vẫn ở workspace, nhưng không thấy site nào. Chủ sở hữu đổi quyền hoặc gỡ họ.
@@ -1898,6 +1898,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Chấp nhận: lượt xem (`analytics_daily`, `analytics_seen`) ghi sau lượt quét vẫn còn tới khi TTL xóa; chúng chỉ có số đếm và hash.
   - Hai test chạy đua giữa xuất bản và xóa trang kiểm "đúng một bên thắng, không bao giờ có release mất trang", vì MongoDB có thể hủy tạm transaction đang giữ trang và chạy lại nó.
 - **Amended 2026-11-02 (ADR-030, lát G2):** xóa site bỏ site đó khỏi `scope.siteIds` của các template của workspace trong cùng transaction. Template, phiên bản và ảnh của chúng (tiền tố `templates/` của workspace) không bị xóa.
+- **Amended 2026-11-02 (sửa sau review Phase 2, ADR-031):** `ai_jobs` của site bị xóa cùng site.
+  - Bắt đầu một lần "Viết nội dung" tăng `sites.dataSeq` trong transaction giữ lượt và ghi job; site đã mất thì 404 "Không tìm thấy site", không tốn lượt.
+  - Transaction xóa site trả lượt của các job của site còn chạy lần đầu (`running`, chưa có bản nháp, chưa trả lượt), gộp theo tháng đã giữ, rồi xóa mọi job của site.
+    - Lượt chạy của các job đó kết thúc sau không khớp job nào, nên không trả lượt lần nữa. Một lượt chạy kết thúc đúng lúc đó ghi cùng document job, nên một trong hai transaction chạy lại và thấy việc của bên kia: mỗi lượt được trả đúng một lần.
+    - Lượt quét sau commit chỉ xóa, không trả lượt: không job nào được ghi cho site đã mất.
+  - Lượt chạy đang viết dừng ở lần ghi kế tiếp của nó và không gọi AI thêm (ADR-031).
+  - Template ghi `scope.siteIds` trong transaction tăng `dataSeq` của các site đó, nên xung đột với `$pull` ở trên (ADR-030).
 
 ### ADR-028 — Màn Sites của workspace và số đếm ở Sidebar v2
 
@@ -2180,10 +2187,25 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Mọi thao tác đánh dấu `templateQueryKeys.all` là cũ, nên "Phiên bản mới của …" và "Áp dụng mẫu…" không còn đưa ra mẫu đã lưu trữ.
   - 422 có lỗi ở chỗ form không có field (composition bị registry từ chối, site không được chọn) được nói trong callout (`problemBesideFields`). Trước đây chỉ cần một lỗi nằm ở field là callout ẩn.
   - "Sửa thông tin" bắt đầu từ các site của phạm vi mà admin còn biết, nên lần lưu không gửi lại id của site đã xóa.
-  - Lịch sử phiên bản: `source.pageId` và `source.pageTitle` có thể null khi site nguồn nằm ngoài phạm vi của thành viên; dòng đó ghi "Lưu từ một trang ở site khác".
   - **Bố cục hẹp:**
     - `RadioCardGroup` không bao giờ rộng hơn nhóm (`minmax(min(w, 100%), 1fr)`), nên hộp áp mẫu không cuộn ngang ở 320 và 375 px.
     - Ô "Đường dẫn" (`PageSlugField`, `Input` với `wrapPrefix`) cho địa chỉ site xuống dòng riêng khi đường dẫn còn chưa tới 12rem bên cạnh nó. Trước đây đường dẫn chỉ còn vài ký tự.
+- **Sửa sau review Phase 2 (2026-11-02), API:**
+  - **Thu hẹp phạm vi:** thành viên bị giới hạn site không đổi được template toàn workspace thành template giới hạn site, vì việc đó lấy mẫu khỏi mọi site họ không thấy.
+    - API trả 422 `narrows_workspace` ở `scope.siteIds`: "Mẫu này đang dùng cho mọi site. Chỉ thành viên của toàn workspace mới giới hạn được nó." Admin hiện lỗi dưới ô "Ai được dùng".
+    - Chọn từ chối thay vì lặng lẽ giữ toàn workspace, như khi chọn một site không phải của họ (G2): người dùng thấy vì sao lựa chọn của họ không được lưu.
+    - Họ vẫn mở rộng được sang toàn workspace, vẫn tạo template mới giới hạn ở site của họ, và vẫn sửa phạm vi của template đã giới hạn.
+  - **Lịch sử phiên bản:** `source.pageId` và `source.pageTitle` là `null` khi thành viên không mở được site của trang nguồn (ADR-020). Admin ghi "Lưu từ một trang ở site khác".
+  - **Site bị xóa trong lúc lưu template:** tạo template, "Sửa thông tin" và "Nhân bản" ghi template trong transaction tăng `sites.dataSeq` của mọi site trong `scope.siteIds` (một `updateMany`), nên xung đột với `$pull` của việc xóa site (ADR-027).
+    - Site thành viên vừa chọn mà đã mất: 422 `site_not_found` "Có site không còn trong workspace".
+    - Site giữ từ trước (site họ không thấy, phạm vi của template được nhân bản) mà đã mất thì rời phạm vi.
+    - Nhờ vậy `scope.siteIds` không bao giờ giữ site đã xóa, và "Sửa thông tin" sau đó không còn 422.
+  - **Đích của nút với "Đánh dấu toàn bộ chữ là chữ mẫu":**
+    - Số điện thoại, Zalo và đường dẫn ngoài của nút thành "chưa chọn đích", như link tới trang khác. Nút chỉ nhận một loại đích (nút gọi và nút Zalo của "Gọi / Zalo nhanh") giữ loại đó với số trống. Nút tới một section của trang giữ nguyên.
+    - "Giữ chữ và ảnh như hiện tại" giữ các đích này: agency đã chọn dùng lại nội dung của doanh nghiệp đó, gồm chữ, ảnh, số điện thoại và đường dẫn. Checklist xuất bản vẫn nhắc như mọi trang.
+  - **Commit không rõ kết quả:** ảnh vừa chép chỉ bị xóa khi transaction lỗi trước commit.
+    - Lỗi mang nhãn `UnknownTransactionCommitResult` (driver thôi thử lại commit) có thể đã ghi trang, bản nháp, asset hay phiên bản trỏ tới các ảnh đó, nên ảnh được giữ (`commitMayHaveApplied`, `shared/persistence/transaction.ts`).
+    - Commit đó không ghi thì ảnh là file công khai không ai trỏ tới, như ảnh tải lên bị từ chối (ADR-027).
 
 ### ADR-031 — AI: cổng adapter, tạo trang từ brief, trợ lý trong editor
 
@@ -2310,7 +2332,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - lượt chạy thua (bị hủy hay hết hạn trước khi kịp ghi) không ghi gì: transaction tạo trang bị bỏ.
     - "Hủy" kết thúc job ngay và trả lượt; lượt chạy ở instance khác ghi muộn thì không khớp `run.id`.
   - **"Thử lại"** chỉ ghi khi bản nháp còn đúng revision job đã ghi, bằng `baseRevision` như autosave; bản nháp đã bị sửa thì trả 409 `revision_conflict` trước khi gọi AI, và nếu bị sửa trong lúc chạy thì các section đó là `draft_changed`.
-  - **Hạn chạy:** ngân sách = số vòng (3 section một vòng) × 2 lần × `AI_TIMEOUT_MS`. Runner tự dừng ở ngân sách; hạn lưu trong job thêm 60 giây cho bước ghi. Job quá hạn được kết thúc khi đọc mức dùng hay job, và lúc khởi động (mọi workspace), với lỗi `interrupted`. Khi API dừng, các lượt chạy bị dừng và vẫn tạo bản nháp với những section đã viết.
+  - **Hạn chạy:** ngân sách = số vòng (`AI_CONCURRENCY` section một vòng, mặc định 3) × 2 lần × `AI_TIMEOUT_MS`. Runner tự dừng ở ngân sách; hạn lưu trong job thêm 60 giây cho bước ghi. Job quá hạn được kết thúc khi đọc mức dùng hay job, và lúc khởi động (mọi workspace), với lỗi `interrupted`. Khi API dừng, các lượt chạy bị dừng và vẫn tạo bản nháp với những section đã viết.
   - **Hạn mức:** `ai_usage { workspaceId, month }` (unique), bộ đếm được tạo trước transaction; lượt được giữ bằng `$inc` có điều kiện trong chính transaction ghi job. Trả lượt về đúng tháng đã giữ. Giới hạn 10 yêu cầu mỗi phút tính theo người dùng trên mọi workspace, trong `lead_limits` ở master, và tính cả yêu cầu bị từ chối.
   - **`ai_jobs` tự xóa sau 30 ngày** (TTL theo `expiresAt`): job chỉ là bản ghi công việc, brief không cần giữ lâu hơn.
   - **Prompt:** lời dặn bằng tiếng Anh, ngôn ngữ của chữ theo brief và được nhắc lại ở cuối (model nhỏ viết theo ngôn ngữ của brief). Prompt có tên site, mục tiêu, brief, tên các section theo thứ tự, mô tả section, các field kèm giới hạn và chữ hiện có của đúng các field đó; không có link, ảnh, mô tả ảnh hay số điện thoại.
@@ -2329,7 +2351,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - "Đoạn chữ" và "Section" gửi cả section, vì API dựng lại section bằng registry: chữ mẫu của variant, danh sách đúng số mục editor đang có, mọi chữ AI được viết thay bằng chữ editor gửi (thiếu là trống, nên nút không dùng vẫn không dùng). Đường dẫn AI không được viết là 422 `not_writable`; registry parse kết quả như mọi bản nháp.
     - "Viết nội dung section" chỉ cho phạm vi Section; "Gợi ý SEO" chỉ cho Toàn trang. Không có gì để viết thì 422 `nothing_to_write`. Mọi lần từ chối đều trước khi giữ lượt; giới hạn 10 yêu cầu mỗi phút tính cả yêu cầu bị từ chối, như G4.
     - Trả 200 với luồng NDJSON như G4: `heartbeat` mỗi 10 giây rồi một dòng `result` `{ changes, charged, failure, usage }`. Mỗi thay đổi là `ok` `{ sectionId | 'seo', path, before, after, review }` hoặc `failed` `{ …, failure }`; chữ AI để nguyên thì không thành thay đổi.
-  - **Gọi AI:** mỗi section có chữ trong phạm vi là một request (3 request cùng lúc), "Gợi ý SEO" là một request đọc chữ của trang (tối đa 4.000 ký tự). Danh sách giữ đúng số mục (gợi ý đổi chữ, không thêm bớt mục). Câu trả lời không vừa thì thử lại một lần kèm danh sách lỗi; sau đó field nào qua được thì giữ, field còn lại là `failed` ("Chưa viết được phần này"). Ngôn ngữ theo chữ của phạm vi (có chữ cái riêng của tiếng Việt thì tiếng Việt). SEO được hỏi theo độ dài khuyến nghị (60, 160) và kiểm theo giới hạn của `seoSchema`.
+  - **Gọi AI:** mỗi section có chữ trong phạm vi là một request (`AI_CONCURRENCY` request cùng lúc, mặc định 3), "Gợi ý SEO" là một request đọc chữ của trang (tối đa 4.000 ký tự). Danh sách giữ đúng số mục (gợi ý đổi chữ, không thêm bớt mục). Câu trả lời không vừa thì thử lại một lần kèm danh sách lỗi; sau đó field nào qua được thì giữ, field còn lại là `failed` ("Chưa viết được phần này"). Ngôn ngữ theo chữ của phạm vi (có chữ cái riêng của tiếng Việt thì tiếng Việt). SEO được hỏi theo độ dài khuyến nghị (60, 160) và kiểm theo giới hạn của `seoSchema`.
   - **Hạn mức:** giữ lượt trong transaction trước khi gọi AI; trả lượt khi không có thay đổi `ok` nào (lỗi, trả lời sai, chữ không đổi) hoặc khi client đã đi (đóng request trước khi có kết quả, kể cả lúc đang giữ lượt). API nghe `close` của response từ đầu request. Chấp nhận: API dừng giữa chừng thì lượt đó mất, vì không có bản ghi giữ lượt như `ai_jobs`.
   - **Log:** một dòng "AI suggestion ended" chỉ có số đếm, token và thời gian; lỗi của từng request ghi loại lỗi, không có prompt, chữ hay câu trả lời.
   - **Admin:**
@@ -2354,6 +2376,16 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Danh sách tiến độ không còn là live region ("Xong" không kèm tên section). Một vùng status đọc một câu cho mỗi thay đổi.
     - Thất bại thì ẩn danh sách, như board. Mất kết nối thì giữ trạng thái cuối đã biết, không ghi "Chờ" cho mọi section.
     - Mức dùng ở header được đọc lại khi lượt chạy bắt đầu (`started`), nên hiện lượt đã giữ. Khi lượt chạy kết thúc, mức dùng được đọc lại lần nữa (lượt được trả khi không viết được gì hoặc khi hủy).
+- **Sửa sau review Phase 2 (2026-11-02), API:**
+  - **Lượt chạy bị kết thúc ở nơi khác thôi gọi AI:** "Hủy" tới một instance khác (ADR-004), "Hủy" rơi vào giữa lúc ghi job và lúc runner nhận lượt chạy, hay job bị xóa cùng site (ADR-027).
+    - Mỗi lần ghi tiến độ là update có điều kiện theo `run.id` khi job còn `running`. Không khớp thì lượt chạy dừng (`superseded`): nó không ghi được gì nữa.
+    - Trạng thái `writing` được ghi trước khi gọi AI cho mỗi section, và trước lần thử lại của một section runner đọc lại job. Vì vậy không section nào, không lần thử lại nào được gửi sau khi job đã kết thúc; request đang chờ thì xong rồi bị bỏ.
+  - **"Thử lại" dừng giữa chừng:** lượt chạy ghi các section nó viết (`run.sectionIds`). Lượt "Thử lại" kết thúc mà không ghi bản nháp ("Hủy", quá hạn, lỗi) đặt lại `failed` mọi section của nó, kể cả section đã `done`, vì chữ đó chưa tới bản nháp. Chúng thử lại được; lần "Thử lại" đó vẫn được tính vào giới hạn 2 lần.
+  - **Xóa site:** job thuộc site như mọi dữ liệu của site (ADR-027). Bắt đầu job tăng `sites.dataSeq`; xóa site trả lượt của job còn chạy lần đầu đúng một lần và xóa `ai_jobs` của site.
+  - **Trợ lý chỉ tính lượt khi kết quả tới client:** lượt được giữ lại khi dòng `result` đã được gửi hết và response kết thúc (`finish`).
+    - Client đi trước đó, kể cả lúc API đang đọc mức dùng cho kết quả, thì lượt được trả, một lần, và log ghi "AI suggestion not delivered".
+    - Lỗi khi dựng kết quả cũng trả lượt.
+  - **`AI_CONCURRENCY`** (1 đến 8, mặc định 3): số section job tạo trang và trợ lý viết cùng lúc, và số section một vòng của ngân sách chạy. Ollama local trả lời từng yêu cầu một nếu không đặt `OLLAMA_NUM_PARALLEL`, nên đặt `AI_CONCURRENCY=1` ở đó.
 
 ---
 
@@ -2493,7 +2525,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - không xóa hay đổi tên index khi API đang chạy.
 
 - AI (ADR-031): đặt `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` cho dịch vụ AI của production. Không dùng `fake`.
-  - Một job viết 3 section cùng lúc. AI tự host xếp hàng các yêu cầu (Ollama mặc định), nên đặt cho nó xử lý song song từ 3 yêu cầu (`OLLAMA_NUM_PARALLEL`), hoặc tăng `AI_TIMEOUT_MS`: thời gian chờ trong hàng cũng tính vào hạn của mỗi yêu cầu.
+  - Một job viết `AI_CONCURRENCY` section cùng lúc (mặc định 3). AI tự host xếp hàng các yêu cầu (Ollama mặc định), nên đặt cho nó xử lý song song ít nhất bằng số đó (`OLLAMA_NUM_PARALLEL`), hạ `AI_CONCURRENCY` (1 cho một Ollama không đặt `OLLAMA_NUM_PARALLEL`), hoặc tăng `AI_TIMEOUT_MS`: thời gian chờ trong hàng cũng tính vào hạn của mỗi yêu cầu.
 
 **Chủ sản phẩm cần quyết**
 

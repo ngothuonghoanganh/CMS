@@ -6,13 +6,20 @@ import type { AiJobRecord, AiJobSectionRecord } from './ai-job.schema.js';
 import { AiJobsRepository } from './ai-jobs.repository.js';
 import { AiQuota } from './ai-quota.service.js';
 
-/** Sections a run had not finished when it stopped: they failed, for `failure`. */
+/**
+ * The sections of a run that stopped without writing its draft: those it had not finished failed,
+ * for `failure`. A "Thử lại" run also fails the sections it wrote: they never reached the job's
+ * draft, and "Thử lại" can write them again. A first run had no draft to keep them.
+ */
 export function stoppedSections(
-  sections: readonly AiJobSectionRecord[],
+  job: Pick<AiJobRecord, 'sections' | 'pageId' | 'run'>,
   failure: AiFailure,
 ): AiJobSectionRecord[] {
-  return sections.map((section) =>
-    section.status === 'queued' || section.status === 'writing'
+  const written = new Set(job.pageId === null ? [] : job.run?.sectionIds);
+  return job.sections.map((section) =>
+    section.status === 'queued' ||
+    section.status === 'writing' ||
+    (section.status === 'done' && written.has(section.id))
       ? { ...section, status: 'failed', failure }
       : section,
   );

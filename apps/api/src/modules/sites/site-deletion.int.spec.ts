@@ -1,5 +1,6 @@
 import { HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import {
+  aiUsageSchema,
   dataRequestDetailSchema,
   type Domain,
   domainSchema,
@@ -12,6 +13,14 @@ import {
 } from '@plp/contracts';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  aiJobBody,
+  fakeAi,
+  finishedJob,
+  postAiJob,
+  runAiJob,
+  streamEvents,
+} from '../../../test/ai.js';
 import { pageView, sendPageView } from '../../../test/analytics.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
@@ -46,6 +55,8 @@ import {
 import { testEnvInput } from '../../../test/env.js';
 import { parseEnv } from '../../config/env.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import type { FakeAiTextModel } from '../ai/adapters/fake-ai-text-model.js';
+import { AiError } from '../ai/ai-text-model.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
 import { ASSET_STORAGE, type AssetStorage, siteStoragePrefix } from '../assets/asset-storage.js';
 import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
@@ -79,6 +90,7 @@ describe('DELETE /sites/:siteId', () => {
   let t: TestApp;
   let owner: TestClient;
   let workspaceId: string;
+  let fake: FakeAiTextModel;
   const revalidation = new RecordingRevalidationClient();
   // The storage the API writes to (docker compose), with its credentials: to see what it holds.
   const storage = parseEnv(testEnvInput({ MONGODB_URI: 'mongodb://localhost:1/unused' }));
@@ -93,7 +105,11 @@ describe('DELETE /sites/:siteId', () => {
   });
 
   beforeAll(async () => {
-    t = await createTestApp('plp_test_site_deletion', withRevalidationRecorder(revalidation));
+    t = await createTestApp('plp_test_site_deletion', {
+      ...withRevalidationRecorder(revalidation),
+      env: { AI_PROVIDER: 'fake' },
+    });
+    fake = fakeAi(t);
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
@@ -192,6 +208,15 @@ describe('DELETE /sites/:siteId', () => {
     });
   }
 
+  /** The AI uses of the workspace this month, read through a site that stays. */
+  async function aiUsed(siteId: string): Promise<number> {
+    return aiUsageSchema.parse((await owner.get(`/sites/${siteId}/ai/usage`).expect(200)).body)
+      .used;
+  }
+
+  /** A one-section page for the AI to write: one request. */
+  const heroOnly = () => aiJobBody({ structure: [{ type: 'hero', variant: 'split' }] });
+
   async function storedKeys(siteId: string): Promise<string[]> {
     const listed = await s3.send(
       new ListObjectsV2Command({
@@ -205,7 +230,7 @@ describe('DELETE /sites/:siteId', () => {
   /**
    * A site with something in every collection: a live form page with a lead and a view, an
    * unpublished page, a page deleted while a lead kept its version, a request to publish, an
-   * image, a data request and two custom domains.
+   * image, a data request, an AI job and two custom domains.
    */
   async function fullSite(name = 'Nha khoa Smile Care') {
     const site = await createSite(owner, workspaceId, { name });
@@ -250,6 +275,15 @@ describe('DELETE /sites/:siteId', () => {
       .expect(200);
     const asset = await uploadImage(owner, site.id);
     await owner.post(`/sites/${site.id}/data-requests`, dataRequest()).expect(201);
+    // An AI job that wrote nothing, so the page counts stay: the job is a record of the site.
+    fake.respondWith(() => {
+      throw new AiError('overloaded', 'The AI service answered HTTP 503', { status: 503 });
+    });
+    try {
+      expect((await runAiJob(owner, site.id, heroOnly())).job.status).toBe('failed');
+    } finally {
+      fake.respondWith(null);
+    }
     const active = await activeDomain(owner, site.id);
     const pending = await addDomain(owner, site.id, newDomain());
     return { site, slug, asset, active, pending };
@@ -274,6 +308,7 @@ describe('DELETE /sites/:siteId', () => {
       'publish_approvals',
       'analytics_daily',
       'analytics_seen',
+      'ai_jobs',
     ]) {
       // `redirects` is the one the fixture leaves empty: an unpublished slug change has none.
       if (collection !== 'redirects') {
@@ -492,6 +527,44 @@ describe('DELETE /sites/:siteId', () => {
     });
   });
 
+  it('gives back, once, the use of an AI job still writing for the site, and deletes the job', async () => {
+    const site = await createSite(owner, workspaceId, { name: 'AI đang viết' });
+    const other = await createSite(owner, workspaceId, { name: 'Vẫn còn' });
+    // A use kept by a page the AI wrote on another site: a second refund would take it back too.
+    expect((await runAiJob(owner, other.id, heroOnly())).job.status).toBe('done');
+    const kept = await aiUsed(other.id);
+    fake.reset();
+    const held = gate();
+    fake.respondWith(async () => {
+      await held.opened;
+      return undefined;
+    });
+    try {
+      const pending = postAiJob(owner, site.id, aiJobBody()).then((response) => response);
+      await vi.waitFor(() => {
+        expect(fake.requests.length).toBeGreaterThan(0);
+      });
+      expect(await aiUsed(other.id)).toBe(kept + 1);
+
+      await remove(owner, site, 'AI đang viết').expect(204);
+
+      // The deletion ended the job and gave its use back.
+      expect(await aiUsed(other.id)).toBe(kept);
+      expect(await leftOf(site.id)).toEqual([]);
+      const asked = fake.requests.length;
+      held.open();
+      expect(finishedJob(streamEvents(await pending))).toMatchObject({ pageId: null });
+      // The run found its job gone at its next write: it asked for no other section, wrote no
+      // draft and gave nothing back again.
+      expect(fake.requests).toHaveLength(asked);
+    } finally {
+      held.open();
+      fake.respondWith(null);
+    }
+    expect(await aiUsed(other.id)).toBe(kept);
+    expect(await leftOf(site.id)).toEqual([]);
+  });
+
   it('deletes a site once when two deletions race', async () => {
     const site = await createSite(owner, workspaceId, { name: 'Hai lần' });
     const statuses = await Promise.all([
@@ -689,6 +762,20 @@ describe('DELETE /sites/:siteId', () => {
         spy.mockRestore();
       }
       expect(await leftOf(site.id)).toEqual([]);
+    });
+
+    it('starts no AI job on a site deleted once it was checked, and takes no use', async () => {
+      const site = await createSite(owner, workspaceId, { name: 'AI muộn' });
+      const other = await createSite(owner, workspaceId, { name: 'Đọc lượt AI' });
+      const before = await aiUsed(other.id);
+      const spy = deleteBeforeTransaction(site);
+      try {
+        expectSiteGone(await postAiJob(owner, site.id, heroOnly()).expect(404));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(site.id)).toEqual([]);
+      expect(await aiUsed(other.id)).toBe(before);
     });
 
     it('answers 404, not "đã hoàn tất", completing a request of a site deleted meanwhile', async () => {

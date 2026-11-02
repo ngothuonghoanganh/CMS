@@ -307,8 +307,8 @@ export const templateVersionItemSchema = z.object({
   version: templateVersionSchema,
   note: z.string(),
   /**
-   * The page it was saved from, with its title then; both null when its site is outside the
-   * member's sites.
+   * The page it was saved from, with its title then. Both null for a member who does not open the
+   * page's site (ADR-020): the admin says "một trang ở site khác".
    */
   source: z.object({
     pageId: idSchema.nullable(),

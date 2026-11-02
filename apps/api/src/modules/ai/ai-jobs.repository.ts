@@ -110,6 +110,14 @@ export class AiJobsRepository {
       .exec();
   }
 
+  /** Whether the run is still the job's: cancelled or ended past its deadline, it is not. */
+  async isRunCurrent(ref: WorkspaceRef, jobId: ObjectId, runId: string): Promise<boolean> {
+    const found = await this.jobs(ref)
+      .exists({ _id: jobId, workspaceId: ref.workspaceId, status: 'running', 'run.id': runId })
+      .exec();
+    return found !== null;
+  }
+
   /** A section's progress, while the run is the job's; false when it no longer is. */
   async setSectionStatus(
     ref: WorkspaceRef,

@@ -25,7 +25,11 @@ import { buildCompositionFromGoal, parseComposition, splitPath } from '@plp/sect
 import type { z } from 'zod';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
-import { TransactionRunner, type Tx } from '../../shared/persistence/transaction.js';
+import {
+  commitMayHaveApplied,
+  TransactionRunner,
+  type Tx,
+} from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -179,7 +183,8 @@ export class PagesService {
         this.insertPage(scope, site, { title: input.title, slug: input.slug, ...initial }, tx),
       );
     } catch (error) {
-      if (initial.template !== null) {
+      // A commit that may have applied keeps them: the page would name deleted images.
+      if (initial.template !== null && !commitMayHaveApplied(error)) {
         await this.templates.discardImages(initial.template, site._id);
       }
       throw error;

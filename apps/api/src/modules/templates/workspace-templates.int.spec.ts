@@ -6,6 +6,7 @@ import {
   MAX_WORKSPACE_TEMPLATES,
   type PageDetailResponse,
   pageDetailResponseSchema,
+  pageListResponseSchema,
   problemSchema,
   type Site,
   type TemplateDetail,
@@ -18,15 +19,18 @@ import {
   workspaceTemplateSchema,
 } from '@plp/contracts';
 import { findSystemTemplate, getAtPath } from '@plp/sections/schema';
-import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mongo, Types } from 'mongoose';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { cleanSeo, composition, heroSection } from '../../../test/compositions.js';
 import { createPage, getPage, publish, replaceDraft, uniqueSlug } from '../../../test/pages.js';
 import { addMember, createSite, uploadImage } from '../../../test/resources.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { TEMPLATE_VERSION_COLLECTION } from './template.schema.js';
+import { TemplateVersionsRepository } from './template-versions.repository.js';
 
 const HEADING = 'Niềng răng trong suốt cho người bận rộn';
 
@@ -476,6 +480,29 @@ describe('workspace templates', () => {
       .expect(422);
     expect(problemSchema.parse(notTheirs.body).code).toBe('validation_failed');
 
+    // Nor can they take a template every site uses away from the sites they do not see.
+    const everywhere = await saveTemplate(owner, saveBody(smile.id, pageId));
+    const narrowed = await insider.client
+      .patch(`${base()}/${everywhere.id}`, {
+        name: everywhere.name,
+        description: '',
+        goal: null,
+        industry: null,
+        scope: { kind: 'sites', siteIds: [smile.id] },
+      })
+      .expect(422);
+    expect(problemSchema.parse(narrowed.body).issues).toEqual([
+      {
+        path: ['scope', 'siteIds'],
+        code: 'narrows_workspace',
+        message:
+          'Mẫu này đang dùng cho mọi site. Chỉ thành viên của toàn workspace mới giới hạn được nó.',
+      },
+    ]);
+    expect((await board(owner)).find((item) => item.id === everywhere.id)?.scope).toEqual({
+      kind: 'workspace',
+    });
+
     // Used in its sites only, even by Chủ sở hữu.
     const page = await createPage(owner, smile.id);
     await owner.post(`/sites/${smile.id}/pages`, fromTemplate(limited.id, 1)).expect(404);
@@ -486,6 +513,179 @@ describe('workspace templates', () => {
       })
       .expect(404);
     await owner.post(`/sites/${kitchen.id}/pages`, fromTemplate(limited.id, 1)).expect(201);
+  });
+
+  it('names the page a version came from only to members who see its site', async () => {
+    const { pageId } = await pageWithPhoto(owner, spa);
+    const saved = await saveTemplate(owner, saveBody(spa.id, pageId));
+    const elsewhere = await addMember(t, workspaceId, 'editor', [kitchen.id]);
+    const sourceOf = async (client: TestClient) =>
+      templateVersionListResponseSchema.parse(
+        (await client.get(`${base()}/${saved.id}/versions`).expect(200)).body,
+      ).items[0]?.source;
+    expect(await sourceOf(owner)).toEqual({
+      pageId,
+      pageTitle: 'Niềng răng tháng 9',
+      kind: 'draft',
+    });
+    // The template is for every site, but its page is of a site this member does not open.
+    expect(await sourceOf(elsewhere.client)).toEqual({
+      pageId: null,
+      pageTitle: null,
+      kind: 'draft',
+    });
+  });
+
+  it('never keeps a site deleted meanwhile among the sites that may use a template', async () => {
+    const { pageId } = await pageWithPhoto(owner, smile);
+    const sitesRepository = t.app.get(SitesRepository);
+    const listForWorkspace = sitesRepository.listForWorkspace.bind(sitesRepository);
+    const deleteSite = (site: Site) =>
+      owner.delete(`/sites/${site.id}`).send({ confirmName: site.name }).expect(204);
+    /** Deletes `site` once the sites chosen were checked, before the template is written. */
+    const deletedOnceChecked = (site: Site) =>
+      vi.spyOn(sitesRepository, 'listForWorkspace').mockImplementationOnce(async (...args) => {
+        const listed = await listForWorkspace(...args);
+        await deleteSite(site);
+        return listed;
+      });
+    const siteGone = [
+      {
+        path: ['scope', 'siteIds'],
+        code: 'site_not_found',
+        message: 'Có site không còn trong workspace',
+      },
+    ];
+
+    // "Lưu trang thành template" for a site deleted meanwhile.
+    const first = await createSite(owner, workspaceId, { name: 'Xóa khi lưu' });
+    let spy = deletedOnceChecked(first);
+    try {
+      const refused = await owner
+        .post(
+          base(),
+          saveBody(smile.id, pageId, { scope: { kind: 'sites', siteIds: [first.id, kitchen.id] } }),
+        )
+        .expect(422);
+      expect(problemSchema.parse(refused.body).issues).toEqual(siteGone);
+    } finally {
+      spy.mockRestore();
+    }
+
+    // "Sửa thông tin" choosing a site deleted meanwhile.
+    const saved = await saveTemplate(
+      owner,
+      saveBody(smile.id, pageId, { scope: { kind: 'sites', siteIds: [kitchen.id] } }),
+    );
+    const second = await createSite(owner, workspaceId, { name: 'Xóa khi sửa' });
+    const info = { name: saved.name, description: '', goal: null, industry: null };
+    spy = deletedOnceChecked(second);
+    try {
+      const refused = await owner
+        .patch(`${base()}/${saved.id}`, {
+          ...info,
+          scope: { kind: 'sites', siteIds: [second.id, kitchen.id] },
+        })
+        .expect(422);
+      expect(problemSchema.parse(refused.body).issues).toEqual(siteGone);
+    } finally {
+      spy.mockRestore();
+    }
+    const stored = (await board(owner)).find((item) => item.id === saved.id);
+    expect(stored?.scope).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+
+    // "Nhân bản" of a template one of whose sites is deleted meanwhile.
+    const third = await createSite(owner, workspaceId, { name: 'Xóa khi nhân bản' });
+    await owner
+      .patch(`${base()}/${saved.id}`, {
+        ...info,
+        scope: { kind: 'sites', siteIds: [third.id, kitchen.id] },
+      })
+      .expect(200);
+    const versions = t.app.get(TemplateVersionsRepository);
+    const find = versions.find.bind(versions);
+    const versionSpy = vi.spyOn(versions, 'find').mockImplementationOnce(async (...args) => {
+      const found = await find(...args);
+      await deleteSite(third);
+      return found;
+    });
+    let copy: WorkspaceTemplate;
+    try {
+      copy = workspaceTemplateSchema.parse(
+        (await owner.post(`${base()}/${saved.id}/duplicate`).expect(201)).body,
+      );
+    } finally {
+      versionSpy.mockRestore();
+    }
+    expect(copy.scope).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+
+    // Every later "Sửa thông tin" saves the sites the board shows.
+    for (const template of [saved, copy]) {
+      const shown = (await board(owner)).find((item) => item.id === template.id);
+      expect(shown?.scope).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+      await owner
+        .patch(`${base()}/${template.id}`, {
+          ...info,
+          name: template.name,
+          scope: shown?.scope ?? { kind: 'workspace' },
+        })
+        .expect(200);
+    }
+  });
+
+  it('keeps the photos it copied when a commit’s result is unknown: it may have applied', async () => {
+    const { pageId } = await pageWithPhoto(owner, smile);
+    const saved = await saveTemplate(owner, saveBody(smile.id, pageId));
+    const transactions = t.app.get(TransactionRunner);
+    const run = transactions.run.bind(transactions);
+    /** The next write commits, then the driver gives up learning whether its commit applied. */
+    const commitUnknown = () =>
+      vi.spyOn(transactions, 'run').mockImplementationOnce(async (work) => {
+        await run(work);
+        const unknown = new mongo.MongoError('Transaction commit result is unknown');
+        unknown.addErrorLabel('UnknownTransactionCommitResult');
+        throw unknown;
+      });
+
+    // A page made from the template: the page holds a copy of the photo in its site.
+    const slug = uniqueSlug('chua-ro');
+    let spy = commitUnknown();
+    try {
+      await owner
+        .post(`/sites/${kitchen.id}/pages`, { ...fromTemplate(saved.id, 1), slug })
+        .expect(500);
+    } finally {
+      spy.mockRestore();
+    }
+    const pages = pageListResponseSchema.parse(
+      (await owner.get(`/sites/${kitchen.id}/pages?q=${slug}`).expect(200)).body,
+    );
+    const created = pages.items.find((item) => item.slug === slug);
+    if (created === undefined) {
+      throw new Error('The page was not committed');
+    }
+    const image = imageOf(await getPage(owner, kitchen.id, created.id));
+    const assets = assetListResponseSchema.parse(
+      (await owner.get(`/sites/${kitchen.id}/assets?ids=${image}`).expect(200)).body,
+    );
+    expect((await fetch(assets.items[0]?.url ?? '')).status).toBe(200);
+
+    // A template saved from the page: the version holds the template's own copy of the photo.
+    spy = commitUnknown();
+    try {
+      await owner
+        .post(base(), saveBody(smile.id, pageId, { name: 'Lưu chưa rõ kết quả' }))
+        .expect(500);
+    } finally {
+      spy.mockRestore();
+    }
+    const stored = (await board(owner)).find((item) => item.name === 'Lưu chưa rõ kết quả');
+    if (stored === undefined) {
+      throw new Error('The template was not committed');
+    }
+    const images = Object.values((await detail(owner, stored.id)).images);
+    expect(images).toHaveLength(1);
+    expect((await fetch(images[0]?.url ?? '')).status).toBe(200);
   });
 
   it('belongs to its workspace: another one finds nothing', async () => {

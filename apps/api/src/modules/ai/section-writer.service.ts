@@ -46,10 +46,15 @@ function registryIssues(
 export class SectionWriter {
   constructor(private readonly model: AiTextModel) {}
 
+  /**
+   * `beforeRetry` runs before the retry is sent: the caller aborts `signal` there when the work is
+   * no longer wanted. No request is sent once `signal` aborted.
+   */
   async write(
     context: PromptContext,
     section: SectionInstance,
     signal: AbortSignal,
+    beforeRetry: () => Promise<void> = () => Promise.resolve(),
   ): Promise<SectionWriteResult> {
     const plan = copyPlanOf(section);
     const first = buildSectionPrompt(context, section, plan);
@@ -58,6 +63,16 @@ export class SectionWriter {
     const tokens: TokenCount = { input: 0, output: 0 };
     let prompt = first;
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (attempt > 0) {
+        await beforeRetry();
+      }
+      if (signal.aborted) {
+        return {
+          status: 'error',
+          error: new AiError('aborted', 'The AI request was cancelled'),
+          tokens,
+        };
+      }
       let result: AiTextResult;
       try {
         result = await this.model.generate({ ...prompt, schema, maxOutputTokens, signal });

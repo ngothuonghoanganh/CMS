@@ -144,7 +144,8 @@ export class TemplateAssets {
   }
 
   /**
-   * Deletes copied objects nothing will refer to: the write they were copied for failed. A failure
+   * Deletes copied objects nothing will refer to: the write they were copied for failed before its
+   * commit. Callers keep them when the commit may have applied (`commitMayHaveApplied`). A failure
    * is logged, never thrown over the error that is being answered; a leftover is a public file
    * nothing refers to, as after a refused upload (ADR-027).
    */

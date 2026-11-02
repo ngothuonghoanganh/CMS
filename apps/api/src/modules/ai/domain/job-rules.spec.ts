@@ -3,9 +3,12 @@ import { failureOfError, runBudgetMs, summarizeFailures } from './job-rules.js';
 
 describe('AI job rules (ADR-031)', () => {
   it('gives a run time for every round of sections, each with its one retry', () => {
-    expect(runBudgetMs(1, 60_000)).toBe(120_000);
-    expect(runBudgetMs(3, 60_000)).toBe(120_000);
-    expect(runBudgetMs(7, 60_000)).toBe(360_000);
+    expect(runBudgetMs(1, 60_000, 3)).toBe(120_000);
+    expect(runBudgetMs(3, 60_000, 3)).toBe(120_000);
+    expect(runBudgetMs(7, 60_000, 3)).toBe(360_000);
+    // One section at a time (a local Ollama): a round per section.
+    expect(runBudgetMs(7, 60_000, 1)).toBe(840_000);
+    expect(runBudgetMs(7, 60_000, 8)).toBe(120_000);
   });
 
   it('names what a failed request means for its section', () => {

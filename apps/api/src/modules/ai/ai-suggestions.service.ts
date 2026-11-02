@@ -6,6 +6,8 @@ import {
   MAX_SECTIONS,
   type VnMonth,
 } from '@plp/contracts';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { validationFailed } from '../../shared/errors.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { TaskLimiter } from '../../shared/task-limiter.js';
@@ -25,7 +27,7 @@ import {
   type SuggestionTask,
   type SuggestionUnit,
 } from './domain/assistant.js';
-import { failureOfError, SECTION_CONCURRENCY, summarizeFailures } from './domain/job-rules.js';
+import { failureOfError, summarizeFailures } from './domain/job-rules.js';
 import { withRetryFeedback } from './domain/prompts.js';
 import {
   copyJsonSchema,
@@ -41,7 +43,14 @@ const OUTPUT_TOKEN_MARGIN = 300;
 
 /** Runs a suggestion whose use is reserved; never rejects for the AI's sake. */
 export interface SuggestionRun {
-  execute(signal: AbortSignal): Promise<AiSuggestionResult>;
+  execute(signal: AbortSignal): Promise<SuggestionOutcome>;
+}
+
+/** A suggestion's result, and how its use goes back when the result never reaches the client. */
+export interface SuggestionOutcome {
+  result: AiSuggestionResult;
+  /** Set when the result charges the use; gives it back at most once. */
+  giveBack: (() => Promise<void>) | null;
 }
 
 interface UnitOutcome {
@@ -65,13 +74,15 @@ function better(first: Reading | null, second: Reading): Reading {
  * The assistant of the editor (ADR-031, board 21): `pages.edit` on the site. Suggests new text for
  * a field, a section or the page and never changes the draft; the editor applies what the user
  * accepts as one command. One use of the month is reserved before the AI is asked, and given back
- * unless at least one change came back to a client still waiting for it.
+ * unless at least one change reached the client: the stream gives it back when the result line
+ * could not be delivered (`streamSuggestion`). The sections are written `AI_CONCURRENCY` at once.
  */
 @Injectable()
 export class AiSuggestionsService {
   private readonly logger = new Logger(AiSuggestionsService.name);
 
   constructor(
+    @InjectEnv() private readonly env: Env,
     private readonly pageAccess: PageAccessService,
     private readonly quota: AiQuota,
     private readonly model: AiTextModel,
@@ -119,12 +130,18 @@ export class AiSuggestionsService {
       pageId: string;
     },
     signal: AbortSignal,
-  ): Promise<AiSuggestionResult> {
+  ): Promise<SuggestionOutcome> {
     const startedAt = Date.now();
-    // Set once the use is kept or on its way back, so it goes back at most once.
-    let settled = false;
+    // Set as the use goes back, so it goes back at most once.
+    let givenBack = false;
+    const giveBack = async () => {
+      if (!givenBack) {
+        givenBack = true;
+        await this.refund(run.scope, run.month);
+      }
+    };
     try {
-      const limiter = new TaskLimiter({ running: SECTION_CONCURRENCY, waiting: MAX_SECTIONS });
+      const limiter = new TaskLimiter({ running: this.env.AI_CONCURRENCY, waiting: MAX_SECTIONS });
       const outcomes = await Promise.all(
         run.plan.units.map((unit) =>
           limiter.run(() => this.writeUnit(run.context, run.task, run.plan, unit, signal)),
@@ -132,11 +149,11 @@ export class AiSuggestionsService {
       );
       const changes = outcomes.flatMap((outcome) => outcome.changes);
       const written = changes.filter((change) => change.status === 'ok').length;
-      // A client that went away never sees the changes: nothing was written for it.
+      // A client that went away never sees the changes: nothing was written for it. One that goes
+      // away from now on is the stream's to notice, as it writes the result.
       const kept = written > 0 && !signal.aborted;
-      settled = true;
       if (!kept) {
-        await this.refund(run.scope, run.month);
+        await giveBack();
       }
       const failures = changes.flatMap((change): AiFailure[] =>
         change.status === 'failed' ? [change.failure] : [],
@@ -157,16 +174,18 @@ export class AiSuggestionsService {
         'AI suggestion ended',
       );
       return {
-        changes,
-        charged: kept,
-        failure: written > 0 ? null : summarizeFailures(failures),
-        usage: await this.quota.usageOf(run.scope),
+        result: {
+          changes,
+          charged: kept,
+          failure: written > 0 ? null : summarizeFailures(failures),
+          usage: await this.quota.usageOf(run.scope),
+        },
+        giveBack: kept ? giveBack : null,
       };
     } catch (error) {
-      // A defect while the AI wrote: the use goes back before the error does.
-      if (!settled) {
-        await this.refund(run.scope, run.month);
-      }
+      // A defect while the AI wrote or the result was made: no result will reach the client, so
+      // the use goes back before the error does.
+      await giveBack();
       throw new Error('The AI suggestion failed', { cause: error });
     }
   }
