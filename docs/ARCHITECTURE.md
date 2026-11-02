@@ -1435,6 +1435,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Mỗi dòng của màn 13 có dòng chẩn đoán như màn 14.
     - Tiêu đề bước của màn 14 đi theo trạng thái.
     - Hộp "Đặt làm chính" nêu số trang đang live sẽ đổi địa chỉ và một địa chỉ ví dụ.
+  - **Chi tiết khi làm (lát E1):**
+    - Màn 01 đọc `GET /sites/:siteId/address-status` (`pages.view`) → `{ primaryStatus, customDomainActive }`, một truy vấn ở master. Tên miền chính đang cấp chứng chỉ (`issuing`) không có "Xem cách sửa": không ai phải làm gì.
+    - `DomainListResponse.livePages { count, exampleSlug }` cho hộp "Đặt làm chính" ở màn 13 và 14: một truy vấn có giới hạn; ví dụ là slug đầu tiên không phải trang chủ.
+    - Sự kiện tên miền hiện với mọi vai trò có `pages.view`; chúng không có dữ liệu cá nhân. `actorId` null chỉ được nhận cho `domain.activated` và `domain.lost` (validator của schema); mọi nơi cần người làm (lịch sử, đánh giá trang) đi qua `pointerActorOf`.
+    - `domain.primary_changed` chỉ ghi khi địa chỉ chính thật sự đổi; quay về địa chỉ mặc định thì `hostname` là host mặc định. `domain.activated` chỉ ghi lần hoạt động đầu (`activeSince` không bao giờ bị xóa); `domain.lost` ghi mỗi lần `lostSince` được đặt. Tên miền bị chuyển sang site khác không ghi gì ở site mất nó.
+    - Vòng kiểm tra ghi sự kiện cùng transaction với update có điều kiện đặt mốc (master và workspace DB), và bỏ qua transaction khi bản ghi đã có mốc.
+    - Kiểm tra trước khi thêm: `already_added` thắng `taken`; màn 14 hỏi sau 400 ms, request mới hủy request cũ, kết quả đọc qua vùng live.
+    - Tiêu đề bước cho trạng thái board không vẽ: taken → "Xác minh quyền sở hữu", lost → "Sửa bản ghi DNS", needs_attention → "Chưa bật được HTTPS".
+    - Tìm trang so cả slug với dấu gạch ngang là khoảng trắng: "khuyen mai" tìm ra `khuyen-mai`.
 
 ### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
 
@@ -1915,7 +1924,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 
 | Lát | Nội dung                                                                                                                                                                               | Màn              | Trạng thái |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------- |
-| E1  | Khớp thiết kế: bước tên miền và trạng thái địa chỉ ở màn 01, tìm trang không dấu, sự kiện tên miền, chẩn đoán và kiểm tra trùng ở màn 13–14, mục đã đạt về địa chỉ (ADR-005, 006, 022) | 01, 05, 13, 14   | Đang làm   |
+| E1  | Khớp thiết kế: bước tên miền và trạng thái địa chỉ ở màn 01, tìm trang không dấu, sự kiện tên miền, chẩn đoán và kiểm tra trùng ở màn 13–14, mục đã đạt về địa chỉ (ADR-005, 006, 022) | 01, 05, 13, 14   | Xong       |
 | E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Xong       |
 | E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Xong       |
 | E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Xong       |
