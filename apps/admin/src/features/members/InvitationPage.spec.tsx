@@ -92,6 +92,9 @@ describe('InvitationPage', () => {
     expect(screen.getByText(/trên site Nha khoa Smile Care/)).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toHaveValue('thuy.mkt@smilecare.vn');
     expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
+    // A password manager saves the new password under the email, not the name typed next.
+    expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'username');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('name', 'email');
 
     await user.type(screen.getByLabelText('Họ và tên'), 'Thu Hà');
     await user.type(screen.getByLabelText('Mật khẩu'), 'mat-khau-an-toan');
@@ -142,6 +145,58 @@ describe('InvitationPage', () => {
       body: { token: 'bi-mat-cua-link' },
     });
     expect(window.sessionStorage.getItem(PENDING_INVITATION_KEY)).toBeNull();
+    // The page is not a dead end: the start page opens the user's workspaces.
+    expect(screen.getByRole('link', { name: 'Về trang chủ' })).toHaveAttribute('href', '/');
+  });
+
+  it('shows another link opened in the same tab, not the answer given to the one before', async () => {
+    const user = userEvent.setup();
+    const signedInUser = signedIn('thuy.mkt@smilecare.vn');
+    serve(invitation, signedInUser);
+    renderWithProviders(<InvitationPage addresses={null} />);
+    await user.click(await screen.findByRole('button', { name: 'Từ chối lời mời' }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bạn đã từ chối lời mời' }),
+    ).toBeInTheDocument();
+
+    // The email of another invitation opens in this tab: only the fragment changes.
+    serve({ ...invitation, workspaceName: 'Phòng khám Gia Đình' }, signedInUser);
+    window.location.hash = '#token=link-moi';
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Tham gia Phòng khám Gia Đình?' }),
+    ).toBeInTheDocument();
+    expect(lastCallTo(apiMock, endpoints.lookupInvitation).options).toEqual({
+      body: { token: 'link-moi' },
+    });
+  });
+
+  it('keeps a failed answer to its own link', async () => {
+    const user = userEvent.setup();
+    const signedInUser = signedIn('thuy.mkt@smilecare.vn');
+    serve(invitation, signedInUser);
+    const served = apiMock.getMockImplementation();
+    apiMock.mockImplementation((endpoint, ...rest) =>
+      endpoint === endpoints.declineInvitation
+        ? Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận'))
+        : (served?.(endpoint, ...rest) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    renderWithProviders(<InvitationPage addresses={null} />);
+    await user.click(await screen.findByRole('button', { name: 'Từ chối lời mời' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Máy chủ đang bận');
+
+    const other = { ...invitation, workspaceName: 'Phòng khám Gia Đình' };
+    apiMock.mockImplementation((endpoint, ...rest) =>
+      endpoint === endpoints.lookupInvitation
+        ? Promise.resolve(other)
+        : (served?.(endpoint, ...rest) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    window.location.hash = '#token=link-moi';
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Tham gia Phòng khám Gia Đình?' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('opens the workspace after "Tham gia" without calling the link invalid meanwhile', async () => {
