@@ -8,8 +8,9 @@ import {
   type SectionType,
   sectionTypes,
 } from '@plp/contracts';
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { FieldDescriptor, LeafField } from '../schema/define.js';
 import { setAtPath } from '../schema/paths.js';
 import { collectLeaves, createSectionInstance, getSectionDefinition } from '../schema/registry.js';
@@ -160,6 +161,15 @@ describe('section components', () => {
     expect(live).not.toContain('Nội dung section không hợp lệ');
     expect(edit).toContain(EDITABLE);
     expect(edit).not.toContain('<a ');
+  });
+
+  it('has a component for every section type', () => {
+    // The result leaves out `undefined`: a switch that misses a type falls off its end, which
+    // fails to compile.
+    expectTypeOf(renderSectionContent).returns.toEqualTypeOf<ReactElement | null>();
+    for (const type of sectionTypes) {
+      expect(renderSectionContent(section(type), liveCtx()), type).not.toBeNull();
+    }
   });
 
   it.each(variants)(
