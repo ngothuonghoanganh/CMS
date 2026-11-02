@@ -67,7 +67,12 @@ describe('sites', () => {
         themePresetId: 'indigo',
       });
       const response = await client.get(`/workspaces/${ownWorkspace}/sites`).expect(200);
-      expect(siteListResponseSchema.parse(response.body).items).toEqual([first, second]);
+      // Each with its counts (ADR-028), which site-list.int.spec.ts covers.
+      const empty = { pages: 0, livePages: 0, leadsLast7Days: 0 };
+      expect(siteListResponseSchema.parse(response.body).items).toEqual([
+        { ...first, summary: empty },
+        { ...second, summary: empty },
+      ]);
     });
 
     it('records site.created with the creator as actor', async () => {

@@ -46,6 +46,7 @@ function renderShell() {
         site={site}
         sites={[site]}
         pageCount={2}
+        memberCount={1}
         leadCounts={NO_LEADS}
         addresses={null}
       >

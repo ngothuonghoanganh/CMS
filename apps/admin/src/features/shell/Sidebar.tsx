@@ -11,6 +11,7 @@ import {
 import {
   Avatar,
   Badge,
+  BrowserIcon,
   ButtonLink,
   ChartBarIcon,
   ChevronUpDownIcon,
@@ -40,11 +41,13 @@ import { loadPage } from '../../lib/page-load';
 import { hostOf } from '../../lib/site-url';
 import { newLeadsBadge } from '../leads/lead-presentation';
 import { useLeadCounts } from '../leads/queries';
+import { useMemberCount } from '../members/queries';
 import { Brand } from './Brand';
 import {
   type NavItem,
   navCurrent,
   newLeadsHref,
+  newSiteHref,
   siteHref,
   siteNavItems,
   type SiteNavKey,
@@ -65,6 +68,7 @@ const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   domain: GlobeIcon,
   privacy: ShieldCheckIcon,
   settings: SettingsIcon,
+  sites: BrowserIcon,
   members: UsersIcon,
   roles: LockIcon,
 };
@@ -76,9 +80,11 @@ export interface SidebarProps {
   membership: Membership;
   /** The site of the frame; null on a workspace screen of a workspace without a site yet. */
   site: Site | null;
-  /** Sites of the current workspace the user may open. */
+  /** Sites of the current workspace the user may open; "Sites" counts them (ADR-028). */
   sites: readonly Site[];
   pageCount: number;
+  /** Members of the workspace for "Thành viên"; null for roles that do not manage members. */
+  memberCount: number | null;
   /**
    * Lead counts the server loaded; the badge then follows changes made in the inbox. Null for
    * roles that do not see leads (ADR-020).
@@ -111,6 +117,18 @@ interface NavLinkProps {
   /** Overrides the item's address, e.g. the new leads behind the badge. */
   href?: string;
   children?: ReactNode;
+}
+
+/** A count after a section's name, read with its noun: "Trang 6 trang". */
+function NavCount({ count, noun }: { count: number; noun: string }) {
+  return (
+    <>
+      {' '}
+      <span className={styles.navCount}>
+        {count} <VisuallyHidden>{noun}</VisuallyHidden>
+      </span>
+    </>
+  );
 }
 
 function NavLink({ item, pathname, onNavigate, href = item.href, children }: NavLinkProps) {
@@ -151,6 +169,22 @@ function LeadsNavLink({
 }
 
 /**
+ * "Thành viên" with the number of members: it counts again after a change on "Thành viên", which
+ * the sidebar's layout does not render again (ADR-028).
+ */
+function MembersNavLink({
+  workspaceId,
+  memberCount,
+  ...link
+}: Omit<NavLinkProps, 'href' | 'children'> & { workspaceId: string; memberCount: number }) {
+  return (
+    <NavLink {...link}>
+      <NavCount count={useMemberCount(workspaceId, memberCount)} noun="thành viên" />
+    </NavLink>
+  );
+}
+
+/**
  * Main navigation (Sidebar v2): brand, the workspace switcher and its sections, the site switcher
  * and the site's sections, and the account. Each section shows only to roles that hold its
  * permission (ADR-020).
@@ -162,6 +196,7 @@ export function Sidebar({
   site,
   sites,
   pageCount,
+  memberCount,
   leadCounts,
   addresses,
   onNavigate,
@@ -177,7 +212,7 @@ export function Sidebar({
   // Roles that cannot change roles ask Chủ sở hữu instead (ADR-021).
   const canAskForAccess = !can(membership.role, 'members.manage');
   const [requestOpen, setRequestOpen] = useState(false);
-  const newSiteHref = `/sites/new?workspace=${encodeURIComponent(workspace.id)}`;
+  const createSiteHref = newSiteHref(workspace.id);
 
   // Code navigation leaves through the screen on display, which saves what it holds first.
   function go(href: string) {
@@ -289,7 +324,19 @@ export function Sidebar({
           <ul className={styles.navList}>
             {workspaceItems.map((item) => (
               <li key={item.key}>
-                <NavLink item={item} pathname={pathname} onNavigate={onNavigate} />
+                {item.key === 'members' && memberCount !== null ? (
+                  <MembersNavLink
+                    item={item}
+                    pathname={pathname}
+                    onNavigate={onNavigate}
+                    workspaceId={workspace.id}
+                    memberCount={memberCount}
+                  />
+                ) : (
+                  <NavLink item={item} pathname={pathname} onNavigate={onNavigate}>
+                    {item.key === 'sites' ? <NavCount count={sites.length} noun="site" /> : null}
+                  </NavLink>
+                )}
               </li>
             ))}
           </ul>
@@ -304,7 +351,7 @@ export function Sidebar({
           canCreateSite ? (
             <ButtonLink
               as={Link}
-              href={newSiteHref}
+              href={createSiteHref}
               variant="secondary"
               leadingIcon={<PlusIcon size={16} />}
             >
@@ -352,7 +399,7 @@ export function Sidebar({
                 <DropdownMenuItem
                   icon={<PlusIcon size={18} />}
                   onSelect={() => {
-                    go(newSiteHref);
+                    go(createSiteHref);
                   }}
                 >
                   Tạo site mới
@@ -377,14 +424,7 @@ export function Sidebar({
                 />
               ) : (
                 <NavLink item={item} pathname={pathname} onNavigate={onNavigate}>
-                  {item.key === 'pages' ? (
-                    <>
-                      {' '}
-                      <span className={styles.navCount}>
-                        {pageCount} <VisuallyHidden>trang</VisuallyHidden>
-                      </span>
-                    </>
-                  ) : null}
+                  {item.key === 'pages' ? <NavCount count={pageCount} noun="trang" /> : null}
                 </NavLink>
               )}
             </li>

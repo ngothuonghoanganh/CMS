@@ -351,6 +351,35 @@ export class LeadsRepository {
   }
 
   /**
+   * Leads per site created in `window`, spam excluded, in one aggregation keyed by site id hex:
+   * the "Lead 7 ngày qua" of each site's dashboard, for the Sites screen (ADR-028). Sites without
+   * leads are absent.
+   */
+  async countRecentBySite(
+    scope: WorkspaceScope,
+    siteIds: readonly ObjectId[],
+    window: InstantWindow,
+  ): Promise<Map<string, number>> {
+    if (siteIds.length === 0) {
+      return new Map();
+    }
+    const groups = await this.leads(scope)
+      .aggregate<{ _id: ObjectId; count: number }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            siteId: { $in: [...siteIds] },
+            'spam.suspected': false,
+            createdAt: { $gte: window.from, $lt: window.to },
+          },
+        },
+        { $group: { _id: '$siteId', count: { $sum: 1 } } },
+      ])
+      .exec();
+    return new Map(groups.map((group) => [group._id.toHexString(), group.count]));
+  }
+
+  /**
    * Leads not suspected of spam for board 11 (ADR-019), in one aggregation on the inbox index: per
    * Vietnamese day over `window`, per source pair and per page from `currentFrom` on. Moving a lead
    * in or out of spam shows at once.

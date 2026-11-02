@@ -10,6 +10,7 @@ const redirect = vi.fn((href: string) => {
 });
 vi.mock('next/navigation', () => ({ redirect: (href: string) => redirect(href) }));
 
+class NotFound extends Error {}
 const context = vi.fn<() => Promise<{ membership: { role: Access } }>>();
 vi.mock('../../../../features/shell/workspace-context', () => ({
   loadWorkspaceContext: () => context(),
@@ -24,8 +25,20 @@ async function landing(role: Access): Promise<string> {
 }
 
 describe('workspace page', () => {
-  it('sends who signs in again from a workspace screen to "Thành viên", or to the start', async () => {
-    expect(await landing('admin')).toBe(`/workspaces/${WORKSPACE_ID}/members`);
-    expect(await landing('editor')).toBe('/');
+  it('opens the Sites screen for every role (ADR-028)', async () => {
+    const roles: Access[] = ['owner', 'admin', 'editor', 'contributor', 'support', 'viewer'];
+    for (const role of roles) {
+      expect(await landing(role)).toBe(`/workspaces/${WORKSPACE_ID}/sites`);
+    }
+  });
+
+  it('redirects only once the context let the user in (membership, address)', async () => {
+    redirect.mockClear();
+    // The context answers 404 for someone outside the workspace, or moves them to its address.
+    context.mockRejectedValueOnce(new NotFound());
+    await expect(
+      WorkspacePage({ params: Promise.resolve({ workspaceId: WORKSPACE_ID }) }),
+    ).rejects.toBeInstanceOf(NotFound);
+    expect(redirect).not.toHaveBeenCalled();
   });
 });

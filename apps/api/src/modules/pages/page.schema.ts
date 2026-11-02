@@ -5,6 +5,7 @@ import { workspaceCollection } from '../../shared/persistence/workspace-database
 const PAGE_MODEL = 'Page';
 export const PAGES_DRAFT_SLUG_INDEX = 'pages_draft_slug_unique';
 export const PAGES_PUBLISHED_SLUG_INDEX = 'pages_published_slug_unique';
+export const PAGES_SITE_LIVE_INDEX = 'pages_site_live';
 
 /** The editable state of a page. Saving it never changes what is live (business rule 1). */
 export interface PageDraftRecord {
@@ -85,6 +86,12 @@ pageSchema.index(
   },
 );
 pageSchema.index({ workspaceId: 1, siteId: 1, updatedAt: -1, _id: -1 });
+// The page counts of the Sites screen (ADR-028), which every admin screen loads with the site
+// switcher: the index answers them alone, without reading pages and their compositions.
+pageSchema.index(
+  { workspaceId: 1, siteId: 1, publishedReleaseId: 1 },
+  { name: PAGES_SITE_LIVE_INDEX },
+);
 
 /** In the workspace's own database (ADR-025). */
 export const PAGE_COLLECTION = workspaceCollection(PAGE_MODEL, pageSchema);

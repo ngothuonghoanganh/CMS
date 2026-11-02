@@ -51,8 +51,14 @@ describe('siteNavItems', () => {
     ]);
   });
 
-  it('lists the workspace sections, each behind its permission', () => {
+  it('lists the workspace sections, "Sites" first for every role, each behind its permission', () => {
     expect(workspaceNavItems('64b0000000000000000000aa')).toEqual([
+      {
+        key: 'sites',
+        label: 'Sites',
+        href: '/workspaces/64b0000000000000000000aa/sites',
+        permissions: ['pages.view'],
+      },
       {
         key: 'members',
         label: 'Thành viên',
@@ -83,6 +89,16 @@ describe('navCurrent', () => {
     expect(navCurrent(`/sites/${siteId}/domain`, pages)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/privacy`, privacy)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/settings`, settings)).toBe('page');
+  });
+
+  it('marks "Sites" on the Sites screen of the workspace only', () => {
+    const [sites] = workspaceNavItems('64b0000000000000000000aa');
+    if (!sites) {
+      throw new Error('missing nav items');
+    }
+    expect(navCurrent('/workspaces/64b0000000000000000000aa/sites', sites)).toBe('page');
+    expect(navCurrent('/workspaces/64b0000000000000000000aa/members', sites)).toBeUndefined();
+    expect(navCurrent(`/sites/${siteId}`, sites)).toBeUndefined();
   });
 
   it('keeps "Trang" current on the SEO and history pages of a page', () => {
