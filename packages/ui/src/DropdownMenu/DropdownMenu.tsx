@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu as RadixMenu } from 'radix-ui';
-import { type ReactElement, type ReactNode, useId } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { CheckIcon } from '../icons';
 import { cx } from '../internal/cx';
 import styles from './DropdownMenu.module.css';
@@ -69,7 +69,8 @@ export interface DropdownMenuItemProps {
   disabled?: boolean | undefined;
   /**
    * A second line under the label, e.g. why the item is disabled ("Gỡ xuất bản trước khi xóa").
-   * It is the item's accessible description; the name stays the label.
+   * It is part of the item's name: everything visible must be in the name (WCAG 2.5.3, axe
+   * `label-content-name-mismatch`), and a disabled item's reason is read with it.
    */
   description?: ReactNode;
 }
@@ -82,7 +83,6 @@ export function DropdownMenuItem({
   disabled = false,
   description,
 }: DropdownMenuItemProps) {
-  const id = useId();
   const described = description !== undefined && description !== null;
   return (
     <RadixMenu.Item
@@ -90,9 +90,6 @@ export function DropdownMenuItem({
       disabled={disabled}
       className={cx(styles.item, tone === 'danger' && styles.danger, described && styles.twoLines)}
       data-tone={tone}
-      {...(described
-        ? { 'aria-labelledby': `${id}-label`, 'aria-describedby': `${id}-description` }
-        : {})}
     >
       {icon ? (
         <span className={styles.icon} aria-hidden="true">
@@ -101,12 +98,8 @@ export function DropdownMenuItem({
       ) : null}
       {described ? (
         <span className={styles.lines}>
-          <span id={`${id}-label`} className={styles.text}>
-            {children}
-          </span>
-          <span id={`${id}-description`} className={styles.description}>
-            {description}
-          </span>
+          <span className={styles.text}>{children}</span>{' '}
+          <span className={styles.description}>{description}</span>
         </span>
       ) : (
         <span className={styles.text}>{children}</span>

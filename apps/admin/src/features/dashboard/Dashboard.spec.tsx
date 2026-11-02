@@ -554,12 +554,13 @@ describe('Dashboard', () => {
       'SEO & chia sẻ',
       'Lịch sử phiên bản',
       'Gỡ xuất bản',
-      'Xóa trangGỡ xuất bản trước khi xóa',
+      'Xóa trang Gỡ xuất bản trước khi xóa',
     ]);
     // A live page goes off the web before it can be deleted (ADR-027).
-    const deleteItem = screen.getByRole('menuitem', { name: 'Xóa trang' });
+    const deleteItem = screen.getByRole('menuitem', {
+      name: 'Xóa trang Gỡ xuất bản trước khi xóa',
+    });
     expect(deleteItem).toHaveAttribute('aria-disabled', 'true');
-    expect(deleteItem).toHaveAccessibleDescription('Gỡ xuất bản trước khi xóa');
     await user.click(screen.getByRole('menuitem', { name: 'Xem trang live' }));
     expect(open).toHaveBeenCalledWith(
       `${livePage.liveUrl ?? ''}?plp_internal=1`,

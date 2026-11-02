@@ -58,7 +58,7 @@ test.describe('E4 · deleting a page and a site (ADR-027)', () => {
     const deleteItem = page.getByRole('menuitem', { name: 'Xóa trang' });
     await expect(deleteItem).toHaveAttribute('aria-disabled', 'true');
     await expect(deleteItem).toContainText('Gỡ xuất bản trước khi xóa');
-    await page.getByRole('menuitem', { name: 'Gỡ xuất bản' }).click();
+    await page.getByRole('menuitem', { name: 'Gỡ xuất bản', exact: true }).click();
     const unpublish = page.getByRole('alertdialog');
     await unpublish.getByRole('textbox').fill('Hết chương trình');
     await unpublish.getByRole('button', { name: 'Gỡ xuất bản' }).click();
@@ -76,7 +76,7 @@ test.describe('E4 · deleting a page and a site (ADR-027)', () => {
     await expect(confirm.getByRole('region', { name: 'Vẫn giữ' })).toContainText('Lead đã nhận');
     await confirm.getByRole('button', { name: 'Xóa trang' }).click();
 
-    await expect(page.getByText(`Đã xóa trang “${TITLE}”`)).toBeVisible();
+    await expect(page.getByText(`Đã xóa trang “${TITLE}”`, { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Chưa có trang nào' })).toBeVisible();
     const activity = page.getByRole('region', { name: 'Hoạt động xuất bản gần đây' });
     await expect(activity.getByRole('listitem').nth(0)).toContainText(
