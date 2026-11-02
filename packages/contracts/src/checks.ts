@@ -40,10 +40,16 @@ export const warningCheckCodes = [
   'section_hidden_everywhere',
 ] as const;
 
+/**
+ * In the order of board 05. `domain_verified` and `https_active` come from the site's primary
+ * address, not the draft (ADR-006): never blocking nor a warning, only passed or absent.
+ */
 export const passedCheckCodes = [
   'seo_title',
   'seo_description',
   'slug_valid',
+  'domain_verified',
+  'https_active',
   'contrast_aa',
   'internal_links',
   'mobile_visible',

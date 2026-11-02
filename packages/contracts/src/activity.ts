@@ -18,9 +18,40 @@ export const activityTypes = [
   'lead.recipients_changed',
   'data_request.created',
   'data_request.completed',
+  'domain.added',
+  'domain.removed',
+  'domain.primary_changed',
+  'domain.activated',
+  'domain.lost',
 ] as const;
 export const activityTypeSchema = z.enum(activityTypes);
 export type ActivityType = z.infer<typeof activityTypeSchema>;
+
+/**
+ * Events of a site's custom domains (ADR-022); their `data` holds the hostname only. Members add,
+ * remove and choose the primary address; the domain checks find it active or lost.
+ */
+export const domainActivityTypes = [
+  'domain.added',
+  'domain.removed',
+  'domain.primary_changed',
+  'domain.activated',
+  'domain.lost',
+] as const satisfies readonly ActivityType[];
+
+/**
+ * Events no member does: the domain checks record them, with no actor ("Hệ thống"). Every other
+ * event has the member who did it.
+ */
+export const systemActivityTypes = [
+  'domain.activated',
+  'domain.lost',
+] as const satisfies readonly ActivityType[];
+export type SystemActivityType = (typeof systemActivityTypes)[number];
+
+export function isSystemActivityType(type: ActivityType): type is SystemActivityType {
+  return (systemActivityTypes as readonly ActivityType[]).includes(type);
+}
 
 /**
  * Events that move a page's live pointer (publish, rollback, undo, unpublish): the publishing
@@ -51,7 +82,8 @@ export type ActivityListQuery = z.input<typeof activityListQuerySchema>;
 export const activityItemSchema = z.object({
   id: idSchema,
   type: activityTypeSchema,
-  actor: userRefSchema,
+  /** Who did it; null for the events of `systemActivityTypes`, which the admin calls "Hệ thống". */
+  actor: userRefSchema.nullable(),
   siteId: idSchema,
   /**
    * The page the event is about, with its title then. `deleted`: the page was deleted since
@@ -63,6 +95,7 @@ export const activityItemSchema = z.object({
    * `from`/`to` for pointer moves. `count` is how many leads an export, a deletion or a completed
    * data request covered, or how many addresses receive leads after a change; activity never holds
    * personal data (rule 10). `slug` is the address a deleted page had (`page.deleted`).
+   * `hostname` is the domain of a domain event, or the default address made primary again.
    */
   data: z.object({
     version: z.number().int().positive().nullable(),
@@ -70,6 +103,7 @@ export const activityItemSchema = z.object({
     toVersion: z.number().int().positive().nullable(),
     count: z.number().int().nonnegative().nullable(),
     slug: z.string().nullable(),
+    hostname: z.string().nullable(),
     revalidationFailed: z.boolean(),
   }),
   reason: z.string().nullable(),

@@ -7,7 +7,6 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { DOMAIN_MODEL, type DomainCheck, type DomainRecord } from './domain.schema.js';
 
-/** What a check writes back. */
 /**
  * What a check stores. `activeSince` and `lostSince` are set by `markSince` only, so two checks of
  * one domain at once never both announce it; `lost: false` clears `lostSince`.
@@ -172,10 +171,18 @@ export class DomainsRepository {
       .exec();
   }
 
-  /** Sets `activeSince` or `lostSince` once; true only for the check that set it. */
-  async markSince(id: ObjectId, field: 'activeSince' | 'lostSince', at: Date): Promise<boolean> {
+  /**
+   * Sets `activeSince` or `lostSince` once, in the transaction that logs it; true only for the
+   * check that set it.
+   */
+  async markSince(
+    id: ObjectId,
+    field: 'activeSince' | 'lostSince',
+    at: Date,
+    tx: Tx,
+  ): Promise<boolean> {
     const result = await this.domains
-      .updateOne({ _id: id, [field]: null }, { $set: { [field]: at } })
+      .updateOne({ _id: id, [field]: null }, { $set: { [field]: at } }, { session: tx })
       .exec();
     return result.modifiedCount === 1;
   }

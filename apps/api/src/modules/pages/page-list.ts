@@ -1,5 +1,6 @@
 import type { PageCounts, PageListResponse, PageStatusKind, PageSummary } from '@plp/contracts';
 import { decodeCursor, encodeCursor } from '../../shared/cursor.js';
+import { foldVietnamese } from '../leads/domain/lead-search.js';
 
 /** A page of the list with what the dashboard needs about it. */
 export interface ListedPage {
@@ -78,9 +79,12 @@ export function liveSiteUrlOf(pages: readonly ListedPage[]): string | null {
   return latest?.url ?? null;
 }
 
-/** Status filter and a case-insensitive substring search on the title or the slug. */
+/**
+ * Status filter and a substring search on the title or the slug that ignores accents and case,
+ * folded like names in the lead inbox (ADR-005, ADR-018): "uu dai" finds "Ưu đãi tháng 11".
+ */
 export function filterPages(pages: readonly ListedPage[], filter: PageListFilter): ListedPage[] {
-  const query = filter.q?.trim().toLocaleLowerCase('vi') ?? '';
+  const query = foldVietnamese(filter.q ?? '');
   return pages.filter(({ summary }) => {
     if (filter.status !== undefined && !matchesStatusFilter(summary.status.kind, filter.status)) {
       return false;
@@ -88,9 +92,11 @@ export function filterPages(pages: readonly ListedPage[], filter: PageListFilter
     if (query === '') {
       return true;
     }
+    // A slug's dashes stand for spaces: "khuyen mai" finds "khuyen-mai".
     return (
-      summary.title.toLocaleLowerCase('vi').includes(query) ||
-      summary.slug.toLocaleLowerCase('vi').includes(query)
+      foldVietnamese(summary.title).includes(query) ||
+      foldVietnamese(summary.slug.replaceAll('-', ' ')).includes(query) ||
+      foldVietnamese(summary.slug).includes(query)
     );
   });
 }

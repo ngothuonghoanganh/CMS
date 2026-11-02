@@ -14,12 +14,13 @@ function pageRef(record: ActivityRecord, deletedPages: ReadonlySet<string>): Act
 }
 
 /**
- * Maps a stored event to the contract `ActivityItem`. Release ids stay internal. `deletedPages`
- * holds the ids (hex) of the deleted pages among the events' pages.
+ * Maps a stored event to the contract `ActivityItem`. Release ids stay internal. `actor` is null
+ * for an event of the system. `deletedPages` holds the ids (hex) of the deleted pages among the
+ * events' pages.
  */
 export function toActivityItem(
   record: ActivityRecord,
-  actor: UserRef,
+  actor: UserRef | null,
   undoable: boolean,
   deletedPages: ReadonlySet<string>,
 ): ActivityItem {
@@ -37,6 +38,8 @@ export function toActivityItem(
       count: record.data.count ?? null,
       // Only `page.deleted` has one; events stored before it have no field.
       slug: record.data.slug ?? null,
+      // Only domain events have one (ADR-022), the same.
+      hostname: record.data.hostname ?? null,
       revalidationFailed: record.data.revalidationFailed,
     },
     reason: record.reason,

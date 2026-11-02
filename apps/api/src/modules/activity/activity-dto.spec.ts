@@ -38,6 +38,7 @@ describe('toActivityItem', () => {
         toVersion: null,
         count: null,
         slug: null,
+        hostname: null,
         revalidationFailed: false,
       },
       reason: null,
@@ -74,6 +75,7 @@ describe('toActivityItem', () => {
       toVersion: 3,
       count: null,
       slug: null,
+      hostname: null,
       revalidationFailed: true,
     });
     expect(item.reason).toBe('Sai giá');
@@ -117,6 +119,20 @@ describe('toActivityItem', () => {
     expect(item.data.slug).toBe('uu-dai-thang-11');
     expect(toActivityItem(published, actor, false, gone).page?.deleted).toBe(true);
     expect(toActivityItem(published, actor, false, NONE_DELETED).page?.deleted).toBe(false);
+  });
+
+  it('maps a domain event of the system with its hostname and no actor (ADR-022)', () => {
+    const record = activityRecord({
+      type: 'domain.activated',
+      actorId: null,
+      data: { ...EMPTY_ACTIVITY_DATA, hostname: 'go.smilecare.vn' },
+    });
+    const item = activityItemSchema.parse(toActivityItem(record, null, false, NONE_DELETED));
+    expect(item).toMatchObject({ type: 'domain.activated', actor: null, page: null });
+    expect(item.data.hostname).toBe('go.smilecare.vn');
+    const { hostname: _hostname, ...before } = EMPTY_ACTIVITY_DATA;
+    const older = activityRecord({ data: before as typeof EMPTY_ACTIVITY_DATA });
+    expect(toActivityItem(older, actor, false, NONE_DELETED).data.hostname).toBeNull();
   });
 
   it('fails loudly when a page event lost its title snapshot', () => {

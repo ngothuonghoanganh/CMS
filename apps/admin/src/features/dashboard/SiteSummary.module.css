@@ -31,6 +31,18 @@
   overflow-wrap: anywhere;
 }
 
+.addressProblem {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+  color: var(--color-ink-2);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
 .link {
   display: inline-flex;
   align-items: center;

@@ -51,11 +51,14 @@ import {
 } from './data-request.js';
 import {
   addDomainRequestSchema,
+  domainAvailabilityQuerySchema,
+  domainAvailabilitySchema,
   domainListResponseSchema,
   domainSchema,
   hostSiteResponseSchema,
   setPrimaryDomainRequestSchema,
   siteAddressResponseSchema,
+  siteAddressStatusSchema,
 } from './domains.js';
 import { healthResponseSchema } from './health.js';
 import { publicLeadRequestSchema, publicLeadResponseSchema } from './lead.js';
@@ -502,6 +505,14 @@ export const endpoints = {
     query: null,
     response: domainSchema,
   }),
+  /** Board 14 while the domain is typed: whether adding it would work, never whose it is. */
+  domainAvailability: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/domains/availability`,
+    request: null,
+    query: domainAvailabilityQuerySchema,
+    response: domainAvailabilitySchema,
+  }),
   /** "Kiểm tra ngay": checks the DNS (and HTTPS) of the domain now. */
   checkDomain: endpoint({
     method: 'POST',
@@ -524,6 +535,17 @@ export const endpoints = {
     request: setPrimaryDomainRequestSchema,
     query: null,
     response: domainListResponseSchema,
+  }),
+  /**
+   * `pages.view`: whether the primary address works and whether a custom domain is connected, for
+   * the card "Địa chỉ live" and the setup checklist of board 01.
+   */
+  siteAddressStatus: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/address-status`,
+    request: null,
+    query: null,
+    response: siteAddressStatusSchema,
   }),
 
   // Personal data and consent (ADR-017): every member reads, `privacy.manage` writes (ADR-020)

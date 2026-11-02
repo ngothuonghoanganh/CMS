@@ -30,6 +30,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       initialFilters={filters}
       initialPages={data.pages}
       initialActivity={data.activity}
+      address={data.address}
       initialLeadCounts={leadCounts}
       loadedAt={data.loadedAt}
       role={membership.role}

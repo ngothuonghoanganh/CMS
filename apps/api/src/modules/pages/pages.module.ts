@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AssetsModule } from '../assets/assets.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { DomainsCoreModule } from '../domains/domains-core.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { PrivacyCoreModule } from '../privacy/privacy-core.module.js';
 import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
@@ -25,6 +26,8 @@ import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-d
     ActivityModule,
     AssetsModule,
     AuthModule,
+    // The primary custom domain, for the address checks (ADR-006).
+    DomainsCoreModule,
     LeadsCoreModule,
     PrivacyCoreModule,
     PublishingCoreModule,

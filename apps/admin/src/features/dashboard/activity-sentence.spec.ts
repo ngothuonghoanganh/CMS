@@ -14,6 +14,7 @@ const noVersions = {
   toVersion: null,
   count: null,
   slug: null,
+  hostname: null,
   revalidationFailed: false,
 };
 
@@ -37,6 +38,7 @@ describe('activitySentence', () => {
           toVersion: 5,
           count: null,
           slug: null,
+          hostname: null,
           revalidationFailed: false,
         },
       }),
@@ -114,6 +116,7 @@ describe('activitySentence', () => {
           toVersion: null,
           count: null,
           slug: null,
+          hostname: null,
           revalidationFailed: false,
         },
       }),
@@ -130,6 +133,7 @@ describe('activitySentence', () => {
           toVersion: null,
           count: null,
           slug: null,
+          hostname: null,
           revalidationFailed: false,
         },
       }),
@@ -150,6 +154,26 @@ describe('activitySentence', () => {
     ).toBe('Ngọc Anh xóa trang “Webinar tháng 9” [muted]');
     expect(sentence({ type: 'page.unpublished', page: gone })).toBe(
       'Ngọc Anh gỡ xuất bản “Webinar tháng 9” (trang đã xóa) [muted]',
+    );
+  });
+
+  it('describes domain events, those of the domain checks as "Hệ thống" (ADR-022)', () => {
+    const domain = (type: ActivityItem['type'], hostname: string, actor: ActivityItem['actor']) =>
+      sentence({ type, actor, page: null, data: { ...noVersions, hostname } });
+    expect(domain('domain.added', 'go.smilecare.vn', minh)).toBe(
+      'Minh thêm tên miền go.smilecare.vn [primary]',
+    );
+    expect(domain('domain.activated', 'go.smilecare.vn', null)).toBe(
+      'Hệ thống cấp chứng chỉ HTTPS cho go.smilecare.vn [primary]',
+    );
+    expect(domain('domain.primary_changed', 'smilecare.payload.site', minh)).toBe(
+      'Minh đặt smilecare.payload.site làm địa chỉ chính [primary]',
+    );
+    expect(domain('domain.lost', 'go.smilecare.vn', null)).toBe(
+      'Hệ thống phát hiện go.smilecare.vn mất kết nối [warning]',
+    );
+    expect(domain('domain.removed', 'uudai.smilecare.vn', minh)).toBe(
+      'Minh ngắt kết nối uudai.smilecare.vn [muted]',
     );
   });
 

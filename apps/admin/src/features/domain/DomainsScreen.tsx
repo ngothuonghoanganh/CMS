@@ -6,6 +6,7 @@ import {
   type DomainListResponse,
   domainStatusLabels,
   endpoints,
+  relativeRecordName,
   type Site,
 } from '@plp/contracts';
 import {
@@ -26,14 +27,20 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '../../lib/api';
-import { formatDate, formatRelativeTime } from '../../lib/format';
+import { formatRelativeTime } from '../../lib/format';
 import { siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { useNow } from '../shell/use-now';
 import { siteQueryKeys } from '../dashboard/queries';
 import { CopyAddressButton } from './CopyAddressButton';
-import { httpsLine, statusLegend, statusTones } from './domain-presentation';
+import {
+  diagnosisLine,
+  httpsLine,
+  movedPagesLine,
+  statusLegend,
+  statusTones,
+} from './domain-presentation';
 import { domainQueryKeys } from './queries';
 import styles from './Domains.module.css';
 
@@ -124,6 +131,9 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
     .at(-1);
   const full = list.items.length >= CUSTOM_DOMAINS_MAX;
   const primaryHost = primary?.hostname ?? list.defaultHost;
+  // Other addresses redirect only to an active primary custom domain (ADR-022).
+  const redirectsTo = primary !== null && primary.status === 'active' ? primary.hostname : null;
+  const empty = list.items.length === 0;
 
   return (
     <PageContainer width="wide">
@@ -194,7 +204,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
         <Card as="section" padding="none" aria-labelledby="domains-heading">
           <div className={styles.listHead}>
             <h2 id="domains-heading" className={styles.heading}>
-              {list.items.length + 1} địa chỉ
+              {empty ? 'Địa chỉ của site' : `${list.items.length + 1} địa chỉ`}
             </h2>
             <span className={styles.muted}>
               Tự kiểm tra mỗi 10 phút
@@ -215,11 +225,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                       </Badge>
                     ) : null}
                   </div>
-                  <span className={styles.note}>
-                    {domain.primary || primary === null || domain.status !== 'active'
-                      ? `Thêm ngày ${formatDate(domain.createdAt)} bởi ${domain.addedBy.name}`
-                      : `Đang chuyển hướng → ${primaryHost}`}
-                  </span>
+                  <span className={styles.note}>{diagnosisLine(domain, redirectsTo, now)}</span>
                 </div>
                 <div className={styles.rowStatus}>
                   <Badge tone={statusTones[domain.status]} dot>
@@ -279,9 +285,9 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                   </Badge>
                 </div>
                 <span className={styles.note}>
-                  {primary === null || primary.status !== 'active'
+                  {redirectsTo === null
                     ? 'Có sẵn khi tạo site, luôn hoạt động.'
-                    : `Đang chuyển hướng → ${primaryHost}`}
+                    : `Đang chuyển hướng → ${redirectsTo}`}
                 </span>
               </div>
               <div className={styles.rowStatus}>
@@ -307,7 +313,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
               </div>
             </li>
           </ul>
-          {list.items.length === 0 ? (
+          {empty ? (
             <div className={styles.empty}>
               <span className={styles.emptyIcon} aria-hidden="true">
                 <GlobeIcon size={24} />
@@ -318,6 +324,9 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                 <span className={styles.mono}>go.tenmien.vn</span> để khách tin tưởng hơn khi bấm
                 quảng cáo. Mất khoảng 10 phút nếu bạn có quyền vào trang quản lý tên miền.
               </p>
+              <ButtonLink as={Link} href={connectHref(site.id)}>
+                Kết nối tên miền riêng
+              </ButtonLink>
             </div>
           ) : null}
         </Card>
@@ -362,13 +371,22 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
           }
         }}
       >
-        <ul className={styles.consequences}>
-          <li>Các trang đang live có địa chỉ mới; các địa chỉ khác tự chuyển hướng 301 về đây.</li>
-          <li>Sitemap và thẻ canonical được cập nhật. Google có thể mất vài ngày để cập nhật.</li>
-          <li>
-            Kiểm tra lại link trong quảng cáo Facebook, TikTok để tránh một lần chuyển hướng thừa.
-          </li>
-        </ul>
+        {pending?.kind === 'primary' ? (
+          <ul className={styles.consequences}>
+            <li>{movedPagesLine(list.livePages, pending.host)}</li>
+            <li>
+              Link cũ trên <span className={styles.mono}>{primaryHost}</span> vẫn mở được, tự chuyển
+              hướng 301 sang địa chỉ mới.
+            </li>
+            <li>
+              Sitemap và thẻ canonical được cập nhật. Google có thể mất vài ngày để cập nhật kết quả
+              tìm kiếm.
+            </li>
+            <li>
+              Kiểm tra lại link trong quảng cáo Facebook, TikTok để tránh một lần chuyển hướng thừa.
+            </li>
+          </ul>
+        ) : null}
       </ConfirmDialog>
       <ConfirmDialog
         open={pending?.kind === 'remove'}
@@ -381,6 +399,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
         title={`Ngắt kết nối ${pending?.kind === 'remove' ? pending.domain.hostname : ''}?`}
         description="Khách mở địa chỉ này sẽ không còn thấy trang của bạn. Trang, bản nháp và lead không bị xóa."
         confirmLabel="Ngắt kết nối"
+        cancelLabel="Giữ kết nối"
         pending={remove.isPending}
         error={remove.isError ? problemMessage(remove.error) : undefined}
         onConfirm={() => {
@@ -389,9 +408,15 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
           }
         }}
       >
-        <p className={styles.muted}>
-          Bạn nên xóa bản ghi CNAME hoặc A của tên miền tại nhà cung cấp sau khi ngắt.
-        </p>
+        {pending?.kind === 'remove' ? (
+          <p className={styles.muted}>
+            Bạn nên xóa bản ghi {pending.domain.kind === 'apex' ? 'A' : 'CNAME'}{' '}
+            <span className={styles.mono}>
+              {relativeRecordName(pending.domain.hostname, pending.domain.hostname)}
+            </span>{' '}
+            tại nhà cung cấp tên miền sau khi ngắt.
+          </p>
+        ) : null}
       </ConfirmDialog>
     </PageContainer>
   );

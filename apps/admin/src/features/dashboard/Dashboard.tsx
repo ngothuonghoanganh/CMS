@@ -8,6 +8,7 @@ import {
   type LeadCounts,
   type PageListResponse,
   type Site,
+  type SiteAddressStatus,
   type Access,
 } from '@plp/contracts';
 import { themePresets } from '@plp/sections/schema';
@@ -37,7 +38,13 @@ import { internalVisitUrl } from '../../lib/site-url';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
-import { leadRecipientsHref, newPageHref, privacyHref, siteHref } from '../shell/navigation';
+import {
+  domainsHref,
+  leadRecipientsHref,
+  newPageHref,
+  privacyHref,
+  siteHref,
+} from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
 import { adoptServerRender, serverFirstPage } from '../shell/server-render';
@@ -72,6 +79,8 @@ export interface DashboardProps {
   initialFilters: DashboardFilters;
   initialPages: PageListResponse;
   initialActivity: ActivityListResponse;
+  /** The primary address and whether a custom domain is connected (ADR-022). */
+  address: SiteAddressStatus;
   /** Null for roles that do not see leads (ADR-020). */
   initialLeadCounts: LeadCounts | null;
   /** When the server loaded the data (epoch ms); hydration uses it for identical relative times. */
@@ -91,6 +100,7 @@ export function Dashboard({
   initialFilters,
   initialPages,
   initialActivity,
+  address,
   initialLeadCounts,
   loadedAt,
   role,
@@ -180,6 +190,7 @@ export function Dashboard({
 
   const canChangeSite = can(role, 'sites.manage');
   const canChangePrivacy = can(role, 'privacy.manage');
+  const canManageDomains = can(role, 'domains.manage');
   const setupSteps: SetupStep[] = [
     {
       label: 'Thêm logo & chọn giao diện',
@@ -202,7 +213,13 @@ export function Dashboard({
             },
       holders: holdersOf('pages.publish'),
     },
-    // Board 01 also lists a custom domain, which MVP A and B do not offer.
+    // Done once a custom domain works, primary or not: it then serves the pages (ADR-022).
+    {
+      label: 'Kết nối tên miền riêng',
+      done: address.customDomainActive,
+      action: canManageDomains ? { href: domainsHref(site.id) } : null,
+      holders: holdersOf('domains.manage'),
+    },
     {
       label: 'Thêm chính sách quyền riêng tư',
       done: site.privacyConfigured,
@@ -264,10 +281,11 @@ export function Dashboard({
       <SiteSummary
         site={site}
         attention={summary.attention}
+        address={address}
         initialLeadCounts={initialLeadCounts}
         loadedAt={loadedAt}
         canEditPages={canEditPages}
-        canManageDomains={can(role, 'domains.manage')}
+        canManageDomains={canManageDomains}
       />
 
       <Card as="section" padding="none" aria-labelledby="pages-heading">

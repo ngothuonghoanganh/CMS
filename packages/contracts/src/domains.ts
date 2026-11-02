@@ -184,11 +184,50 @@ export const domainListResponseSchema = z.object({
   defaultHost: z.string(),
   /** Null: the default address is the primary one. */
   primaryDomainId: idSchema.nullable(),
+  /**
+   * The pages a new primary address moves at once, for "Đặt làm chính" (boards 13, 14): how many
+   * are live, and the live slug of one of them for an example address ("" is the home page; null
+   * while none is live).
+   */
+  livePages: z.object({
+    count: z.number().int().nonnegative(),
+    exampleSlug: z.string().nullable(),
+  }),
 });
 export type DomainListResponse = z.infer<typeof domainListResponseSchema>;
 
-export const addDomainRequestSchema = z.object({ hostname: z.string().max(HOSTNAME_MAX + 20) });
+const typedHostnameSchema = z.string().max(HOSTNAME_MAX + 20);
+
+export const addDomainRequestSchema = z.object({ hostname: typedHostnameSchema });
 export type AddDomainRequest = z.infer<typeof addDomainRequestSchema>;
+
+export const domainAvailabilityQuerySchema = z.object({ hostname: typedHostnameSchema });
+
+/**
+ * Board 14 checks a domain while it is typed, before it is added: `invalid` (with the reason),
+ * `already_added` to this site, `taken` by another site that verified it, or `available`. Which
+ * site has it is never told (ADR-022).
+ */
+export const domainAvailabilitySchema = z.object({
+  /** As it would be stored; for an invalid one, as typed. */
+  hostname: z.string(),
+  state: z.enum(['invalid', 'already_added', 'taken', 'available']),
+  /** Why an `invalid` domain is refused, in the words of `normalizeHostname`; null otherwise. */
+  reason: z.string().nullable(),
+});
+export type DomainAvailability = z.infer<typeof domainAvailabilitySchema>;
+
+/**
+ * The card "Địa chỉ live" and the setup step "Kết nối tên miền riêng" of board 01, for every role
+ * that sees the site (ADR-022).
+ */
+export const siteAddressStatusSchema = z.object({
+  /** Where the primary custom domain stands; null while the default address is primary. */
+  primaryStatus: domainStatusSchema.nullable(),
+  /** At least one custom domain of the site is active. */
+  customDomainActive: z.boolean(),
+});
+export type SiteAddressStatus = z.infer<typeof siteAddressStatusSchema>;
 
 export const setPrimaryDomainRequestSchema = z.object({ domainId: idSchema.nullable() });
 export type SetPrimaryDomainRequest = z.infer<typeof setPrimaryDomainRequestSchema>;

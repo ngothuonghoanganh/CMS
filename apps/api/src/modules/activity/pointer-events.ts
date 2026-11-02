@@ -1,4 +1,5 @@
 import { publishingActivityTypes } from '@plp/contracts';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { ActivityRecord } from './activity.schema.js';
 
 /** Events that move a page's live pointer; each is written in the same transaction as the move. */
@@ -19,4 +20,12 @@ export function isUndoable(
     latestPointerEventOfPage !== undefined &&
     latestPointerEventOfPage._id.equals(record._id)
   );
+}
+
+/** Who moved the pointer: always a member, since only the domain checks record events alone. */
+export function pointerActorOf(record: Pick<ActivityRecord, '_id' | 'type' | 'actorId'>): ObjectId {
+  if (record.actorId === null) {
+    throw new Error(`Activity ${record._id.toHexString()} (${record.type}) has no actor`);
+  }
+  return record.actorId;
 }

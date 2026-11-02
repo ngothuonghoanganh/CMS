@@ -283,6 +283,21 @@ const ROWS: Row[] = [
     status: 200,
     call: (client, { site }) => client.put(`/sites/${site.id}/primary-domain`, { domainId: null }),
   },
+  {
+    action: 'Kiểm tra tên miền trước khi thêm',
+    permission: 'domains.manage',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) =>
+      client.get(`/sites/${site.id}/domains/availability?hostname=go.${site.subdomain}.vn`),
+  },
+  {
+    action: 'Trạng thái địa chỉ live',
+    permission: 'pages.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/address-status`),
+  },
   // Pages and drafts
   {
     action: 'Xem danh sách trang',

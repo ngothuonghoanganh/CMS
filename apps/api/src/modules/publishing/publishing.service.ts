@@ -19,7 +19,7 @@ import type { KeysetPage } from '../../shared/persistence/keyset.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { ActivityRecord } from '../activity/activity.schema.js';
-import { isUndoable } from '../activity/pointer-events.js';
+import { isUndoable, pointerActorOf } from '../activity/pointer-events.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { PAGE_NOT_FOUND, PageAccessService } from '../pages/page-access.service.js';
@@ -484,7 +484,7 @@ export class PublishingService {
     const merged = mergeKeysetPages([releaseRows, eventRows], query.limit);
     const users = await this.users.findRefs(
       merged.items.map((row) =>
-        row.kind === 'release' ? row.release.createdBy : row.event.actorId,
+        row.kind === 'release' ? row.release.createdBy : pointerActorOf(row.event),
       ),
     );
     const latestEvent = latest.get(page._id.toHexString());
@@ -522,7 +522,7 @@ export class PublishingService {
       fromVersion: event.data.fromVersion,
       toVersion: event.data.toVersion,
       reason: event.reason,
-      by: userRef(users, event.actorId),
+      by: userRef(users, pointerActorOf(event)),
       at: event.createdAt.toISOString(),
       undoable: isUndoable(event, latestEvent),
     };

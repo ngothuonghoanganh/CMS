@@ -5,6 +5,7 @@ import { InjectEnv } from '../../shared/env.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { ActivityRepository } from '../activity/activity.repository.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
 import {
@@ -55,6 +56,7 @@ export class DomainChecker {
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
     private readonly revalidation: RevalidationClient,
+    private readonly activity: ActivityRepository,
   ) {
     this.targets = { cnameTarget: env.CUSTOM_DOMAIN_CNAME_TARGET, ipv4: env.CUSTOM_DOMAIN_IPV4 };
   }
@@ -108,15 +110,51 @@ export class DomainChecker {
     if (before !== after || verifiedAt !== domain.verifiedAt) {
       await this.revalidate(domain);
     }
-    // Only the check that marks it tells: two checks of one domain at once send one email.
-    if (after === 'active' && (await this.domains.markSince(domain._id, 'activeSince', now))) {
+    // Only the check that marks it tells: two checks of one domain at once send one email. One
+    // that read the mark already set skips the transaction.
+    if (
+      after === 'active' &&
+      domain.activeSince === null &&
+      (await this.announce(domain, 'activeSince', now))
+    ) {
       saved = { ...saved, activeSince: now };
       await this.notify(saved, 'active');
-    } else if (after === 'lost' && (await this.domains.markSince(domain._id, 'lostSince', now))) {
+    } else if (
+      after === 'lost' &&
+      domain.lostSince === null &&
+      (await this.announce(domain, 'lostSince', now))
+    ) {
       saved = { ...saved, lostSince: now };
       await this.notify(saved, 'lost');
     }
     return saved;
+  }
+
+  /**
+   * Sets `activeSince` or `lostSince` and logs it in the site's activity as "Hệ thống", in one
+   * transaction over the master and the workspace database (ADR-022, ADR-025). Only the check whose
+   * conditional update sets it logs the event: of two checks at once, the later one finds it set.
+   */
+  private announce(
+    domain: DomainRecord,
+    field: 'activeSince' | 'lostSince',
+    now: Date,
+  ): Promise<boolean> {
+    return this.transactions.run(async (tx) => {
+      if (!(await this.domains.markSince(domain._id, field, now, tx))) {
+        return false;
+      }
+      await this.activity.recordSystem(
+        domain,
+        {
+          siteId: domain.siteId,
+          type: field === 'activeSince' ? 'domain.activated' : 'domain.lost',
+          data: { hostname: domain.hostname },
+        },
+        tx,
+      );
+      return true;
+    });
   }
 
   /**

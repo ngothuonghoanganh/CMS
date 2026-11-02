@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ActivityType } from '@plp/contracts';
+import type { ActivityType, SystemActivityType } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import {
   afterCursor,
@@ -22,15 +22,22 @@ import {
   type WorkspaceRef,
 } from '../../shared/persistence/workspace-databases.js';
 
-/** What happened; the actor is the scope's user and the time is now. */
+/** What a member did; the actor is the scope's user and the time is now. */
 export interface ActivityEntry {
   siteId: ObjectId;
-  type: ActivityType;
+  type: Exclude<ActivityType, SystemActivityType>;
   /** The page the event is about, with its title at that moment. Omit for site/asset events. */
   page?: { id: ObjectId; title: string } | null;
   /** Only the fields the event uses; the rest default to null (`revalidationFailed` to false). */
   data?: Partial<ActivityData>;
   reason?: string | null;
+}
+
+/** What the system did on its own, e.g. a domain check that found the domain active. */
+export interface SystemActivityEntry {
+  siteId: ObjectId;
+  type: SystemActivityType;
+  data: Partial<ActivityData>;
 }
 
 /** The minimum needed to check access to an activity, e.g. for `POST /activity/:id/undo`. */
@@ -39,19 +46,52 @@ export class ActivityRepository {
   constructor(private readonly databases: WorkspaceDatabases) {}
 
   /** Appends an event done by `scope.userId`; pass `tx` to commit it with the change it logs. */
-  async record(scope: WorkspaceScope, entry: ActivityEntry, tx?: Tx): Promise<ObjectId> {
-    const document = {
-      workspaceId: scope.workspaceId,
-      siteId: entry.siteId,
-      pageId: entry.page?.id ?? null,
-      pageTitle: entry.page?.title ?? null,
-      actorId: scope.userId,
-      type: entry.type,
-      data: { ...EMPTY_ACTIVITY_DATA, ...entry.data },
-      reason: entry.reason ?? null,
-      createdAt: new Date(),
-    };
-    const [created] = await this.activity(scope).create([document], tx ? { session: tx } : {});
+  record(scope: WorkspaceScope, entry: ActivityEntry, tx?: Tx): Promise<ObjectId> {
+    return this.insert(
+      scope,
+      {
+        workspaceId: scope.workspaceId,
+        siteId: entry.siteId,
+        pageId: entry.page?.id ?? null,
+        pageTitle: entry.page?.title ?? null,
+        actorId: scope.userId,
+        type: entry.type,
+        data: { ...EMPTY_ACTIVITY_DATA, ...entry.data },
+        reason: entry.reason ?? null,
+        createdAt: new Date(),
+      },
+      tx,
+    );
+  }
+
+  /**
+   * Appends an event with no actor ("Hệ thống") to a site of the workspace `ref` was routed to from
+   * a master record, in the transaction of the change it logs.
+   */
+  recordSystem(ref: WorkspaceRef, entry: SystemActivityEntry, tx: Tx): Promise<ObjectId> {
+    return this.insert(
+      ref,
+      {
+        workspaceId: ref.workspaceId,
+        siteId: entry.siteId,
+        pageId: null,
+        pageTitle: null,
+        actorId: null,
+        type: entry.type,
+        data: { ...EMPTY_ACTIVITY_DATA, ...entry.data },
+        reason: null,
+        createdAt: new Date(),
+      },
+      tx,
+    );
+  }
+
+  private async insert(
+    ref: WorkspaceRef,
+    document: Omit<ActivityRecord, '_id'>,
+    tx: Tx | undefined,
+  ): Promise<ObjectId> {
+    const [created] = await this.activity(ref).create([document], tx ? { session: tx } : {});
     if (!created) {
       throw new Error('Activity insert returned no document');
     }

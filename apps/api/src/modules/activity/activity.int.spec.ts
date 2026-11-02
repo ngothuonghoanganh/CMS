@@ -57,7 +57,7 @@ describe('GET /sites/:siteId/activity', () => {
     await uploadImage(editor.client, siteId);
 
     const items = await list(client, siteId);
-    expect(items.map((item) => [item.type, item.actor.name])).toEqual([
+    expect(items.map((item) => [item.type, item.actor?.name])).toEqual([
       ['asset.uploaded', editor.me.user.name],
       ['asset.uploaded', userName],
       ['site.created', userName],

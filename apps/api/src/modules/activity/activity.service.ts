@@ -64,7 +64,7 @@ export class ActivityService {
       record.type === 'page.rolled_back' && record.pageId !== null ? [record.pageId] : [],
     );
     const [actors, latestByPage, deletedPages] = await Promise.all([
-      this.users.findRefs(records.map((record) => record.actorId)),
+      this.users.findRefs(records.flatMap((record) => (record.actorId ? [record.actorId] : []))),
       this.activity.latestPointerEvents(scope, rolledBackPageIds),
       this.activity.findGonePages(
         scope,
@@ -72,10 +72,11 @@ export class ActivityService {
       ),
     ]);
     return records.map((record) => {
-      const actor = actors.get(record.actorId.toHexString());
-      if (!actor) {
+      // The system's events (the domain checks) have no actor; the schema allows nothing else.
+      const actor = record.actorId === null ? null : actors.get(record.actorId.toHexString());
+      if (actor === undefined) {
         throw new Error(
-          `Activity ${record._id.toHexString()} refers to unknown user ${record.actorId.toHexString()}`,
+          `Activity ${record._id.toHexString()} refers to unknown user ${record.actorId?.toHexString() ?? ''}`,
         );
       }
       const latest =
