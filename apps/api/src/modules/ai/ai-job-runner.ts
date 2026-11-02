@@ -242,7 +242,9 @@ export class AiJobRunner implements OnModuleDestroy {
     }
     const ended = await this.jobs.findById(scope, job._id);
     if (ended === null) {
-      throw new Error(`AI job ${job._id.toHexString()} disappeared while it ran`);
+      // Deleted with its site (ADR-027), whose deletion gave a first run's use back.
+      this.logger.log({ jobId: job._id.toHexString() }, 'AI job deleted with its site as it ran');
+      return toAiJob({ ...job, status: 'failed', sections, failure: 'interrupted' });
     }
     this.logger.log(
       {

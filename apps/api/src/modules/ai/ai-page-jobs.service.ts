@@ -19,7 +19,8 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { PAGE_LIMIT_MESSAGE } from '../pages/pages.service.js';
 import { newSectionId } from '../pages/section-id.js';
 import type { SiteRecord } from '../sites/site.schema.js';
-import { SitesService } from '../sites/sites.service.js';
+import { SitesRepository } from '../sites/sites.repository.js';
+import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { toAiJob } from './ai-job-dto.js';
@@ -66,6 +67,7 @@ export class AiPageJobsService implements OnApplicationBootstrap {
   constructor(
     @InjectEnv() private readonly env: Env,
     private readonly sites: SitesService,
+    private readonly siteRecords: SitesRepository,
     private readonly pages: PagesRepository,
     private readonly jobs: AiJobsRepository,
     private readonly ledger: AiJobLedger,
@@ -130,6 +132,11 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     const month = await this.quota.prepare(scope);
     const now = this.clock.now();
     const job = await this.transactions.run(async (tx) => {
+      // The job and its use belong to the site: deleting it at the same moment either waits and
+      // gives the use back as it deletes the job, or finds the job refused (ADR-027).
+      if (!(await this.siteRecords.recordDataWrite(scope, site._id, tx))) {
+        throw notFound(SITE_NOT_FOUND);
+      }
       await this.quota.reserve(scope, month, tx);
       return this.jobs.insert(
         scope,

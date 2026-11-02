@@ -8,6 +8,8 @@ import {
   WorkspaceDatabases,
 } from '../../shared/persistence/workspace-databases.js';
 import { ACTIVITY_COLLECTION } from '../activity/activity.schema.js';
+import { AI_JOB_COLLECTION } from '../ai/ai-job.schema.js';
+import { AI_USAGE_COLLECTION } from '../ai/ai-usage.schema.js';
 import {
   ANALYTICS_DAILY_COLLECTION,
   ANALYTICS_SEEN_COLLECTION,
@@ -62,6 +64,10 @@ export class SiteErasureRepository {
     await this.deleteAll(scope, ANALYTICS_DAILY_COLLECTION, owned, tx);
     // No `workspaceId` in this one; in the workspace's own database `siteId` alone is the site.
     await this.deleteAll(scope, ANALYTICS_SEEN_COLLECTION, { siteId }, tx);
+    if (tx !== undefined) {
+      await this.giveBackAiUses(scope, siteId, tx);
+    }
+    await this.deleteAll(scope, AI_JOB_COLLECTION, owned, tx);
     // Workspace templates stay, with their own images (ADR-030): the site only leaves the list of
     // sites that may use them.
     await this.databases
@@ -72,6 +78,44 @@ export class SiteErasureRepository {
         tx === undefined ? {} : { session: tx },
       )
       .exec();
+  }
+
+  /**
+   * Gives back the uses of the site's AI jobs still on their first run (ADR-031), in the
+   * transaction that deletes the jobs: their runs' own ends will match no job, so this is the one
+   * time each use goes back. A run that ends at the same moment writes the same job, so one of the
+   * two transactions is retried and sees what the other did. The sweep after the commit finds no
+   * such job: starting one writes the site (`dataSeq`), which is gone.
+   */
+  private async giveBackAiUses(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
+    const months = await this.databases
+      .model(scope, AI_JOB_COLLECTION)
+      .aggregate<{ _id: string; uses: number }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            siteId,
+            status: 'running',
+            pageId: null,
+            'quota.refunded': false,
+          },
+        },
+        { $group: { _id: '$quota.month', uses: { $sum: 1 } } },
+      ])
+      .session(tx)
+      .exec();
+    const now = new Date();
+    // One counter per month a use was taken in: at most a couple.
+    for (const { _id: month, uses } of months) {
+      await this.databases
+        .model(scope, AI_USAGE_COLLECTION)
+        .updateOne(
+          { workspaceId: scope.workspaceId, month },
+          [{ $set: { used: { $max: [0, { $subtract: ['$used', uses] }] }, updatedAt: now } }],
+          { updatePipeline: true, session: tx },
+        )
+        .exec();
+    }
   }
 
   private async deleteAll<T extends SiteDocument>(
