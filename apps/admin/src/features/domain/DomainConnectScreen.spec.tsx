@@ -1,7 +1,7 @@
 import { type Domain, type DomainAvailability, endpoints } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture } from '../dashboard/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
@@ -96,13 +96,31 @@ describe('DomainConnectScreen', () => {
   });
 
   it('checks a typed domain and says at once that another site has it, never which', async () => {
-    const user = userEvent.setup();
+    // The test holds the clock: the check goes once typing pauses for 400 ms, and a busy machine
+    // must neither make a pause between two letters nor make the answer late.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const checks = () =>
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.domainAvailability);
     answer('taken');
     renderScreen(null);
-    await user.type(screen.getByLabelText('Tên miền'), ' UuDai.SmileCare.vn ');
-    const alert = await screen.findByRole('alert');
+    const field = screen.getByLabelText('Tên miền');
+    for (const typed of [' U', ' UuDai.', ' UuDai.SmileCare.', ' UuDai.SmileCare.vn ']) {
+      fireEvent.change(field, { target: { value: typed } });
+      await act(() => vi.advanceTimersByTimeAsync(399));
+    }
+    expect(checks()).toEqual([]);
+
+    // Typing stopped: the check goes, and its answer reaches the screen.
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Tên miền này đang được một site khác dùng');
     expect(alert).toHaveTextContent('hãy thêm bản ghi TXT ở bước sau');
+    // Asked once the typing stopped, not for every letter.
+    expect(checks()).toHaveLength(1);
     expect(lastCallTo(apiMock, endpoints.domainAvailability)).toEqual({
       args: [site.id],
       options: {
@@ -110,11 +128,8 @@ describe('DomainConnectScreen', () => {
         signal: expect.any(AbortSignal) as AbortSignal,
       },
     });
-    // Asked once the typing stopped, not for every letter.
-    expect(
-      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.domainAvailability),
-    ).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'Tiếp tục để xác minh quyền sở hữu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục để xác minh quyền sở hữu' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
     expect(lastCallTo(apiMock, endpoints.addDomain).options).toEqual({
       body: { hostname: 'uudai.smilecare.vn' },
     });

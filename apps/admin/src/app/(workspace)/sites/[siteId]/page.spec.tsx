@@ -1,7 +1,7 @@
 import { endpoints, type Membership, type PageListResponse } from '@plp/contracts';
 import { ToastProvider } from '@plp/ui';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,6 +95,21 @@ function renderRoute(element: ReactElement) {
   return render(element, { wrapper: Providers });
 }
 
+/** How long typing pauses before the search goes. */
+const SEARCH_PAUSE_MS = 300;
+
+/**
+ * Types into the search and holds the clock from then on: the refresh then comes while the search
+ * waits for typing to pause, however slow a busy machine is between two letters.
+ */
+function typeSearch(search: HTMLElement, text: string) {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'], now: Date.now() });
+  act(() => {
+    search.focus();
+  });
+  fireEvent.change(search, { target: { value: text } });
+}
+
 function filterButton(name: string): HTMLElement {
   return within(screen.getByRole('group', { name: 'Lọc theo trạng thái' })).getByRole('button', {
     name,
@@ -137,7 +152,7 @@ describe('dashboard route', () => {
     await user.click(screen.getByRole('button', { name: 'Xem thêm trang' }));
     expect(await screen.findByRole('link', { name: draftPage.title })).toBeInTheDocument();
     const search = screen.getByRole('searchbox', { name: 'Tìm trang' });
-    await user.type(search, 'webinar');
+    typeSearch(search, 'webinar');
 
     // "Xóa trang" refreshes the route for the sidebar's "Trang N", before the search is sent.
     vi.setSystemTime(LOADED_AT + 5_000);
@@ -149,11 +164,10 @@ describe('dashboard route', () => {
     expect(screen.getByRole('link', { name: livePage.title })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: draftPage.title })).toBeInTheDocument();
     // The search goes on once typing stops.
-    await vi.waitFor(() => {
-      expect(lastCallTo(apiMock, endpoints.listPages).options).toHaveProperty('query', {
-        q: 'webinar',
-        limit: 50,
-      });
+    await act(() => vi.advanceTimersByTimeAsync(SEARCH_PAUSE_MS));
+    expect(lastCallTo(apiMock, endpoints.listPages).options).toHaveProperty('query', {
+      q: 'webinar',
+      limit: 50,
     });
   });
 
@@ -163,7 +177,7 @@ describe('dashboard route', () => {
     await user.click(filterButton('Bản nháp · 1'));
     expect(window.location.search).toBe('?status=draft');
     const search = screen.getByRole('searchbox', { name: 'Tìm trang' });
-    await user.type(search, 'webinar');
+    typeSearch(search, 'webinar');
 
     vi.setSystemTime(LOADED_AT + 5_000);
     view.rerender(await serverRender());
