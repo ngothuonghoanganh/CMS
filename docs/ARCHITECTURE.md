@@ -474,6 +474,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `styles.spec` thêm quy tắc: màu chữ của section chỉ lấy từ vai trò màu đã kiểm AA.
   - **Sửa 2026-11-02 (review giao diện):** variant đặt được tên riêng cho mục danh sách (`SectionVariant.listLabels`): "Quy trình 3 bước" gọi mục là "Bước" ở panel, kiểm tra hợp lệ, kiểm tra xuất bản và tóm tắt ("3 bước"). Danh sách bước giữ `role="list"` và một "Bước N:" ẩn cho trình đọc màn hình. Ảnh bắt buộc chưa chọn có nhắc "Cần chọn ảnh trước khi xuất bản." ngay trong panel; logo thiếu tên báo "chưa có tên đối tác". Variant bị chặn vì số mục có kiểu vô hiệu và lý do ở tooltip.
   - **Sửa 2026-11-02:** `hasMedia` nghĩa là ảnh nằm cạnh chữ và đổi chỗ trên điện thoại. Hero "Ảnh nền" có `hasMedia: false`, nên không còn tùy chọn thứ tự trên điện thoại vốn không có tác dụng. `renderSectionContent` trả `ReactElement | null`, nên thiếu một loại section là lỗi biên dịch.
+  - **Sửa 2026-11-02 (review giao diện vòng 2):** thông báo thêm section nói cả loại section và thẻ đã chọn: "Đã thêm Cảm nhận khách hàng “Trích dẫn nổi bật” ở vị trí 3.". Thẻ trùng tên với loại thì chỉ nói một lần.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -512,7 +513,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - danh sách lead và lead đang mở;
       - danh sách yêu cầu dữ liệu;
       - số đếm lead và báo cáo "Hiệu quả" (đã có từ trước).
-    - Danh sách được thay bắt đầu lại từ trang đầu.
+    - Danh sách được thay bắt đầu lại từ trang đầu. Server render lại khi màn vẫn đang hiện (`router.refresh()`) thì giữ các trang "Xem thêm" đã nạp và đọc lại chúng (`adoptServerRenderKeepingPages`). (Sửa 2026-11-02, review vòng 2.)
+    - Màn 01 được key theo site, không theo `loadedAt`. Một lần server render với bộ lọc khác bộ lọc đang hiện là một lần điều hướng (link "Trang" ở sidebar khi đang lọc), nên màn bắt đầu lại. Refresh thì màn giữ focus, chữ đang gõ và các trang đã nạp.
     - Quy tắc so `dataUpdatedAt` của cache (đồng hồ trình duyệt) với `loadedAt` của server, nên đồng hồ trình duyệt lệch nhiều thì có thể chọn sai.
     - Mỗi lần lưu bản nháp thành công, và "Quay về bản live", đánh dấu danh sách trang và các màn của trang đó là cũ. Đổi giao diện site trong editor đánh dấu danh sách trang và màn của mọi trang.
       - Màn đang hiện được đọc lại ngay; màn khác được đọc lại khi hiện ra, kể cả khi nút Back của trình duyệt dựng lại một bản render cũ hơn cache.
@@ -1358,6 +1360,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Tìm thành viên và lời mời bỏ dấu và không phân biệt hoa thường, bằng cùng `foldVietnamese` (nay ở `@plp/contracts`) với hộp thư lead; lời mời chỉ tìm theo email.
     - Dán danh bạ dạng `Tên <email>` (Gmail, Outlook) lấy địa chỉ trong ngoặc nhọn. Email có lời mời đã hết hạn báo "Lời mời đã hết hạn — dùng Gửi lại". Lỗi chặn gửi được đọc qua vùng live và focus về ô email.
     - Màn 15b: link `mailto:` có tiêu đề và nội dung, và hiện email người mời. Từ chối hay tham gia hiện kết quả của chính lựa chọn đó.
+  - **Sửa 2026-11-02 (review giao diện vòng 2):**
+    - "Tóm tắt thay đổi" chỉ so các site còn trong workspace: hộp thoại chưa sửa gì của thành viên giữ một site đã xóa ghi "Chưa có thay đổi.".
+    - Kết quả từ chối hay tham gia, và lỗi của hai nút đó, thuộc về link đã chọn: mở link mời khác trong cùng tab thì hiện lời mời của link đó.
+    - Thẻ "đã từ chối" có "Về trang chủ".
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1765,6 +1771,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Mỗi phiên lưu phiên bản lúc tạo (thiếu là 0); guard trả 401 khi phiên bản khác của user. Đăng nhập dùng phiên bản đọc cùng hash đã kiểm. Một lượt đăng nhập đã đọc hash cũ trước khi đặt lại vì vậy không giữ được phiên.
     - Đổi mật khẩu chỉ ghi khi user còn đúng hash và phiên bản nó đã kiểm; không thì 409 `password_changed` "Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.". Thành công thì phiên đang dùng chuyển sang phiên bản mới, các phiên khác bị xóa.
   - **Giới hạn email theo hộp thư:** khóa của `auth_email_limits` là HMAC của `mailboxOf(email)` (bỏ `+tag`, chữ hoa, và dấu chấm với Gmail), dùng chung helper với giới hạn lời mời (ADR-021, nay ở `shared/`). `login_attempts` vẫn theo địa chỉ.
+- **Amended 2026-11-02 (review vòng 2):**
+  - Đăng ký lại hay gửi lại link xóa `passwordHash` mà một bản ghi `pending_signups` đã lưu trước sửa đổi ở trên, để không bản ghi nào còn giữ mật khẩu do người đăng ký chọn.
+  - **Admin:**
+    - Email chỉ xem ở `/signup/verify` và ở form đăng ký của lời mời là username của form (`autoComplete="username"`): trình quản lý mật khẩu lưu mật khẩu dưới email, không dưới tên workspace.
+    - `lookup` chỉ đọc một lần. Một lần đọc lại bị lỗi không lấy mất form và những gì đã nhập. Màn lỗi của `lookup` có "Đăng ký lại" và "Đăng nhập".
+    - Lỗi "nhập lại mật khẩu không khớp" được đọc qua vùng live ở cả ba form đặt mật khẩu, vì Enter để focus ở lại ô đó.
+    - 409 `password_changed` ở trang tài khoản có nút "Đăng nhập lại" (đăng xuất rồi mở `/login`).
+    - Giới hạn đã biết: trang đặt lại mật khẩu không có ô username, vì admin không biết email của link đặt lại. Hiện email cần một endpoint tra link, tức là đổi API.
 
 ### ADR-027 — Xóa trang và xóa site
 
@@ -1842,6 +1856,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Thành viên chỉ có site đó giữ `siteIds: []`.
   - Không có toast sau khi xóa site: màn workspace có khung riêng, toast sẽ mất ngay khi chuyển màn.
   - Xóa trang xong thì bỏ các query của trang đó trước khi làm mới danh sách, rồi `router.refresh()` để số trang ở Sidebar (render phía server) cập nhật. Mục "Xóa trang" bị vô hiệu vẫn nhận focus (`aria-disabled`, mẫu menu của APG) và không làm gì khi chọn. Ô xác nhận tên của "Xóa site" chỉ đọc khi đang xóa, nên focus không rời hộp thoại.
+    - Sửa 2026-11-02 (review vòng 2): `router.refresh()` không dựng lại màn 01, nên focus ở "Tìm trang", chữ đang gõ và các trang đã nạp vẫn còn (ADR-008).
 - **Amended 2026-11-02 (vòng sửa lỗi sau E1–E6):** lead tới đúng lúc trang bị gỡ rồi xóa.
   - Nhận lead đọc lại release của lead sau khi lưu; release đã mất thì xóa lead và trả 404 "Form này không còn nhận đăng ký", như khi site bị xóa.
   - Lead được lưu trong lúc transaction xóa trang còn mở vẫn có thể giữ một release đã mất. Đọc lead khi đó không lỗi:
