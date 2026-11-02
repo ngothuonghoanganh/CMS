@@ -92,7 +92,9 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
     await save.getByRole('textbox', { name: /^Tên/ }).fill(TEMPLATE);
     await save.getByRole('radio', { name: 'Giữ chữ và ảnh như hiện tại' }).check();
     await save.getByRole('button', { name: 'Lưu template' }).click();
-    await expect(page.getByText(`Đã lưu template “${TEMPLATE}”, phiên bản 1`)).toBeVisible();
+    await expect(
+      page.getByText(`Đã lưu template “${TEMPLATE}”, phiên bản 1`, { exact: true }),
+    ).toBeVisible();
     const inUse = page.getByRole('table', { name: 'Template đang dùng' });
     await expect(inUse.getByRole('link', { name: TEMPLATE })).toBeVisible();
     await expect(inUse.getByRole('row').nth(1)).toContainText('Toàn workspace');
@@ -122,7 +124,7 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
       .getByRole('button', { name: `Sửa thông tin, nhân bản hoặc lưu trữ ${TEMPLATE}` })
       .click();
     await page.getByRole('menuitem', { name: 'Lưu trữ' }).click();
-    await expect(page.getByText(`Đã lưu trữ “${TEMPLATE}”`)).toBeVisible();
+    await expect(page.getByText(`Đã lưu trữ “${TEMPLATE}”`, { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Lưu trữ · 1' })).toBeVisible();
     await page.goto(`/workspaces/${site.workspaceId}/templates?site=${kitchen.id}`);
     await expect(page.getByRole('article').first()).toBeVisible();
@@ -185,7 +187,9 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
     await expect(dialog).toBeHidden();
     await expect(editor.canvas.getByText(SYSTEM_HERO_HEADING)).toBeVisible();
     await expect(
-      page.getByText(`Đã áp dụng mẫu “${SYSTEM_TEMPLATE}”. Nhấn Ctrl+Z để hoàn tác.`),
+      page.getByText(`Đã áp dụng mẫu “${SYSTEM_TEMPLATE}”. Nhấn Ctrl+Z để hoàn tác.`, {
+        exact: true,
+      }),
     ).toBeAttached();
     await editor.expectSaved();
 
