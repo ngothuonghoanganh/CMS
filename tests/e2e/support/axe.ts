@@ -88,7 +88,7 @@ export async function expectNoSidewaysScroll(
           element.scrollWidth > element.clientWidth
         );
       })
-      .map((element) => `${element.tagName.toLowerCase()}.${element.className}`),
+      .map((element) => `${element.tagName.toLowerCase()}.${element.getAttribute('class') ?? ''}`),
   );
   expect.soft(scrolling, `${screen} has boxes that scroll sideways`).toEqual([]);
 }
