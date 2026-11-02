@@ -1,7 +1,11 @@
 import { endpoints, type Membership, type TemplateDetail } from '@plp/contracts';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SITE_ID, siteFixture, WORKSPACE_ID } from '../../../../../../features/dashboard/test-fixtures';
+import {
+  SITE_ID,
+  siteFixture,
+  WORKSPACE_ID,
+} from '../../../../../../features/dashboard/test-fixtures';
 import { renderWithProviders } from '../../../../../../features/shell/test-utils';
 import {
   detailFixture,

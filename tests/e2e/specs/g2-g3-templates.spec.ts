@@ -253,9 +253,13 @@ test.describe('G2 · G3 · Workspace templates and applying a template', () => {
     await page.getByRole('button', { name: `Phiên bản của ${TEMPLATE}` }).click();
     const versions = page.getByRole('dialog', { name: TEMPLATE });
     await versions.getByRole('link', { name: 'Xem trước v1' }).click();
-    await expect(page).toHaveURL(new RegExp(`/templates/${template.id}\\?site=${site.id}&version=1$`));
+    await expect(page).toHaveURL(
+      new RegExp(`/templates/${template.id}\\?site=${site.id}&version=1$`),
+    );
     // Board 18 in "Bạn đang xem v1": the photo of v1, and no way to make a page from it.
-    await expect(page.getByText('Bạn đang xem v1. Trang mới được tạo từ phiên bản đang dùng, v2.')).toBeVisible();
+    await expect(
+      page.getByText('Bạn đang xem v1. Trang mới được tạo từ phiên bản đang dùng, v2.'),
+    ).toBeVisible();
     await expect(page.getByText(/^v1 · cập nhật /)).toBeVisible();
     const preview = page.getByRole('region', { name: /^Bản xem trước/ });
     await expect(preview.getByRole('img', { name: PHOTO_ALT })).toBeVisible();
