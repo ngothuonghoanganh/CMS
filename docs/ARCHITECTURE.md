@@ -472,6 +472,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Logo và Trước & sau có `hasMedia: false`, nên không có thứ tự trên điện thoại.
     - Link chính sách ở chân trang mở tab mới, như link của form, và được suy ra từ `leadCapture` lúc render: trang có form đang live hiện nó mà không phải xuất bản lại, không release nào bị viết lại. Chỉ so trùng với link tuyệt đối người dùng thêm.
     - `styles.spec` thêm quy tắc: màu chữ của section chỉ lấy từ vai trò màu đã kiểm AA.
+  - **Sửa 2026-11-02:** `hasMedia` nghĩa là ảnh nằm cạnh chữ và đổi chỗ trên điện thoại. Hero "Ảnh nền" có `hasMedia: false`, nên không còn tùy chọn thứ tự trên điện thoại vốn không có tác dụng. `renderSectionContent` trả `ReactElement | null`, nên thiếu một loại section là lỗi biên dịch.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -767,6 +768,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Đổi option của một index đã có (`expireAfterSeconds` của TTL, `partialFilterExpression`, unique) là một bước migration chạy trước khi deploy: xóa rồi tạo lại index, hoặc `collMod` với TTL. Thiếu bước này thì phiên bản mới không khởi động được, MongoDB báo `IndexOptionsConflict`.
     - Index mới trên collection lớn được dựng trước khi deploy, để lúc khởi động index đã có sẵn.
     - Không xóa hay đổi tên index khi API đang chạy. Lượt kiểm tra gửi lại của lead công khai dùng `hint` (ADR-016), nên thất bại trong lúc thiếu index của nó; chỉ lần khởi động sau mới tạo lại index.
+- **Amended 2026-11-02 (vòng sửa lỗi sau E1–E6):**
+  - Integration test thất bại khi Mongoose phát cảnh báo (`test/mongoose-warnings.ts`), nên option đã bị bỏ như `new: true` không quay lại; mọi `findOneAndUpdate` dùng `returnDocument: 'after'`.
+  - Route của renderer bọc API theo request trong `try/catch` gọi `unstable_rethrow` đầu khối `catch`, để lỗi điều khiển của Next (prerender lúc build) không bị ghi log như lỗi tra cứu.
+  - MongoDB của docker compose giới hạn bộ nhớ đệm 1 GB (`--wiredTigerCacheSizeGB 1`). Mỗi lượt integration test tạo hàng trăm database workspace (ADR-025); hai lượt chạy cùng lúc trên một máy 16 GB làm mongod bị kill vì hết bộ nhớ.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -1349,7 +1354,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - Giới hạn 10 email áp cho số email mời được.
     - "Tóm tắt thay đổi" thêm các câu board không có: đổi vai trò, toàn workspace, "Chưa có thay đổi."; site màn hình không biết được đếm là "N site khác".
     - Dòng cuối của màn 15b hiện ở mọi trạng thái của lời mời.
-    - Tìm thành viên vẫn so chuỗi con không phân biệt hoa thường, chưa bỏ dấu; lời mời chỉ tìm theo email.
+    - Tìm thành viên và lời mời bỏ dấu và không phân biệt hoa thường, bằng cùng `foldVietnamese` (nay ở `@plp/contracts`) với hộp thư lead; lời mời chỉ tìm theo email.
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1812,6 +1817,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Hai lần xóa site cùng lúc: một 204, một 404.
     - Thành viên chỉ có site đó giữ `siteIds: []`.
   - Không có toast sau khi xóa site: màn workspace có khung riêng, toast sẽ mất ngay khi chuyển màn.
+- **Amended 2026-11-02 (vòng sửa lỗi sau E1–E6):** lead tới đúng lúc trang bị gỡ rồi xóa.
+  - Nhận lead đọc lại release của lead sau khi lưu; release đã mất thì xóa lead và trả 404 "Form này không còn nhận đăng ký", như khi site bị xóa.
+  - Lead được lưu trong lúc transaction xóa trang còn mở vẫn có thể giữ một release đã mất. Đọc lead khi đó không lỗi:
+    - Bằng chứng đồng ý có `consent.snapshot` (phiên bản, đơn vị, link chính sách, nội dung) là `null`.
+    - Admin, CSV và JSON xuất dữ liệu một người ghi "Không còn bản lưu nội dung đồng ý (trang bị xóa đúng lúc khách gửi form)".
+    - Contract: các trường của release trong bằng chứng đồng ý nằm dưới `consent.snapshot`.
 
 ### ADR-028 — Màn Sites của workspace và số đếm ở Sidebar v2
 
