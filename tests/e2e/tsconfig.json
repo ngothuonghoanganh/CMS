@@ -8,10 +8,12 @@
     "playwright.config.ts",
     "visual.config.ts",
     "addresses.config.ts",
+    "seed-dev.config.ts",
     "urls.ts",
     "specs",
     "support",
     "visual",
-    "addresses"
+    "addresses",
+    "seed-dev"
   ]
 }
