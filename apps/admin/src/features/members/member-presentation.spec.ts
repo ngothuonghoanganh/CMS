@@ -119,6 +119,20 @@ describe('member presentation', () => {
     expect(matchesFilters(editor, { ...all, search: 'khoa' })).toBe(false);
   });
 
+  it('searches names without minding accents, as the lead inbox does (ADR-018)', () => {
+    const all: PeopleFilters = { role: 'all', siteId: 'all', search: '' };
+    const member = {
+      role: 'editor' as const,
+      siteIds: null,
+      name: 'Trần Ngọc Đức',
+      email: 'duc@mayxanh.vn',
+    };
+    expect(matchesFilters(member, { ...all, search: 'ngoc' })).toBe(true);
+    expect(matchesFilters(member, { ...all, search: 'NGOC  duc' })).toBe(true);
+    expect(matchesFilters(member, { ...all, search: 'tran ngọc' })).toBe(true);
+    expect(matchesFilters(member, { ...all, search: 'ngoc anh' })).toBe(false);
+  });
+
   it('sums up a change of access in the board’s words', () => {
     const sites = [smile, kitchen, spa];
     expect(

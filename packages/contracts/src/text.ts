@@ -14,3 +14,21 @@ export function slugify(input: string, maxLength = 60): string {
     .slice(0, maxLength)
     .replace(/-+$/g, '');
 }
+
+/**
+ * Lowercase, without Vietnamese accents, spaces collapsed: "Nguyễn  Thu Hà" → "nguyen thu ha".
+ * How searches compare names, so "ngoc" finds "Ngọc": the lead inbox (ADR-018) and the members
+ * screen (ADR-021).
+ */
+export function foldVietnamese(text: string): string {
+  return (
+    text
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      // "đ" has no decomposed form.
+      .replace(/[đĐ]/g, 'd')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}

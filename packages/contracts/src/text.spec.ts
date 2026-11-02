@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slugify } from './text.js';
+import { foldVietnamese, slugify } from './text.js';
 
 describe('slugify', () => {
   it('writes Vietnamese text without accents, in lowercase, words joined by dashes', () => {
@@ -29,5 +29,13 @@ describe('slugify', () => {
 
   it('drops the dash a cut leaves at the end', () => {
     expect(slugify('nha khoa smile', 9)).toBe('nha-khoa');
+  });
+});
+
+describe('foldVietnamese', () => {
+  it('drops accents, đ and case, and collapses spaces', () => {
+    expect(foldVietnamese('  Nguyễn  Thu Hà ')).toBe('nguyen thu ha');
+    expect(foldVietnamese('ĐẶNG Minh Đức')).toBe('dang minh duc');
+    expect(foldVietnamese('Võ Ngọc Trâm')).toBe('vo ngoc tram');
   });
 });
