@@ -334,7 +334,7 @@ export function AiAssistantPanel() {
                   setChoice(option);
                 }}
               />
-              {options[option].label}
+              <span className={styles.scopeLabel}>{options[option].label}</span>
             </label>
           ))}
         </div>
