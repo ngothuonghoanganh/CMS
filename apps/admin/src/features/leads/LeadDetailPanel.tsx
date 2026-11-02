@@ -10,6 +10,7 @@ import {
   leadStatuses,
   leadStatusLabels,
   leadStatusSchema,
+  pageTitleLabel,
   type PersonExportRequest,
   type UpdateLeadRequest,
 } from '@plp/contracts';
@@ -349,7 +350,8 @@ export function LeadDetailPanel({
           )}
           <dt>Trang</dt>
           <dd>
-            {lead.page.title} <span className={styles.muted}>· v{lead.releaseVersion}</span>
+            {pageTitleLabel(lead.page.title)}{' '}
+            <span className={styles.muted}>· v{lead.releaseVersion}</span>
           </dd>
           <dt>Nguồn</dt>
           <dd className={styles.mono}>{leadSourceLine(lead.source)}</dd>

@@ -173,6 +173,14 @@ export class LeadsRepository {
     }
   }
 
+  /**
+   * Removes a lead the public intake just stored for a site deleted in the meantime: the deletion
+   * did not see it, and nothing of the site may stay (ADR-027).
+   */
+  async deletePublic(ref: WorkspaceRef, siteId: ObjectId, id: ObjectId): Promise<void> {
+    await this.leads(ref).deleteOne({ _id: id, workspaceId: ref.workspaceId, siteId }).exec();
+  }
+
   /** Corrects the expiry of a lead the public intake just stored (see `LeadIntakeService`). */
   async setPublicExpiry(ref: WorkspaceRef, id: ObjectId, expiresAt: Date | null): Promise<void> {
     await this.leads(ref)
@@ -290,6 +298,31 @@ export class LeadsRepository {
       // cursor; close it, or the server cursor and its buffered batch stay open until timeout.
       await cursor.close();
     }
+  }
+
+  /**
+   * The releases the leads of a page refer to: the consent evidence that outlives the page when it
+   * is deleted (ADR-027). Read in that transaction, on the inbox's page index.
+   */
+  async releaseIdsOfPage(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    pageId: ObjectId,
+    tx: Tx,
+  ): Promise<ObjectId[]> {
+    return this.leads(scope)
+      .distinct('releaseId', {
+        siteId,
+        pageId,
+        workspaceId: scope.workspaceId,
+      })
+      .session(tx)
+      .exec();
+  }
+
+  /** Every lead of the site, spam included: what deleting the site removes (ADR-027). */
+  countForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
+    return this.leads(scope).countDocuments({ siteId, workspaceId: scope.workspaceId }).exec();
   }
 
   /**

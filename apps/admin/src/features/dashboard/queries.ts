@@ -18,10 +18,11 @@ export const siteQueryKeys = {
 export const PAGE_LIST_LIMIT = 50;
 
 /**
- * "Hoạt động xuất bản gần đây": the 5 newest publishing events only, so uploads and page
- * creations never push them out, and a site that never published shows the empty state.
+ * "Hoạt động xuất bản gần đây": the 5 newest publishing events and page deletions (ADR-027) only,
+ * so uploads and page creations never push them out, and a site that never published shows the
+ * empty state.
  */
 export const RECENT_ACTIVITY_QUERY = {
   limit: 5,
-  types: publishingActivityTypes.join(','),
+  types: [...publishingActivityTypes, 'page.deleted'].join(','),
 } as const satisfies ActivityListQuery;

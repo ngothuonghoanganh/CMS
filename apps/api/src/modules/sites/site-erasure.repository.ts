@@ -1,0 +1,74 @@
+import { Injectable } from '@nestjs/common';
+import type { Types } from 'mongoose';
+import { erasureOptions } from '../../shared/persistence/erasure.js';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
+import {
+  type WorkspaceCollection,
+  WorkspaceDatabases,
+} from '../../shared/persistence/workspace-databases.js';
+import { ACTIVITY_COLLECTION } from '../activity/activity.schema.js';
+import {
+  ANALYTICS_DAILY_COLLECTION,
+  ANALYTICS_SEEN_COLLECTION,
+} from '../analytics/analytics.schema.js';
+import { ASSET_COLLECTION } from '../assets/asset.schema.js';
+import { DATA_REQUEST_COLLECTION } from '../data-requests/data-request.schema.js';
+import { LEAD_COLLECTION } from '../leads/lead.schema.js';
+import { PAGE_COLLECTION } from '../pages/page.schema.js';
+import { CONSENT_VERSION_COLLECTION } from '../privacy/consent-version.schema.js';
+import { APPROVAL_COLLECTION } from '../publishing/approval.schema.js';
+import { REDIRECT_COLLECTION } from '../publishing/redirect.schema.js';
+import { RELEASE_COLLECTION } from '../publishing/release.schema.js';
+import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import { SITE_COLLECTION } from './site.schema.js';
+
+/** A document of a site's data: it names its site, and its workspace except `analytics_seen`. */
+interface SiteDocument {
+  siteId: Types.ObjectId | null;
+}
+
+/**
+ * The workspace database's side of deleting a site (ADR-027): the site and every document that
+ * holds its data by `siteId` (ADR-025). Each delete carries the erasure comment, which the guards
+ * of releases and consent versions require (ADR-005, ADR-017).
+ */
+@Injectable()
+export class SiteErasureRepository {
+  constructor(private readonly databases: WorkspaceDatabases) {}
+
+  /**
+   * Deletes the site and its data, in the transaction of the deletion. Run again without one after
+   * the commit, it removes what requests that read the site before the commit (a lead, a view, an
+   * upload) wrote while the transaction ran, which it did not see.
+   */
+  async erase(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<void> {
+    await this.databases
+      .model(scope, SITE_COLLECTION)
+      .deleteOne({ _id: siteId, workspaceId: scope.workspaceId }, erasureOptions(tx))
+      .exec();
+    const owned = { siteId, workspaceId: scope.workspaceId };
+    // One after the other: a session runs one operation at a time.
+    await this.deleteAll(scope, PAGE_COLLECTION, owned, tx);
+    await this.deleteAll(scope, RELEASE_COLLECTION, owned, tx);
+    await this.deleteAll(scope, REDIRECT_COLLECTION, owned, tx);
+    await this.deleteAll(scope, ASSET_COLLECTION, owned, tx);
+    await this.deleteAll(scope, LEAD_COLLECTION, owned, tx);
+    await this.deleteAll(scope, ACTIVITY_COLLECTION, owned, tx);
+    await this.deleteAll(scope, CONSENT_VERSION_COLLECTION, owned, tx);
+    await this.deleteAll(scope, DATA_REQUEST_COLLECTION, owned, tx);
+    await this.deleteAll(scope, APPROVAL_COLLECTION, owned, tx);
+    await this.deleteAll(scope, ANALYTICS_DAILY_COLLECTION, owned, tx);
+    // No `workspaceId` in this one; in the workspace's own database `siteId` alone is the site.
+    await this.deleteAll(scope, ANALYTICS_SEEN_COLLECTION, { siteId }, tx);
+  }
+
+  private async deleteAll<T extends SiteDocument>(
+    scope: WorkspaceScope,
+    collection: WorkspaceCollection<T>,
+    filter: { siteId: ObjectId; workspaceId?: ObjectId },
+    tx: Tx | undefined,
+  ): Promise<void> {
+    await this.databases.model(scope, collection).deleteMany(filter, erasureOptions(tx)).exec();
+  }
+}

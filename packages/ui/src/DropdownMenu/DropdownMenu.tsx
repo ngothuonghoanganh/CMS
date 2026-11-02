@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu as RadixMenu } from 'radix-ui';
-import type { ReactElement, ReactNode } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { CheckIcon } from '../icons';
 import { cx } from '../internal/cx';
 import styles from './DropdownMenu.module.css';
@@ -67,6 +67,12 @@ export interface DropdownMenuItemProps {
   /** `danger` for destructive actions such as "Gỡ xuất bản". */
   tone?: 'default' | 'danger' | undefined;
   disabled?: boolean | undefined;
+  /**
+   * A second line under the label, e.g. why the item is disabled ("Gỡ xuất bản trước khi xóa").
+   * It is part of the item's name: everything visible must be in the name (WCAG 2.5.3, axe
+   * `label-content-name-mismatch`), and a disabled item's reason is read with it.
+   */
+  description?: ReactNode;
 }
 
 export function DropdownMenuItem({
@@ -75,12 +81,14 @@ export function DropdownMenuItem({
   icon,
   tone = 'default',
   disabled = false,
+  description,
 }: DropdownMenuItemProps) {
+  const described = description !== undefined && description !== null;
   return (
     <RadixMenu.Item
       {...(onSelect === undefined ? {} : { onSelect })}
       disabled={disabled}
-      className={cx(styles.item, tone === 'danger' && styles.danger)}
+      className={cx(styles.item, tone === 'danger' && styles.danger, described && styles.twoLines)}
       data-tone={tone}
     >
       {icon ? (
@@ -88,7 +96,14 @@ export function DropdownMenuItem({
           {icon}
         </span>
       ) : null}
-      <span className={styles.text}>{children}</span>
+      {described ? (
+        <span className={styles.lines}>
+          <span className={styles.text}>{children}</span>{' '}
+          <span className={styles.description}>{description}</span>
+        </span>
+      ) : (
+        <span className={styles.text}>{children}</span>
+      )}
     </RadixMenu.Item>
   );
 }

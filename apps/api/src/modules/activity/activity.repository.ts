@@ -161,6 +161,25 @@ export class ActivityRepository {
     return new Map(groups.map((group) => [group._id.toHexString(), group.latest]));
   }
 
+  /**
+   * The pages among `pageIds` that were deleted (ADR-027), as id hex: those with a `page.deleted`
+   * event, recorded in the transaction that deleted the page. One query on the page index.
+   */
+  async findGonePages(scope: WorkspaceScope, pageIds: readonly ObjectId[]): Promise<Set<string>> {
+    const unique = [...new Map(pageIds.map((id) => [id.toHexString(), id])).values()];
+    if (unique.length === 0) {
+      return new Set();
+    }
+    const events = await this.activity(scope)
+      .find(
+        { workspaceId: scope.workspaceId, pageId: { $in: unique }, type: 'page.deleted' },
+        { pageId: 1 },
+      )
+      .lean<Pick<ActivityRecord, '_id' | 'pageId'>[]>()
+      .exec();
+    return new Set(events.flatMap((event) => (event.pageId ? [event.pageId.toHexString()] : [])));
+  }
+
   /** Flags a pointer event whose renderer revalidation failed after the commit (ADR-009). */
   async markRevalidationFailed(ref: WorkspaceRef, id: ObjectId): Promise<void> {
     const result = await this.activity(ref)

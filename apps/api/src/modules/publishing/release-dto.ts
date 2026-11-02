@@ -1,4 +1,5 @@
 import type { ReleaseSummary, UserRef } from '@plp/contracts';
+import { releaseLeadCapture } from './release-presentation.js';
 import type { ReleaseRecord } from './release.schema.js';
 
 export const RELEASE_NOT_FOUND = 'Không tìm thấy phiên bản';
@@ -17,6 +18,8 @@ export function toReleaseSummary(release: ReleaseRecord, createdBy: UserRef): Re
       sectionId: change.sectionId,
     })),
     sourceRevision: release.sourceRevision,
+    // The consent snapshot is taken exactly when the page has a form (ADR-017).
+    capturesLeads: releaseLeadCapture(release) !== null,
     createdBy,
     createdAt: release.createdAt.toISOString(),
   };

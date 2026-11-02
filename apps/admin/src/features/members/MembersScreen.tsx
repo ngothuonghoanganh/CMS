@@ -46,17 +46,17 @@ import { ScrollRegion } from '../shell/ScrollRegion';
 import { useNow } from '../shell/use-now';
 import { ChangeAccessDialog } from './ChangeAccessDialog';
 import { InviteDialog } from './InviteDialog';
-import { invitationStatus, scopeLabel } from './member-presentation';
+import {
+  invitationStatus,
+  matchesFilters,
+  type PeopleFilters,
+  scopeLabel,
+} from './member-presentation';
 import { memberQueryKeys } from './queries';
 import { TransferOwnershipDialog } from './TransferOwnershipDialog';
 import styles from './Members.module.css';
 
 type Tab = 'members' | 'invitations' | 'requests';
-
-/** The filter value of a member's role: the system role, or `custom:{id}`. */
-function roleKey(access: Access): string {
-  return typeof access === 'string' ? access : customRoleRef(access.customRoleId);
-}
 
 export interface MembersScreenProps {
   workspace: { id: string; name: string };
@@ -198,15 +198,10 @@ export function MembersScreen({
     });
   }
 
-  const query = search.trim().toLowerCase();
-  const shown = members.filter(
-    (member) =>
-      (roleFilter === 'all' || roleKey(member.role) === roleFilter) &&
-      (siteFilter === 'all' || member.siteIds === null || member.siteIds.includes(siteFilter)) &&
-      (query === '' ||
-        member.name.toLowerCase().includes(query) ||
-        member.email.toLowerCase().includes(query)),
-  );
+  // One set of filters for both lists, on what screen 15 loaded (ADR-021).
+  const filters: PeopleFilters = { role: roleFilter, siteId: siteFilter, search };
+  const shown = members.filter((member) => matchesFilters(member, filters));
+  const shownInvitations = invitations.filter((invitation) => matchesFilters(invitation, filters));
   const admins = members.filter((member) => member.role === 'admin');
   const used = members.length + invitations.length;
   const memberOf = (userId: string) => members.find((member) => member.userId === userId);
@@ -256,7 +251,7 @@ export function MembersScreen({
           value={tab}
           onChange={setTab}
         />
-        {tab === 'members' ? (
+        {tab !== 'requests' ? (
           <div className={styles.filters}>
             <Field label="Lọc theo vai trò" hideLabel id="members-role">
               <Select
@@ -397,6 +392,13 @@ export function MembersScreen({
               title="Không có lời mời nào đang chờ"
               description="Lời mời đã nhận, bị thu hồi hoặc bị từ chối không còn ở đây."
             />
+          ) : shownInvitations.length === 0 ? (
+            <EmptyState
+              headingLevel={3}
+              icon={<SearchIcon size={24} />}
+              title="Không có lời mời nào khớp"
+              description="Thử vai trò, site hoặc từ khóa khác."
+            />
           ) : (
             <>
               <ScrollRegion label="Lời mời đang chờ">
@@ -413,7 +415,7 @@ export function MembersScreen({
                     </tr>
                   </thead>
                   <tbody>
-                    {invitations.map((invitation) => {
+                    {shownInvitations.map((invitation) => {
                       const status = invitationStatus(invitation, now);
                       return (
                         <tr key={invitation.id}>
@@ -544,6 +546,8 @@ export function MembersScreen({
           workspaceId={workspace.id}
           sites={sites}
           customRoles={customRoles}
+          members={members}
+          invitations={invitations}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           onInvited={invited}

@@ -139,6 +139,11 @@ export const invitationLookupResponseSchema = z.object({
   state: invitationStateSchema,
   workspaceName: z.string(),
   invitedByName: z.string(),
+  /**
+   * Only once the invitation expired, for "Nhờ {người mời} gửi lại"; null otherwise. Whoever holds
+   * the link is the invited person, whom that inviter emailed (ADR-021).
+   */
+  inviterEmail: z.string().nullable(),
   email: z.string(),
   role: accessSchema,
   /** Names of the sites; null is the whole workspace. */

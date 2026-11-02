@@ -104,15 +104,16 @@ export function buildAnalyticsReport(input: ReportInput): AnalyticsReport {
       pageRows.set(row.pageId, { ...page, leads: page.leads + row.leads });
     }
   }
+  // A deleted page keeps its numbers (ADR-027): its row has no title, and goes after the others
+  // that tie with it.
   const pages = [...pageRows.entries()]
-    .flatMap(([id, counts]) => {
-      const title = input.titles.get(id);
-      // Pages are never deleted; a missing title is data edited by hand, left out.
-      return title === undefined ? [] : [{ page: { id, title }, ...counts }];
-    })
+    .map(([id, counts]) => ({ page: { id, title: input.titles.get(id) ?? null }, ...counts }))
     .sort(
       (a, b) =>
-        b.leads - a.leads || b.visitors - a.visitors || a.page.title.localeCompare(b.page.title),
+        b.leads - a.leads ||
+        b.visitors - a.visitors ||
+        (a.page.title === null ? 1 : 0) - (b.page.title === null ? 1 : 0) ||
+        (a.page.title ?? '').localeCompare(b.page.title ?? ''),
     );
 
   const devices = { mobile: 0, desktop: 0 };

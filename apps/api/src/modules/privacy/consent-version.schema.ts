@@ -1,4 +1,5 @@
 import { Schema, type Types } from 'mongoose';
+import { isErasure } from '../../shared/persistence/erasure.js';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 const CONSENT_VERSION_MODEL = 'ConsentVersion';
@@ -42,22 +43,21 @@ consentVersionSchema.index(
 // Version history of a site, newest first.
 consentVersionSchema.index({ siteId: 1, createdAt: -1, _id: -1 });
 
-// Defence in depth for immutability: no query may update, replace or delete a version.
+// Defence in depth for immutability: no query may update or replace a version, and only the
+// deletion of its site removes one (ADR-027).
 consentVersionSchema.pre(
-  [
-    'updateOne',
-    'updateMany',
-    'findOneAndUpdate',
-    'findOneAndReplace',
-    'replaceOne',
-    'deleteOne',
-    'deleteMany',
-    'findOneAndDelete',
-  ],
+  ['updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndReplace', 'replaceOne'],
   function () {
     throw new Error('Consent versions are immutable (ADR-017)');
   },
 );
+consentVersionSchema.pre(['deleteOne', 'deleteMany', 'findOneAndDelete'], function () {
+  if (!isErasure(this)) {
+    throw new Error(
+      'Consent versions are immutable (ADR-017): only deleting their site removes them',
+    );
+  }
+});
 
 /** In the workspace's own database (ADR-025). */
 export const CONSENT_VERSION_COLLECTION = workspaceCollection(

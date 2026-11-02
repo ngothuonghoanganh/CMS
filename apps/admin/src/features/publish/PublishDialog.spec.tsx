@@ -112,6 +112,7 @@ function publishResponse(overrides: Partial<PublishResponse> = {}): PublishRespo
       note: '',
       changeSummary: [],
       sourceRevision: 5,
+      capturesLeads: false,
       createdBy: { id: '64b000000000000000000004', name: 'Ngọc Anh' },
       createdAt: '2026-10-24T08:01:00.000Z',
     },

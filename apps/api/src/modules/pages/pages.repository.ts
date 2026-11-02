@@ -219,6 +219,13 @@ export class PagesRepository {
     );
   }
 
+  /** How many pages of the site are live: what deleting the site takes off the web (ADR-027). */
+  countLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
+    return this.pages(scope)
+      .countDocuments({ workspaceId: scope.workspaceId, siteId, ...LIVE_FILTER })
+      .exec();
+  }
+
   /** Pages of the site that are live right now. */
   async listLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<LivePageRow[]> {
     const pages = await this.pages(scope)
@@ -401,17 +408,49 @@ export class PagesRepository {
     }
   }
 
+  /**
+   * Deletes the page in the transaction of its deletion (ADR-027), only while nothing of it is live:
+   * the condition is the pointer `movePointer` writes, so a publish committing at the same moment
+   * conflicts with it and one of the two fails. False when the page is gone or live.
+   */
+  async deleteIfNotLive(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    id: ObjectId,
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.pages(scope)
+      .deleteOne(
+        { _id: id, workspaceId: scope.workspaceId, siteId, publishedReleaseId: null },
+        { session: tx },
+      )
+      .exec();
+    return result.deletedCount === 1;
+  }
+
   /* Public delivery and signed previews have no user: these lookups are unscoped. The site always
      comes from the request host or a signed token, routed to its workspace database through the
      master DB (ADR-025), and callers check that records belong to it. */
 
-  /** A page's title for a background job that has no member scope, e.g. a lead email. */
+  /**
+   * A page's title for a background job that has no member scope, e.g. a lead email; null once the
+   * page was deleted (ADR-027).
+   */
   async findPublicTitle(ref: WorkspaceRef, id: ObjectId): Promise<string | null> {
     const page = await this.pages(ref)
       .findOne({ _id: id, workspaceId: ref.workspaceId }, { title: 1 })
       .lean<PageTitleRow>()
       .exec();
     return page?.title ?? null;
+  }
+
+  /** The site of a page, without its draft: whether a signed preview still opens something. */
+  async findPublicSiteId(ref: WorkspaceRef, id: ObjectId): Promise<ObjectId | null> {
+    const page = await this.pages(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId }, { siteId: 1 })
+      .lean<Pick<PageRecord, '_id' | 'siteId'>>()
+      .exec();
+    return page?.siteId ?? null;
   }
 
   findPublicById(ref: WorkspaceRef, id: ObjectId): Promise<PageRecord | null> {

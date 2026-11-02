@@ -167,13 +167,18 @@ export class ReleasesRepository {
       .exec();
   }
 
-  /** The site of a release, without its content: a signed preview's check (ADR-010). */
-  async findPublicSiteId(ref: WorkspaceRef, id: ObjectId): Promise<ObjectId | null> {
-    const release = await this.releases(ref)
-      .findOne({ _id: id, workspaceId: ref.workspaceId }, { siteId: 1 })
-      .lean<Pick<ReleaseRecord, '_id' | 'siteId'>>()
+  /**
+   * The site and page of a release, without its content: a signed preview's check (ADR-010), which
+   * also needs the page to exist (ADR-027).
+   */
+  findPublicOwner(
+    ref: WorkspaceRef,
+    id: ObjectId,
+  ): Promise<Pick<ReleaseRecord, '_id' | 'siteId' | 'pageId'> | null> {
+    return this.releases(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId }, { siteId: 1, pageId: 1 })
+      .lean<Pick<ReleaseRecord, '_id' | 'siteId' | 'pageId'>>()
       .exec();
-    return release?.siteId ?? null;
   }
 
   /** Unscoped variant of `findByIds` for public delivery, limited to one site (the sitemap). */

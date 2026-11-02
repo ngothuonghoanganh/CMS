@@ -17,7 +17,7 @@ describe('activityListQuerySchema', () => {
 
   it('rejects an unknown or empty type', () => {
     expect(
-      activityListQuerySchema.safeParse({ types: 'page.published,page.deleted' }).success,
+      activityListQuerySchema.safeParse({ types: 'page.published,page.archived' }).success,
     ).toBe(false);
     expect(activityListQuerySchema.safeParse({ types: '' }).success).toBe(false);
   });

@@ -209,7 +209,7 @@ describe('GET /sites/:siteId/activity', () => {
 
   it('rejects an unknown activity type', async () => {
     const { client, siteId } = await setup();
-    await client.get(`/sites/${siteId}/activity?types=page.published,page.deleted`).expect(422);
+    await client.get(`/sites/${siteId}/activity?types=page.published,page.archived`).expect(422);
   });
 
   it('rejects a forged cursor and an out-of-range limit', async () => {

@@ -22,11 +22,18 @@ import {
   Select,
 } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { type SubmitEvent, useState } from 'react';
+import { Fragment, type SubmitEvent, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { permissionSummary, roleChoiceOf, roleOptions, siteChange } from './member-presentation';
+import {
+  accessChangeSummary,
+  permissionSummary,
+  roleChoiceOf,
+  roleOptions,
+  siteChange,
+  type SummaryPart,
+} from './member-presentation';
 import styles from './Members.module.css';
 
 export interface ChangeAccessDialogProps {
@@ -243,6 +250,15 @@ export function ChangeAccessDialog({
               onChosen={setChosen}
             />
           )}
+          {option === null ? null : (
+            <ChangeSummary
+              parts={accessChangeSummary(
+                member,
+                { role: option.access, siteIds: grant.siteIds },
+                sites,
+              )}
+            />
+          )}
           {option === null || summary === null ? null : (
             <PermissionSummary roleLabel={option.label} summary={summary} />
           )}
@@ -346,6 +362,25 @@ export function SiteScopeFields({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/** "Tóm tắt thay đổi": what saving changes, the old role → the new one and the sites. */
+function ChangeSummary({ parts }: { parts: readonly SummaryPart[] }) {
+  return (
+    <div className={styles.changeSummary}>
+      <span className={styles.summaryTitle}>Tóm tắt thay đổi</span>
+      <span className={styles.changeText}>
+        {parts.map((part, index) =>
+          // The parts never move: their place is their key.
+          part.strong ? (
+            <strong key={index}>{part.text}</strong>
+          ) : (
+            <Fragment key={index}>{part.text}</Fragment>
+          ),
+        )}
+      </span>
     </div>
   );
 }

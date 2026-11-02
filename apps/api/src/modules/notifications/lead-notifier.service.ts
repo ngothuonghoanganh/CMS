@@ -5,6 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { pageTitleLabel } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import type { LeadRecord } from '../leads/lead.schema.js';
@@ -256,8 +257,8 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
       );
       return;
     }
-    // Pages cannot be deleted; an email still goes out if the data was edited by hand.
-    const pageTitle = (await this.pages.findPublicTitle(lead, lead.pageId)) ?? '(trang không còn)';
+    // A lead outlives its page when the page is deleted (ADR-027); the email goes out all the same.
+    const pageTitle = pageTitleLabel(await this.pages.findPublicTitle(lead, lead.pageId));
     const email = leadNotificationEmail({
       siteName: site.name,
       pageTitle,

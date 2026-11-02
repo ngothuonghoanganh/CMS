@@ -253,6 +253,21 @@ export class WorkspacesRepository {
       .exec();
   }
 
+  /**
+   * Takes a deleted site out of the members' sites, in the transaction that deletes it (ADR-027).
+   * A member kept to that site only stays in the workspace with no site to open, until Chủ sở hữu
+   * changes their access or removes them.
+   */
+  async removeSiteFromMembers(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
+    await this.memberships
+      .updateMany(
+        { workspaceId: scope.workspaceId, siteIds: siteId },
+        { $pull: { siteIds: siteId } },
+        { session: tx },
+      )
+      .exec();
+  }
+
   /** Removes a member; never Chủ sở hữu. False when there was no such member. */
   async removeMember(scope: WorkspaceScope, userId: ObjectId, tx: Tx): Promise<boolean> {
     const result = await this.memberships

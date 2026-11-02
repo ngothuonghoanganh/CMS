@@ -188,6 +188,27 @@ export class InvitationsRepository {
   }
 
   /**
+   * Takes a deleted site out of the workspace's invitations, in the transaction that deletes it
+   * (ADR-027). A pending invitation to that site only would give no site at all: it is revoked.
+   */
+  async removeSite(scope: WorkspaceScope, siteId: ObjectId, now: Date, tx: Tx): Promise<void> {
+    await this.invitations
+      .updateMany(
+        { workspaceId: scope.workspaceId, status: 'pending', siteIds: [siteId] },
+        { $set: { status: 'revoked', closedAt: now, purgeAt: purgeAfter(now) } },
+        { session: tx },
+      )
+      .exec();
+    await this.invitations
+      .updateMany(
+        { workspaceId: scope.workspaceId, siteIds: siteId },
+        { $pull: { siteIds: siteId } },
+        { session: tx },
+      )
+      .exec();
+  }
+
+  /**
    * Closes the invitation of a link as accepted or declined, once: only while it is pending, still
    * has that link (`tokenHash`: "Gửi lại" at the same moment ends the old one) and, for an
    * acceptance, is not expired. False when it was not.

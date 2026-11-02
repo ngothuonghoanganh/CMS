@@ -207,6 +207,44 @@ describe('Dashboard', () => {
     expect(apiMock).not.toHaveBeenCalled();
   });
 
+  it('says a page was deleted and opens the history of a page that still exists (ADR-027)', () => {
+    const gone = { id: '64b000000000000000000109', title: 'Webinar tháng 9', deleted: true };
+    renderDashboard({
+      activity: {
+        items: [
+          activityFixture({
+            id: '64b000000000000000000311',
+            type: 'page.deleted',
+            page: gone,
+            data: { ...activityFixture().data, version: null, toVersion: null, slug: 'webinar' },
+          }),
+          activityFixture({ id: '64b000000000000000000310', type: 'page.unpublished', page: gone }),
+          activityFixture(),
+        ],
+        nextCursor: null,
+      },
+    });
+
+    expect(screen.getByText('xóa trang “Webinar tháng 9”', { exact: false })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', {
+        name: /^Xem lịch sử phiên bản\s*của trang “Ưu đãi niềng răng tháng 11”$/,
+      }),
+    ).toHaveAttribute('href', `${DASHBOARD_PATH}/pages/64b000000000000000000101/history`);
+  });
+
+  it('has no history link when the pages of the recent activity are all deleted', () => {
+    const gone = { id: '64b000000000000000000109', title: 'Webinar tháng 9', deleted: true };
+    renderDashboard({
+      activity: {
+        items: [activityFixture({ type: 'page.deleted', page: gone })],
+        nextCursor: null,
+      },
+    });
+
+    expect(screen.queryByRole('link', { name: /^Xem lịch sử phiên bản/ })).toBeNull();
+  });
+
   it('shows the leads of the last 7 days and the new ones, linking into the inbox (ADR-018)', () => {
     renderDashboard({
       pages: pageListFixture([pageFixture({ leadsLast7Days: 31 }), draftPage]),
@@ -278,7 +316,7 @@ describe('Dashboard', () => {
     expect(within(summary).queryByText(/chưa xử lý/)).not.toBeInTheDocument();
   });
 
-  it('asks only for publishing events, so uploads never push them out of the activity card', async () => {
+  it('asks only for publishing events and page deletions, so uploads never push them out of the activity card', async () => {
     apiMock.mockResolvedValue({ items: [], nextCursor: null } satisfies ActivityListResponse);
     const { queryClient } = renderDashboard();
 
@@ -288,7 +326,7 @@ describe('Dashboard', () => {
     expect(call.args).toEqual([SITE_ID]);
     expect(call.options).toHaveProperty('query', {
       limit: 5,
-      types: publishingActivityTypes.join(','),
+      types: [...publishingActivityTypes, 'page.deleted'].join(','),
     });
     // A site that never published shows the empty state instead of "tạo site".
     await vi.waitFor(() => {
@@ -490,6 +528,7 @@ describe('Dashboard', () => {
               fromVersion: 12,
               toVersion: null,
               count: null,
+              slug: null,
               revalidationFailed: true,
             },
           }),
@@ -515,7 +554,13 @@ describe('Dashboard', () => {
       'SEO & chia sẻ',
       'Lịch sử phiên bản',
       'Gỡ xuất bản',
+      'Xóa trang Gỡ xuất bản trước khi xóa',
     ]);
+    // A live page goes off the web before it can be deleted (ADR-027).
+    const deleteItem = screen.getByRole('menuitem', {
+      name: 'Xóa trang Gỡ xuất bản trước khi xóa',
+    });
+    expect(deleteItem).toHaveAttribute('aria-disabled', 'true');
     await user.click(screen.getByRole('menuitem', { name: 'Xem trang live' }));
     expect(open).toHaveBeenCalledWith(
       `${livePage.liveUrl ?? ''}?plp_internal=1`,
@@ -550,9 +595,70 @@ describe('Dashboard', () => {
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'SEO & chia sẻ',
       'Lịch sử phiên bản',
+      'Xóa trang',
     ]);
     await user.click(screen.getByRole('menuitem', { name: 'SEO & chia sẻ' }));
     expect(router.push).toHaveBeenCalledWith(`${DASHBOARD_PATH}/pages/${draftPage.id}/seo`);
+  });
+
+  it('deletes a page that is not live after saying what goes and what stays (ADR-027)', async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderDashboard();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    apiMock.mockImplementation((endpoint) => {
+      switch (endpoint) {
+        case endpoints.deletePage:
+          return Promise.resolve(undefined);
+        case endpoints.listPages:
+          return Promise.resolve(pageListFixture([livePage]));
+        case endpoints.listActivity:
+          return Promise.resolve({ items: [], nextCursor: null });
+        case endpoints.leadCounts:
+          return Promise.resolve(NO_LEADS);
+        default:
+          return Promise.reject(new Error('unexpected call'));
+      }
+    });
+
+    await user.click(screen.getByRole('button', { name: `Tùy chọn khác cho ${draftPage.title}` }));
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    const dialog = screen.getByRole('alertdialog', { name: `Xóa trang “${draftPage.title}”?` });
+    expect(within(dialog).getByRole('region', { name: 'Bị xóa' })).toHaveTextContent(
+      'Bản nháp và nội dung của trangLịch sử phiên bảnChuyển hướng từ đường dẫn cũ',
+    );
+    expect(within(dialog).getByRole('region', { name: 'Vẫn giữ' })).toHaveTextContent(
+      'Lead đã nhận, kèm nội dung đồng ý khách đã thấySố liệu Hiệu quả của trang',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Xóa trang' }));
+
+    expect(await screen.findByText(`Đã xóa trang “${draftPage.title}”`)).toBeInTheDocument();
+    expect(lastCallTo(apiMock, endpoints.deletePage).args).toEqual([SITE_ID, draftPage.id]);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: siteQueryKeys.site(SITE_ID) });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    // Its row and menu are gone: the focus waits in the search.
+    await vi.waitFor(() => {
+      expect(screen.getByRole('searchbox', { name: 'Tìm trang' })).toHaveFocus();
+    });
+  });
+
+  it('cancels a deletion without asking the server', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await user.click(screen.getByRole('button', { name: `Tùy chọn khác cho ${draftPage.title}` }));
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Hủy' }));
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('does not offer deletion to a role that does not manage live pages (ADR-020)', async () => {
+    const user = userEvent.setup();
+    renderDashboard({ role: 'contributor' });
+
+    await user.click(screen.getByRole('button', { name: `Tùy chọn khác cho ${draftPage.title}` }));
+    expect(screen.queryByRole('menuitem', { name: 'Xóa trang' })).toBeNull();
   });
 
   describe('rendered again by the server', () => {
@@ -591,6 +697,7 @@ describe('Dashboard', () => {
                   fromVersion: 12,
                   toVersion: 13,
                   count: null,
+                  slug: null,
                   revalidationFailed: false,
                 },
               }),

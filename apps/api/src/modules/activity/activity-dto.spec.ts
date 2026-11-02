@@ -21,11 +21,12 @@ function activityRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord
 }
 
 const actor = { id: newObjectId().toHexString(), name: 'Lan Anh' };
+const NONE_DELETED: ReadonlySet<string> = new Set();
 
 describe('toActivityItem', () => {
   it('maps a site event without a page', () => {
     const record = activityRecord();
-    expect(activityItemSchema.parse(toActivityItem(record, actor, false))).toEqual({
+    expect(activityItemSchema.parse(toActivityItem(record, actor, false, NONE_DELETED))).toEqual({
       id: record._id.toHexString(),
       type: 'site.created',
       actor,
@@ -36,6 +37,7 @@ describe('toActivityItem', () => {
         fromVersion: null,
         toVersion: null,
         count: null,
+        slug: null,
         revalidationFailed: false,
       },
       reason: null,
@@ -60,13 +62,18 @@ describe('toActivityItem', () => {
       },
       reason: 'Sai giá',
     });
-    const item = activityItemSchema.parse(toActivityItem(record, actor, true));
-    expect(item.page).toEqual({ id: pageId.toHexString(), title: 'Ưu đãi niềng răng' });
+    const item = activityItemSchema.parse(toActivityItem(record, actor, true, NONE_DELETED));
+    expect(item.page).toEqual({
+      id: pageId.toHexString(),
+      title: 'Ưu đãi niềng răng',
+      deleted: false,
+    });
     expect(item.data).toEqual({
       version: null,
       fromVersion: 4,
       toVersion: 3,
       count: null,
+      slug: null,
       revalidationFailed: true,
     });
     expect(item.reason).toBe('Sai giá');
@@ -78,14 +85,42 @@ describe('toActivityItem', () => {
       type: 'lead.exported',
       data: { ...EMPTY_ACTIVITY_DATA, count: 48 },
     });
-    expect(activityItemSchema.parse(toActivityItem(exported, actor, false)).data.count).toBe(48);
+    expect(
+      activityItemSchema.parse(toActivityItem(exported, actor, false, NONE_DELETED)).data.count,
+    ).toBe(48);
     const { count: _count, ...before } = EMPTY_ACTIVITY_DATA;
     const older = activityRecord({ data: before as typeof EMPTY_ACTIVITY_DATA });
-    expect(toActivityItem(older, actor, false).data.count).toBeNull();
+    expect(toActivityItem(older, actor, false, NONE_DELETED).data.count).toBeNull();
+  });
+
+  it('maps the deletion of a page with its title and slug, and marks its events deleted', () => {
+    const pageId = newObjectId();
+    const deleted = activityRecord({
+      type: 'page.deleted',
+      pageId,
+      pageTitle: 'Ưu đãi tháng 11',
+      data: { ...EMPTY_ACTIVITY_DATA, slug: 'uu-dai-thang-11' },
+    });
+    const published = activityRecord({
+      type: 'page.published',
+      pageId,
+      pageTitle: 'Ưu đãi tháng 11',
+      data: { ...EMPTY_ACTIVITY_DATA, version: 1 },
+    });
+    const gone = new Set([pageId.toHexString()]);
+    const item = activityItemSchema.parse(toActivityItem(deleted, actor, false, gone));
+    expect(item.page).toEqual({
+      id: pageId.toHexString(),
+      title: 'Ưu đãi tháng 11',
+      deleted: true,
+    });
+    expect(item.data.slug).toBe('uu-dai-thang-11');
+    expect(toActivityItem(published, actor, false, gone).page?.deleted).toBe(true);
+    expect(toActivityItem(published, actor, false, NONE_DELETED).page?.deleted).toBe(false);
   });
 
   it('fails loudly when a page event lost its title snapshot', () => {
     const record = activityRecord({ type: 'page.created', pageId: newObjectId(), pageTitle: null });
-    expect(() => toActivityItem(record, actor, false)).toThrow(/no title snapshot/);
+    expect(() => toActivityItem(record, actor, false, NONE_DELETED)).toThrow(/no title snapshot/);
   });
 });

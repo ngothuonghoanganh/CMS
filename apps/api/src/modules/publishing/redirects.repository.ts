@@ -9,7 +9,10 @@ import {
   type WorkspaceRef,
 } from '../../shared/persistence/workspace-databases.js';
 
-/** Redirects are written only by `movePointer`, in the same transaction as the pointer move. */
+/**
+ * Redirects are written only by `movePointer`, in the same transaction as the pointer move, and
+ * deleted with their page (ADR-027).
+ */
 @Injectable()
 export class RedirectsRepository {
   constructor(private readonly databases: WorkspaceDatabases) {}
@@ -41,6 +44,18 @@ export class RedirectsRepository {
   ): Promise<void> {
     await this.redirects(scope)
       .deleteOne({ workspaceId: scope.workspaceId, siteId, fromSlug }, { session: tx })
+      .exec();
+  }
+
+  /** Removes every redirect to a page, in the transaction that deletes it (ADR-027). */
+  async deleteForPage(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    pageId: ObjectId,
+    tx: Tx,
+  ): Promise<void> {
+    await this.redirects(scope)
+      .deleteMany({ workspaceId: scope.workspaceId, siteId, pageId }, { session: tx })
       .exec();
   }
 

@@ -10,6 +10,11 @@ export const releaseSummarySchema = z.object({
   note: z.string(),
   changeSummary: z.array(changeItemSchema),
   sourceRevision: z.number().int().nonnegative(),
+  /**
+   * The release has a lead form. Its leads go to the site's recipients of the moment, which no
+   * release holds (ADR-018): screen 06 says so before a rollback (ADR-006).
+   */
+  capturesLeads: z.boolean(),
   createdBy: userRefSchema,
   createdAt: isoDateTimeSchema,
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseEnv } from '../../config/env.js';
 import { newObjectId } from '../../shared/persistence/object-id.js';
-import { assetStorageKey, S3AssetStorage } from './asset-storage.js';
+import { assetStorageKey, S3AssetStorage, siteStoragePrefix } from './asset-storage.js';
 
 function storage(publicBaseUrl: string): S3AssetStorage {
   return new S3AssetStorage(
@@ -33,6 +33,36 @@ describe('assetStorageKey', () => {
     const assetId = newObjectId();
     expect(assetStorageKey({ workspaceId, siteId, assetId, extension: 'png' })).toBe(
       `public/${workspaceId.toHexString()}/${siteId.toHexString()}/${assetId.toHexString()}.png`,
+    );
+  });
+});
+
+describe('siteStoragePrefix', () => {
+  it("is the folder of the site's assets, and only of that site", () => {
+    const workspaceId = newObjectId();
+    const siteId = newObjectId();
+    const prefix = siteStoragePrefix({ workspaceId, siteId });
+    expect(
+      assetStorageKey({ workspaceId, siteId, assetId: newObjectId(), extension: 'webp' }),
+    ).toMatch(new RegExp(`^${prefix}`));
+    expect(prefix.endsWith('/')).toBe(true);
+    expect(
+      assetStorageKey({
+        workspaceId,
+        siteId: newObjectId(),
+        assetId: newObjectId(),
+        extension: 'png',
+      }).startsWith(prefix),
+    ).toBe(false);
+  });
+});
+
+describe('S3AssetStorage.deletePrefix', () => {
+  it('refuses a prefix that is not a folder, before asking the storage anything', async () => {
+    const assets = storage('http://localhost:9100/plp-assets');
+    await expect(assets.deletePrefix('')).rejects.toThrow(/not a folder prefix/);
+    await expect(assets.deletePrefix('public/64b0000000000000000000a1')).rejects.toThrow(
+      /not a folder prefix/,
     );
   });
 });

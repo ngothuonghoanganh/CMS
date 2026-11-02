@@ -13,9 +13,16 @@ import {
   MoreHorizontalIcon,
   StatusBadge,
   TabsNav,
+  TrashIcon,
 } from '@plp/ui';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import {
+  deletable,
+  DeletePageDialog,
+  UNPUBLISH_BEFORE_DELETE,
+} from '../dashboard/DeletePageDialog';
 import { presentPageStatus } from '../dashboard/status-presentation';
 import {
   type UnpublishablePage,
@@ -37,7 +44,7 @@ export interface PageDetailHeaderProps {
   now: number;
   /** The user edits pages: "Mở editor" and the tabs of the editor and SEO show (ADR-020). */
   canEdit: boolean;
-  /** The user takes pages off the live site: "Gỡ xuất bản" shows. */
+  /** The user takes pages off the live site: "Gỡ xuất bản" and "Xóa trang" show. */
   canManageLive: boolean;
   /**
    * Link component for the header's links. Defaults to `next/link`; the SEO page passes one that
@@ -47,10 +54,10 @@ export interface PageDetailHeaderProps {
   /** After "Gỡ xuất bản" succeeded; the site's page and activity queries are refreshed already. */
   onUnpublished?: ((result: PointerMoveResponse) => void) | undefined;
   /**
-   * After "Gỡ xuất bản" answered that the live page changed meanwhile. The site's queries are
-   * refreshed already; a screen that keeps its page elsewhere reads it again here.
+   * After "Gỡ xuất bản" or "Xóa trang" answered that the live page changed meanwhile. The site's
+   * queries are refreshed already; a screen that keeps its page elsewhere reads it again here.
    */
-  onUnpublishConflict?: (() => void) | undefined;
+  onPageConflict?: (() => void) | undefined;
 }
 
 /** The tabs of one page: "Nội dung" (the editor), "SEO & chia sẻ", "Lịch sử phiên bản". */
@@ -68,7 +75,8 @@ export function pageTabs(siteId: string, pageId: string, current: PageView) {
 
 /**
  * Header of the page-level screens (boards 06 and 07): breadcrumb, title with status, "Mở editor",
- * "Tùy chọn khác" (unpublish) and the page tabs.
+ * "Tùy chọn khác" (the live page, unpublishing, deleting) and the page tabs. Once the page is
+ * deleted the page list opens: nothing of the page is left to show (ADR-027).
  */
 export function PageDetailHeader({
   siteId,
@@ -79,9 +87,10 @@ export function PageDetailHeader({
   canManageLive,
   link = Link,
   onUnpublished,
-  onUnpublishConflict,
+  onPageConflict,
 }: PageDetailHeaderProps) {
   const LinkAs = link;
+  const router = useRouter();
   const presentation = presentPageStatus(page, now);
   const live = unpublishable(page);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -90,11 +99,13 @@ export function PageDetailHeader({
   const menuTriggerFocused = useRef(false);
   const [unpublishTarget, setUnpublishTarget] = useState<UnpublishablePage | null>(null);
   const [unpublishOpen, setUnpublishOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const dialogOpen = unpublishOpen || deleteOpen;
 
   useEffect(() => {
     const target = returnFocus.current;
-    if (unpublishOpen || target === null) {
+    if (dialogOpen || target === null) {
       return;
     }
     // The dialog opened from a menu item that no longer exists; focus its menu button instead.
@@ -107,7 +118,7 @@ export function PageDetailHeader({
     return () => {
       clearTimeout(timer);
     };
-  }, [unpublishOpen]);
+  }, [dialogOpen]);
 
   useEffect(() => {
     // Focus that moves anywhere fires `focusin` there; the removal of the focused button does not.
@@ -122,18 +133,20 @@ export function PageDetailHeader({
     };
   }, []);
 
-  // The page can stop being live while "Tùy chọn khác" has the focus: unpublishing answered that a
-  // teammate did it first, and the page read since caught up. The button goes, and its focus with it.
-  const isLive = live !== null;
+  const liveUrl = live?.liveUrl ?? null;
+  // Without "Gỡ xuất bản" and "Xóa trang", the menu only opens the live page.
+  const hasMenu = canManageLive || liveUrl !== null;
+  // The menu can go while "Tùy chọn khác" has the focus: for a role that only views the live page,
+  // a read brings the page as no longer live. The button goes, and its focus with it.
   useEffect(() => {
-    if (isLive || !menuTriggerFocused.current) {
+    if (hasMenu || !menuTriggerFocused.current) {
       return;
     }
     menuTriggerFocused.current = false;
     if (document.activeElement === null || document.activeElement === document.body) {
       editorLink.current?.focus();
     }
-  }, [isLive]);
+  }, [hasMenu]);
 
   return (
     <header className={styles.header}>
@@ -156,7 +169,7 @@ export function PageDetailHeader({
               Mở editor
             </ButtonLink>
           ) : null}
-          {live === null || (live.liveUrl === null && !canManageLive) ? null : (
+          {!hasMenu ? null : (
             <DropdownMenu
               trigger={
                 <IconButton
@@ -170,33 +183,43 @@ export function PageDetailHeader({
                 />
               }
             >
-              {live.liveUrl === null ? null : (
+              {liveUrl === null ? null : (
                 <DropdownMenuItem
                   icon={<ExternalLinkIcon size={18} />}
                   onSelect={() => {
-                    if (live.liveUrl !== null) {
-                      window.open(internalVisitUrl(live.liveUrl), '_blank', 'noopener,noreferrer');
-                    }
+                    window.open(internalVisitUrl(liveUrl), '_blank', 'noopener,noreferrer');
                   }}
                 >
                   Xem trang live
                 </DropdownMenuItem>
               )}
+              {canManageLive && liveUrl !== null ? <DropdownMenuSeparator /> : null}
+              {canManageLive && live !== null ? (
+                <DropdownMenuItem
+                  tone="danger"
+                  icon={<EyeOffIcon size={18} />}
+                  onSelect={() => {
+                    returnFocus.current = menuTrigger.current;
+                    setUnpublishTarget(live);
+                    setUnpublishOpen(true);
+                  }}
+                >
+                  Gỡ xuất bản
+                </DropdownMenuItem>
+              ) : null}
               {canManageLive ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    tone="danger"
-                    icon={<EyeOffIcon size={18} />}
-                    onSelect={() => {
-                      returnFocus.current = menuTrigger.current;
-                      setUnpublishTarget(live);
-                      setUnpublishOpen(true);
-                    }}
-                  >
-                    Gỡ xuất bản
-                  </DropdownMenuItem>
-                </>
+                <DropdownMenuItem
+                  tone="danger"
+                  icon={<TrashIcon size={18} />}
+                  disabled={!deletable(page)}
+                  description={deletable(page) ? undefined : UNPUBLISH_BEFORE_DELETE}
+                  onSelect={() => {
+                    returnFocus.current = menuTrigger.current;
+                    setDeleteOpen(true);
+                  }}
+                >
+                  Xóa trang
+                </DropdownMenuItem>
               ) : null}
             </DropdownMenu>
           )}
@@ -217,10 +240,22 @@ export function PageDetailHeader({
           open={unpublishOpen}
           onOpenChange={setUnpublishOpen}
           onUnpublished={onUnpublished}
-          onConflict={onUnpublishConflict}
+          onConflict={onPageConflict}
           fallbackFocusRef={editorLink}
         />
       )}
+      {canManageLive ? (
+        <DeletePageDialog
+          page={page}
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          onDeleted={() => {
+            router.push(siteHref(siteId));
+          }}
+          onConflict={onPageConflict}
+          fallbackFocusRef={editorLink}
+        />
+      ) : null}
     </header>
   );
 }

@@ -1,8 +1,16 @@
-import { type Asset, can, endpoints, type Site } from '@plp/contracts';
+import {
+  type Access,
+  type Asset,
+  can,
+  endpoints,
+  type Site,
+  type SiteDeletionSummary,
+} from '@plp/contracts';
 import type { Metadata } from 'next';
 import { loadAssetsByIds } from '../../../../../features/assets';
 import { PageContainer, PageHeader } from '../../../../../features/shell/PageHeader';
 import { loadSiteContext } from '../../../../../features/shell/site-context';
+import { DeleteSiteCard } from '../../../../../features/site-settings/DeleteSiteCard';
 import { SiteSettingsForm } from '../../../../../features/site-settings/SiteSettingsForm';
 import { serverApi } from '../../../../../lib/server-api';
 
@@ -20,6 +28,16 @@ function loadSiteImages(site: Site): Promise<Asset[]> {
   );
 }
 
+/**
+ * What deleting the site removes, for the roles that may delete it (ADR-027): the site, and the
+ * leads with it. Null for the others, who see no card.
+ */
+function loadDeletionSummary(site: Site, role: Access): Promise<SiteDeletionSummary> | null {
+  return can(role, 'sites.manage') && can(role, 'personalData.manage')
+    ? serverApi(endpoints.siteDeletionSummary, [site.id])
+    : null;
+}
+
 export async function generateMetadata({ params }: SettingsPageProps): Promise<Metadata> {
   const { site } = await loadSiteContext((await params).siteId);
   return { title: `Cài đặt site — ${site.name}` };
@@ -27,7 +45,10 @@ export async function generateMetadata({ params }: SettingsPageProps): Promise<M
 
 export default async function SiteSettingsPage({ params }: SettingsPageProps) {
   const { site, membership } = await loadSiteContext((await params).siteId);
-  const assets = await loadSiteImages(site);
+  const [assets, deletion] = await Promise.all([
+    loadSiteImages(site),
+    loadDeletionSummary(site, membership.role),
+  ]);
   return (
     <PageContainer width="narrow">
       <PageHeader
@@ -39,6 +60,7 @@ export default async function SiteSettingsPage({ params }: SettingsPageProps) {
         assets={assets}
         canEdit={can(membership.role, 'sites.manage')}
       />
+      {deletion === null ? null : <DeleteSiteCard site={site} summary={deletion} />}
     </PageContainer>
   );
 }
