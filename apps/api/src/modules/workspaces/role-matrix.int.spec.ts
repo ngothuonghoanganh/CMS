@@ -1182,23 +1182,22 @@ describe('a member kept to some sites', () => {
     await addMember(t, workspaceId, 'editor');
     await addMember(t, workspaceId, 'editor');
     await addMember(t, workspaceId, 'viewer');
-    // The holder of a custom role is counted with that role on board 16 (ADR-024), and among the
-    // members in the sidebar (ADR-028).
+    // Members of another workspace are not counted.
+    const other = await signedUpClient(t.app);
+    await addMember(t, other.workspaceId, 'support');
+    // Its owner also holds a custom role here: counted with that role on board 16 (ADR-024), and
+    // among the members in the sidebar (ADR-028).
     const custom = customRoleSchema.parse(
       (await owner.post(`/workspaces/${workspaceId}/custom-roles`, CUSTOM_ROLE).expect(201)).body,
     );
-    const holder = await signedUpClient(t.app);
     await t.connection.collection('memberships').insertOne({
       workspaceId: new Types.ObjectId(workspaceId),
-      userId: new Types.ObjectId(holder.me.user.id),
+      userId: new Types.ObjectId(other.me.user.id),
       role: 'custom',
       customRoleId: new Types.ObjectId(custom.id),
       siteIds: null,
       createdAt: new Date(),
     });
-    // Members of another workspace are not counted.
-    const other = await signedUpClient(t.app);
-    await addMember(t, other.workspaceId, 'support');
 
     for (const client of [owner, admin]) {
       const response = await client.get(`/workspaces/${workspaceId}/role-counts`).expect(200);
