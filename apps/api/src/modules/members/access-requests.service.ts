@@ -13,13 +13,13 @@ import {
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
-import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { type UserContact, UsersRepository } from '../auth/users.repository.js';
 import { EmailQuota, type QuotaUse } from '../notifications/email-quota.js';
 import { EmailSender, EmailSendError, type EmailMessage } from '../notifications/email-sender.js';
-import { accessDecisionEmail, accessRequestEmail } from '../notifications/email-templates.js';
+import { accessDecisionEmail, accessRequestEmail } from '../notifications/emails.js';
 import type { AccessRequestRecord } from '../workspaces/access-request.schema.js';
 import { AccessRequestsRepository } from '../workspaces/access-requests.repository.js';
 import { AccessService } from '../workspaces/access.service.js';
@@ -196,7 +196,7 @@ export class AccessRequestsService {
       return membership;
     });
     const access = accessOf(updated, roles);
-    await this.notifyRequester(scope, request.userId, {
+    await this.notifyRequester(scope, request, {
       accepted: true,
       roleLabel: accessLabel(access),
       siteIds: grant.siteIds,
@@ -211,7 +211,7 @@ export class AccessRequestsService {
     if (!(await this.requests.decide(scope, request._id, 'declined', new Date()))) {
       throw notFound(ACCESS_REQUEST_NOT_FOUND);
     }
-    await this.notifyRequester(scope, request.userId, { accepted: false });
+    await this.notifyRequester(scope, request, { accepted: false });
   }
 
   private async findPending(scope: WorkspaceScope, requestId: string) {
@@ -256,6 +256,7 @@ export class AccessRequestsService {
       return {
         to: [ownerContact.email],
         ...accessRequestEmail({
+          requestId: request._id.toHexString(),
           workspaceName: workspace.name,
           requesterName: requester.name,
           requesterEmail: requester.email,
@@ -271,31 +272,34 @@ export class AccessRequestsService {
 
   private async notifyRequester(
     scope: WorkspaceScope,
-    requesterId: ObjectId,
+    request: Pick<AccessRequestRecord, '_id' | 'userId'>,
     decision:
       | { accepted: true; roleLabel: string; siteIds: readonly string[] | null }
       | { accepted: false },
   ): Promise<void> {
     await this.sendTo(scope, async () => {
       const [[requester], workspace, scopeLine] = await Promise.all([
-        this.users.findContacts([requesterId]),
+        this.users.findContacts([request.userId]),
         this.workspaces.findWorkspace(scope),
         decision.accepted ? this.grants.scopeLine(scope, decision.siteIds) : '',
       ]);
       if (!requester || !workspace) {
         throw new Error(
-          `Member ${requesterId.toHexString()} or workspace ${scope.workspaceId.toHexString()} is gone`,
+          `Member ${request.userId.toHexString()} or workspace ${scope.workspaceId.toHexString()} is gone`,
         );
       }
+      const common = {
+        requestId: request._id.toHexString(),
+        workspaceName: workspace.name,
+        openUrl: `${this.links.originFor(workspace)}/`,
+      };
       return {
         to: [requester.email],
-        ...accessDecisionEmail({
-          workspaceName: workspace.name,
-          accepted: decision.accepted,
-          roleLabel: decision.accepted ? decision.roleLabel : '',
-          scope: scopeLine,
-          openUrl: `${this.links.originFor(workspace)}/`,
-        }),
+        ...accessDecisionEmail(
+          decision.accepted
+            ? { ...common, accepted: true, roleLabel: decision.roleLabel, scope: scopeLine }
+            : { ...common, accepted: false },
+        ),
       };
     });
   }

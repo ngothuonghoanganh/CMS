@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "approval-published",
+  "description": "Báo người gửi yêu cầu rằng trang của họ đã live (ADR-023).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pageTitle", "publisherName", "approved", "version", "liveUrl"],
+  "properties": {
+    "pageTitle": { "type": "string", "minLength": 1 },
+    "publisherName": { "type": "string", "minLength": 1 },
+    "approved": { "type": "boolean", "description": "true khi người xuất bản có quyền duyệt: \"đã duyệt và xuất bản\"; false khi đó là một Biên tập: \"đã xuất bản\"." },
+    "version": { "type": "integer", "minimum": 1, "description": "Số phiên bản vừa xuất bản." },
+    "liveUrl": { "type": "string", "format": "http-url" }
+  }
+}

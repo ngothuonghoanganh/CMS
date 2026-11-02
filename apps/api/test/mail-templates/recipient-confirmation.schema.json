@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "recipient-confirmation",
+  "description": "Xin một địa chỉ xác nhận trước khi nhận lead (ADR-018).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["siteName", "invitedBy", "confirmUrl", "validDays"],
+  "properties": {
+    "siteName": { "type": "string", "minLength": 1 },
+    "invitedBy": { "type": "string", "minLength": 1, "description": "Người đã thêm địa chỉ, như admin hiển thị." },
+    "confirmUrl": { "type": "string", "format": "http-url" },
+    "validDays": { "type": "integer", "minimum": 1 }
+  }
+}

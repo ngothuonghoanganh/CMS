@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "domain-active",
+  "description": "Tên miền riêng đã phục vụ các trang của site (ADR-022).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["hostname", "siteName", "domainsUrl"],
+  "properties": {
+    "hostname": { "type": "string", "minLength": 1, "description": "Tên miền riêng, ví dụ \"go.smilecare.vn\"." },
+    "siteName": { "type": "string", "minLength": 1 },
+    "domainsUrl": { "type": "string", "format": "http-url", "description": "Mục \"Tên miền\" của site trong admin." }
+  }
+}

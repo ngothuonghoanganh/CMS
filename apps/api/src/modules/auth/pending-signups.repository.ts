@@ -19,25 +19,33 @@ export class PendingSignupsRepository {
     @InjectModel(PENDING_SIGNUP_MODEL) private readonly pending: Model<PendingSignupRecord>,
   ) {}
 
-  /** The sign-up of `input.email`, replacing an earlier one: its link stops working. */
-  async replace(input: PendingSignupInput, now: Date): Promise<void> {
-    const write = () =>
-      this.pending
-        .updateOne(
+  /**
+   * The sign-up of `input.email`, replacing an earlier one: its link stops working. Resolves with
+   * its id, which keys its email (ADR-029).
+   */
+  async replace(input: PendingSignupInput, now: Date): Promise<ObjectId> {
+    const write = async () => {
+      const stored = await this.pending
+        .findOneAndUpdate(
           { email: input.email },
           // A sign-up stored before passwords moved to the link's page still had one (ADR-026).
           { $set: { ...input, createdAt: now }, $unset: { passwordHash: '' } },
           // Not strict: the schema no longer has the field, and strict mode would drop the $unset.
-          { upsert: true, strict: false },
+          { upsert: true, strict: false, returnDocument: 'after', projection: { _id: 1 } },
         )
+        .lean<Pick<PendingSignupRecord, '_id'>>()
         .exec();
+      if (stored === null) {
+        throw new Error('An upserted sign-up was not returned');
+      }
+      return stored._id;
+    };
     try {
-      await write();
+      return await write();
     } catch (error) {
       // Two sign-ups of one email raced to insert; the loser now replaces the winner's.
       if (isDuplicateKeyError(error, PENDING_SIGNUPS_EMAIL_INDEX)) {
-        await write();
-        return;
+        return write();
       }
       throw error;
     }

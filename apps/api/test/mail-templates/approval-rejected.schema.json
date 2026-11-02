@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "approval-rejected",
+  "description": "Báo người gửi yêu cầu vì sao trang chưa được xuất bản (ADR-023).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pageTitle", "rejecterName", "reason", "pageUrl"],
+  "properties": {
+    "pageTitle": { "type": "string", "minLength": 1 },
+    "rejecterName": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1, "description": "Lý do người duyệt nhập." },
+    "pageUrl": { "type": "string", "format": "http-url", "description": "Trang trong editor." }
+  }
+}

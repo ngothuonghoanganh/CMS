@@ -6,6 +6,7 @@ import {
   NOTIFICATION_RETRY_DELAYS_MS,
   recipientStatus,
   smtpErrorCode,
+  sqsErrorCode,
 } from './notification-rules.js';
 
 describe('nextAttemptDelay', () => {
@@ -35,6 +36,35 @@ describe('smtpErrorCode', () => {
     ['not an error', 'unknown'],
   ])('reads %j as %s', (error, code) => {
     expect(smtpErrorCode(error)).toBe(code);
+  });
+});
+
+/** What the AWS SDK throws for a failed SendMessage (ADR-029). */
+function awsError(name: string, httpStatusCode: number, throttling = false): Error {
+  return Object.assign(new Error(name), {
+    name,
+    $fault: httpStatusCode >= 500 ? 'server' : 'client',
+    $metadata: { httpStatusCode, requestId: 'req-1' },
+    ...(throttling ? { $retryable: { throttling: true } } : {}),
+  });
+}
+
+describe('sqsErrorCode', () => {
+  it.each([
+    [Object.assign(new Error('Request timed out'), { name: 'TimeoutError' }), 'timeout'],
+    [{ code: 'ETIMEDOUT' }, 'timeout'],
+    [{ code: 'ECONNREFUSED' }, 'smtp_unavailable'],
+    [{ code: 'ENOTFOUND' }, 'smtp_unavailable'],
+    [awsError('InternalError', 500), 'smtp_unavailable'],
+    [awsError('ServiceUnavailable', 503), 'smtp_unavailable'],
+    [awsError('ThrottlingException', 400, true), 'smtp_unavailable'],
+    [awsError('TooManyRequests', 429), 'smtp_unavailable'],
+    [awsError('AccessDenied', 403), 'smtp_rejected'],
+    [awsError('QueueDoesNotExist', 400), 'smtp_rejected'],
+    [new Error('boom'), 'unknown'],
+    ['not an error', 'unknown'],
+  ])('reads %j as %s', (error, code) => {
+    expect(sqsErrorCode(error)).toBe(code);
   });
 });
 

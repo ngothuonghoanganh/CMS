@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "signup-confirmation",
+  "description": "Link xác nhận email của một lần đăng ký (ADR-026). Trang của link đặt mật khẩu; tài khoản và workspace chỉ được tạo khi link được dùng.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "confirmUrl", "validHours"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1, "description": "Tên workspace người đăng ký đã nhập." },
+    "confirmUrl": { "type": "string", "format": "http-url" },
+    "validHours": { "type": "integer", "minimum": 1 }
+  }
+}

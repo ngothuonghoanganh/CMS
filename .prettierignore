@@ -3,3 +3,5 @@ docs/design/plp-ux-v1/screens
 .legacy-local
 .kilo
 .serena
+# Copied verbatim from plp-mailer templates/emails (ADR-029), so a refresh is a plain diff.
+apps/api/test/mail-templates

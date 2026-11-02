@@ -6,7 +6,7 @@ import {
   approvalPublishedEmail,
   approvalRejectedEmail,
   approvalRequestEmail,
-} from '../notifications/email-templates.js';
+} from '../notifications/emails.js';
 import type { PageRecord } from '../pages/page.schema.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
@@ -61,6 +61,8 @@ export class ApprovalNotifier {
       return {
         to: contacts.map((contact) => contact.email),
         ...approvalRequestEmail({
+          approvalId: approval._id.toHexString(),
+          sentAt: approval.sentAt,
           requesterName,
           pageTitle: page.title,
           siteName: site.name,
@@ -85,6 +87,7 @@ export class ApprovalNotifier {
         : {
             to: [email],
             ...approvalPublishedEmail({
+              approvalId: approval._id.toHexString(),
               pageTitle: page.title,
               publisherName: release.publisherName,
               approved: can(scope.access, 'publishApprovals.decide'),
@@ -108,6 +111,7 @@ export class ApprovalNotifier {
         : {
             to: [email],
             ...approvalRejectedEmail({
+              approvalId: approval._id.toHexString(),
               pageTitle: page.title,
               rejecterName,
               reason: approval.reason,

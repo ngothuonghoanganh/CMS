@@ -17,7 +17,7 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, type ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
-import { accountExistsEmail, signupConfirmationEmail } from '../notifications/email-templates.js';
+import { accountExistsEmail, signupConfirmationEmail } from '../notifications/emails.js';
 import { slugBaseOf, slugCandidates } from '../workspaces/domain/workspace-slug.js';
 import { WORKSPACES_SLUG_INDEX } from '../workspaces/workspace.schema.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
@@ -87,24 +87,31 @@ export class SignupService {
   async start(input: SignupRequest): Promise<AccountEmailResponse> {
     const now = new Date();
     await this.emails.deliver(input.email, now, 'Sign-up email', async () => {
-      if ((await this.users.findByEmail(input.email)) !== null) {
+      const existing = await this.users.findByEmail(input.email);
+      if (existing !== null) {
         return accountExistsEmail({
+          userId: existing._id.toHexString(),
+          requestedAt: now,
           loginUrl: `${this.env.ADMIN_ORIGIN}/login`,
           forgotUrl: `${this.env.ADMIN_ORIGIN}${FORGOT_PASSWORD_PATH}`,
         });
       }
       const { token, tokenHash } = newLinkToken();
-      await this.pending.replace(
+      const expiresAt = signupLinkExpiry(now);
+      const signupId = await this.pending.replace(
         {
           email: input.email,
           name: input.name,
           workspaceName: input.workspaceName,
           tokenHash,
-          expiresAt: signupLinkExpiry(now),
+          expiresAt,
         },
         now,
       );
-      return this.confirmationEmail(input.workspaceName, token);
+      return this.confirmationEmail(
+        { _id: signupId, workspaceName: input.workspaceName, expiresAt },
+        token,
+      );
     });
     return { email: input.email };
   }
@@ -115,7 +122,7 @@ export class SignupService {
     await this.emails.deliver(input.email, now, 'Sign-up email sent again', async () => {
       const { token, tokenHash } = newLinkToken();
       const renewed = await this.pending.renew(input.email, tokenHash, signupLinkExpiry(now), now);
-      return renewed === null ? null : this.confirmationEmail(renewed.workspaceName, token);
+      return renewed === null ? null : this.confirmationEmail(renewed, token);
     });
     return { email: input.email };
   }
@@ -165,9 +172,14 @@ export class SignupService {
     return pending;
   }
 
-  private confirmationEmail(workspaceName: string, token: string) {
+  private confirmationEmail(
+    signup: Pick<PendingSignupRecord, '_id' | 'workspaceName' | 'expiresAt'>,
+    token: string,
+  ) {
     return signupConfirmationEmail({
-      workspaceName,
+      signupId: signup._id.toHexString(),
+      linkExpiresAt: signup.expiresAt,
+      workspaceName: signup.workspaceName,
       confirmUrl: accountLink(this.env.ADMIN_ORIGIN, SIGNUP_VERIFY_PATH, token),
       validHours: SIGNUP_LINK_VALID_HOURS,
     });

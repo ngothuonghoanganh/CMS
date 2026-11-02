@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "domain-lost",
+  "description": "Tên miền riêng không còn trỏ tới hệ thống; khách mở trang qua tên miền này gặp lỗi (ADR-022).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["hostname", "siteName", "domainsUrl"],
+  "properties": {
+    "hostname": { "type": "string", "minLength": 1, "description": "Tên miền riêng, ví dụ \"go.smilecare.vn\"." },
+    "siteName": { "type": "string", "minLength": 1 },
+    "domainsUrl": { "type": "string", "format": "http-url", "description": "Mục \"Tên miền\" của site trong admin." }
+  }
+}

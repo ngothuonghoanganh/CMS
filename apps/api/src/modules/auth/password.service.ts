@@ -12,7 +12,7 @@ import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
-import { passwordResetEmail } from '../notifications/email-templates.js';
+import { passwordResetEmail } from '../notifications/emails.js';
 import { AccountEmails } from './account-emails.js';
 import { accountLink, hashLinkToken, newLinkToken, resetLinkExpiry } from './account-links.js';
 import { AuthService, type IssuedSession } from './auth.service.js';
@@ -73,8 +73,11 @@ export class PasswordService {
         return null;
       }
       const { token, tokenHash } = newLinkToken();
-      await this.resets.replace(user._id, tokenHash, resetLinkExpiry(now), now);
+      const expiresAt = resetLinkExpiry(now);
+      await this.resets.replace(user._id, tokenHash, expiresAt, now);
       return passwordResetEmail({
+        userId: user._id.toHexString(),
+        linkExpiresAt: expiresAt,
         resetUrl: accountLink(this.env.ADMIN_ORIGIN, RESET_PASSWORD_PATH, token),
         validMinutes: RESET_LINK_VALID_MINUTES,
       });

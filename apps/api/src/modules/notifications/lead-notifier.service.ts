@@ -25,7 +25,7 @@ import {
   STALE_SENDING_MS,
 } from './domain/notification-rules.js';
 import { type EmailDelivery, EmailSender, EmailSendError } from './email-sender.js';
-import { leadNotificationEmail } from './email-templates.js';
+import { leadNotificationEmail } from './emails.js';
 
 /** Injection token of the waits between attempts; tests shorten them. */
 export const NOTIFICATION_RETRY_DELAYS = Symbol('NOTIFICATION_RETRY_DELAYS');
@@ -260,6 +260,7 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
     // A lead outlives its page when the page is deleted (ADR-027); the email goes out all the same.
     const pageTitle = pageTitleLabel(await this.pages.findPublicTitle(lead, lead.pageId));
     const email = leadNotificationEmail({
+      leadId: lead._id.toHexString(),
       siteName: site.name,
       pageTitle,
       releaseVersion: lead.releaseVersion,

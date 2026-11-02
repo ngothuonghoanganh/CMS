@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const secret = z.string().min(32, 'must be at least 32 characters');
 
-const envSchema = z.object({
+const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().min(1).max(65_535).default(4100),
   MONGODB_URI: z
@@ -126,14 +126,6 @@ const envSchema = z.object({
   /** Page views one site counts per hour, whoever sends them. */
   PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR: z.coerce.number().int().min(1).default(20_000),
 
-  /**
-   * SMTP server for lead notifications and recipient confirmations (ADR-018), e.g.
-   * "smtp://localhost:1125" (Mailpit) or "smtps://user:pass@smtp.example.com:465".
-   */
-  SMTP_URL: z.url({ protocol: /^smtps?$/ }),
-  /** Sender of those emails, e.g. "Payload Landing Page <no-reply@payload.site>". */
-  LEAD_EMAIL_FROM: z.string().trim().min(3).max(200),
-
   S3_ENDPOINT: z.url(),
   S3_REGION: z.string().min(1),
   S3_BUCKET: z.string().min(3),
@@ -143,8 +135,34 @@ const envSchema = z.object({
   S3_PUBLIC_BASE_URL: z.url(),
 });
 
+/** Emails go to an SMTP server (ADR-018), the default. */
+const smtpMailSchema = z.object({
+  MAIL_TRANSPORT: z.literal('smtp').default('smtp'),
+  /**
+   * SMTP server for every email the API sends, e.g. "smtp://localhost:1125" (Mailpit) or
+   * "smtps://user:pass@smtp.example.com:465".
+   */
+  SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+  /** Sender of those emails, e.g. "Payload Landing Page <no-reply@payload.site>". */
+  LEAD_EMAIL_FROM: z.string().trim().min(3).max(200),
+});
+
+/** Emails go to the queue of plp-mailer, which renders and sends them with SES (ADR-029). */
+const sqsMailSchema = z.object({
+  MAIL_TRANSPORT: z.literal('sqs'),
+  /** The `MailQueue` URL from the plp-mailer stack; http only for a local SQS-compatible queue. */
+  MAIL_QUEUE_URL: z.url({ protocol: /^https?$/ }),
+  /** The queue's AWS region, e.g. "ap-southeast-1". */
+  MAIL_QUEUE_REGION: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d+$/, 'must be an AWS region'),
+});
+
+const envSchema = baseEnvSchema.and(
+  z.discriminatedUnion('MAIL_TRANSPORT', [smtpMailSchema, sqsMailSchema]),
+);
+
 export type Env = z.infer<typeof envSchema>;
 export type EnvInput = z.input<typeof envSchema>;
+export type SqsMailEnv = z.infer<typeof sqsMailSchema>;
 
 export function parseEnv(source: Record<string, string | undefined>): Env {
   const result = envSchema.safeParse(source);
