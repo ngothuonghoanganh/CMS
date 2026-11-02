@@ -691,6 +691,51 @@ describe('Dashboard', () => {
     ).toHaveFocus();
   });
 
+  it('hands the focus to the search when the row unpublished leaves the "Live" list', async () => {
+    const user = userEvent.setup();
+    renderDashboard({
+      pages: pageListFixture([livePage]),
+      filters: { status: 'live', q: '' },
+    });
+    let reread: (list: PageListResponse) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) => {
+      switch (endpoint) {
+        case endpoints.movePointer:
+          return Promise.resolve({ revalidation: 'done' });
+        case endpoints.listPages:
+          // The list reads itself again after the dialog closed.
+          return new Promise((resolve) => {
+            reread = resolve;
+          });
+        case endpoints.listActivity:
+          return Promise.resolve({ items: [], nextCursor: null });
+        case endpoints.leadCounts:
+          return Promise.resolve(NO_LEADS);
+        default:
+          return Promise.reject(new Error('unexpected call'));
+      }
+    });
+
+    await user.click(screen.getByRole('button', { name: `Tùy chọn khác cho ${livePage.title}` }));
+    await user.click(screen.getByRole('menuitem', { name: 'Gỡ xuất bản' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.type(within(dialog).getByRole('textbox'), 'Hết chương trình');
+    await user.click(within(dialog).getByRole('button', { name: 'Gỡ xuất bản' }));
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    const menuButton = screen.getByRole('button', { name: `Tùy chọn khác cho ${livePage.title}` });
+    expect(menuButton).toHaveFocus();
+
+    act(() => {
+      reread(pageListFixture([]));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('searchbox', { name: 'Tìm trang' })).toHaveFocus();
+    });
+  });
+
   it('does not offer unpublishing or the live page for a draft', async () => {
     const user = userEvent.setup();
     renderDashboard();

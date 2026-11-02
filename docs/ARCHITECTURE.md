@@ -1858,6 +1858,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Không có toast sau khi xóa site: màn workspace có khung riêng, toast sẽ mất ngay khi chuyển màn.
   - Xóa trang xong thì bỏ các query của trang đó trước khi làm mới danh sách, rồi `router.refresh()` để số trang ở Sidebar (render phía server) cập nhật. Mục "Xóa trang" bị vô hiệu vẫn nhận focus (`aria-disabled`, mẫu menu của APG) và không làm gì khi chọn. Ô xác nhận tên của "Xóa site" chỉ đọc khi đang xóa, nên focus không rời hộp thoại.
     - Sửa 2026-11-02 (review vòng 2): `router.refresh()` không dựng lại màn 01, nên focus ở "Tìm trang", chữ đang gõ và các trang đã nạp vẫn còn (ADR-008).
+    - Sửa 2026-11-02 (kiểm trên trình duyệt):
+      - Hộp thoại đóng trước khi danh sách đọc lại xong. Focus về nút menu của dòng, rồi rơi xuống `<body>` khi dòng biến mất.
+      - Hộp thoại của `@plp/ui` vì vậy theo dõi nút mở sau khi đóng. Nút bị gỡ khi còn giữ focus thì focus chuyển sang ô dự phòng: "Tìm trang" ở màn 01, cả khi "Gỡ xuất bản" làm dòng rời bộ lọc "Live".
+      - Hộp thoại không có ô dự phòng (thu hồi lời mời, ngắt tên miền) đưa focus về `<main>` của trang, như skip link.
 - **Amended 2026-11-02 (vòng sửa lỗi sau E1–E6):** lead tới đúng lúc trang bị gỡ rồi xóa.
   - Nhận lead đọc lại release của lead sau khi lưu; release đã mất thì xóa lead và trả 404 "Form này không còn nhận đăng ký", như khi site bị xóa.
   - Lead được lưu trong lúc transaction xóa trang còn mở vẫn có thể giữ một release đã mất. Đọc lead khi đó không lỗi:
