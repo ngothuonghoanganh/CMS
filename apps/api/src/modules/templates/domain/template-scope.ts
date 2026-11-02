@@ -41,27 +41,40 @@ export function visibleSiteIds(
     .map((id) => id.toHexString());
 }
 
+/** The scope a change stores, or why it is refused. */
+export type ScopeChange =
+  | { ok: true; scope: TemplateScopeRecord }
+  /**
+   * `site_not_yours`: a chosen site is not the member's. `narrows_workspace`: a member kept to some
+   * sites would take a template every site uses away from the sites they do not see.
+   */
+  | { ok: false; reason: 'site_not_yours' | 'narrows_workspace' };
+
 /**
  * The scope after "Sửa thông tin" or a save by a member: the sites chosen, which must all be the
  * member's, plus the sites of the template the member does not see, which they could neither
- * choose nor clear. Null when a chosen site is not the member's.
+ * choose nor clear. For the same reason a member kept to some sites cannot limit a template of the
+ * whole workspace (ADR-030): that would clear every site they do not see.
  */
 export function scopeAfterChange(
   requested: { kind: 'workspace' } | { kind: 'sites'; siteIds: readonly ObjectId[] },
   current: TemplateScopeRecord | null,
   memberSiteIds: readonly ObjectId[] | null,
-): TemplateScopeRecord | null {
+): ScopeChange {
   if (requested.kind === 'workspace') {
-    return { kind: 'workspace' };
+    return { ok: true, scope: { kind: 'workspace' } };
   }
   const covers = (id: ObjectId) =>
     memberSiteIds === null || memberSiteIds.some((member) => member.equals(id));
   if (!requested.siteIds.every(covers)) {
-    return null;
+    return { ok: false, reason: 'site_not_yours' };
+  }
+  if (current?.kind === 'workspace' && memberSiteIds !== null) {
+    return { ok: false, reason: 'narrows_workspace' };
   }
   const hidden =
     current?.kind === 'sites' ? current.siteIds.filter((id) => !covers(id)) : ([] as ObjectId[]);
-  return { kind: 'sites', siteIds: [...requested.siteIds, ...hidden] };
+  return { ok: true, scope: { kind: 'sites', siteIds: [...requested.siteIds, ...hidden] } };
 }
 
 /** The scope as the API answers it. */

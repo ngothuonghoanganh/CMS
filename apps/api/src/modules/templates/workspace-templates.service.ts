@@ -35,6 +35,7 @@ import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { templateContentOf } from './domain/template-content.js';
 import {
   scopeAfterChange,
+  type ScopeChange,
   scopeDto,
   type TemplateScopeRecord,
   templateVisibleTo,
@@ -55,6 +56,8 @@ export type UpdateWorkspaceTemplateValues = z.output<typeof updateWorkspaceTempl
 const VERSION_NOT_FOUND = 'Không tìm thấy phiên bản';
 const NOT_LIVE = 'Trang chưa có bản live';
 const SITE_NOT_YOURS = 'Chỉ chọn được các site của bạn trong workspace';
+const KEEPS_EVERY_SITE =
+  'Mẫu này đang dùng cho mọi site. Chỉ thành viên của toàn workspace mới giới hạn được nó.';
 /** "Tư vấn niềng răng trả góp (bản sao)", within the name's 120 characters. */
 const COPY_SUFFIX = ' (bản sao)';
 const NAME_MAX = 120;
@@ -93,6 +96,11 @@ function versionLimitReached(name: string): AppError {
 
 function copyName(name: string): string {
   return `${name.slice(0, NAME_MAX - COPY_SUFFIX.length).trimEnd()}${COPY_SUFFIX}`;
+}
+
+/** The sites the member chose for "Ai được dùng", as ids. */
+function chosenSites(requested: TemplateScope): ObjectId[] {
+  return requested.kind === 'workspace' ? [] : requested.siteIds.map((id) => toObjectId(id));
 }
 
 /**
@@ -576,33 +584,36 @@ export class WorkspaceTemplatesService {
 
   /**
    * "Ai được dùng" as stored: every requested site must be a site of the workspace the member
-   * opens (422 otherwise); the template's sites the member does not see stay.
+   * opens (422 otherwise); the template's sites the member does not see stay. A member kept to
+   * some sites cannot limit a template of the whole workspace (422 `narrows_workspace`), which
+   * would take it away from the sites they do not see (ADR-030).
    */
   private async scopeOf(
     scope: WorkspaceScope,
     requested: TemplateScope,
     current: TemplateScopeRecord | null,
   ): Promise<TemplateScopeRecord> {
-    const siteIds =
-      requested.kind === 'workspace' ? [] : requested.siteIds.map((id) => toObjectId(id));
+    const siteIds = chosenSites(requested);
     const known = new Set(
       siteIds.length === 0
         ? []
         : (await this.sites.listForWorkspace(scope)).map((site) => site._id.toHexString()),
     );
-    const next = siteIds.every((id) => known.has(id.toHexString()))
+    const next: ScopeChange = siteIds.every((id) => known.has(id.toHexString()))
       ? scopeAfterChange(
           requested.kind === 'workspace' ? requested : { kind: 'sites', siteIds },
           current,
           scope.siteIds,
         )
-      : null;
-    if (next === null) {
+      : { ok: false, reason: 'site_not_yours' };
+    if (!next.ok) {
       throw validationFailed([
-        { path: ['scope', 'siteIds'], code: 'site_not_found', message: SITE_NOT_YOURS },
+        next.reason === 'site_not_yours'
+          ? { path: ['scope', 'siteIds'], code: 'site_not_found', message: SITE_NOT_YOURS }
+          : { path: ['scope', 'siteIds'], code: 'narrows_workspace', message: KEEPS_EVERY_SITE },
       ]);
     }
-    return next;
+    return next.scope;
   }
 
   private async setArchived(

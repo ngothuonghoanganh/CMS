@@ -476,6 +476,29 @@ describe('workspace templates', () => {
       .expect(422);
     expect(problemSchema.parse(notTheirs.body).code).toBe('validation_failed');
 
+    // Nor can they take a template every site uses away from the sites they do not see.
+    const everywhere = await saveTemplate(owner, saveBody(smile.id, pageId));
+    const narrowed = await insider.client
+      .patch(`${base()}/${everywhere.id}`, {
+        name: everywhere.name,
+        description: '',
+        goal: null,
+        industry: null,
+        scope: { kind: 'sites', siteIds: [smile.id] },
+      })
+      .expect(422);
+    expect(problemSchema.parse(narrowed.body).issues).toEqual([
+      {
+        path: ['scope', 'siteIds'],
+        code: 'narrows_workspace',
+        message:
+          'Mẫu này đang dùng cho mọi site. Chỉ thành viên của toàn workspace mới giới hạn được nó.',
+      },
+    ]);
+    expect((await board(owner)).find((item) => item.id === everywhere.id)?.scope).toEqual({
+      kind: 'workspace',
+    });
+
     // Used in its sites only, even by Chủ sở hữu.
     const page = await createPage(owner, smile.id);
     await owner.post(`/sites/${smile.id}/pages`, fromTemplate(limited.id, 1)).expect(404);
