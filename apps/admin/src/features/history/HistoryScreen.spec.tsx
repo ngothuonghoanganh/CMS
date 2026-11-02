@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { SITE_ID, siteFixture } from '../dashboard/test-fixtures';
-import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, findToastAction, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { HistoryScreen } from './HistoryScreen';
 import {
   historyFixture,
@@ -410,7 +410,7 @@ describe('HistoryScreen', () => {
     expect(apiMock).toHaveBeenCalledWith(endpoints.restoreDraft, [SITE_ID, PAGE_ID], {
       body: { baseRevision: 9, releaseId: releaseId(11) },
     });
-    await user.click(screen.getByRole('button', { name: 'Mở editor' }));
+    await user.click(await findToastAction('Mở editor'));
     expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
   });
 
