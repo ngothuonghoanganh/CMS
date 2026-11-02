@@ -140,6 +140,34 @@ describe('DeleteSiteCard', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('keeps the focus in the name field while deleting from Enter, and there when it fails', async () => {
+    const user = userEvent.setup();
+    let fail: (error: unknown) => void = () => undefined;
+    apiMock.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    renderCard();
+
+    const dialog = await openDialog(user);
+    const field = within(dialog).getByRole('textbox', { name: 'Nhập tên site để xác nhận' });
+    await user.type(field, 'Nha khoa Smile Care{Enter}');
+    expect(apiMock).toHaveBeenCalledWith(endpoints.deleteSite, [SITE_ID], {
+      body: { confirmName: 'Nha khoa Smile Care' },
+    });
+    // While the deletion runs the name cannot change, and the focus stays in the dialog.
+    expect(field).not.toBeDisabled();
+    expect(field).toHaveAttribute('readonly');
+    expect(field).toHaveFocus();
+
+    fail(apiError(500, 'internal', 'Máy chủ đang gặp sự cố'));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Máy chủ đang gặp sự cố');
+    expect(field).not.toHaveAttribute('readonly');
+    expect(field).toHaveFocus();
+  });
+
   it('starts again empty each time it opens', async () => {
     const user = userEvent.setup();
     renderCard();

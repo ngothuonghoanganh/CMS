@@ -199,7 +199,9 @@ function DeleteSiteDialog({
             autoComplete="off"
             placeholder={site.name}
             value={confirmName}
-            disabled={remove.isPending}
+            // Read-only, not disabled, while deleting: Enter here starts it, and a disabled
+            // field would drop the focus out of the dialog, where an error would not be heard.
+            readOnly={remove.isPending}
             onChange={(event) => {
               remove.reset();
               setConfirmName(event.target.value);
