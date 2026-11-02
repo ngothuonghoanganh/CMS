@@ -382,32 +382,18 @@ export class SitesRepository {
   /**
    * Increments `pageSeq` inside a page-creation transaction. The write makes concurrent creations
    * in the site conflict, so the page count read afterwards in the same transaction is exact.
+   * False when the site was deleted since it was read (ADR-027).
    */
-  async recordPageCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
-    const result = await this.sites(scope)
-      .updateOne(
-        { _id: siteId, workspaceId: scope.workspaceId },
-        { $inc: { pageSeq: 1 } },
-        { session: tx },
-      )
-      .exec();
-    if (result.matchedCount === 0) {
-      throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
-    }
+  recordPageCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    return this.increment(scope, siteId, 'pageSeq', tx);
   }
 
-  /** Increments `domainSeq` inside the transaction that adds a custom domain (ADR-022). */
-  async recordDomainCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
-    const result = await this.sites(scope)
-      .updateOne(
-        { _id: siteId, workspaceId: scope.workspaceId },
-        { $inc: { domainSeq: 1 } },
-        { session: tx },
-      )
-      .exec();
-    if (result.matchedCount === 0) {
-      throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
-    }
+  /**
+   * Increments `domainSeq` inside the transaction that adds a custom domain (ADR-022). False when
+   * the site was deleted since it was read (ADR-027).
+   */
+  recordDomainCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    return this.increment(scope, siteId, 'domainSeq', tx);
   }
 
   /**
@@ -416,11 +402,20 @@ export class SitesRepository {
    * deletion waits and deletes the data too, or the data is refused. False when the site is gone:
    * deleted since it was read, its data already swept, so the transaction must store nothing.
    */
-  async recordDataWrite(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+  recordDataWrite(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    return this.increment(scope, siteId, 'dataSeq', tx);
+  }
+
+  private async increment(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    counter: 'pageSeq' | 'domainSeq' | 'dataSeq',
+    tx: Tx,
+  ): Promise<boolean> {
     const result = await this.sites(scope)
       .updateOne(
         { _id: siteId, workspaceId: scope.workspaceId },
-        { $inc: { dataSeq: 1 } },
+        { $inc: { [counter]: 1 } },
         { session: tx },
       )
       .exec();

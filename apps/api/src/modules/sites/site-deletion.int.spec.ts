@@ -703,6 +703,35 @@ describe('DELETE /sites/:siteId', () => {
       expect(await storedKeys(site.id)).toEqual([]);
     });
 
+    it('answers a page or a custom domain added to a deleted site with 404, not 500', async () => {
+      const pages = await createSite(owner, workspaceId, { name: 'Trang muộn' });
+      let spy = deleteBeforeTransaction(pages);
+      try {
+        expectSiteGone(
+          await owner
+            .post(`/sites/${pages.id}/pages`, {
+              title: 'Ưu đãi niềng răng',
+              slug: uniqueSlug('muon'),
+              start: { kind: 'blank' },
+            })
+            .expect(404),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await leftOf(pages.id)).toEqual([]);
+
+      const domains = await createSite(owner, workspaceId, { name: 'Tên miền muộn' });
+      const hostname = newDomain();
+      spy = deleteBeforeTransaction(domains);
+      try {
+        expectSiteGone(await owner.post(`/sites/${domains.id}/domains`, { hostname }).expect(404));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await t.connection.collection('domains').countDocuments({ hostname })).toBe(0);
+    });
+
     it('refuses a consent version of a deleted site', async () => {
       const site = await createSite(owner, workspaceId, { name: 'Đồng ý muộn' });
       const spy = deleteBeforeTransaction(site);
