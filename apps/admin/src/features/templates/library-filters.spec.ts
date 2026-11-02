@@ -45,6 +45,24 @@ describe('search', () => {
     expect(matchesQuery(dental, '   ')).toBe(true);
   });
 
+  it('matches whole words, the last one as it is being typed', () => {
+    // "cảm nhận" and "Khóa học" hold "nha" and "khoa", but not as words.
+    expect(names({ query: 'nha khoa' })).toEqual([
+      'Ưu đãi dịch vụ nha khoa',
+      'Giới thiệu phòng khám',
+    ]);
+    expect(names({ query: 'nha kho' })).toEqual([
+      'Ưu đãi dịch vụ nha khoa',
+      'Giới thiệu phòng khám',
+    ]);
+    // The goal "Sự kiện / webinar" holds the word too.
+    expect(names({ query: 'webin' })).toEqual(['Webinar trực tuyến', 'Sự kiện mở bán dự án']);
+    expect(names({ query: 'F&B' })).toEqual([
+      'Thực đơn mới & đặt bàn',
+      'Danh sách chờ ngày khai trương',
+    ]);
+  });
+
   it('finds the templates of an industry by its name', () => {
     expect(names({ query: 'the hinh' })).toEqual([
       'Ưu đãi khai trương phòng tập',

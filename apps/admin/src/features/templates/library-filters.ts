@@ -57,19 +57,26 @@ export function hasFilters(filters: LibraryFilters): boolean {
   return filters.goals.length > 0 || filters.industries.length > 0 || filters.withForm;
 }
 
+/** Words without accents or case: "Nhà hàng & F&B" → ["nha", "hang", "f", "b"]. */
+function wordsOf(text: string): string[] {
+  return foldVietnamese(text)
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== '');
+}
+
 /**
- * The search, without accents or case: "nha khoa" finds "Nha khoa & y tế". Every word must appear
- * somewhere in the name, description, industry or goal, so "uu dai nha khoa" finds "Ưu đãi dịch vụ
- * nha khoa".
+ * The search, without accents or case: "nha khoa" finds "Nha khoa & y tế", "uu dai nha khoa"
+ * finds "Ưu đãi dịch vụ nha khoa". Each word is a whole word of the name, description, industry
+ * or goal, so "nha" does not find "cảm nhận"; the last one may be a beginning, as it is still
+ * being typed ("nha kh").
  */
 export function matchesQuery(template: TemplateSummary, query: string): boolean {
-  const words = foldVietnamese(query)
-    .split(' ')
-    .filter((word) => word !== '');
-  if (words.length === 0) {
+  const words = wordsOf(query);
+  const last = words.pop();
+  if (last === undefined) {
     return true;
   }
-  const haystack = foldVietnamese(
+  const haystack = wordsOf(
     [
       template.name,
       template.description,
@@ -77,7 +84,9 @@ export function matchesQuery(template: TemplateSummary, query: string): boolean 
       goalLabel(template.goal),
     ].join(' '),
   );
-  return words.every((word) => haystack.includes(word));
+  return (
+    words.every((word) => haystack.includes(word)) && haystack.some((word) => word.startsWith(last))
+  );
 }
 
 type FilterGroup = 'goals' | 'industries' | 'withForm';
