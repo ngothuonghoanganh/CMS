@@ -11,7 +11,7 @@ import { Button, Callout, Dialog, Field, Input } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useId, useRef } from 'react';
 import { ApiError, api } from '../../lib/api';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import styles from './LeadInbox.module.css';
 
@@ -85,9 +85,8 @@ export function EditLeadContactDialog({
     save.mutate(form.values);
   }
 
-  const fieldRejected =
-    save.error instanceof ApiError && Object.keys(save.error.fieldErrors()).length > 0;
-  const formError = save.error === null || fieldRejected ? null : problemMessage(save.error);
+  // Said above the form unless every problem is already beside its field.
+  const formError = save.error === null ? null : problemBesideFields(save.error, FIELDS);
 
   return (
     <Dialog

@@ -26,7 +26,7 @@ import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useId, useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import { dataRequestTypeDescriptions } from './data-request-presentation';
 import styles from './DataRequests.module.css';
@@ -48,6 +48,8 @@ export interface RecordDataRequestDialogProps {
 }
 
 const CONTACT_FIELDS = ['name', 'phone', 'email'] as const;
+/** The fields a problem of the API can be shown beside. */
+const SHOWN_FIELDS = [...CONTACT_FIELDS, 'receivedAt'];
 
 const TYPE_OPTIONS = dataRequestTypes.map((type) => ({
   value: type,
@@ -147,9 +149,8 @@ export function RecordDataRequestDialog({
     record.mutate({ ...form.values, type, receivedAt: receivedAt.toISOString() });
   }
 
-  const fieldRejected =
-    record.error instanceof ApiError && Object.keys(record.error.fieldErrors()).length > 0;
-  const formError = record.error === null || fieldRejected ? null : problemMessage(record.error);
+  // Said above the form unless every problem is already beside its field.
+  const formError = record.error === null ? null : problemBesideFields(record.error, SHOWN_FIELDS);
 
   return (
     <Dialog
