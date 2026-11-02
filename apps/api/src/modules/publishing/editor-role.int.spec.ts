@@ -96,7 +96,7 @@ describe('an editor on the owner’s pages', () => {
     return activityListResponseSchema
       .parse(response.body)
       .items.filter((item) => item.page?.id === pageId)
-      .map((item) => ({ type: item.type, by: item.actor.id, reason: item.reason }))
+      .map((item) => ({ type: item.type, by: item.actor?.id, reason: item.reason }))
       .reverse();
   }
 

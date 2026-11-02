@@ -4,8 +4,7 @@ import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient } from '../../../test/client.js';
 import { createSite, scopeOf } from '../../../test/resources.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { ActivityRepository } from './activity.repository.js';
-import type { ActivityRecord } from './activity.schema.js';
+import { type ActivityEntry, ActivityRepository } from './activity.repository.js';
 
 describe('ActivityRepository', () => {
   let t: TestApp;
@@ -34,7 +33,7 @@ describe('ActivityRepository', () => {
 
   function recordFor(
     pageId: Types.ObjectId,
-    type: ActivityRecord['type'],
+    type: ActivityEntry['type'],
     inScope: WorkspaceScope = scope,
     site: Types.ObjectId = siteId,
   ): Promise<Types.ObjectId> {

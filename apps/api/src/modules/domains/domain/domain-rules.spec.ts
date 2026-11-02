@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { newObjectId } from '../../../shared/persistence/object-id.js';
 import { EMPTY_CHECK } from '../domain.schema.js';
 import {
   domainStatus,
   evaluateDns,
   expectedRecords,
   HTTPS_GRACE_MS,
+  livePagesSummary,
   newDomainToken,
   nextCheckAt,
   servesPages,
+  siteAddressStatus,
 } from './domain-rules.js';
 
 const targets = { cnameTarget: 'cname.payload.site', ipv4: ['203.0.113.10', '203.0.113.11'] };
@@ -155,5 +158,56 @@ describe('nextCheckAt', () => {
     expect(nextCheckAt({ verifiedAt: null, watchSince: NOW }, at(59))).toEqual(at(60));
     expect(nextCheckAt({ verifiedAt: null, watchSince: NOW }, at(61))).toEqual(at(71));
     expect(nextCheckAt({ verifiedAt: null, watchSince: NOW }, at(7 * 24 * 60))).toBeNull();
+  });
+});
+
+describe('siteAddressStatus (board 01)', () => {
+  const ok = {
+    ...EMPTY_CHECK,
+    at: NOW,
+    txt: 'ok' as const,
+    routing: 'ok' as const,
+    https: 'ok' as const,
+  };
+  const active = { _id: newObjectId(), verifiedAt: NOW, check: ok, activeSince: NOW };
+  const lost = {
+    _id: newObjectId(),
+    verifiedAt: NOW,
+    check: { ...ok, routing: 'wrong' as const },
+    activeSince: NOW,
+  };
+  const waiting = { _id: newObjectId(), verifiedAt: null, check: EMPTY_CHECK, activeSince: null };
+
+  it('has no primary status while the default address is primary', () => {
+    expect(siteAddressStatus([], null, NOW)).toEqual({
+      primaryStatus: null,
+      customDomainActive: false,
+    });
+    expect(siteAddressStatus([waiting, active], null, NOW)).toEqual({
+      primaryStatus: null,
+      customDomainActive: true,
+    });
+  });
+
+  it('tells where the primary custom domain stands, and whether any domain is active', () => {
+    expect(siteAddressStatus([active, waiting], active._id, NOW)).toEqual({
+      primaryStatus: 'active',
+      customDomainActive: true,
+    });
+    expect(siteAddressStatus([lost, waiting], lost._id, NOW)).toEqual({
+      primaryStatus: 'lost',
+      customDomainActive: false,
+    });
+  });
+});
+
+describe('livePagesSummary', () => {
+  it('counts the live pages and picks a page other than the home page as the example', () => {
+    expect(livePagesSummary(['', 'uu-dai-nieng-rang', 'cay-ghep-implant'])).toEqual({
+      count: 3,
+      exampleSlug: 'cay-ghep-implant',
+    });
+    expect(livePagesSummary([''])).toEqual({ count: 1, exampleSlug: '' });
+    expect(livePagesSummary([])).toEqual({ count: 0, exampleSlug: null });
   });
 });

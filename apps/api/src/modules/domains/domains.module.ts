@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { type Env, tlsCheckEnabled } from '../../config/env.js';
 import { ENV } from '../../shared/env.js';
+import { ActivityModule } from '../activity/activity.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { EmailModule } from '../notifications/email.module.js';
+import { PagesModule } from '../pages/pages.module.js';
 import { RevalidationModule } from '../revalidation/revalidation.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
@@ -19,9 +21,12 @@ import { PublicDomainsService } from './public-domains.service.js';
 /** Custom domains (ADR-022): the admin's endpoints, the edge's and renderer's, the checks. */
 @Module({
   imports: [
+    // Domain events in the site's activity; live pages for "Đặt làm chính" (boards 01, 13).
+    ActivityModule,
     AuthModule,
     DomainsCoreModule,
     EmailModule,
+    PagesModule,
     RevalidationModule,
     SitesCoreModule,
     WorkspacesModule,

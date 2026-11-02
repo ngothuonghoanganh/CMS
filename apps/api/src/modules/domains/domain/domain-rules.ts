@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import {
+  type DomainListResponse,
   type DomainRecord as DomainRecordDto,
   type DomainStatus,
   domainKind,
   type RecordState,
+  type SiteAddressStatus,
   VERIFICATION_RECORD_LABEL,
   VERIFICATION_VALUE_PREFIX,
 } from '@plp/contracts';
@@ -165,4 +167,38 @@ export function nextCheckAt(
 /** The domain serves pages: verified and pointing here (HTTPS is the edge's business). */
 export function servesPages(domain: Pick<DomainRecord, 'verifiedAt' | 'check'>): boolean {
   return domain.verifiedAt !== null && domain.check.routing === 'ok';
+}
+
+/**
+ * The card "Địa chỉ live" and the step "Kết nối tên miền riêng" of board 01: where the primary
+ * custom domain stands (null while the default address is primary), and whether any domain of the
+ * site is active. Both concern verified domains only, which no other site can have.
+ */
+export function siteAddressStatus(
+  domains: readonly Pick<DomainRecord, '_id' | 'verifiedAt' | 'check' | 'activeSince'>[],
+  primaryDomainId: DomainRecord['_id'] | null,
+  now: Date,
+): SiteAddressStatus {
+  const statuses = domains.map((domain) => ({
+    id: domain._id,
+    status: domainStatus(domain, false, now),
+  }));
+  const primary =
+    primaryDomainId === null ? undefined : statuses.find(({ id }) => id.equals(primaryDomainId));
+  return {
+    primaryStatus: primary?.status ?? null,
+    customDomainActive: statuses.some(({ status }) => status === 'active'),
+  };
+}
+
+/**
+ * The live pages a new primary address moves, from their live slugs: how many, and one for the
+ * example address of "Đặt làm chính", a page other than the home page when there is one.
+ */
+export function livePagesSummary(slugs: readonly string[]): DomainListResponse['livePages'] {
+  const sorted = [...slugs].sort((a, b) => a.localeCompare(b, 'vi'));
+  return {
+    count: slugs.length,
+    exampleSlug: sorted.find((slug) => slug !== '') ?? sorted[0] ?? null,
+  };
 }

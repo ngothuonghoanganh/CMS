@@ -20,6 +20,7 @@ import {
   evaluateChecks,
   type LivePageRef,
   PASSED_CHECK_TITLES,
+  type SiteAddressCheck,
 } from './checks.js';
 import type { LeadCaptureGap } from './lead-capture.js';
 
@@ -38,6 +39,7 @@ function run(
     revision?: number;
     leadCaptureGaps?: LeadCaptureGap[];
     leadDestinationReady?: boolean;
+    address?: SiteAddressCheck;
   } = {},
 ) {
   const input: ChecksInput = {
@@ -52,6 +54,7 @@ function run(
     otherLivePages: options.otherLivePages ?? [],
     leadCaptureGaps: options.leadCaptureGaps ?? [],
     leadDestinationReady: options.leadDestinationReady ?? true,
+    address: options.address ?? { kind: 'default' },
   };
   return checksResultSchema.parse(evaluateChecks(input));
 }
@@ -88,12 +91,57 @@ describe('evaluateChecks: a clean draft', () => {
       'Tiêu đề SEO',
       'Mô tả SEO',
       'Đường dẫn hợp lệ, không trùng',
+      'HTTPS hoạt động',
       'Tương phản màu đạt AA',
       'Liên kết nội bộ hoạt động',
       'Hiển thị tốt trên điện thoại',
       'Ảnh có mô tả',
       'Không còn nội dung mẫu',
     ]);
+  });
+});
+
+describe('evaluateChecks: the primary address (board 05, ADR-006)', () => {
+  function addressItems(address: SiteAddressCheck) {
+    const result = run([heroSection()], { address });
+    return {
+      passed: result.passed
+        .filter((item) => item.code === 'domain_verified' || item.code === 'https_active')
+        .map((item) => item.title),
+      order: result.passed.map((item) => item.code),
+      findings: [...result.blocking, ...result.warnings],
+    };
+  }
+
+  it('passes HTTPS on the default address, which the wildcard certificate covers', () => {
+    expect(addressItems({ kind: 'default' }).passed).toEqual(['HTTPS hoạt động']);
+  });
+
+  it('passes the verified domain and HTTPS, after the slug, while the primary domain is active', () => {
+    const { passed, order } = addressItems({
+      kind: 'custom',
+      hostname: 'go.smilecare.vn',
+      active: true,
+    });
+    expect(passed).toEqual(['Tên miền go.smilecare.vn đã xác minh', 'HTTPS hoạt động']);
+    expect(order.slice(0, 6)).toEqual([
+      'seo_title',
+      'seo_description',
+      'slug_valid',
+      'domain_verified',
+      'https_active',
+      'contrast_aa',
+    ]);
+  });
+
+  it('leaves both out for a primary domain that does not work, with no finding either', () => {
+    const { passed, findings } = addressItems({
+      kind: 'custom',
+      hostname: 'go.smilecare.vn',
+      active: false,
+    });
+    expect(passed).toEqual([]);
+    expect(findings).toEqual([]);
   });
 });
 

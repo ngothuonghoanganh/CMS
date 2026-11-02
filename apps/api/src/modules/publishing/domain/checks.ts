@@ -7,6 +7,7 @@ import {
   imageRefSchema,
   type LinkKind,
   type PassedCheck,
+  passedCheckCodes,
   type ProblemIssue,
   SEO_DESCRIPTION_RECOMMENDED_MAX,
   SEO_TITLE_RECOMMENDED_MAX,
@@ -52,12 +53,25 @@ export interface ChecksInput {
   leadCaptureGaps: readonly LeadCaptureGap[];
   /** The site has at least one confirmed address its leads are emailed to (ADR-018). */
   leadDestinationReady: boolean;
+  /** The site's primary address, read once for every page of a request (ADR-006, ADR-022). */
+  address: SiteAddressCheck;
 }
 
-export const PASSED_CHECK_TITLES: Record<PassedCode, string> = {
+/**
+ * The default address, which the wildcard certificate covers, or the primary custom domain and
+ * whether it is active (verified, pointing here, with HTTPS).
+ */
+export type SiteAddressCheck =
+  { kind: 'default' } | { kind: 'custom'; hostname: string; active: boolean };
+
+/** Passed groups that come from the draft's findings; the address ones come from the site. */
+type FindingsPassedCode = Exclude<PassedCode, 'domain_verified' | 'https_active'>;
+
+export const PASSED_CHECK_TITLES: Record<FindingsPassedCode | 'https_active', string> = {
   seo_title: 'Tiêu đề SEO',
   seo_description: 'Mô tả SEO',
   slug_valid: 'Đường dẫn hợp lệ, không trùng',
+  https_active: 'HTTPS hoạt động',
   contrast_aa: 'Tương phản màu đạt AA',
   internal_links: 'Liên kết nội bộ hoạt động',
   mobile_visible: 'Hiển thị tốt trên điện thoại',
@@ -68,7 +82,7 @@ export const PASSED_CHECK_TITLES: Record<PassedCode, string> = {
 };
 
 /** Which findings make a passed group fail. `contrast_aa` holds by construction (ADR-007). */
-const PASSED_GROUPS: Record<PassedCode, readonly CheckCode[]> = {
+const PASSED_GROUPS: Record<FindingsPassedCode, readonly CheckCode[]> = {
   seo_title: ['seo_title_missing', 'seo_title_too_long'],
   seo_description: ['seo_description_missing', 'seo_description_too_long'],
   slug_valid: ['slug_invalid', 'slug_taken'],
@@ -83,6 +97,21 @@ const PASSED_GROUPS: Record<PassedCode, readonly CheckCode[]> = {
 
 /** Passed groups that only mean something on a page with a lead form. */
 const FORM_PASSED_GROUPS: ReadonlySet<PassedCode> = new Set(['privacy_policy', 'lead_destination']);
+
+/**
+ * "Tên miền {host} đã xác minh" and "HTTPS hoạt động" (board 05) from the primary address: the
+ * default one always has HTTPS; a custom one has both while it is active. Otherwise neither, and
+ * no finding either: pages still open at the default address, and board 13 reports the domain.
+ */
+function addressPassed(address: SiteAddressCheck): PassedCheck[] {
+  const https: PassedCheck = { code: 'https_active', title: PASSED_CHECK_TITLES.https_active };
+  if (address.kind === 'default') {
+    return [https];
+  }
+  return address.active
+    ? [{ code: 'domain_verified', title: `Tên miền ${address.hostname} đã xác minh` }, https]
+    : [];
+}
 
 const REQUIRED_DESCRIPTION = 'Đây là nội dung bắt buộc. Điền vào trước khi xuất bản.';
 const LINK_DESCRIPTION =
@@ -588,11 +617,20 @@ function checkLeadDestination(findings: Findings, input: ChecksInput): void {
   );
 }
 
-function passedGroups(findings: Findings, hasForm: boolean): PassedCheck[] {
-  return (Object.keys(PASSED_GROUPS) as PassedCode[])
+/** The passed items in the order of `passedCheckCodes`: the address ones after the slug. */
+function passedGroups(
+  findings: Findings,
+  hasForm: boolean,
+  address: SiteAddressCheck,
+): PassedCheck[] {
+  const fromFindings = (Object.keys(PASSED_GROUPS) as FindingsPassedCode[])
     .filter((code) => hasForm || !FORM_PASSED_GROUPS.has(code))
     .filter((code) => !PASSED_GROUPS[code].some((failing) => findings.has(failing)))
-    .map((code) => ({ code, title: PASSED_CHECK_TITLES[code] }));
+    .map((code): PassedCheck => ({ code, title: PASSED_CHECK_TITLES[code] }));
+  const passed = [...fromFindings, ...addressPassed(address)];
+  return passed.sort(
+    (a, b) => passedCheckCodes.indexOf(a.code) - passedCheckCodes.indexOf(b.code),
+  );
 }
 
 /**
@@ -629,6 +667,10 @@ export function evaluateChecks(input: ChecksInput): ChecksResult {
     revision: input.revision,
     blocking: findings.blocking,
     warnings: findings.warnings,
-    passed: passedGroups(findings, leadFormSectionOf(input.snapshot.composition) !== null),
+    passed: passedGroups(
+      findings,
+      leadFormSectionOf(input.snapshot.composition) !== null,
+      input.address,
+    ),
   };
 }
