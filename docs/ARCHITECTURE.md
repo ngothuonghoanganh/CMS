@@ -2167,6 +2167,23 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Activity `page.template_applied` ghi lúc này, khi mẫu đến bản nháp; hoàn tác trong editor là một lần sửa như mọi lần sửa khác, không xóa activity hay ảnh đã chép.
     - Store có thêm một command, `applyTemplate(composition)`: id section mới (duy nhất trong trang, nút dẫn tới section của mẫu theo id mới, `withFreshSectionIds` của `@plp/sections/schema` dùng chung với API), kiểm bằng registry, rồi đúng một bước hoàn tác. Autosave lưu như mọi command.
     - Hộp thoại liệt kê mẫu hệ thống và template của workspace dùng được cho site, với ảnh thu nhỏ và số section thật.
+- **Sửa sau review Phase 2 (2026-11-02), admin:**
+  - "Xem trước vN" đọc `?version=` và gửi nó tới API; màn 18 mở ở chế độ "Bạn đang xem vN", không tạo trang hay áp mẫu. Trước đây màn luôn hiện phiên bản đang dùng.
+  - **409 `template_archived`** (mẫu bị lưu trữ sau khi hiện):
+    - "Tạo trang từ mẫu" và "Áp dụng vào trang đang sửa…" báo, tắt nút, đánh dấu `templateQueryKeys.all` là cũ và đọc lại màn. Hộp đang mở vẫn ở lại để nói lý do, kể cả khi thư viện đọc lại không còn thẻ của mẫu.
+    - "Áp dụng mẫu…" của editor đọc lại thư viện và để trống lựa chọn, không tự chọn mẫu khác thay người dùng.
+    - Chỉ vai trò có `templates.manage` được nhắc "Khôi phục"; vai trò khác được biết ai khôi phục được. Ghi chú mẫu lưu trữ của màn 18 cũng vậy.
+  - "Áp dụng mẫu…" của editor không đóng được khi đang chuẩn bị mẫu, như các hộp mẫu khác: đóng giữa chừng thì kết quả vẫn thay mọi section của bản nháp.
+  - **Menu "…" của màn 19:**
+    - Nút "…" không bị tắt khi một thao tác chạy (nút bị tắt làm rơi focus); các mục thao tác chờ, mỗi lần một thao tác.
+    - Lưu trữ hay khôi phục xong, refresh bỏ dòng đó: focus tới "…" của dòng kế, rồi dòng trước, rồi tab đang chọn.
+    - Mọi thao tác đánh dấu `templateQueryKeys.all` là cũ, nên "Phiên bản mới của …" và "Áp dụng mẫu…" không còn đưa ra mẫu đã lưu trữ.
+  - 422 có lỗi ở chỗ form không có field (composition bị registry từ chối, site không được chọn) được nói trong callout (`problemBesideFields`). Trước đây chỉ cần một lỗi nằm ở field là callout ẩn.
+  - "Sửa thông tin" bắt đầu từ các site của phạm vi mà admin còn biết, nên lần lưu không gửi lại id của site đã xóa.
+  - Lịch sử phiên bản: `source.pageId` và `source.pageTitle` có thể null khi site nguồn nằm ngoài phạm vi của thành viên; dòng đó ghi "Lưu từ một trang ở site khác".
+  - **Bố cục hẹp:**
+    - `RadioCardGroup` không bao giờ rộng hơn nhóm (`minmax(min(w, 100%), 1fr)`), nên hộp áp mẫu không cuộn ngang ở 320 và 375 px.
+    - Ô "Đường dẫn" (`PageSlugField`, `Input` với `wrapPrefix`) cho địa chỉ site xuống dòng riêng khi đường dẫn còn chưa tới 12rem bên cạnh nó. Trước đây đường dẫn chỉ còn vài ký tự.
 
 ### ADR-031 — AI: cổng adapter, tạo trang từ brief, trợ lý trong editor
 
@@ -2326,6 +2343,17 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - "Thử lại" của một phần lỗi là một yêu cầu "Đoạn chữ" (SEO thì hỏi lại SEO), nên tốn một lượt nếu viết được.
     - Trình đọc màn hình nghe trạng thái qua announcer của editor; thất bại và xung đột là `role="alert"`. Focus chỉ chuyển khi control đang giữ focus biến mất hoặc nằm trong panel trợ lý, nên người đang gõ trên canvas lúc AI chạy không bị cướp focus.
   - **Kiểm thử thật với Ollama `qwen3:4b-instruct`** (2026-11-02): "Viết lại" Hero 4,6–6 giây, FAQ 2 câu 9 giây, "Rút gọn" một ô 2,4 giây, "Gợi ý SEO" 5,2 giây; JSON hợp lệ và qua registry ngay lần đầu. Lời dặn ban đầu làm model trả nguyên 3 trên 4 ô của Hero, nên "Viết lại" nói rõ không trả lại ô không đổi. Model vẫn chỉ đổi cách viết hoa ở vài ô và thêm khẳng định về sức khỏe không có số ("không cảm thấy đau gì cả") mà không đánh dấu; người dùng vẫn phải đọc gợi ý trước khi áp dụng.
+- **Sửa sau review Phase 2 (2026-11-02), admin:**
+  - **Trợ lý:**
+    - Phần lỗi được "Thử lại" và viết được thì focus tới checkbox của phần đó, rồi tới tiêu đề kết quả. Nút "Thử lại" đó tắt khi hết lượt, như nút của trạng thái thất bại.
+    - Focus không bao giờ tới control nằm trong panel đang ẩn: "Hoàn tác" trên canvas khi tab "Thuộc tính" mở đưa focus tới tab "Trợ lý AI".
+    - Cột phải rộng 320 px, hẹp hơn board 21: nhãn phạm vi không xuống dòng giữa chữ, các lựa chọn xuống hàng.
+  - **Màn 20:**
+    - "Thử lại", "Thử lại N section" và "Xem tiến độ" đổi lượt chạy trong cùng một bước. Khi focus bị mất, tiêu đề nhận focus.
+    - Dời một section làm tắt mũi tên đang giữ focus (cạnh thanh điều hướng hay chân trang): focus sang mũi tên kia, rồi nút "Bỏ" của dòng.
+    - Danh sách tiến độ không còn là live region ("Xong" không kèm tên section). Một vùng status đọc một câu cho mỗi thay đổi.
+    - Thất bại thì ẩn danh sách, như board. Mất kết nối thì giữ trạng thái cuối đã biết, không ghi "Chờ" cho mọi section.
+    - Mức dùng ở header được đọc lại khi lượt chạy bắt đầu (`started`), nên hiện lượt đã giữ. Khi lượt chạy kết thúc, mức dùng được đọc lại lần nữa (lượt được trả khi không viết được gì hoặc khi hủy).
 
 ---
 
