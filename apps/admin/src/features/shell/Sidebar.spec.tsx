@@ -6,9 +6,10 @@ import { api } from '../../lib/api';
 import { loadPage } from '../../lib/page-load';
 import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { leadQueryKeys } from '../leads/queries';
+import { memberQueryKeys } from '../members/queries';
 import { type Leave, setScreenLeave } from './screen-leave';
 import { Sidebar, type SidebarProps } from './Sidebar';
-import { apiError, renderWithProviders } from './test-utils';
+import { apiError, lastCallTo, renderWithProviders } from './test-utils';
 
 const { router, pathname } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
@@ -75,6 +76,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}) {
       site={site}
       sites={[site, otherSite]}
       pageCount={6}
+      memberCount={7}
       leadCounts={NO_LEADS}
       addresses={null}
       {...overrides}
@@ -131,8 +133,12 @@ describe('Sidebar', () => {
     );
     // Words of their own, not "Ngọc AnhChủ sở hữu".
     expect(screen.getByRole('button', { name: 'Ngọc Anh Chủ sở hữu' })).toBeInTheDocument();
-    // The workspace's own sections (Sidebar v2).
-    expect(screen.getByRole('link', { name: 'Thành viên' })).toHaveAttribute(
+    // The workspace's own sections (Sidebar v2), with their counts (ADR-028).
+    expect(screen.getByRole('link', { name: 'Sites 2 site' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/sites`,
+    );
+    expect(screen.getByRole('link', { name: 'Thành viên 7 thành viên' })).toHaveAttribute(
       'href',
       `/workspaces/${WORKSPACE_ID}/members`,
     );
@@ -162,20 +168,23 @@ describe('Sidebar', () => {
   it('shows each role only the sections it may use (ADR-020)', () => {
     const { unmount } = renderSidebar({
       membership: { ...agency, role: 'editor', siteIds: [SITE_ID, '64b000000000000000000002'] },
+      memberCount: null,
       leadCounts: null,
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Trang 6 trang', 'Hiệu quả', 'Cài đặt site']);
+    ).toEqual(['Sites 2 site', 'Trang 6 trang', 'Hiệu quả', 'Cài đặt site']);
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Biên tập · 2 site');
     unmount();
 
     const support = renderSidebar({
       membership: { ...agency, role: 'support', siteIds: [SITE_ID] },
+      sites: [site],
+      memberCount: null,
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Trang 6 trang', 'Leads', 'Hiệu quả']);
+    ).toEqual(['Sites 1 site', 'Trang 6 trang', 'Leads', 'Hiệu quả']);
     support.unmount();
 
     // A custom role answering data requests finds them under "Dữ liệu & đồng ý" (ADR-024).
@@ -188,10 +197,11 @@ describe('Sidebar', () => {
           permissions: ['pages.view', 'leads.view', 'personalData.manage'],
         },
       },
+      memberCount: null,
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Trang 6 trang', 'Leads', 'Hiệu quả', 'Dữ liệu & đồng ý']);
+    ).toEqual(['Sites 2 site', 'Trang 6 trang', 'Leads', 'Hiệu quả', 'Dữ liệu & đồng ý']);
   });
 
   it('offers a first site on a workspace screen of a workspace without one', () => {
@@ -208,10 +218,59 @@ describe('Sidebar', () => {
       site: null,
       sites: [],
       pageCount: 0,
+      memberCount: null,
       leadCounts: null,
     });
     expect(screen.getByText('Bạn chưa được giao site nào.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Vai trò & quyền' })).not.toBeInTheDocument();
+    // "Sites" still explains, on its own screen, why there is none (ADR-028).
+    expect(screen.getByRole('link', { name: 'Sites 0 site' })).toBeInTheDocument();
+  });
+
+  it('puts "Sites" first in WORKSPACE for every role, marked on its screen (ADR-028)', () => {
+    pathname.current = `/workspaces/${WORKSPACE_ID}/sites`;
+    const { unmount } = renderSidebar();
+    expect(
+      screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
+    ).toEqual([
+      'Sites 2 site',
+      'Thành viên 7 thành viên',
+      'Vai trò & quyền',
+      'Trang 6 trang',
+      'Leads',
+      'Hiệu quả',
+      'Tên miền',
+      'Dữ liệu & đồng ý',
+      'Cài đặt site',
+    ]);
+    expect(screen.getByRole('link', { name: 'Sites 2 site' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Trang 6 trang' })).not.toHaveAttribute('aria-current');
+    unmount();
+
+    renderSidebar({
+      membership: { ...agency, role: 'viewer' },
+      memberCount: null,
+      leadCounts: null,
+    });
+    expect(screen.getByRole('link', { name: 'Sites 2 site' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Thành viên/ })).not.toBeInTheDocument();
+  });
+
+  it('counts the members again after a change on "Thành viên" (ADR-028)', async () => {
+    apiMock.mockResolvedValue({ counts: {}, members: 8 });
+    const { queryClient } = renderSidebar();
+    expect(screen.getByRole('link', { name: 'Thành viên 7 thành viên' })).toBeInTheDocument();
+    // The members screen invalidates every query of the workspace's people after a change.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: memberQueryKeys.all(WORKSPACE_ID) });
+    });
+    expect(
+      await screen.findByRole('link', { name: 'Thành viên 8 thành viên' }),
+    ).toBeInTheDocument();
+    expect(lastCallTo(apiMock, endpoints.roleCounts).args).toEqual([WORKSPACE_ID]);
   });
 
   it('marks "Tên miền" on the domain page', () => {
