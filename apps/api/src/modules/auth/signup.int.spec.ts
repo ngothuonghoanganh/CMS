@@ -337,6 +337,21 @@ describe('two-step sign-up', () => {
     await verify(second ?? '', input).expect(201);
   });
 
+  it('drops the password a sign-up stored before the link chose it, when sent again', async () => {
+    // A sign-up from before the password moved to the link's page (ADR-026 amendment).
+    const input = signupInput();
+    await requestSignup(t.app, input);
+    const pending = t.connection.collection('pending_signups');
+    await pending.updateOne({ email: input.email }, { $set: { passwordHash: 'hash-cu' } });
+
+    await new TestClient(t.app).post('/auth/signup/resend', { email: input.email }).expect(202);
+    expect(await pending.findOne({ email: input.email })).not.toHaveProperty('passwordHash');
+
+    await pending.updateOne({ email: input.email }, { $set: { passwordHash: 'hash-cu' } });
+    await requestSignup(t.app, input);
+    expect(await pending.findOne({ email: input.email })).not.toHaveProperty('passwordHash');
+  });
+
   it('answers "Gửi lại" the same when no sign-up waits, and sends nothing', async () => {
     const nobody = signupInput().email;
     const response = await new TestClient(t.app)

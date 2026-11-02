@@ -23,7 +23,13 @@ export class PendingSignupsRepository {
   async replace(input: PendingSignupInput, now: Date): Promise<void> {
     const write = () =>
       this.pending
-        .updateOne({ email: input.email }, { $set: { ...input, createdAt: now } }, { upsert: true })
+        .updateOne(
+          { email: input.email },
+          // A sign-up stored before passwords moved to the link's page still had one (ADR-026).
+          { $set: { ...input, createdAt: now }, $unset: { passwordHash: '' } },
+          // Not strict: the schema no longer has the field, and strict mode would drop the $unset.
+          { upsert: true, strict: false },
+        )
         .exec();
     try {
       await write();
@@ -58,8 +64,8 @@ export class PendingSignupsRepository {
     return this.pending
       .findOneAndUpdate(
         { email, expiresAt: { $gt: now } },
-        { $set: { tokenHash, expiresAt } },
-        { returnDocument: 'after' },
+        { $set: { tokenHash, expiresAt }, $unset: { passwordHash: '' } },
+        { returnDocument: 'after', strict: false },
       )
       .lean<PendingSignupRecord>()
       .exec();
