@@ -8,6 +8,7 @@ import { IS_PUBLIC } from './public.decorator.js';
 import { sessionTokensOf } from './session-cookie.js';
 import { hashSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
+import { credentialsVersionOf } from './user.schema.js';
 import { UsersRepository } from './users.repository.js';
 
 function unauthenticated(): AppError {
@@ -44,7 +45,9 @@ export class SessionGuard implements CanActivate {
       throw unauthenticated();
     }
     const user = await this.users.findById(session.userId);
-    if (!user) {
+    // Issued against a password reset or changed since, e.g. by a login that read the old one
+    // before the reset committed (ADR-026).
+    if (!user || credentialsVersionOf(session) !== credentialsVersionOf(user)) {
       throw unauthenticated();
     }
     request.user = { id: user._id, name: user.name, email: user.email };

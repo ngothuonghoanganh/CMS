@@ -3,6 +3,7 @@ import { ACCOUNT_EMAILS_PER_HOUR } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
+import { mailboxOf } from '../../shared/mailbox.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
 import type { EmailContent } from '../notifications/email-templates.js';
 import { AuthEmailLimitsRepository } from './auth-email-limits.repository.js';
@@ -12,8 +13,8 @@ import { loginAccountKey } from './login-attempts.repository.js';
 const HOUR_MS = 3_600_000;
 
 function tooManyEmails(): AppError {
-  return new AppError(429, 'rate_limited', 'Đã gửi quá nhiều email tới địa chỉ này', {
-    detail: `Mỗi địa chỉ nhận tối đa ${ACCOUNT_EMAILS_PER_HOUR} email tài khoản trong 60 phút. Hãy kiểm tra hộp thư, kể cả mục spam, hoặc thử lại sau.`,
+  return new AppError(429, 'rate_limited', 'Đã gửi quá nhiều email tới hộp thư này', {
+    detail: `Mỗi hộp thư nhận tối đa ${ACCOUNT_EMAILS_PER_HOUR} email tài khoản trong 60 phút. Hãy kiểm tra hộp thư, kể cả mục spam, hoặc thử lại sau.`,
   });
 }
 
@@ -23,8 +24,10 @@ function emailUnavailable(): AppError {
 
 /**
  * Emails about an account (ADR-026): sign-up confirmations, sent again, password resets and
- * "already has an account". Each address receives at most `ACCOUNT_EMAILS_PER_HOUR` an hour,
- * counted in MongoDB for every API instance under an HMAC of the email, like failed logins.
+ * "already has an account". Each mailbox receives at most `ACCOUNT_EMAILS_PER_HOUR` an hour,
+ * counted in MongoDB for every API instance under an HMAC of the mailbox, as failed logins are
+ * under one of the address. Per mailbox, like invitations (ADR-021): `an+1@gmail.com`,
+ * `a.n+2@gmail.com`… would otherwise each bring their own emails into one inbox.
  */
 @Injectable()
 export class AccountEmails {
@@ -50,7 +53,7 @@ export class AccountEmails {
     what: string,
     prepare: () => Promise<EmailContent | null>,
   ): Promise<void> {
-    const key = loginAccountKey(this.env.LOGIN_ATTEMPT_SECRET, email);
+    const key = loginAccountKey(this.env.LOGIN_ATTEMPT_SECRET, mailboxOf(email));
     const counted = await this.limits.count(key, now, new Date(now.getTime() + HOUR_MS));
     if (counted.count > ACCOUNT_EMAILS_PER_HOUR) {
       throw tooManyEmails();

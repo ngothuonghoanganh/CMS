@@ -1748,8 +1748,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `/signup/verify` mở ở địa chỉ workspace thì chuyển về địa chỉ chung, giữ fragment.
     - `/account` là trang riêng ngoài khung workspace, mở được ở mọi địa chỉ. Mục menu ghi "Cài đặt tài khoản", vì menu đã tên là "Tài khoản".
   - **Giới hạn đã biết:**
-    - Body của forgot giống hệt nhau, nhưng thời gian trả lời có thể khác, vì chỉ email có tài khoản mới ghi bản ghi và gửi thư. Đăng ký băm mật khẩu ở cả hai nhánh để thu hẹp chênh lệch.
+    - Body của forgot giống hệt nhau, nhưng thời gian trả lời có thể khác, vì chỉ email có tài khoản mới ghi bản ghi và gửi thư.
     - Khi SMTP hỏng, chỉ email có tài khoản mới nhận 503, nên lúc đó forgot lộ được email nào có tài khoản. Chấp nhận, vì chỉ xảy ra khi SMTP hỏng và vẫn có rate limit.
+- **Amended 2026-11-02 (review bảo mật sau E1–E6):**
+  - **Mật khẩu đặt ở trang của link, không ở form đăng ký.** Trước đây người đăng ký chọn mật khẩu ở bước 1, còn ai mở link thì được đăng nhập: kẻ gian đăng ký bằng email của người khác, người đó bấm link, và kẻ gian vẫn biết mật khẩu của tài khoản vừa tạo.
+    - `POST /auth/signup { name, email, workspaceName }`: có `password` thì 422; `pending_signups` không còn `passwordHash`.
+    - Trang `/signup/verify` gọi `POST /auth/signup/lookup { token }` (rate limit như `/auth/*`, không tiêu link) → `{ email, name, workspaceName }` hoặc 410, rồi hiện email (chỉ xem), tên và tên workspace (sửa được), mật khẩu và nhập lại, nút "Tạo tài khoản và workspace".
+    - `POST /auth/signup/verify { token, password, name, workspaceName }` tạo tài khoản với mật khẩu và tên do người mở link nhập, rồi đăng nhập.
+    - Link không còn dùng được thì có "Đăng ký lại" và "Đăng nhập", kèm "Nếu bạn đã xác nhận email này, hãy đăng nhập."
+    - Đăng ký hộ email người khác vì vậy không cho người đăng ký gì; đăng ký lại chỉ gửi một link mới tới hộp thư đó.
+  - **Phiên bản thông tin đăng nhập:** `users.credentialsVersion` (thiếu là 0) tăng khi đặt lại và khi đổi mật khẩu, trong cùng transaction.
+    - Mỗi phiên lưu phiên bản lúc tạo (thiếu là 0); guard trả 401 khi phiên bản khác của user. Đăng nhập dùng phiên bản đọc cùng hash đã kiểm. Một lượt đăng nhập đã đọc hash cũ trước khi đặt lại vì vậy không giữ được phiên.
+    - Đổi mật khẩu chỉ ghi khi user còn đúng hash và phiên bản nó đã kiểm; không thì 409 `password_changed` "Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.". Thành công thì phiên đang dùng chuyển sang phiên bản mới, các phiên khác bị xóa.
+  - **Giới hạn email theo hộp thư:** khóa của `auth_email_limits` là HMAC của `mailboxOf(email)` (bỏ `+tag`, chữ hoa, và dấu chấm với Gmail), dùng chung helper với giới hạn lời mời (ADR-021, nay ở `shared/`). `login_attempts` vẫn theo địa chỉ.
 
 ### ADR-027 — Xóa trang và xóa site
 

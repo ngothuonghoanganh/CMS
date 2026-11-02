@@ -145,12 +145,13 @@ export interface SignupConfirmationEmailInput {
 }
 
 /**
- * The link that confirms a sign-up's email (ADR-026); the account and its workspace exist once it
- * is used. The address may be someone else's, so the email says how to ignore it.
+ * The link that confirms a sign-up's email (ADR-026); its page sets the password, and the account
+ * and its workspace exist once it is used. The address may be someone else's, so the email says
+ * how to ignore it.
  */
 export function signupConfirmationEmail(input: SignupConfirmationEmailInput): EmailContent {
   const title = 'Xác nhận email để tạo workspace';
-  const intro = `Email này vừa được dùng để đăng ký tài khoản và tạo workspace "${input.workspaceName}". Bấm nút dưới đây để xác nhận email, workspace được tạo ngay sau đó.`;
+  const intro = `Email này vừa được dùng để đăng ký tài khoản và tạo workspace "${input.workspaceName}". Bấm nút dưới đây để xác nhận email và đặt mật khẩu; tài khoản và workspace được tạo ngay sau đó.`;
   const validity = `Link có hiệu lực ${input.validHours} giờ và chỉ dùng được một lần. Nếu bạn không đăng ký, hãy bỏ qua email này: tài khoản sẽ không được tạo.`;
   return {
     subject: title,

@@ -1,6 +1,11 @@
 import { type Browser, expect, type Page, test } from '@playwright/test';
 import { meResponseSchema, RESET_PASSWORD_PATH, SIGNUP_VERIFY_PATH } from '@plp/contracts';
-import { createSiteThroughForm, fillSignupForm, logInThroughForm } from '../support/flows.js';
+import {
+  createAccountOnLinkPage,
+  createSiteThroughForm,
+  fillSignupForm,
+  logInThroughForm,
+} from '../support/flows.js';
 import {
   accountLink,
   RESET_EMAIL_SUBJECT,
@@ -23,7 +28,7 @@ async function signUpAtCommon(page: Page, account: Account): Promise<string> {
   // The link leads to the common address, where a new account starts.
   expect(link.startsWith(`${COMMON_ORIGIN}${SIGNUP_VERIFY_PATH}#token=`)).toBe(true);
   await page.goto(link);
-  await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
+  await createAccountOnLinkPage(page, account);
   await expect(page).toHaveURL(/^http:\/\/[a-z0-9-]+\.app\.e2e\.test:3100\/sites\/new/);
   return slugOf(page.url());
 }

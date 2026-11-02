@@ -13,7 +13,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTestApp, type TestApp } from '../../test/app.js';
-import { requestSignup, signupInput, TestClient } from '../../test/client.js';
+import { requestSignup, signupInput, signupVerifyBody, TestClient } from '../../test/client.js';
 import { formDraft, leadFormSection } from '../../test/compositions.js';
 import { TEST_ADMIN_ORIGIN } from '../../test/env.js';
 import { createLiveFormPage, leadBody, PHONE_UA, submitLead } from '../../test/leads.js';
@@ -67,6 +67,7 @@ describe('request log', () => {
   let sessionToken: string;
   /** The secret of the sign-up link, sent in a body (ADR-026). */
   let signupToken: string;
+  const signupAccount = signupInput();
   let workspaceId: string;
   let site: Site;
   let pageId: string;
@@ -85,9 +86,9 @@ describe('request log', () => {
     });
     owner = new TestClient(t.app);
     // The confirmation of a sign-up sets the session cookie (ADR-026).
-    signupToken = await requestSignup(t.app, signupInput(), owner);
+    signupToken = await requestSignup(t.app, signupAccount, owner);
     const signup = await owner
-      .post('/auth/signup/verify', { token: signupToken })
+      .post('/auth/signup/verify', signupVerifyBody(signupToken, signupAccount))
       .set('x-request-id', 'log-signup')
       .expect(201);
     const token = /plp_session=([^;]+)/.exec(String(signup.headers['set-cookie']))?.[1];
@@ -155,7 +156,8 @@ describe('request log', () => {
       authorization: CENSORED,
       referer: `${TEST_ADMIN_ORIGIN}/sites/${site.id}/leads?status=new&q=${REDACTED}&lead=abc`,
     });
-    expectNotLogged(AUTHORIZATION_SECRET, SEARCH, signupToken);
+    // The link's page sends the new account's password with the secret (ADR-026).
+    expectNotLogged(AUTHORIZATION_SECRET, SEARCH, signupToken, signupAccount.password);
   });
 
   it('keeps the visitor address, user agent, channel signature and lead fields out of the log', async () => {

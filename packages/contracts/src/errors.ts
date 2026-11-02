@@ -13,6 +13,7 @@ export const errorCodes = [
   'subdomain_taken',
   'email_taken',
   'invalid_credentials',
+  'password_changed',
   'signup_link_invalid',
   'reset_link_invalid',
   'email_unavailable',

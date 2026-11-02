@@ -9,17 +9,23 @@ import { SESSION_MODEL, type SessionRecord } from './user.schema.js';
 export class SessionsRepository {
   constructor(@InjectModel(SESSION_MODEL) private readonly sessions: Model<SessionRecord>) {}
 
+  /**
+   * A session of the user, issued against `credentialsVersion`: the version read together with the
+   * password it was proven with (ADR-026).
+   */
   async create(
     userId: ObjectId,
     tokenHash: string,
     expiresAt: Date,
     cookieDomain: string | null,
+    credentialsVersion: number,
   ): Promise<void> {
     await this.sessions.create({
       userId,
       tokenHash,
       expiresAt,
       cookieDomain,
+      credentialsVersion,
       createdAt: new Date(),
     });
   }
@@ -58,6 +64,13 @@ export class SessionsRepository {
   async deleteForUser(userId: ObjectId, tx: Tx, keep?: ObjectId): Promise<void> {
     await this.sessions
       .deleteMany(keep === undefined ? { userId } : { userId, _id: { $ne: keep } }, { session: tx })
+      .exec();
+  }
+
+  /** The session that changed the password goes on under the new credentials version. */
+  async setCredentialsVersion(id: ObjectId, credentialsVersion: number, tx: Tx): Promise<void> {
+    await this.sessions
+      .updateOne({ _id: id }, { $set: { credentialsVersion } }, { session: tx })
       .exec();
   }
 

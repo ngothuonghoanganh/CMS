@@ -21,6 +21,7 @@ import { PasswordAttempts, type PasswordCheckUse } from './password-attempts.js'
 import { PasswordResetsRepository } from './password-resets.repository.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { SessionsRepository } from './sessions.repository.js';
+import { credentialsVersionOf } from './user.schema.js';
 import { UsersRepository } from './users.repository.js';
 
 function resetLinkInvalid(): AppError {
@@ -31,6 +32,11 @@ function resetLinkInvalid(): AppError {
 }
 
 const WRONG_CURRENT_PASSWORD = 'Mật khẩu hiện tại không đúng';
+
+/** A reset or another change committed between proving the current password and writing. */
+function passwordChanged(): AppError {
+  return new AppError(409, 'password_changed', 'Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.');
+}
 
 /** A wrong current password costs an attempt of the account's login limit (ADR-004). */
 const CHANGE: PasswordCheckUse = {
@@ -78,9 +84,10 @@ export class PasswordService {
 
   /**
    * Sets the new password, uses up the link and ends every session of the user in one
-   * transaction: whoever forgot their password may have lost a device too. The account's failed
-   * logins stop counting in the same transaction, so a reset never leaves the account held back.
-   * Then the user is signed in as by a login.
+   * transaction: whoever forgot their password may have lost a device too. The new credentials
+   * version also refuses a session a racing login creates afterwards, from the old password it
+   * read before (ADR-026). The account's failed logins stop counting in the same transaction, so a
+   * reset never leaves the account held back. Then the user is signed in as by a login.
    */
   async reset(input: ResetPasswordRequest): Promise<IssuedSession> {
     const tokenHash = hashLinkToken(input.token);
@@ -90,24 +97,31 @@ export class PasswordService {
       throw resetLinkInvalid();
     }
     const passwordHash = await hashPassword(input.password);
-    await this.transactions.run(async (tx) => {
+    const credentialsVersion = await this.transactions.run(async (tx) => {
       // Used or replaced since it was read: this link no longer counts.
       if (!(await this.resets.claim(reset._id, tokenHash, tx))) {
         throw resetLinkInvalid();
       }
-      if (!(await this.users.setPasswordHash(user._id, passwordHash, tx))) {
+      const version = await this.users.setPassword(user._id, passwordHash, tx);
+      if (version === null) {
         throw resetLinkInvalid();
       }
       await this.sessions.deleteForUser(user._id, tx);
       await this.passwordAttempts.clear(user.email, tx);
+      return version;
     });
-    return this.auth.issueSession({ id: user._id, name: user.name, email: user.email });
+    return this.auth.issueSession(
+      { id: user._id, name: user.name, email: user.email },
+      credentialsVersion,
+    );
   }
 
   /**
    * Changes the password of the signed-in user, who proves the current one: a stolen session
    * alone cannot change it, nor guess it faster than the login limit allows. The user's other
-   * sessions end; this one stays.
+   * sessions end; this one stays, under the new credentials version. The write holds only while
+   * the password proven is still the user's: after a reset or another change meanwhile it is a
+   * 409, which changes nothing (ADR-026).
    */
   async change(
     user: AuthenticatedUser,
@@ -133,8 +147,15 @@ export class PasswordService {
     }
     const passwordHash = await hashPassword(input.newPassword);
     await this.transactions.run(async (tx) => {
-      await this.users.setPasswordHash(user.id, passwordHash, tx);
+      const version = await this.users.setPassword(user.id, passwordHash, tx, {
+        passwordHash: proven.passwordHash,
+        credentialsVersion: credentialsVersionOf(proven),
+      });
+      if (version === null) {
+        throw passwordChanged();
+      }
       await this.sessions.deleteForUser(user.id, tx, sessionId);
+      await this.sessions.setCredentialsVersion(sessionId, version, tx);
     });
   }
 }

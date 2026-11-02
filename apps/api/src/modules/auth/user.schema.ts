@@ -9,7 +9,18 @@ export interface UserRecord {
   email: string;
   name: string;
   passwordHash: string;
+  /**
+   * Goes up with every reset or changed password (ADR-026); absent, on accounts from before it, is
+   * 0. A session counts only while it was issued against the current one, so a login that read the
+   * old password before a reset committed holds no session after it.
+   */
+  credentialsVersion?: number;
   createdAt: Date;
+}
+
+/** The credentials version of a user or session record: absent is 0. */
+export function credentialsVersionOf(record: { credentialsVersion?: number }): number {
+  return record.credentialsVersion ?? 0;
 }
 
 export const userSchema = new Schema<UserRecord>(
@@ -17,6 +28,7 @@ export const userSchema = new Schema<UserRecord>(
     email: { type: String, required: true },
     name: { type: String, required: true },
     passwordHash: { type: String, required: true },
+    credentialsVersion: { type: Number, default: 0 },
     createdAt: { type: Date, required: true },
   },
   { collection: 'users', versionKey: false },
@@ -36,6 +48,11 @@ export interface SessionRecord {
    * change of mode never stands for anyone.
    */
   cookieDomain?: string | null;
+  /**
+   * The user's `credentialsVersion` when the session was issued; absent, on sessions from before
+   * it, is 0. The session guard refuses it once the user's has moved on (ADR-026).
+   */
+  credentialsVersion?: number;
 }
 
 export const sessionSchema = new Schema<SessionRecord>(
@@ -45,6 +62,7 @@ export const sessionSchema = new Schema<SessionRecord>(
     expiresAt: { type: Date, required: true },
     createdAt: { type: Date, required: true },
     cookieDomain: { type: String, default: null },
+    credentialsVersion: { type: Number, default: 0 },
   },
   { collection: 'sessions', versionKey: false },
 );

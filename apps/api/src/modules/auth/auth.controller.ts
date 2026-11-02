@@ -14,6 +14,9 @@ import {
   type ResetPasswordRequest,
   resetPasswordRequestSchema,
   SESSION_COOKIE,
+  type SignupLookupRequest,
+  signupLookupRequestSchema,
+  type SignupLookupResponse,
   type SignupRequest,
   signupRequestSchema,
   type SignupVerifyRequest,
@@ -54,7 +57,21 @@ export class AuthController {
     return this.signups.start(body);
   }
 
-  /** From the confirmation link: the account, its workspace, and a session. */
+  /** The confirmation link's page: the email it proves and the names to prefill. */
+  @Public()
+  @UseGuards(AuthThrottlerGuard)
+  @Post('signup/lookup')
+  @HttpCode(200)
+  lookupSignup(
+    @Body(new ZodPipe(signupLookupRequestSchema)) body: SignupLookupRequest,
+  ): Promise<SignupLookupResponse> {
+    return this.signups.lookup(body);
+  }
+
+  /**
+   * From the confirmation link, with the password chosen on its page: the account, its workspace,
+   * and a session.
+   */
   @Public()
   @UseGuards(AuthThrottlerGuard)
   @Post('signup/verify')

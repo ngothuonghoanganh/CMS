@@ -4,7 +4,13 @@ import { problemSchema, type Site } from '@plp/contracts';
 import { type Connection, Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { requestSignup, signedUpClient, signupInput, TestClient } from '../../../test/client.js';
+import {
+  requestSignup,
+  signedUpClient,
+  signupInput,
+  signupVerifyBody,
+  TestClient,
+} from '../../../test/client.js';
 import { RecordingEmailSender } from '../../../test/email.js';
 import { createSecondInstance } from '../../../test/instances.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
@@ -124,7 +130,7 @@ describe('workspace databases', () => {
       });
     try {
       const response = await new TestClient(t.app)
-        .post('/auth/signup/verify', { token })
+        .post('/auth/signup/verify', signupVerifyBody(token, input))
         .expect(500);
       expect(problemSchema.parse(response.body).code).toBe('internal');
     } finally {

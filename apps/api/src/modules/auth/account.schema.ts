@@ -7,12 +7,14 @@ export const AUTH_EMAIL_LIMIT_MODEL = 'AuthEmailLimit';
 /**
  * A sign-up waiting for its email to be confirmed (ADR-026): no account, workspace or database
  * exists for it yet. One per email; signing up again replaces it, so an older link stops working.
+ * No password: whoever opens the link chooses it, so a sign-up made with someone else's email
+ * gives its maker nothing.
  */
 export interface PendingSignupRecord {
   _id: Types.ObjectId;
   email: string;
+  /** As typed in the form; the link's page may correct it. */
   name: string;
-  passwordHash: string;
   workspaceName: string;
   /** sha256 of the link's secret; the secret itself is only in the email. */
   tokenHash: string;
@@ -27,7 +29,6 @@ export const pendingSignupSchema = new Schema<PendingSignupRecord>(
   {
     email: { type: String, required: true },
     name: { type: String, required: true },
-    passwordHash: { type: String, required: true },
     workspaceName: { type: String, required: true },
     tokenHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },
@@ -63,10 +64,10 @@ passwordResetSchema.index({ userId: 1 }, { unique: true, name: PASSWORD_RESETS_U
 passwordResetSchema.index({ tokenHash: 1 }, { unique: true, name: 'password_resets_token_unique' });
 passwordResetSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-/** Account emails one address received in the current hour (ADR-026). */
+/** Account emails one mailbox received in the current hour (ADR-026). */
 export interface AuthEmailLimitRecord {
   _id: Types.ObjectId;
-  /** HMAC of the normalised email, like the key of `login_attempts` (`loginAccountKey`). */
+  /** HMAC of the email's mailbox (`mailboxOf`), keyed like `login_attempts` (`loginAccountKey`). */
   key: string;
   count: number;
   /** End of the window; the TTL index removes the record afterwards. */
