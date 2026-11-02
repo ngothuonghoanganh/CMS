@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import {
   AI_JOB_STREAM_TYPE,
+  type AiJob,
   aiJobEventSchema,
   aiJobSchema,
   aiUsageSchema,
@@ -25,7 +26,7 @@ import {
   untilAborted,
 } from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { signedUpClient, type TestClient } from '../../../test/client.js';
+import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
 import { createSecondInstance } from '../../../test/instances.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
 import { getPage, uniqueSlug } from '../../../test/pages.js';
@@ -421,6 +422,98 @@ describe('creating a page with AI (ADR-031)', () => {
     // Cancelling again changes nothing.
     await client.post(`/sites/${site.id}/ai/page-jobs/${jobId}/cancel`).expect(200);
     expect((await usage(client, site.id)).used).toBe(0);
+  });
+
+  it('stops asking the AI once “Hủy” reached another instance (ADR-004)', async () => {
+    const input = signupInput();
+    const { client, workspaceId } = await signedUpClient(t.app, input);
+    const site = await createSite(client, workspaceId);
+    const second = await createSecondInstance(t);
+    try {
+      // The same person, whose next request went to another instance behind the load balancer.
+      const elsewhere = new TestClient(second.app);
+      await elsewhere
+        .post('/auth/login', { email: input.email, password: input.password })
+        .expect(200);
+      const gate = new Gate();
+      fake.respondWith(async () => {
+        await gate.opened;
+        return undefined;
+      });
+      const pending = postAiJob(client, site.id, aiJobBody()).then((response) => response);
+      // Three sections are written at once; the other three wait for a slot.
+      await vi.waitFor(() => {
+        expect(fake.requests).toHaveLength(3);
+      });
+      const [jobDoc] = await t
+        .workspaceDb(workspaceId)
+        .collection('ai_jobs')
+        .find({ siteId: new Types.ObjectId(site.id) })
+        .toArray();
+      const jobId = String(jobDoc?._id);
+      const cancelled = aiJobSchema.parse(
+        (await elsewhere.post(`/sites/${site.id}/ai/page-jobs/${jobId}/cancel`).expect(200)).body,
+      );
+      expect(cancelled).toMatchObject({ status: 'cancelled', pageId: null });
+      gate.open();
+      expect(finishedJob(streamEvents(await pending))).toMatchObject({
+        status: 'cancelled',
+        pageId: null,
+      });
+      // The run here learned of the cancel from its next write: no other section was asked for.
+      expect(fake.requests).toHaveLength(3);
+      expect((await usage(client, site.id)).used).toBe(0);
+    } finally {
+      await second.close();
+    }
+  });
+
+  it('gives a stopped “Thử lại” its sections back to retry, the draft as it was', async () => {
+    const { client, site } = await owner();
+    const refused = new Set(['section_faq', 'section_benefits']);
+    fake.respondWith((request) =>
+      refused.has(request.schema.name)
+        ? { text: 'không phải JSON', usage: { inputTokens: 1, outputTokens: 1 }, truncated: false }
+        : undefined,
+    );
+    const { job: partial } = await runAiJob(client, site.id);
+    const faq = partial.sections.find((section) => section.type === 'faq');
+    const benefits = partial.sections.find((section) => section.type === 'benefits');
+    if (partial.pageId === null || faq === undefined || benefits === undefined) {
+      throw new Error('The partial job created no draft');
+    }
+    const before = await getPage(client, site.id, partial.pageId);
+
+    // "Thử lại": the FAQ is written at once, the benefits until the run is stopped.
+    fake.respondWith((request, signal) =>
+      request.schema.name === 'section_benefits' ? untilAborted(signal) : undefined,
+    );
+    const pending = postAiRetry(client, site.id, partial.id).then((response) => response);
+    const statusOf = (current: AiJob, id: string) =>
+      current.sections.find((section) => section.id === id)?.status;
+    await vi.waitFor(async () => {
+      expect(statusOf(await job(client, site.id, partial.id), faq.id)).toBe('done');
+    });
+    const cancelled = aiJobSchema.parse(
+      (await client.post(`/sites/${site.id}/ai/page-jobs/${partial.id}/cancel`).expect(200)).body,
+    );
+    // The FAQ this run wrote never reached the draft: it is to write again, like the benefits.
+    expect(cancelled).toMatchObject({ status: 'done', pageId: partial.pageId, retriesLeft: 1 });
+    expect(statusOf(cancelled, faq.id)).toBe('failed');
+    expect(statusOf(cancelled, benefits.id)).toBe('failed');
+    expect(finishedJob(streamEvents(await pending)).status).toBe('done');
+    expect((await getPage(client, site.id, partial.pageId)).draft).toEqual(before.draft);
+
+    fake.respondWith(null);
+    const written = finishedJob(
+      streamEvents(await postAiRetry(client, site.id, partial.id).expect(200)),
+    );
+    expect(written).toMatchObject({ status: 'done', failure: null, retriesLeft: 0 });
+    expect(written.sections.every((section) => section.status !== 'failed')).toBe(true);
+    const rewritten = await getPage(client, site.id, partial.pageId);
+    expect(
+      rewritten.draft.composition.sections.find((section) => section.id === faq.id)?.samplePaths,
+    ).toEqual([]);
   });
 
   it('finishes the job when the client goes away: the draft is in the page list', async () => {

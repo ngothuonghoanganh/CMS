@@ -147,6 +147,12 @@ const baseEnvSchema = z.object({
   AI_MODEL: z.string().min(1).max(200).optional(),
   /** How long one AI request may take before it counts as failed. */
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600_000).default(60_000),
+  /**
+   * Sections the AI writes at once, for a page job and for the assistant. A local Ollama answers
+   * one request at a time unless `OLLAMA_NUM_PARALLEL` says otherwise: set 1 there, or the others
+   * wait in its queue on their own timeout.
+   */
+  AI_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(3),
   /** AI uses per workspace per calendar month in Vietnam. */
   AI_MONTHLY_QUOTA: z.coerce.number().int().min(0).max(100_000).default(100),
 });

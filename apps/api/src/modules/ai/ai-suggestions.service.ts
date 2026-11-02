@@ -6,6 +6,8 @@ import {
   MAX_SECTIONS,
   type VnMonth,
 } from '@plp/contracts';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { validationFailed } from '../../shared/errors.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { TaskLimiter } from '../../shared/task-limiter.js';
@@ -25,7 +27,7 @@ import {
   type SuggestionTask,
   type SuggestionUnit,
 } from './domain/assistant.js';
-import { failureOfError, SECTION_CONCURRENCY, summarizeFailures } from './domain/job-rules.js';
+import { failureOfError, summarizeFailures } from './domain/job-rules.js';
 import { withRetryFeedback } from './domain/prompts.js';
 import {
   copyJsonSchema,
@@ -72,6 +74,7 @@ export class AiSuggestionsService {
   private readonly logger = new Logger(AiSuggestionsService.name);
 
   constructor(
+    @InjectEnv() private readonly env: Env,
     private readonly pageAccess: PageAccessService,
     private readonly quota: AiQuota,
     private readonly model: AiTextModel,
@@ -124,7 +127,7 @@ export class AiSuggestionsService {
     // Set once the use is kept or on its way back, so it goes back at most once.
     let settled = false;
     try {
-      const limiter = new TaskLimiter({ running: SECTION_CONCURRENCY, waiting: MAX_SECTIONS });
+      const limiter = new TaskLimiter({ running: this.env.AI_CONCURRENCY, waiting: MAX_SECTIONS });
       const outcomes = await Promise.all(
         run.plan.units.map((unit) =>
           limiter.run(() => this.writeUnit(run.context, run.task, run.plan, unit, signal)),

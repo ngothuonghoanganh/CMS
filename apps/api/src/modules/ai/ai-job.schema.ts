@@ -27,6 +27,11 @@ export interface AiJobSectionRecord {
 export interface AiJobRunRecord {
   id: string;
   deadline: Date;
+  /**
+   * The sections it writes. A "Thử lại" run that ends without writing its draft gives them back
+   * as failed, those it wrote too, so they can be retried.
+   */
+  sectionIds: string[];
 }
 
 /**
@@ -84,7 +89,11 @@ const aiJobSchema = new Schema<AiJobRecord>(
     status: { type: String, enum: aiJobStatusIds, required: true },
     run: {
       type: new Schema<AiJobRunRecord>(
-        { id: { type: String, required: true }, deadline: { type: Date, required: true } },
+        {
+          id: { type: String, required: true },
+          deadline: { type: Date, required: true },
+          sectionIds: { type: [String], required: true },
+        },
         { _id: false },
       ),
       default: null,

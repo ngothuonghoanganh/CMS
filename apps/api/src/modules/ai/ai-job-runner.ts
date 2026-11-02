@@ -9,6 +9,8 @@ import {
   type SectionInstance,
 } from '@plp/contracts';
 import { parseComposition } from '@plp/sections/schema';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
@@ -26,7 +28,6 @@ import {
   failureOfError,
   RUN_GRACE_MS,
   type RunStopReason,
-  SECTION_CONCURRENCY,
   summarizeFailures,
 } from './domain/job-rules.js';
 import type { PromptContext } from './domain/prompts.js';
@@ -105,11 +106,13 @@ function draftFailureOf(error: unknown): AiFailure | null {
 }
 
 /**
- * Runs AI jobs in this process (ADR-031): writes the queued sections a few at a time, reports each
- * one's progress to whoever listens, then ends the job in one transaction: the draft and the job
- * together, or no draft and the use given back. The request that started a run only listens, so a
- * client that goes away does not stop it. Runs stop at their budget, on cancel and when the API
- * stops; a run whose process died is ended by a reader past its deadline (`AiPageJobsService`).
+ * Runs AI jobs in this process (ADR-031): writes the queued sections `AI_CONCURRENCY` at a time,
+ * reports each one's progress to whoever listens, then ends the job in one transaction: the draft
+ * and the job together, or no draft and the use given back. The request that started a run only
+ * listens, so a client that goes away does not stop it. Runs stop at their budget, on cancel and
+ * when the API stops; a run whose process died is ended by a reader past its deadline
+ * (`AiPageJobsService`). A run whose job was ended elsewhere (a cancel on another instance, its
+ * site deleted) stops at its next write or before its next request, which name its id.
  */
 @Injectable()
 export class AiJobRunner implements OnModuleDestroy {
@@ -117,6 +120,7 @@ export class AiJobRunner implements OnModuleDestroy {
   private readonly runs = new Map<string, { run: ActiveRun; done: Promise<AiJob> }>();
 
   constructor(
+    @InjectEnv() private readonly env: Env,
     private readonly writer: SectionWriter,
     private readonly jobs: AiJobsRepository,
     private readonly ledger: AiJobLedger,
@@ -188,7 +192,7 @@ export class AiJobRunner implements OnModuleDestroy {
   private async execute(spec: RunSpec, runId: string, run: ActiveRun): Promise<AiJob> {
     const { scope, job } = spec;
     const base = new Map(spec.base.sections.map((section) => [section.id, section]));
-    const limiter = new TaskLimiter({ running: SECTION_CONCURRENCY, waiting: MAX_SECTIONS });
+    const limiter = new TaskLimiter({ running: this.env.AI_CONCURRENCY, waiting: MAX_SECTIONS });
     const outcomes = new Map<string, SectionOutcome>();
     const tokens: TokenCount = { input: 0, output: 0 };
     const startedAt = Date.now();
@@ -272,12 +276,15 @@ export class AiJobRunner implements OnModuleDestroy {
       status: 'failed',
       failure: run.stopReason === 'deadline' ? 'ai_timeout' : 'interrupted',
     });
+    if (!run.controller.signal.aborted) {
+      // The write names the run: a job ended elsewhere stops it here, before the AI is asked.
+      await this.progress(spec, runId, run, item.id, 'writing', null);
+    }
     let outcome: SectionOutcome;
     if (run.controller.signal.aborted) {
       outcome = stopped();
     } else {
-      await this.progress(spec, runId, run, item.id, 'writing', null);
-      const result = await this.writeOrFail(spec, section, run);
+      const result = await this.writeOrFail(spec, runId, section, run);
       tokens.input += result.tokens.input;
       tokens.output += result.tokens.output;
       if (result.status === 'written') {
@@ -310,11 +317,14 @@ export class AiJobRunner implements OnModuleDestroy {
    */
   private async writeOrFail(
     spec: RunSpec,
+    runId: string,
     section: SectionInstance,
     run: ActiveRun,
   ): Promise<SectionWriteResult> {
     try {
-      return await this.writer.write(spec.context, section, run.controller.signal);
+      return await this.writer.write(spec.context, section, run.controller.signal, () =>
+        this.stopUnlessCurrent(spec, runId, run),
+      );
     } catch (error) {
       this.logger.error(
         { err: error, jobId: spec.job._id.toHexString(), sectionType: section.type },
@@ -330,7 +340,8 @@ export class AiJobRunner implements OnModuleDestroy {
 
   /**
    * Records a section's progress and tells the listeners. The record only serves a client that
-   * reads the job again: when it fails, the run goes on, and its end writes every section.
+   * reads the job again: when it fails, the run goes on, and its end writes every section. When it
+   * matches no job, the run is no longer the job's and stops: nothing it writes would be kept.
    */
   private async progress(
     spec: RunSpec,
@@ -342,11 +353,39 @@ export class AiJobRunner implements OnModuleDestroy {
   ): Promise<void> {
     run.emit({ type: 'section', sectionId, status });
     try {
-      await this.jobs.setSectionStatus(spec.scope, spec.job._id, runId, sectionId, status, failure);
+      if (
+        !(await this.jobs.setSectionStatus(
+          spec.scope,
+          spec.job._id,
+          runId,
+          sectionId,
+          status,
+          failure,
+        ))
+      ) {
+        run.stop('superseded');
+      }
     } catch (error) {
       this.logger.error(
         { err: error, jobId: spec.job._id.toHexString() },
         'AI job progress not recorded',
+      );
+    }
+  }
+
+  /**
+   * Stops the run when it is no longer the job's, before a retry asks the AI again. A failed read
+   * is logged and the run goes on: its end is conditional anyway.
+   */
+  private async stopUnlessCurrent(spec: RunSpec, runId: string, run: ActiveRun): Promise<void> {
+    try {
+      if (!(await this.jobs.isRunCurrent(spec.scope, spec.job._id, runId))) {
+        run.stop('superseded');
+      }
+    } catch (error) {
+      this.logger.error(
+        { err: error, jobId: spec.job._id.toHexString() },
+        'AI job run not checked before a retry',
       );
     }
   }
@@ -505,7 +544,7 @@ export class AiJobRunner implements OnModuleDestroy {
       if (current.status === 'running' && current.run?.id === runId) {
         await this.ledger.endWithoutWriting(scope, current, runId, {
           status: 'failed',
-          sections: stoppedSections(current.sections, 'ai_unavailable'),
+          sections: stoppedSections(current, 'ai_unavailable'),
           failure: 'ai_unavailable',
         });
       }

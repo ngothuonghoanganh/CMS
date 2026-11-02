@@ -171,6 +171,16 @@ describe('parseEnv', () => {
       expect(env.AI_MONTHLY_QUOTA).toBe(100);
     });
 
+    it('writes 3 sections at once by default, 1 to 8 when set', () => {
+      expect(parseEnv(valid).AI_CONCURRENCY).toBe(3);
+      // A local Ollama answers one request at a time unless OLLAMA_NUM_PARALLEL says otherwise.
+      expect(parseEnv({ ...valid, AI_CONCURRENCY: '1' }).AI_CONCURRENCY).toBe(1);
+      expect(parseEnv({ ...valid, AI_CONCURRENCY: '8' }).AI_CONCURRENCY).toBe(8);
+      for (const refused of ['0', '9', '2.5', 'many']) {
+        expect(() => parseEnv({ ...valid, AI_CONCURRENCY: refused })).toThrow(/AI_CONCURRENCY/);
+      }
+    });
+
     it('needs the address, key and model of an OpenAI-compatible service', () => {
       expect(parseEnv({ ...valid, ...local }).AI_MODEL).toBe('qwen3:4b-instruct');
       const { AI_API_KEY: _key, AI_MODEL: _model, ...partial } = local;
