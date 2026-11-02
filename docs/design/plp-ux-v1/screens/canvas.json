@@ -26,7 +26,13 @@
     "InviteAccept.dc.html": {"x": 6080, "y": 5540, "w": 390, "h": 844, "title": "15b · Nhận lời mời (mobile)", "is_interactive": true},
     "WorkspaceLogin.dc.html": {"x": 0, "y": 12340, "w": 1440, "h": 900, "title": "34 · Đăng nhập (địa chỉ workspace / địa chỉ chung)", "expand": "fill", "is_interactive": true},
     "WorkspacePicker.dc.html": {"x": 1520, "y": 12340, "w": 1440, "h": 1000, "title": "35 · Chọn workspace (địa chỉ chung)", "expand": "fill", "is_interactive": true},
-    "NotMember.dc.html": {"x": 3040, "y": 12340, "w": 1440, "h": 900, "title": "36 · Không thuộc workspace ở địa chỉ này", "expand": "fill", "is_interactive": true}
+    "NotMember.dc.html": {"x": 3040, "y": 12340, "w": 1440, "h": 900, "title": "36 · Không thuộc workspace ở địa chỉ này", "expand": "fill", "is_interactive": true},
+    "TemplateThumb.dc.html": {"x": -368, "y": 7240, "w": 320, "h": 240, "title": "Thành phần · Ảnh thu nhỏ template"},
+    "TemplateLibrary.dc.html": {"x": 0, "y": 7240, "w": 1440, "h": 1080, "title": "17 · Thư viện template", "expand": "fill", "is_interactive": true},
+    "TemplateDetail.dc.html": {"x": 1520, "y": 7240, "w": 1440, "h": 1080, "title": "18 · Chi tiết & preview template", "expand": "fill", "is_interactive": true},
+    "WorkspaceTemplates.dc.html": {"x": 3040, "y": 7240, "w": 1440, "h": 1000, "title": "19 · Template của workspace", "expand": "fill", "is_interactive": true},
+    "AiCreate.dc.html": {"x": 4560, "y": 7240, "w": 1440, "h": 1080, "title": "20 · Tạo landing page bằng AI", "expand": "fill", "is_interactive": true},
+    "AiAssistant.dc.html": {"x": 6080, "y": 7240, "w": 1440, "h": 1080, "title": "21 · Trợ lý AI trong editor", "expand": "fill", "is_interactive": true}
   },
   "order": [
     "Main.dc.html",
@@ -50,7 +56,13 @@
     "InviteAccept.dc.html",
     "WorkspaceLogin.dc.html",
     "WorkspacePicker.dc.html",
-    "NotMember.dc.html"
+    "NotMember.dc.html",
+    "TemplateThumb.dc.html",
+    "TemplateLibrary.dc.html",
+    "TemplateDetail.dc.html",
+    "WorkspaceTemplates.dc.html",
+    "AiCreate.dc.html",
+    "AiAssistant.dc.html"
   ],
   "notes": {
     "rowCreate": {"x": 0, "y": -320, "text": "CREATE — Tạo & biên tập trang", "kind": "title1", "maxW": 6000},
@@ -60,7 +72,9 @@
     "phase1": {"x": 0, "y": 5220, "text": "PHASE 1 · VẬN HÀNH & ĐỘI NHÓM — Tên miền riêng, thành viên, phân quyền", "kind": "title1", "maxW": 6470},
     "phase1Decisions": {"x": -888, "y": 5540, "w": 440, "fill": "orange", "text": "Phase 1 · Giả định đang vẽ — cần chốt\n\n• Tên miền: nhận cả tên miền phụ (khuyên dùng) và tên miền gốc; tối đa 5 tên miền mỗi site\n• Một địa chỉ chính; mọi địa chỉ khác chuyển hướng 301 về địa chỉ chính\n• Tên miền đang gắn với site khác: chặn, chủ tên miền xác minh bằng bản ghi TXT rồi mới chuyển\n• Bộ vai trò cố định 6 loại; vai trò tùy chỉnh để sau\n• Phạm vi quyền: toàn workspace hoặc các site được chọn\n• “Xem lead” và “Xuất / xóa dữ liệu cá nhân” là hai quyền riêng\n• Lời mời hết hạn sau 7 ngày, chỉ dùng một lần, gắn với email được mời\n• Bị giới hạn vì gói dịch vụ hiện nhãn “Nâng cấp”, khác với “Không có quyền”"},
     "d2": {"x": 0, "y": 12020, "text": "TÁCH DATABASE · ĐỊA CHỈ WORKSPACE (D2, ADR-025) — Mỗi workspace một địa chỉ admin", "kind": "title1", "maxW": 4480},
-    "d2Decisions": {"x": -888, "y": 12340, "w": 440, "fill": "orange", "text": "D2 · Giả định đang vẽ — cần chốt\n\n• Mỗi workspace có địa chỉ admin {slug}.app.<tên miền>, tạo từ tên workspace lúc đăng ký; chưa đổi được\n• Tên miền minh họa app.payload.vn, chốt cùng BASE_DOMAIN (§6); admin và trang công khai dùng hai tên miền khác nhau\n• Một lần đăng nhập dùng cho mọi địa chỉ workspace của người đó\n• Địa chỉ chung: thuộc một workspace thì mở thẳng; nhiều thì chọn (màn 35); không thuộc workspace nào thì hiện trạng thái trống\n• Người ngoài, hoặc địa chỉ không tồn tại: cùng màn 36, không lộ tên workspace\n• Đổi workspace ở Sidebar v2 (bật switcherOpen) mở địa chỉ của workspace kia\n• Email (lời mời, lead, duyệt xuất bản, tên miền) dẫn tới địa chỉ của workspace"}
+    "d2Decisions": {"x": -888, "y": 12340, "w": 440, "fill": "orange", "text": "D2 · Giả định đang vẽ — cần chốt\n\n• Mỗi workspace có địa chỉ admin {slug}.app.<tên miền>, tạo từ tên workspace lúc đăng ký; chưa đổi được\n• Tên miền minh họa app.payload.vn, chốt cùng BASE_DOMAIN (§6); admin và trang công khai dùng hai tên miền khác nhau\n• Một lần đăng nhập dùng cho mọi địa chỉ workspace của người đó\n• Địa chỉ chung: thuộc một workspace thì mở thẳng; nhiều thì chọn (màn 35); không thuộc workspace nào thì hiện trạng thái trống\n• Người ngoài, hoặc địa chỉ không tồn tại: cùng màn 36, không lộ tên workspace\n• Đổi workspace ở Sidebar v2 (bật switcherOpen) mở địa chỉ của workspace kia\n• Email (lời mời, lead, duyệt xuất bản, tên miền) dẫn tới địa chỉ của workspace"},
+    "phase2": {"x": 0, "y": 6920, "text": "PHASE 2 · TẠO TRANG NHANH — Template và AI, đều chỉ ghi vào bản nháp", "kind": "title1", "maxW": 7520},
+    "phase2Decisions": {"x": -888, "y": 7240, "w": 440, "fill": "orange", "text": "Phase 2 · Giả định đang vẽ — cần chốt\n\n• Template = các section + theme + chữ mẫu. Không mang theo lead, tên miền, nơi nhận lead hay nội dung đồng ý\n• Tạo từ mẫu tạo bản nháp độc lập, ghi lại phiên bản template đã dùng; sửa template không đổi trang đã tạo\n• Mẫu có form mà site chưa cài nơi nhận lead / đồng ý: vẫn tạo được, checklist xuất bản chặn như hiện tại\n• Áp mẫu vào trang đang sửa chỉ đổi bản nháp, hoàn tác được, trang live không đổi\n• AI bản đầu: tạo trang từ brief + viết lại chữ trong section; chưa tạo ảnh\n• Dữ liệu gửi AI: brief và chữ của bản nháp; không gửi lead hay dữ liệu cá nhân\n• Hạn mức AI tính theo lượt mỗi tháng theo gói — con số chưa có\n• AI không bao giờ xuất bản; mỗi lần áp dụng là một bước hoàn tác"}
   },
   "designSystems": []
 }

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Tạo landing page bằng AI</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 10px 20px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <a href="Main.dc.html" aria-label="Hủy và quay lại" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: #3C424E">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column">
+        <span style="font-size: 15px; font-weight: 600">Tạo trang bằng AI</span>
+        <span style="font-size: 12px; color: #5E6573">Nha khoa Smile Care</span>
+      </div>
+    </div>
+    <ol aria-label="Các bước" style="list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 8px">
+      <sc-for list="{{ steps }}" as="st" hint-placeholder-count="3">
+        <li aria-current="{{ st.cur }}" style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: {{ st.fw }}; color: {{ st.fg }}">
+          <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 999px; background: {{ st.bg }}; color: {{ st.numFg }}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">{{ st.n }}</span>
+          {{ st.label }}
+          <sc-if value="{{ st.sep }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width: 28px; height: 1px; background: #CDD2DA"></span></sc-if>
+        </li>
+      </sc-for>
+    </ol>
+    <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: {{ usageFg }}">
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"></path></svg>
+      {{ usage }}
+    </span>
+  </header>
+
+  <main style="flex: 1; box-sizing: border-box; padding: 28px 24px 56px">
+    <div style="max-width: 1080px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+      <section aria-labelledby="ai-title" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 18px; padding: 24px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h1 id="ai-title" style="margin: 0; font-size: 24px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em">{{ title }}</h1>
+          <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #3C424E">{{ lead }}</p>
+        </div>
+
+        <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
+          <sc-if value="{{ isQuota }}" hint-placeholder-val="{{ false }}">
+            <div role="alert" style="display: flex; flex-wrap: wrap; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00; font-size: 13px; line-height: 1.55">
+              <span style="flex: 1 1 360px"><strong style="font-size: 14px">Workspace đã dùng hết 20 lượt tạo trang AI tháng này.</strong> Lượt mới có vào 01/12. Brief bạn nhập vẫn được giữ lại.</span>
+              <span style="display: flex; flex-wrap: wrap; gap: 8px">
+                <a href="Plan.dc.html" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none">Xem gói</a>
+                <a href="TemplateLibrary.dc.html" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: #15171C; font-size: 13px; font-weight: 600; text-decoration: none">Dùng template</a>
+              </span>
+            </div>
+          </sc-if>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="b-product" style="font-size: 14px; font-weight: 600">Sản phẩm hoặc dịch vụ</label>
+            <textarea id="b-product" rows="2" style="box-sizing: border-box; padding: 10px 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical">Niềng răng trong suốt Invisalign, trả góp 0% trong 12 tháng</textarea>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="b-audience" style="font-size: 14px; font-weight: 600">Khách hàng mục tiêu</label>
+            <input id="b-audience" type="text" value="Người đi làm 22–35 tuổi ở TP.HCM, ngại mắc cài kim loại" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+          </div>
+          <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+            <legend style="padding: 0 0 8px; font-size: 14px; font-weight: 600">Mục tiêu trang</legend>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <sc-for list="{{ goals }}" as="g" hint-placeholder-count="5">
+                <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1px solid {{ g.border }}; background: {{ g.bg }}; border-radius: 999px; font-size: 14px; font-weight: {{ g.fw }}; cursor: pointer">
+                  <input type="radio" name="b-goal" checked="{{ g.on }}" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">{{ g.label }}
+                </label>
+              </sc-for>
+            </div>
+          </fieldset>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="b-usp" style="font-size: 14px; font-weight: 600">Điểm khác biệt và thông điệp chính</label>
+            <textarea id="b-usp" rows="3" style="box-sizing: border-box; padding: 10px 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical">Bác sĩ 12 năm kinh nghiệm chỉnh nha. Chụp phim 3D miễn phí. Trả góp 0%, không cần thẻ tín dụng. Giảm 3 triệu cho khách đăng ký trước 30/11.</textarea>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px">
+            <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px">
+              <legend style="padding: 0 0 6px; font-size: 14px; font-weight: 600">Giọng văn</legend>
+              <div style="display: flex; gap: 2px; padding: 3px; background: #ECEEF2; border-radius: 10px">
+                <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.08); font-size: 13px; font-weight: 600; cursor: pointer"><input type="radio" name="b-tone" checked style="width: 15px; height: 15px; margin: 0; accent-color: #4338CA">Thân thiện</label>
+                <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer"><input type="radio" name="b-tone" style="width: 15px; height: 15px; margin: 0; accent-color: #4338CA">Chuyên nghiệp</label>
+                <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer"><input type="radio" name="b-tone" style="width: 15px; height: 15px; margin: 0; accent-color: #4338CA">Năng động</label>
+              </div>
+            </fieldset>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="b-lang" style="font-size: 14px; font-weight: 600">Ngôn ngữ</label>
+              <select id="b-lang" style="min-height: 44px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Tiếng Việt</option><option>English</option></select>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 14px; font-weight: 600">Nội dung bạn đã có <span style="font-weight: 400; color: #5E6573">(không bắt buộc)</span></span>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+              <span style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border: 1px solid #E2E5EA; border-radius: 8px; font-size: 13px">
+                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5"></path></svg>
+                bang-gia-invisalign.pdf
+                <button type="button" aria-label="Bỏ tệp bang-gia-invisalign.pdf" style="width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #5E6573; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+              </span>
+              <button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px dashed #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+                Thêm tệp hoặc ảnh
+              </button>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid #EEF0F3">
+            <a href="TemplateLibrary.dc.html" style="font-size: 14px; font-weight: 600; text-decoration: none">Chọn template thay vì AI</a>
+            <button type="button" disabled="{{ isQuota }}" style="min-height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: {{ ctaBg }}; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đề xuất cấu trúc trang</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
+          <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+            <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="7">
+              <li style="display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border: 1px solid #E2E5EA; border-radius: 12px">
+                <span aria-hidden="true" style="flex: none; width: 28px; height: 28px; border-radius: 8px; background: #F0F2F5; color: #3C424E; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">{{ sec.n }}</span>
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                  <span style="font-size: 14px; font-weight: 600">{{ sec.name }}</span>
+                  <span style="font-size: 13px; color: #3C424E">{{ sec.idea }}</span>
+                </span>
+                <span style="display: flex; gap: 2px">
+                  <button type="button" aria-label="Đưa {{ sec.name }} lên" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg></button>
+                  <button type="button" aria-label="Đưa {{ sec.name }} xuống" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></button>
+                  <button type="button" aria-label="Bỏ {{ sec.name }}" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"></path></svg></button>
+                </span>
+              </li>
+            </sc-for>
+          </ol>
+          <button type="button" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 1px dashed #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Thêm section</button>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid #EEF0F3">
+            <span style="display: flex; gap: 8px">
+              <button type="button" style="min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Sửa brief</button>
+              <button type="button" style="min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Đề xuất lại</button>
+            </span>
+            <button type="button" style="min-height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Viết nội dung · tốn 1 lượt</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isRunning }}" hint-placeholder-val="{{ false }}">
+          <ol aria-live="polite" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px">
+            <sc-for list="{{ progress }}" as="pr" hint-placeholder-count="7">
+              <li style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; background: {{ pr.bg }}">
+                <span aria-hidden="true" style="width: 20px; height: 20px; border-radius: 999px; background: {{ pr.dotBg }}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; border: 2px solid {{ pr.ring }}; box-sizing: border-box">{{ pr.mark }}</span>
+                <span style="flex: 1; font-size: 14px; font-weight: 500">{{ pr.name }}</span>
+                <span style="font-size: 13px; font-weight: 600; color: {{ pr.fg }}">{{ pr.status }}</span>
+              </li>
+            </sc-for>
+          </ol>
+          <sc-if value="{{ isGenerating }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid #EEF0F3">
+              <span style="font-size: 13px; color: #5E6573">Thường mất dưới một phút. Bạn có thể rời màn này, bản nháp sẽ có trong danh sách trang.</span>
+              <button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 10px; border-top: 1px solid #EEF0F3">
+              <div role="status" style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00; font-size: 13px; line-height: 1.55">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C27803" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+                <span><strong>Đã viết 5/7 section.</strong> Hai section chưa viết được. Thử lại không tốn thêm lượt. Nếu mở luôn, hai section đó giữ chữ mẫu và checklist xuất bản sẽ nhắc bạn.</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+                <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Mở bản nháp với 5 section</a>
+                <button type="button" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Thử lại 2 section</button>
+              </div>
+            </div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ isFailed }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #FDEBE9; border: 1px solid #F6C9C4; color: #7A1A12; font-size: 13px; line-height: 1.55">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.2v.1"></path></svg>
+            <span><strong style="font-size: 14px">Chưa tạo được nội dung.</strong> Dịch vụ AI đang quá tải. Không có bản nháp nào được tạo và lượt này không bị tính. Brief và cấu trúc của bạn vẫn còn.</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px">
+            <button type="button" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Thử lại</button>
+            <a href="TemplateLibrary.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Dùng template</a>
+          </div>
+        </sc-if>
+      </section>
+
+      <aside style="flex: 1 1 280px; max-width: 340px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.6; color: #3C424E">
+          <span style="font-size: 14px; font-weight: 700; color: #15171C">AI làm gì với trang của bạn</span>
+          <span>Viết chữ cho các section có sẵn trong thư viện, theo theme của site. AI không tự xuất bản; bạn duyệt trong editor rồi mới xuất bản.</span>
+          <span>Số liệu, giá và cam kết y tế phải đúng sự thật. AI đánh dấu những câu cần bạn kiểm tra.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.6; color: #3C424E">
+          <span style="font-size: 14px; font-weight: 700; color: #15171C">Dữ liệu được gửi đi</span>
+          <span><strong style="color: #0B6B45">Có:</strong> nội dung bạn nhập ở brief và tệp đính kèm.</span>
+          <span><strong style="color: #B42318">Không:</strong> lead, danh bạ khách hàng, nội dung đồng ý hay bất kỳ dữ liệu cá nhân nào của khách.</span>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["brief","structure","generating","partial","failed","quota"],"default":"brief"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'brief';
+    var stage = { brief: 0, quota: 0, structure: 1, generating: 2, partial: 2, failed: 2 }[s];
+    var steps = ['Brief', 'Cấu trúc', 'Viết nội dung'].map(function (l, i) {
+      var done = i < stage; var cur = i === stage;
+      return { n: done ? '✓' : String(i + 1), label: l, sep: i < 2, cur: cur ? 'step' : null,
+        bg: done ? '#12A06A' : (cur ? '#4338CA' : '#ECEEF2'), numFg: done || cur ? '#FFFFFF' : '#5E6573',
+        fg: cur ? '#15171C' : '#5E6573', fw: cur ? 600 : 500 };
+    });
+    var goals = ['Thu lead', 'Sự kiện', 'Bán sản phẩm', 'Waitlist', 'Webinar'].map(function (g, i) {
+      var on = i === 0;
+      return { label: g, on: on, border: on ? '#4338CA' : '#CDD2DA', bg: on ? '#F5F5FF' : '#FFFFFF', fw: on ? 600 : 500 };
+    });
+    var S = [
+      ['Hero', 'Niềng răng trong suốt, trả góp 0% · nút “Nhận lịch tư vấn”'],
+      ['Lợi ích', '3 lý do: không lộ mắc cài, ăn uống thoải mái, ít tái khám'],
+      ['Giới thiệu bác sĩ', 'BS. Trần Minh, 12 năm chỉnh nha'],
+      ['Cảm nhận khách hàng', '3 khách đã niềng, có ảnh trước/sau'],
+      ['Câu hỏi thường gặp', 'Giá, thời gian niềng, trả góp, đau không'],
+      ['Form đăng ký tư vấn', 'Họ tên, điện thoại, khung giờ muốn gọi'],
+      ['Chân trang', 'Địa chỉ, giờ mở cửa, Zalo']
+    ];
+    var sections = S.map(function (x, i) { return { n: String(i + 1), name: x[0], idea: x[1] }; });
+    var prog = {
+      generating: ['d', 'd', 'd', 'w', 'q', 'q', 'q'],
+      partial: ['d', 'd', 'd', 'f', 'f', 'd', 'd']
+    }[s] || [];
+    var M = {
+      d: { status: 'Xong', fg: '#0B6B45', mark: '✓', dotBg: '#12A06A', ring: '#12A06A', bg: 'transparent' },
+      w: { status: 'Đang viết…', fg: '#3730A3', mark: '', dotBg: '#EEF0FF', ring: '#4338CA', bg: '#F5F5FF' },
+      q: { status: 'Chờ', fg: '#5E6573', mark: '', dotBg: '#FFFFFF', ring: '#CDD2DA', bg: 'transparent' },
+      f: { status: 'Chưa viết được', fg: '#8A5300', mark: '!', dotBg: '#E39A12', ring: '#E39A12', bg: '#FFF8EB' }
+    };
+    var progress = prog.map(function (k, i) { var m = M[k]; return { name: S[i][0], status: m.status, fg: m.fg, mark: m.mark, dotBg: m.dotBg, ring: m.ring, bg: m.bg }; });
+    var T = {
+      brief: ['Kể cho AI về trang bạn cần', 'Càng cụ thể, bản nháp càng sát. Mọi ô đều sửa lại được sau trong editor.'],
+      quota: ['Kể cho AI về trang bạn cần', 'Càng cụ thể, bản nháp càng sát. Mọi ô đều sửa lại được sau trong editor.'],
+      structure: ['Cấu trúc đề xuất', 'Sắp xếp, bỏ hoặc thêm section trước khi AI viết nội dung. Chưa tốn lượt nào.'],
+      generating: ['Đang viết nội dung', 'AI viết từng section theo brief và theme Bạc hà của site.'],
+      partial: ['Gần xong', 'Bản nháp đã được lưu. Chưa ai thấy cho tới khi bạn xuất bản.'],
+      failed: ['Đang viết nội dung', 'AI viết từng section theo brief và theme Bạc hà của site.']
+    };
+    var quota = s === 'quota';
+    return {
+      steps: steps, goals: goals, sections: sections, progress: progress,
+      title: T[s][0], lead: T[s][1],
+      isBrief: stage === 0, isQuota: quota,
+      isStructure: s === 'structure',
+      isRunning: s === 'generating' || s === 'partial',
+      isGenerating: s === 'generating', isPartial: s === 'partial',
+      isFailed: s === 'failed',
+      ctaBg: quota ? '#A8AEB9' : '#4338CA',
+      usage: quota ? 'Đã dùng 20/20 lượt tháng này' : 'Còn 18/20 lượt tạo trang tháng này',
+      usageFg: quota ? '#8A5300' : '#5E6573'
+    };
+  }
+}
+</script>
+</body>
+</html>

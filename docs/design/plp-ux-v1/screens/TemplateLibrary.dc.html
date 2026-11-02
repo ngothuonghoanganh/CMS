@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thư viện template</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="templates" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px; max-width: 620px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Templates</h1>
+          <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #3C424E">Chọn mẫu để tạo trang mới. Trang tạo từ mẫu là bản nháp riêng: sửa mẫu sau này không làm đổi trang đã tạo.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <label for="for-site" style="font-size: 13px; color: #5E6573">Tạo trang cho</label>
+          <select id="for-site" style="min-height: 44px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600; background: #FFFFFF; color: #15171C"><option>Nha khoa Smile Care</option><option>Bếp Nhà Mây</option><option>Spa Lá Xanh</option></select>
+          <a href="AiCreate.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: #15171C; font-size: 14px; font-weight: 600; text-decoration: none">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4338CA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"></path></svg>
+            Tạo bằng AI
+          </a>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+        <div role="tablist" aria-label="Nguồn mẫu" style="display: flex; gap: 4px; border-bottom: 1px solid #E2E5EA">
+          <button type="button" role="tab" aria-selected="true" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid #4338CA; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #3730A3; cursor: pointer">Tất cả · 24</button>
+          <button type="button" role="tab" aria-selected="false" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 14px; font-weight: 500; color: #3C424E; cursor: pointer">Hệ thống · 12</button>
+          <a href="WorkspaceTemplates.dc.html" role="tab" aria-selected="false" style="display: inline-flex; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; color: #3C424E; text-decoration: none">Của workspace · 4</a>
+          <button type="button" role="tab" aria-selected="false" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 14px; font-weight: 500; color: #3C424E; cursor: pointer">Đã sở hữu từ Marketplace · 8</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; width: 280px; max-width: 100%">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+          <label for="tpl-search" class="sr-only">Tìm template</label>
+          <input id="tpl-search" type="search" value="{{ query }}" placeholder="Tìm theo tên, ngành, mục tiêu" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 13px; background: transparent; color: #15171C">
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <aside aria-label="Bộ lọc" style="flex: 1 1 200px; max-width: 240px; display: flex; flex-direction: column; gap: 18px">
+          <sc-for list="{{ filters }}" as="f" hint-placeholder-count="3">
+            <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 2px">
+              <legend style="padding: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #3C424E">{{ f.name }}</legend>
+              <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="5">
+                <label style="display: flex; align-items: center; gap: 10px; min-height: 36px; font-size: 14px; cursor: pointer">
+                  <input type="checkbox" checked="{{ o.on }}" style="width: 17px; height: 17px; margin: 0; accent-color: #4338CA">
+                  <span style="flex: 1">{{ o.label }}</span>
+                  <span style="font-size: 12px; color: #5E6573">{{ o.n }}</span>
+                </label>
+              </sc-for>
+            </fieldset>
+          </sc-for>
+        </aside>
+
+        <section aria-label="Kết quả" style="flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+          <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+              <span style="font-size: 13px; color: #5E6573">Đang lọc:</span>
+              <sc-for list="{{ chips }}" as="c" hint-placeholder-count="2">
+                <button type="button" aria-label="Bỏ lọc {{ c }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 0; border-radius: 999px; background: #EEF0FF; color: #3730A3; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">{{ c }}<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isBrowse }}" hint-placeholder-val="{{ true }}">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px">
+              <sc-for list="{{ cards }}" as="t" hint-placeholder-count="9">
+                <article style="display: flex; flex-direction: column; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow: hidden">
+                  <div style="height: 186px; background: #F0F2F5; border-bottom: 1px solid #EEF0F3; padding: 12px 18px 0; box-sizing: border-box; overflow: hidden">
+                    <div style="height: 210px; border-radius: 8px 8px 0 0; overflow: hidden; box-shadow: 0 1px 2px rgba(21,23,28,0.08)">
+                      <dc-import name="TemplateThumb" variant="{{ t.v }}" label="Bản xem thu nhỏ: {{ t.name }}" hint-size="100%,210px"></dc-import>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 16px; flex: 1">
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px">
+                      <span style="padding: 2px 8px; border-radius: 999px; background: {{ t.srcBg }}; color: {{ t.srcFg }}; font-size: 11px; font-weight: 700">{{ t.src }}</span>
+                      <sc-if value="{{ t.form }}" hint-placeholder-val="{{ false }}"><span style="padding: 2px 8px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-size: 11px; font-weight: 600">Có form</span></sc-if>
+                    </div>
+                    <h2 style="margin: 0; font-size: 15px; font-weight: 600">{{ t.name }}</h2>
+                    <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #3C424E; flex: 1">{{ t.desc }}</p>
+                    <span style="font-size: 12px; color: #5E6573">{{ t.meta }}</span>
+                    <div style="display: flex; gap: 8px; padding-top: 4px">
+                      <a href="TemplateDetail.dc.html" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; font-size: 13px; font-weight: 600; text-decoration: none">Xem trước</a>
+                      <a href="{{ t.ctaHref }}" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 10px; background: {{ t.ctaBg }}; color: {{ t.ctaFg }}; font-size: 13px; font-weight: 600; text-decoration: none">{{ t.cta }}</a>
+                    </div>
+                  </div>
+                </article>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <div aria-busy="true" aria-label="Đang tải mẫu" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px">
+              <sc-for list="{{ skeletons }}" as="k" hint-placeholder-count="6">
+                <div style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow: hidden">
+                  <span style="height: 186px; background: #ECEEF2"></span>
+                  <span style="margin: 0 16px; width: 40%; height: 12px; border-radius: 6px; background: #ECEEF2"></span>
+                  <span style="margin: 0 16px; width: 80%; height: 12px; border-radius: 6px; background: #F0F2F5"></span>
+                  <span style="margin: 0 16px; width: 60%; height: 12px; border-radius: 6px; background: #F0F2F5"></span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; text-align: center">
+              <span style="font-size: 17px; font-weight: 600">Chưa có mẫu “Webinar” cho ngành Bất động sản</span>
+              <span style="max-width: 460px; font-size: 14px; line-height: 1.6; color: #3C424E">Thử bỏ bớt một bộ lọc, tìm trên Marketplace, hoặc mô tả trang bạn cần để AI dựng bản nháp.</span>
+              <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding-top: 6px">
+                <button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Xóa bộ lọc</button>
+                <a href="Marketplace.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Tìm trên Marketplace</a>
+                <a href="AiCreate.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none">Tạo bằng AI</a>
+              </div>
+            </div>
+          </sc-if>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["browse","loading","noResults"],"default":"browse"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'browse';
+    var SRC = {
+      sys: ['HỆ THỐNG', '#ECEEF2', '#474E5C'],
+      ws: ['WORKSPACE', '#EEF0FF', '#3730A3'],
+      owned: ['MARKETPLACE · ĐÃ SỞ HỮU', '#E2F4EA', '#0B6B45'],
+      paid: ['MARKETPLACE · TRẢ PHÍ', '#FFF1D6', '#8A5300'],
+      free: ['MARKETPLACE · MIỄN PHÍ', '#E2F4EA', '#0B6B45']
+    };
+    var T = [
+      ['Ưu đãi dịch vụ nha khoa', 'Hero ưu đãi, bác sĩ, cảm nhận khách, form đặt lịch tư vấn.', 'sys', 0, true, 'Thu lead · 7 section'],
+      ['Đặt lịch spa & làm đẹp', 'Gói liệu trình, hình trước/sau, câu hỏi thường gặp và form đặt lịch.', 'sys', 1, true, 'Thu lead · 6 section'],
+      ['Webinar trực tuyến', 'Diễn giả, nội dung buổi học, đếm ngược và form đăng ký tham dự.', 'sys', 2, true, 'Webinar · 6 section'],
+      ['Mở bán dự án căn hộ', 'Tiện ích, mặt bằng, chính sách bán hàng và form nhận bảng giá.', 'owned', 3, true, 'Thu lead · 8 section · v2'],
+      ['Thực đơn mới & đặt bàn', 'Món mới theo mùa, combo, địa chỉ và nút gọi đặt bàn.', 'ws', 4, false, 'Bán sản phẩm · 5 section · Mây Xanh'],
+      ['Khai trương phòng tập', 'Ưu đãi khai trương, lớp học, huấn luyện viên và form giữ chỗ.', 'paid', 5, true, 'Sự kiện · 7 section'],
+      ['Danh sách chờ ra mắt', 'Một thông điệp, ba lợi ích, form để lại email.', 'sys', 2, true, 'Waitlist · 4 section'],
+      ['Tư vấn niềng răng trả góp', 'Bản đã dùng cho Smile Care, gồm bảng so sánh mắc cài.', 'ws', 0, true, 'Thu lead · 7 section · Mây Xanh'],
+      ['Khóa học tiếng Anh trẻ em', 'Lộ trình học, giáo viên, cảm nhận phụ huynh và form học thử.', 'free', 2, true, 'Thu lead · 6 section']
+    ];
+    var cards = T.map(function (t) {
+      var src = SRC[t[2]];
+      var paid = t[2] === 'paid';
+      return {
+        name: t[0], desc: t[1], v: t[3], form: t[4], meta: t[5],
+        src: src[0], srcBg: src[1], srcFg: src[2],
+        cta: paid ? 'Xem trên Marketplace' : 'Dùng mẫu',
+        ctaHref: paid ? 'MarketplaceItem.dc.html' : 'TemplateDetail.dc.html',
+        ctaBg: paid ? '#FFFFFF' : '#4338CA',
+        ctaFg: paid ? '#15171C' : '#FFFFFF'
+      };
+    });
+    var empty = s === 'noResults';
+    function opts(list, onIdx) {
+      return list.map(function (x, i) { return { label: x[0], n: x[1], on: onIdx.indexOf(i) >= 0 }; });
+    }
+    var filters = [
+      { name: 'MỤC TIÊU', opts: opts([['Thu lead', 14], ['Sự kiện', 3], ['Bán sản phẩm', 4], ['Waitlist', 1], ['Webinar', 2]], empty ? [4] : []) },
+      { name: 'NGÀNH', opts: opts([['Nha khoa & y tế', 5], ['Spa & làm đẹp', 4], ['Giáo dục', 5], ['Bất động sản', 3], ['Nhà hàng & F&B', 4], ['Thể hình', 3]], empty ? [3] : []) },
+      { name: 'KHÁC', opts: opts([['Có form thu lead', 18], ['Ẩn mẫu trả phí', 3]], []) }
+    ];
+    return {
+      cards: cards, filters: filters,
+      isBrowse: s === 'browse', isLoading: s === 'loading', isEmpty: empty,
+      hasChips: empty, chips: ['Webinar', 'Bất động sản'],
+      skeletons: [1, 2, 3, 4, 5, 6],
+      query: ''
+    };
+  }
+}
+</script>
+</body>
+</html>
