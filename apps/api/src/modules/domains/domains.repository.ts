@@ -57,6 +57,17 @@ export class DomainsRepository {
     await this.domains.create([domain], { session: tx });
   }
 
+  /**
+   * Removes every domain of a site being deleted, in that transaction (ADR-027): the edge stops
+   * getting certificates for them, and another site may verify them.
+   */
+  async removeForSite(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<number> {
+    const result = await this.domains
+      .deleteMany({ workspaceId: scope.workspaceId, siteId }, { session: tx })
+      .exec();
+    return result.deletedCount;
+  }
+
   async remove(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId, tx: Tx): Promise<boolean> {
     const result = await this.domains
       .deleteOne({ _id: id, workspaceId: scope.workspaceId, siteId }, { session: tx })

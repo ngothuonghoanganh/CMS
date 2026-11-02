@@ -197,7 +197,11 @@ export class ApprovalsService {
         );
         if (!held) {
           const current = await this.pages.findById(scope, page._id, tx);
-          throw current !== null && current.draft.revision !== input.expectedRevision
+          if (current === null) {
+            // Deleted since it was read (ADR-027).
+            throw notFound(PAGE_NOT_FOUND);
+          }
+          throw current.draft.revision !== input.expectedRevision
             ? revisionConflict(current.draft.revision)
             : pointerConflict();
         }

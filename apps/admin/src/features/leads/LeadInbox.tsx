@@ -7,7 +7,7 @@ import {
   type LeadCounts,
   type LeadDetail,
   type LeadListResponse,
-  type LeadPageRef,
+  type PageRef,
   type LeadRange,
   leadRangeSchema,
   leadStatuses,
@@ -90,7 +90,7 @@ export interface LeadInboxProps {
   initialList: LeadListResponse | null;
   initialDetail: LeadDetail | null;
   /** Every page of the site, for the page filter. */
-  pageRefs: readonly LeadPageRef[];
+  pageRefs: readonly PageRef[];
   /** Counts loaded with the list, so the sidebar badge matches the inbox it opened. */
   leadCounts: LeadCounts;
   /** Open "Nơi nhận lead" right away: a publish check's "Sửa ngay" leads here (ADR-018). */

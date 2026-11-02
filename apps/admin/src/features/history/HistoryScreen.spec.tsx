@@ -782,10 +782,9 @@ describe('HistoryScreen', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alertdialog')).toBeNull();
     });
-    // "Tùy chọn khác" exists for a live page only: focus goes to "Mở editor" beside it.
-    expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+    // "Tùy chọn khác" stays: the page may now be deleted from it (ADR-027).
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
     });
   });
 
@@ -828,10 +827,11 @@ describe('HistoryScreen', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
     });
+    // The read caught up: the page is no longer live, and its menu now deletes it (ADR-027).
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+      expect(screen.getByText('Đã gỡ')).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
   });
 
   it('shows the newer page and history over what an earlier visit cached', async () => {

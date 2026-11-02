@@ -4,6 +4,7 @@ import {
   LEAD_EXPORT_MAX_ROWS,
   LEAD_PERSON_EXPORT_MAX,
   type LeadFilters,
+  pageTitleLabel,
   type PersonExportFile,
   type PersonExportRequest,
   vnDayOf,
@@ -48,7 +49,7 @@ async function* leadCsvChunks(
 ): AsyncGenerator<string> {
   let chunk = CSV_BOM + csvRecord(LEAD_CSV_HEADER);
   for await (const lead of leads) {
-    chunk += csvRecord(leadCsvFields(lead, pageTitleOf(titles, lead.pageId)));
+    chunk += csvRecord(leadCsvFields(lead, pageTitleLabel(pageTitleOf(titles, lead.pageId))));
     if (chunk.length >= CSV_CHUNK) {
       yield chunk;
       chunk = '';
@@ -157,7 +158,7 @@ export class LeadExportService {
       const rows = included.map((item) => {
         const capture = consentOf(captures, item);
         return csvRecord(
-          personCsvFields(item, pageTitleOf(titles, item.pageId), {
+          personCsvFields(item, pageTitleLabel(pageTitleOf(titles, item.pageId)), {
             version: capture.consentVersion,
             requiredText: capture.requiredText,
           }),
@@ -177,7 +178,11 @@ export class LeadExportService {
       exportedAt: now.toISOString(),
       site: site.name,
       leads: included.map((item) =>
-        toPersonExportLead(item, pageTitleOf(titles, item.pageId), consentOf(captures, item)),
+        toPersonExportLead(
+          item,
+          pageTitleLabel(pageTitleOf(titles, item.pageId)),
+          consentOf(captures, item),
+        ),
       ),
     };
     return {

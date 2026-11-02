@@ -16,6 +16,8 @@ export interface ActivityData {
   toReleaseId: Types.ObjectId | null;
   /** How many leads an export or a deletion covered; never what they contained (rule 10). */
   count: number | null;
+  /** The draft slug of a page when it was deleted (`page.deleted`, ADR-027). */
+  slug: string | null;
   /** Set after the commit when the renderer could not be revalidated (ADR-009). */
   revalidationFailed: boolean;
 }
@@ -27,6 +29,7 @@ export const EMPTY_ACTIVITY_DATA: ActivityData = {
   fromReleaseId: null,
   toReleaseId: null,
   count: null,
+  slug: null,
   revalidationFailed: false,
 };
 
@@ -63,6 +66,7 @@ const activitySchema = new Schema<ActivityRecord>(
       fromReleaseId: { type: Schema.Types.ObjectId, default: null },
       toReleaseId: { type: Schema.Types.ObjectId, default: null },
       count: { type: Number, default: null },
+      slug: { type: String, default: null },
       revalidationFailed: { type: Boolean, default: false },
     },
     reason: { type: String, default: null },

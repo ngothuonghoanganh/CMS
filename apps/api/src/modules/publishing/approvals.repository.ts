@@ -124,6 +124,18 @@ export class ApprovalsRepository {
       .exec();
   }
 
+  /** Removes every request to publish a page, in the transaction that deletes it (ADR-027). */
+  async deleteForPage(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    pageId: ObjectId,
+    tx: Tx,
+  ): Promise<void> {
+    await this.approvals(scope)
+      .deleteMany({ workspaceId: scope.workspaceId, siteId, pageId }, { session: tx })
+      .exec();
+  }
+
   /**
    * The latest request of each page, keyed by page id: one aggregation for a whole list. A pending
    * request comes first whatever its `createdAt`, an instance's clock that may run ahead of others.

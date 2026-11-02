@@ -6,6 +6,7 @@ import {
   endpoints,
   formatLeadPhone,
   LEAD_PERSON_EXPORT_MAX,
+  pageTitleLabel,
   type PersonExportRequest,
 } from '@plp/contracts';
 import {
@@ -246,7 +247,7 @@ export function DataRequestDialog({
                     <span>{formatLeadPhone(match.phone)}</span>
                     {match.email === null ? null : <span>{match.email}</span>}
                     <span className={styles.sub}>
-                      {`${match.page.title} · ${formatDate(match.createdAt)}`}
+                      {`${pageTitleLabel(match.page.title)} · ${formatDate(match.createdAt)}`}
                     </span>
                     {request.type === 'withdraw_marketing' ? (
                       <span className={styles.sub}>{matchMarketing(match)}</span>

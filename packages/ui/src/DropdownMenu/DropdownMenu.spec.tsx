@@ -98,6 +98,31 @@ describe('DropdownMenu', () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
+  it('says under a disabled item why, in its name, and does not run it', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <DropdownMenu trigger={<button type="button">Tùy chọn khác</button>}>
+        <DropdownMenuItem>Lịch sử phiên bản</DropdownMenuItem>
+        <DropdownMenuItem
+          tone="danger"
+          icon={<TrashIcon size={16} />}
+          disabled
+          description="Gỡ xuất bản trước khi xóa"
+          onSelect={onDelete}
+        >
+          Xóa trang
+        </DropdownMenuItem>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    // Everything visible is in the name (WCAG 2.5.3).
+    const item = screen.getByRole('menuitem', { name: 'Xóa trang Gỡ xuất bản trước khi xóa' });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    await user.click(item);
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it('marks the current choice in a radio group', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

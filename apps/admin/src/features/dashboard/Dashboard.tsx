@@ -34,7 +34,7 @@ import {
 } from '@tanstack/react-query';
 import Link from 'next/link';
 import { internalVisitUrl } from '../../lib/site-url';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { leadRecipientsHref, newPageHref, privacyHref, siteHref } from '../shell/navigation';
@@ -52,6 +52,7 @@ import {
   statusFilterOptions,
   type StatusFilterValue,
 } from './filters';
+import { type DeletablePage, DeletePageDialog } from './DeletePageDialog';
 import { PageTable } from './PageTable';
 import { PAGE_LIST_LIMIT, RECENT_ACTIVITY_QUERY, siteQueryKeys } from './queries';
 import { RecentActivity } from './RecentActivity';
@@ -104,6 +105,10 @@ export function Dashboard({
 
   const [unpublishTarget, setUnpublishTarget] = useState<UnpublishablePage | null>(null);
   const [unpublishOpen, setUnpublishOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DeletablePage | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  // A deleted page's row, and the menu that opened the dialog, go: focus lands on the search.
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // The URL mirrors the filters so a reload or a shared link keeps them. Replacing the entry
   // (rather than navigating) keeps the server from rendering the page again.
@@ -281,6 +286,7 @@ export function Dashboard({
           />
           <Field label="Tìm trang" hideLabel id="page-search" className={styles.search}>
             <Input
+              ref={searchRef}
               type="search"
               leadingIcon={<SearchIcon size={16} />}
               placeholder="Tìm theo tên hoặc đường dẫn"
@@ -366,6 +372,10 @@ export function Dashboard({
                 setUnpublishTarget(page);
                 setUnpublishOpen(true);
               }}
+              onDelete={(page) => {
+                setDeleteTarget(page);
+                setDeleteOpen(true);
+              }}
             />
           </div>
         )}
@@ -397,6 +407,15 @@ export function Dashboard({
           page={unpublishTarget}
           open={unpublishOpen}
           onOpenChange={setUnpublishOpen}
+        />
+      )}
+      {deleteTarget === null ? null : (
+        <DeletePageDialog
+          key={deleteTarget.id}
+          page={deleteTarget}
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          fallbackFocusRef={searchRef}
         />
       )}
     </PageContainer>

@@ -173,8 +173,24 @@ export const leadSearchRequestSchema = z
   .superRefine(checkCustomRange);
 export type LeadSearchRequest = z.input<typeof leadSearchRequestSchema>;
 
-export const leadPageRefSchema = z.object({ id: idSchema, title: z.string() });
+/** A page of the site: the page filters of the lead inbox and of "Hiệu quả". */
+export const pageRefSchema = z.object({ id: idSchema, title: z.string() });
+export type PageRef = z.infer<typeof pageRefSchema>;
+
+/**
+ * The page a lead, a row of "Hiệu quả" or a person's lead came from. A page can be deleted while
+ * its leads and numbers stay (ADR-027): its `title` is then null, written `DELETED_PAGE_LABEL`.
+ */
+export const leadPageRefSchema = z.object({ id: idSchema, title: z.string().nullable() });
 export type LeadPageRef = z.infer<typeof leadPageRefSchema>;
+
+/** Where a page that no longer exists is named: the inbox, "Hiệu quả", files and emails. */
+export const DELETED_PAGE_LABEL = 'Trang đã xóa';
+
+/** The title of a page, or `DELETED_PAGE_LABEL` for a deleted one. */
+export function pageTitleLabel(title: string | null): string {
+  return title ?? DELETED_PAGE_LABEL;
+}
 
 export const leadListItemSchema = z.object({
   id: idSchema,
@@ -286,7 +302,7 @@ export const personDeleteResponseSchema = z.object({
 });
 export type PersonDeleteResponse = z.infer<typeof personDeleteResponseSchema>;
 
-export const pageRefListResponseSchema = z.object({ items: z.array(leadPageRefSchema) });
+export const pageRefListResponseSchema = z.object({ items: z.array(pageRefSchema) });
 export type PageRefListResponse = z.infer<typeof pageRefListResponseSchema>;
 
 /**

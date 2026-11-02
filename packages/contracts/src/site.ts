@@ -100,6 +100,32 @@ export const updateSiteRequestSchema = z
   .refine((value) => Object.keys(value).length > 0, 'Không có thay đổi nào để lưu');
 export type UpdateSiteRequest = z.infer<typeof updateSiteRequestSchema>;
 
+/**
+ * Body of `DELETE /sites/:siteId` (ADR-027): the site's name typed again. `siteNameConfirms` says
+ * whether it matches.
+ */
+export const deleteSiteRequestSchema = z.object({ confirmName: z.string().trim().max(80) });
+export type DeleteSiteRequest = z.infer<typeof deleteSiteRequestSchema>;
+
+/**
+ * Whether a typed name is the site's name. Both are compared in Unicode NFC, so "ệ" typed as one
+ * character or as "e" with combining marks matches the same name.
+ */
+export function siteNameConfirms(typed: string, siteName: string): boolean {
+  return typed.trim().normalize('NFC') === siteName.trim().normalize('NFC');
+}
+
+/** What deleting a site removes, for the card "Xóa site" of the site settings (ADR-027). */
+export const siteDeletionSummarySchema = z.object({
+  pages: z.number().int().nonnegative(),
+  livePages: z.number().int().nonnegative(),
+  /** Every lead of the site, spam included. */
+  leads: z.number().int().nonnegative(),
+  /** Hostnames of the site's custom domains (at most 5, ADR-022), oldest first. */
+  domains: z.array(z.string()),
+});
+export type SiteDeletionSummary = z.infer<typeof siteDeletionSummarySchema>;
+
 export const subdomainAvailabilityQuerySchema = z.object({ subdomain: z.string().max(100) });
 
 export const subdomainAvailabilitySchema = z.object({

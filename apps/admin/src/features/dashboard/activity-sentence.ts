@@ -11,8 +11,15 @@ export interface ActivitySentence {
   tone: ActivityTone;
 }
 
+/**
+ * The page's title as it was then. An earlier event of a page deleted since says so (ADR-027);
+ * the deletion itself does already.
+ */
 function quoted(item: ActivityItem): string {
-  return `“${item.page?.title ?? 'một trang'}”`;
+  const title = `“${item.page?.title ?? 'một trang'}”`;
+  return item.page?.deleted === true && item.type !== 'page.deleted'
+    ? `${title} (trang đã xóa)`
+    : title;
 }
 
 function versionLabel(version: number | null): string {
@@ -44,6 +51,8 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
       return { text: `gỡ xuất bản ${quoted(item)}`, tone: 'muted' };
     case 'page.created':
       return { text: `tạo trang ${quoted(item)}`, tone: 'primary' };
+    case 'page.deleted':
+      return { text: `xóa trang ${quoted(item)}`, tone: 'muted' };
     case 'page.draft_restored':
       return {
         text: `sao chép ${versionLabel(data.version)}vào bản nháp của ${quoted(item)}`,

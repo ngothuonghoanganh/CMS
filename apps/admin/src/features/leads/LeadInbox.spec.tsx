@@ -294,6 +294,19 @@ describe('LeadInbox', () => {
     ).toBeInTheDocument();
   });
 
+  it('names the page of a lead "Trang đã xóa" once the page was deleted (ADR-027)', async () => {
+    const gone = { id: '64b000000000000000000109', title: null };
+    renderInbox({
+      list: leadList([leadItem({ page: gone })]),
+      details: [leadDetail({ page: gone })],
+    });
+
+    expect(within(row('Nguyễn Thu Hà')).getByText('Trang đã xóa')).toBeInTheDocument();
+    const { panel } = await openLead();
+    expect(within(panel).getByText('Trang đã xóa')).toBeInTheDocument();
+    expect(within(panel).getByText('· v12')).toBeInTheDocument();
+  });
+
   it('changes the status and saves a note, then refreshes the list and the counts', async () => {
     const { queryClient } = renderInbox();
     const { user, panel } = await openLead();

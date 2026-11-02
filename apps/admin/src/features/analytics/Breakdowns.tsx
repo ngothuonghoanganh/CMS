@@ -1,4 +1,4 @@
-import { type AnalyticsReport, analyticsSourceLabel } from '@plp/contracts';
+import { type AnalyticsReport, analyticsSourceLabel, pageTitleLabel } from '@plp/contracts';
 import { Card, VisuallyHidden } from '@plp/ui';
 import { useId } from 'react';
 import { conversionRate, formatCount } from './analytics-presentation';
@@ -65,8 +65,8 @@ export function PageBreakdown({ pages }: { pages: AnalyticsReport['pages'] }) {
         <ul className={styles.pageList}>
           {pages.map((row) => (
             <li key={row.page.id} className={styles.pageRow}>
-              <span className={styles.pageTitle} title={row.page.title}>
-                {row.page.title}
+              <span className={styles.pageTitle} title={pageTitleLabel(row.page.title)}>
+                {pageTitleLabel(row.page.title)}
               </span>
               <span className={styles.pageNumbers}>
                 {`${formatCount(row.leads)} lead · `}

@@ -16,10 +16,10 @@ export interface RecentActivityProps {
 /**
  * "Hoạt động xuất bản gần đây": the latest activity of the site, newest first. As on board 01 it
  * ends with "Xem lịch sử phiên bản →", which opens the history of the page that changed last
- * (history is kept per page).
+ * (history is kept per page), among the pages that still exist (ADR-027).
  */
 export function RecentActivity({ siteId, items, now }: RecentActivityProps) {
-  const latestPage = items.find((item) => item.page !== null)?.page ?? null;
+  const latestPage = items.find((item) => item.page !== null && !item.page.deleted)?.page ?? null;
   return (
     <Card as="section" aria-labelledby="activity-heading" className={styles.card}>
       <h2 id="activity-heading" className={styles.heading}>

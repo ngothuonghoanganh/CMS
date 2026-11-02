@@ -9,6 +9,7 @@ export const activityTypes = [
   'page.rollback_undone',
   'page.unpublished',
   'page.draft_restored',
+  'page.deleted',
   'asset.uploaded',
   'privacy.updated',
   'consent.version_created',
@@ -52,18 +53,23 @@ export const activityItemSchema = z.object({
   type: activityTypeSchema,
   actor: userRefSchema,
   siteId: idSchema,
-  page: z.object({ id: idSchema, title: z.string() }).nullable(),
+  /**
+   * The page the event is about, with its title then. `deleted`: the page was deleted since
+   * (ADR-027), so nothing links to it.
+   */
+  page: z.object({ id: idSchema, title: z.string(), deleted: z.boolean() }).nullable(),
   /**
    * Versions involved: `version` for publish/restore and for a new consent text version,
    * `from`/`to` for pointer moves. `count` is how many leads an export, a deletion or a completed
    * data request covered, or how many addresses receive leads after a change; activity never holds
-   * personal data (rule 10).
+   * personal data (rule 10). `slug` is the address a deleted page had (`page.deleted`).
    */
   data: z.object({
     version: z.number().int().positive().nullable(),
     fromVersion: z.number().int().positive().nullable(),
     toVersion: z.number().int().positive().nullable(),
     count: z.number().int().nonnegative().nullable(),
+    slug: z.string().nullable(),
     revalidationFailed: z.boolean(),
   }),
   reason: z.string().nullable(),

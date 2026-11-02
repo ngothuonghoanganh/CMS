@@ -1,0 +1,20 @@
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 20px;
+}
+
+.heading {
+  margin: 0 0 4px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--text-body-sm);
+  line-height: 1.6;
+  color: var(--color-ink-2);
+}

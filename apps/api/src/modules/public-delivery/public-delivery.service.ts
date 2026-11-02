@@ -251,7 +251,7 @@ export class PublicDeliveryService {
       });
     }
     const release = await this.releases.findPublicById(site, toObjectId(claims.releaseId));
-    if (!release?.siteId.equals(site._id)) {
+    if (!release?.siteId.equals(site._id) || !(await this.pageInSite(site, release.pageId))) {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
     return publicPreviewResponseSchema.parse({
@@ -267,11 +267,17 @@ export class PublicDeliveryService {
    */
   async previewStatus(token: string): Promise<PublicPreviewStatusResponse> {
     const { claims, site } = await this.previewSite(token);
-    const siteId =
-      claims.kind === 'draft'
-        ? (await this.pages.findPublicById(site, toObjectId(claims.pageId)))?.siteId
-        : await this.releases.findPublicSiteId(site, toObjectId(claims.releaseId));
-    if (!siteId?.equals(site._id)) {
+    let opens: boolean;
+    if (claims.kind === 'draft') {
+      opens = await this.pageInSite(site, toObjectId(claims.pageId));
+    } else {
+      const release = await this.releases.findPublicOwner(site, toObjectId(claims.releaseId));
+      opens =
+        release !== null &&
+        release.siteId.equals(site._id) &&
+        (await this.pageInSite(site, release.pageId));
+    }
+    if (!opens) {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
     return publicPreviewStatusResponseSchema.parse({
@@ -298,6 +304,15 @@ export class PublicDeliveryService {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
     return { claims, site };
+  }
+
+  /**
+   * Whether the page still exists in the site. A version leads keep after their page was deleted
+   * stays in the database as consent evidence, and is never shown again, not even in a preview
+   * signed before (ADR-027).
+   */
+  private async pageInSite(site: SiteRecord, pageId: ObjectId): Promise<boolean> {
+    return (await this.pages.findPublicSiteId(site, pageId))?.equals(site._id) ?? false;
   }
 
   private async siteOrNotFound(subdomain: string): Promise<SiteRecord> {

@@ -16,6 +16,7 @@ import {
   MoreHorizontalIcon,
   SearchIcon,
   StatusBadge,
+  TrashIcon,
   VisuallyHidden,
   WarningTriangleIcon,
 } from '@plp/ui';
@@ -26,6 +27,7 @@ import type { DateInput } from '../../lib/format';
 import { internalVisitUrl, slugPath } from '../../lib/site-url';
 import { cx } from '../shell/cx';
 import { openPageHref, pageHref } from '../shell/navigation';
+import { type DeletablePage, deletable, UNPUBLISH_BEFORE_DELETE } from './DeletePageDialog';
 import { type ChecksTone, presentPageStatus } from './status-presentation';
 import { type UnpublishablePage, unpublishable } from './UnpublishDialog';
 import styles from './PageTable.module.css';
@@ -45,12 +47,14 @@ export interface PageTableProps {
   thumbnailColor: string;
   /** The user edits pages: rows open the editor and offer "SEO & chia sẻ" (ADR-020). */
   canEdit: boolean;
-  /** The user takes pages off the live site: rows offer "Gỡ xuất bản". */
+  /** The user takes pages off the live site: rows offer "Gỡ xuất bản" and "Xóa trang". */
   canManageLive: boolean;
   /** The user sees leads, and so "LEAD 7 NGÀY" (ADR-020). */
   canViewLeads: boolean;
   /** Opens the unpublish dialog; focus returns to the row's menu button when it closes. */
   onUnpublish: (page: UnpublishablePage) => void;
+  /** Opens "Xóa trang" for a page that is not live (ADR-027). */
+  onDelete: (page: DeletablePage) => void;
 }
 
 function RowActions({
@@ -59,12 +63,14 @@ function RowActions({
   canEdit,
   canManageLive,
   onUnpublish,
+  onDelete,
 }: {
   siteId: string;
   page: PageSummary;
   canEdit: boolean;
   canManageLive: boolean;
   onUnpublish: PageTableProps['onUnpublish'];
+  onDelete: PageTableProps['onDelete'];
 }) {
   const router = useRouter();
   const live = canManageLive ? unpublishable(page) : null;
@@ -110,20 +116,31 @@ function RowActions({
         >
           Lịch sử phiên bản
         </DropdownMenuItem>
+        {canManageLive ? <DropdownMenuSeparator /> : null}
         {live === null ? null : (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              tone="danger"
-              icon={<EyeOffIcon size={18} />}
-              onSelect={() => {
-                onUnpublish(live);
-              }}
-            >
-              Gỡ xuất bản
-            </DropdownMenuItem>
-          </>
+          <DropdownMenuItem
+            tone="danger"
+            icon={<EyeOffIcon size={18} />}
+            onSelect={() => {
+              onUnpublish(live);
+            }}
+          >
+            Gỡ xuất bản
+          </DropdownMenuItem>
         )}
+        {canManageLive ? (
+          <DropdownMenuItem
+            tone="danger"
+            icon={<TrashIcon size={18} />}
+            disabled={!deletable(page)}
+            description={deletable(page) ? undefined : UNPUBLISH_BEFORE_DELETE}
+            onSelect={() => {
+              onDelete(page);
+            }}
+          >
+            Xóa trang
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenu>
     </div>
   );
@@ -147,6 +164,7 @@ export function PageTable({
   canManageLive,
   canViewLeads,
   onUnpublish,
+  onDelete,
 }: PageTableProps) {
   return (
     <table className={styles.table}>
@@ -234,6 +252,7 @@ export function PageTable({
                   canEdit={canEdit}
                   canManageLive={canManageLive}
                   onUnpublish={onUnpublish}
+                  onDelete={onDelete}
                 />
               </td>
             </tr>

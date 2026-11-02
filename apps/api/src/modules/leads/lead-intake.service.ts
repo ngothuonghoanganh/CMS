@@ -155,7 +155,15 @@ export class LeadIntakeService {
     // The owner may have changed the retention period since the site was read above. Settings
     // commit before they recompute every lead, so either that recompute covers this lead or this
     // read sees the new period (ADR-017).
-    const latest = retentionOf(await this.sites.findPublicPrivacy(site, site._id));
+    const current = await this.sites.findPublicPrivacy(site, site._id);
+    if (current === null) {
+      // The site was deleted meanwhile (ADR-027). The deletion sweeps the site's leads again after
+      // its commit, which covers a lead stored while this read still saw the site; this lead may
+      // have come after that sweep.
+      await this.leads.deletePublic(site, site._id, stored._id);
+      throw notFound(FORM_NOT_FOUND);
+    }
+    const latest = retentionOf(current.privacy);
     if (latest !== retention) {
       await this.leads.setPublicExpiry(
         site,
