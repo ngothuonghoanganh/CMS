@@ -115,7 +115,7 @@ test.describe('B3 · lead inbox', () => {
     );
     const exported = personExportFileSchema.parse(JSON.parse(json.text));
     expect(exported.leads.map((lead) => lead.name)).toEqual(['Nguyễn Thu Hà']);
-    expect(exported.leads[0]?.consent.requiredText).toBe(FILLED_CONSENT);
+    expect(exported.leads[0]?.consent.snapshot?.requiredText).toBe(FILLED_CONSENT);
 
     await person.getByRole('button', { name: 'Xóa dữ liệu người này' }).click();
     const confirm = page.getByRole('alertdialog', { name: 'Xóa dữ liệu của Nguyễn Thu Hà?' });

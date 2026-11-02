@@ -169,7 +169,8 @@ export class ReleasesRepository {
 
   /**
    * The site and page of a release, without its content: a signed preview's check (ADR-010), which
-   * also needs the page to exist (ADR-027).
+   * also needs the page to exist, and lead intake's check that a page deletion did not take the
+   * release of a lead just stored (ADR-027).
    */
   findPublicOwner(
     ref: WorkspaceRef,

@@ -1,4 +1,5 @@
 import {
+  CONSENT_SNAPSHOT_MISSING_LABEL,
   formatLeadPhone,
   leadDeviceLabels,
   leadSourceLabel,
@@ -81,15 +82,16 @@ export const PERSON_CSV_HEADER = [
   'Nội dung đồng ý',
 ] as const;
 
+/** `consent` is null when the lead's release is gone: the text column says so (ADR-027). */
 export function personCsvFields(
   lead: CsvLead,
   pageTitle: string,
-  consent: { version: number; requiredText: string },
+  consent: { version: number; requiredText: string } | null,
 ): string[] {
   return [
     ...leadCsvFields(lead, pageTitle),
     vnDateTimeOf(lead.consent.at),
-    String(consent.version),
-    consent.requiredText,
+    consent === null ? '' : String(consent.version),
+    consent === null ? CONSENT_SNAPSHOT_MISSING_LABEL : consent.requiredText,
   ];
 }

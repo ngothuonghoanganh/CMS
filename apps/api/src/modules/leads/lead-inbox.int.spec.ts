@@ -344,11 +344,13 @@ describe('lead inbox', () => {
       note: '',
       spam: { suspected: false, reasons: [] },
       consent: {
-        version: 1,
-        controllerName: PRIVACY_SETTINGS.controllerName,
-        policyUrl: PRIVACY_SETTINGS.policyUrl,
-        requiredText: `Tôi đồng ý để ${PRIVACY_SETTINGS.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`,
-        marketingText: 'Nhận thông tin ưu đãi qua Zalo hoặc SMS (không bắt buộc)',
+        snapshot: {
+          version: 1,
+          controllerName: PRIVACY_SETTINGS.controllerName,
+          policyUrl: PRIVACY_SETTINGS.policyUrl,
+          requiredText: `Tôi đồng ý để ${PRIVACY_SETTINGS.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`,
+          marketingText: 'Nhận thông tin ưu đãi qua Zalo hoặc SMS (không bắt buộc)',
+        },
         marketing: true,
         marketingWithdrawnAt: null,
       },
@@ -362,12 +364,15 @@ describe('lead inbox', () => {
     const republished = await publish(owner, site.id, pageId);
     await send(site, republished.release.id, { name: 'Võ Ngọc Trâm', phone: '0703 285 664' });
     const newer = await detail(site, leadIdOf(await inbox(site), 'Võ Ngọc Trâm'));
-    expect(newer.consent).toMatchObject({
+    expect(newer.consent.snapshot).toMatchObject({
       version: 2,
       requiredText: `Bản 2 của ${PRIVACY_SETTINGS.controllerName}.`,
     });
     expect(newer.releaseVersion).toBe(3);
-    expect(await detail(site, first)).toMatchObject({ releaseVersion: 2, consent: { version: 1 } });
+    expect(await detail(site, first)).toMatchObject({
+      releaseVersion: 2,
+      consent: { snapshot: { version: 1 } },
+    });
   });
 
   it('answers a lead with no-store, as every response holding personal data', async () => {

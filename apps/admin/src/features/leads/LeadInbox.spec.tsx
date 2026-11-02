@@ -1,4 +1,5 @@
 import {
+  CONSENT_SNAPSHOT_MISSING_LABEL,
   endpoints,
   type LeadCounts,
   type LeadDetail,
@@ -305,6 +306,26 @@ describe('LeadInbox', () => {
     const { panel } = await openLead();
     expect(within(panel).getByText('Trang đã xóa')).toBeInTheDocument();
     expect(within(panel).getByText('· v12')).toBeInTheDocument();
+  });
+
+  it('says the consent texts are gone when the page was deleted as the form was sent', async () => {
+    const gone = { id: '64b000000000000000000109', title: null };
+    const consent = leadDetail().consent;
+    renderInbox({
+      list: leadList([leadItem({ page: gone })]),
+      details: [
+        leadDetail({ page: gone, consent: { ...consent, snapshot: null, marketing: true } }),
+      ],
+    });
+
+    const { panel } = await openLead();
+    expect(within(panel).getByText('Đồng ý xử lý dữ liệu')).toBeInTheDocument();
+    // The visitor ticked it, so the form had the marketing checkbox.
+    expect(within(panel).getByText('Chọn nhận ưu đãi')).toBeInTheDocument();
+    expect(
+      within(panel).getByText(`${CONSENT_SNAPSHOT_MISSING_LABEL} · lúc 16:42:07`),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Xem nội dung' })).toBeNull();
   });
 
   it('changes the status and saves a note, then refreshes the list and the counts', async () => {

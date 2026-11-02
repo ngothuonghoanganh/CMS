@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     include: ['src/**/*.int.spec.ts'],
-    setupFiles: ['test/load-env.ts'],
+    setupFiles: ['test/load-env.ts', 'test/mongoose-warnings.ts'],
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },

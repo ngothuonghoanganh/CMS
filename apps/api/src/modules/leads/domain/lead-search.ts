@@ -1,16 +1,4 @@
-/** Lowercase, without Vietnamese accents, spaces collapsed: "Nguyễn  Thu Hà" → "nguyen thu ha". */
-export function foldVietnamese(text: string): string {
-  return (
-    text
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      // "đ" has no decomposed form.
-      .replace(/[đĐ]/g, 'd')
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .trim()
-  );
-}
+import { foldVietnamese } from '@plp/contracts';
 
 /** What inbox search matches on (ADR-018), stored with each lead and indexed. */
 export interface LeadSearchKeys {

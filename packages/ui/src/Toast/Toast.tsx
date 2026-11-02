@@ -22,6 +22,7 @@ import {
 } from '../icons';
 import { cx } from '../internal/cx';
 import { hasContent } from '../internal/hasContent';
+import { VisuallyHidden } from '../VisuallyHidden/VisuallyHidden';
 import { type ToastPlacement, toastPlacement } from './placement';
 import styles from './Toast.module.css';
 
@@ -62,6 +63,18 @@ interface ToastRecord extends ToastOptions {
 const MAX_VISIBLE = 3;
 const DEFAULT_DURATION = 5000;
 const ACTION_DURATION = 8000;
+
+/** Text that ends a sentence, maybe inside closing quotes or brackets: "Đã gửi.", "“Ưu đãi!”". */
+const SENTENCE_END = /[.!?…:;]["'”’»)\]]*\s*$/u;
+
+/**
+ * What separates two parts of a toast when it is announced. Radix reads the title, description and
+ * action's text as one run, so without it "…răng”" runs into "Lead đã…". The separator is for
+ * assistive technology only; text that already ends a sentence needs just a space.
+ */
+function sentenceBreak(previous: ReactNode): string {
+  return typeof previous === 'string' && SENTENCE_END.test(previous) ? ' ' : '. ';
+}
 
 const toneIcons: Record<ToastTone, ReactNode> = {
   neutral: <InfoCircleIcon size={18} />,
@@ -197,9 +210,18 @@ export function ToastProvider({ children }: ToastProviderProps) {
               <div className={styles.content}>
                 <RadixToast.Title className={styles.title}>{item.title}</RadixToast.Title>
                 {hasDescription ? (
-                  <RadixToast.Description className={styles.description}>
-                    {item.description}
-                  </RadixToast.Description>
+                  <>
+                    <VisuallyHidden>{sentenceBreak(item.title)}</VisuallyHidden>
+                    <RadixToast.Description className={styles.description}>
+                      {item.description}
+                    </RadixToast.Description>
+                  </>
+                ) : null}
+                {item.action ? (
+                  // The action's text is announced next.
+                  <VisuallyHidden>
+                    {sentenceBreak(hasDescription ? item.description : item.title)}
+                  </VisuallyHidden>
                 ) : null}
               </div>
               {item.action ? (

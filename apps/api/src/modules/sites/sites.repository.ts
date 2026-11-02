@@ -412,7 +412,7 @@ export class SitesRepository {
       .findOneAndUpdate(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $set: { primaryDomain: primary, updatedAt: new Date() } },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<SiteRecord>()
       .exec();

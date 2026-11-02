@@ -8,8 +8,9 @@ import {
   type SectionType,
   sectionTypes,
 } from '@plp/contracts';
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { FieldDescriptor, LeafField } from '../schema/define.js';
 import { setAtPath } from '../schema/paths.js';
 import { collectLeaves, createSectionInstance, getSectionDefinition } from '../schema/registry.js';
@@ -162,6 +163,15 @@ describe('section components', () => {
     expect(edit).not.toContain('<a ');
   });
 
+  it('has a component for every section type', () => {
+    // The result leaves out `undefined`: a switch that misses a type falls off its end, which
+    // fails to compile.
+    expectTypeOf(renderSectionContent).returns.toEqualTypeOf<ReactElement | null>();
+    for (const type of sectionTypes) {
+      expect(renderSectionContent(section(type), liveCtx()), type).not.toBeNull();
+    }
+  });
+
   it.each(variants)(
     'omits empty optional texts and unused buttons of $type · $variant in live mode',
     ({ type, variant }) => {
@@ -239,9 +249,10 @@ describe('section components', () => {
         expect(mediaFirst).toContain(expectedClass);
         expect(auto).not.toContain(expectedClass);
       } else {
-        // Without media (or with a background image behind the text) there is nothing to reorder.
+        // Without media (or with a background image behind the text) there is nothing to reorder,
+        // so the editor does not offer the setting (`hasMedia`).
         expect(mediaFirst).toBe(auto);
-        expect(info.hasMedia && variant !== 'background').toBe(false);
+        expect(info.hasMedia, `${type}:${variant}`).toBe(false);
       }
     }
   });

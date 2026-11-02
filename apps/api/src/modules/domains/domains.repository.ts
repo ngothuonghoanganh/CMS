@@ -90,7 +90,7 @@ export class DomainsRepository {
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, siteId, verifiedAt: { $type: 'date' } },
         { $set: { primarySetAt: now } },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<DomainRecord>()
       .exec();
@@ -138,7 +138,7 @@ export class DomainsRepository {
       .findOneAndUpdate(
         { nextCheckAt: { $lte: now } },
         { $set: { nextCheckAt: new Date(now.getTime() + leaseMs) } },
-        { sort: { nextCheckAt: 1 }, new: true },
+        { sort: { nextCheckAt: 1 }, returnDocument: 'after' },
       )
       .lean<DomainRecord>()
       .exec();
@@ -150,7 +150,7 @@ export class DomainsRepository {
       .findOneAndUpdate(
         { _id: id },
         { $set: lost ? fields : { ...fields, lostSince: null } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<DomainRecord>()
       .exec();

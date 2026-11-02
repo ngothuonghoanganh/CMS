@@ -247,7 +247,7 @@ export class WorkspacesRepository {
       .findOneAndUpdate(
         { workspaceId: scope.workspaceId, userId, role: { $ne: 'owner' } },
         { $set: { role: grant.role, customRoleId: grant.customRoleId, siteIds: grant.siteIds } },
-        { new: true, ...(tx ? { session: tx } : {}) },
+        { returnDocument: 'after', ...(tx ? { session: tx } : {}) },
       )
       .lean<MembershipRecord>()
       .exec();

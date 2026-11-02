@@ -33,14 +33,21 @@ export function pageTitleOf(titles: ReadonlyMap<string, string>, pageId: ObjectI
 }
 
 /**
- * The consent snapshot of a lead's release (ADR-017). Intake only accepts forms whose release has
- * one, and releases are immutable, so a missing one means the data was edited by hand.
+ * The consent snapshot of a lead's release (ADR-017); null when the release is gone. A page
+ * deletion keeps the releases leads refer to, but one that read them just before a lead was stored
+ * took that lead's release along (ADR-027): the lead then shows its evidence as missing instead of
+ * failing every read. Intake only accepts forms whose release has a snapshot, and releases are
+ * immutable, so a release without one means the data was edited by hand.
  */
 export function consentOf(
   captures: ReadonlyMap<string, { leadCapture?: LeadCapture | null }>,
   lead: Pick<LeadRecord, '_id' | 'releaseId'>,
-): LeadCapture {
-  const capture = captures.get(lead.releaseId.toHexString())?.leadCapture ?? null;
+): LeadCapture | null {
+  const release = captures.get(lead.releaseId.toHexString());
+  if (release === undefined) {
+    return null;
+  }
+  const capture = release.leadCapture ?? null;
   if (capture === null) {
     throw new Error(
       `Lead ${lead._id.toHexString()} has no consent snapshot in release ${lead.releaseId.toHexString()}`,
@@ -80,21 +87,27 @@ function toNotification(notification: LeadRecord['notification']): LeadDetail['n
 export interface LeadDetailInput {
   /** Null when the page was deleted (ADR-027). */
   pageTitle: string | null;
-  capture: LeadCapture;
+  /** Null when the lead's release is gone (`consentOf`). */
+  capture: LeadCapture | null;
   personLeads: CappedCount;
 }
 
 function consentEvidence(
   lead: LeadRecord,
-  capture: LeadCapture,
+  capture: LeadCapture | null,
 ): LeadDetail['consent'] & PersonExportFile['leads'][number]['consent'] {
   return {
     at: lead.consent.at.toISOString(),
-    version: capture.consentVersion,
-    controllerName: capture.controllerName,
-    policyUrl: capture.policyUrl,
-    requiredText: capture.requiredText,
-    marketingText: capture.marketingText,
+    snapshot:
+      capture === null
+        ? null
+        : {
+            version: capture.consentVersion,
+            controllerName: capture.controllerName,
+            policyUrl: capture.policyUrl,
+            requiredText: capture.requiredText,
+            marketingText: capture.marketingText,
+          },
     marketing: lead.consent.marketing,
     marketingWithdrawnAt: lead.consent.marketingWithdrawnAt?.toISOString() ?? null,
   };
@@ -126,7 +139,7 @@ export function toLeadDetail(lead: LeadRecord, input: LeadDetailInput): LeadDeta
 export function toPersonExportLead(
   lead: LeadRecord,
   pageTitle: string,
-  capture: LeadCapture,
+  capture: LeadCapture | null,
 ): PersonExportFile['leads'][number] {
   return {
     createdAt: lead.createdAt.toISOString(),

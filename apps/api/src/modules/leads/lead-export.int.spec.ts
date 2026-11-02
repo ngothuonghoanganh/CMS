@@ -236,10 +236,12 @@ describe('lead exports and a person’s data', () => {
       device: 'Máy tính',
       status: 'Mới',
       consent: {
-        version: 1,
-        controllerName: PRIVACY_SETTINGS.controllerName,
-        policyUrl: PRIVACY_SETTINGS.policyUrl,
-        requiredText: `Tôi đồng ý để ${PRIVACY_SETTINGS.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`,
+        snapshot: {
+          version: 1,
+          controllerName: PRIVACY_SETTINGS.controllerName,
+          policyUrl: PRIVACY_SETTINGS.policyUrl,
+          requiredText: `Tôi đồng ý để ${PRIVACY_SETTINGS.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`,
+        },
         marketing: true,
       },
     });

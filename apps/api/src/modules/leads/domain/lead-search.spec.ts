@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldVietnamese, leadSearchKeys, parseLeadQuery } from './lead-search.js';
-
-describe('foldVietnamese', () => {
-  it('drops accents, đ and case, and collapses spaces', () => {
-    expect(foldVietnamese('  Nguyễn  Thu Hà ')).toBe('nguyen thu ha');
-    expect(foldVietnamese('ĐẶNG Minh Đức')).toBe('dang minh duc');
-    expect(foldVietnamese('Võ Ngọc Trâm')).toBe('vo ngoc tram');
-  });
-});
+import { leadSearchKeys, parseLeadQuery } from './lead-search.js';
 
 describe('leadSearchKeys', () => {
   it('stores the digits of the number, the email and the folded name', () => {

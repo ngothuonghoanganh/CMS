@@ -1,5 +1,5 @@
 import type { SectionInstance } from '@plp/contracts';
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType, ReactElement } from 'react';
 import type { z } from 'zod';
 import { beforeAfterContentSchema } from '../schema/sections/before-after.js';
 import { benefitsContentSchema } from '../schema/sections/benefits.js';
@@ -33,7 +33,7 @@ function renderWith<C>(
   section: SectionInstance,
   ctx: RenderContext,
   leading: boolean,
-): ReactNode {
+): ReactElement | null {
   const parsed = schema.safeParse(section.content);
   if (!parsed.success) {
     // Content is validated on every save and publish, so this only happens with corrupted data.
@@ -48,13 +48,14 @@ function renderWith<C>(
 
 /**
  * Renders the component of one section; exhaustive over every section type. `leading`: the section
- * opens the page body (see `SectionProps`).
+ * opens the page body (see `SectionProps`). The result cannot be `undefined`, so a section type
+ * without a case below falls off the end of the switch and fails to compile.
  */
 export function renderSectionContent(
   section: SectionInstance,
   ctx: RenderContext,
   leading = false,
-): ReactNode {
+): ReactElement | null {
   switch (section.type) {
     case 'navbar':
       return renderWith(navbarContentSchema, NavbarSection, section, ctx, leading);

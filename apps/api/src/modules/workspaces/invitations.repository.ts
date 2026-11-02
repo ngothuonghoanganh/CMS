@@ -158,7 +158,7 @@ export class InvitationsRepository {
             purgeAt: purgeAfter(link.expiresAt),
           },
         },
-        { new: true, session: tx },
+        { returnDocument: 'after', session: tx },
       )
       .lean<InvitationRecord>()
       .exec();

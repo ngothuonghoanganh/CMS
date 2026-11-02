@@ -7,6 +7,7 @@ import {
   customRolePermissions,
   customRoleRef,
   emailSchema,
+  foldVietnamese,
   type RoleChoice,
   type Invitation,
   permissionGroups,
@@ -149,20 +150,21 @@ export interface PeopleFilters {
 
 /**
  * Whether a member or an invitation shows under the filters. Someone given the whole workspace
- * works on every site; an invitation has no name, only its email.
+ * works on every site; an invitation has no name, only its email. The search ignores case and
+ * accents, as the lead inbox does (ADR-018): "ngoc" finds "Ngọc".
  */
 export function matchesFilters(
   person: { role: Access; siteIds: readonly string[] | null; name?: string; email: string },
   filters: PeopleFilters,
 ): boolean {
-  const query = filters.search.trim().toLowerCase();
+  const query = foldVietnamese(filters.search);
   return (
     (filters.role === 'all' || roleKey(person.role) === filters.role) &&
     (filters.siteId === 'all' ||
       person.siteIds === null ||
       person.siteIds.includes(filters.siteId)) &&
     (query === '' ||
-      [person.name ?? '', person.email].some((text) => text.toLowerCase().includes(query)))
+      [person.name ?? '', person.email].some((text) => foldVietnamese(text).includes(query)))
   );
 }
 
