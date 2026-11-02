@@ -10,6 +10,7 @@ import {
   templateIndustryLabels,
   templateScopeSchema,
   templateUsableIn,
+  templateVersionItemSchema,
 } from './templates.js';
 
 describe('system template ids', () => {
@@ -115,6 +116,21 @@ describe('workspace templates', () => {
     expect(createWorkspaceTemplateRequestSchema.safeParse({ ...live, name: ' ' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('the version history', () => {
+  it('names no source page when it is in a site outside the member’s', () => {
+    const version = {
+      version: 1,
+      note: '',
+      source: { pageId: null, pageTitle: null, kind: 'live' },
+      reusedFrom: null,
+      createdBy: { id: '64b0000000000000000000c1', name: 'Quốc Bảo' },
+      createdAt: '2026-09-02T03:00:00.000Z',
+      usedCount: 0,
+    };
+    expect(templateVersionItemSchema.parse(version).source.pageTitle).toBeNull();
   });
 });
 

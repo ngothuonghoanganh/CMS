@@ -16,7 +16,7 @@ import { problemBesideFields, reportUnexpected } from '../shell/problem-message'
 import { keepFieldFocus } from '../shell/use-schema-form';
 import { templateQueryKeys } from './queries';
 import { GoalIndustryFields, TemplateScopeField } from './TemplateInfoFields';
-import type { ScopeDraft } from './workspace-templates';
+import { editableScope, type ScopeDraft } from './workspace-templates';
 import styles from './EditTemplateDialog.module.css';
 
 export interface EditTemplateDialogProps {
@@ -47,7 +47,7 @@ function EditTemplateForm({
   const [description, setDescription] = useState(template.description);
   const [goal, setGoal] = useState<PageGoal | null>(template.goal);
   const [industry, setIndustry] = useState<TemplateIndustry | null>(template.industry);
-  const [scope, setScope] = useState<ScopeDraft>(template.scope);
+  const [scope, setScope] = useState<ScopeDraft>(() => editableScope(template.scope, sites));
   const [errors, setErrors] = useState<FormErrors>({});
 
   const save = useMutation({

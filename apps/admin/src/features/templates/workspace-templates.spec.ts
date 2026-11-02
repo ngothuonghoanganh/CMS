@@ -3,6 +3,7 @@ import { siteFixture } from '../dashboard/test-fixtures';
 import { applySummary } from './apply-summary';
 import { summaryFixture, versionFixtures, workspaceTemplateFixture } from './test-fixtures';
 import {
+  editableScope,
   initialScope,
   keptPagesNote,
   scopeLabel,
@@ -39,6 +40,16 @@ describe('the columns of board 19', () => {
   });
 });
 
+describe('“Sửa thông tin”', () => {
+  it('starts from the sites the template is limited to that still exist', () => {
+    const deleted = '64b0000000000000000000dd';
+    expect(
+      editableScope({ kind: 'sites', siteIds: [kitchen.id, deleted] }, [smile, kitchen]),
+    ).toEqual({ kind: 'sites', siteIds: [kitchen.id] });
+    expect(editableScope({ kind: 'workspace' }, [smile])).toEqual({ kind: 'workspace' });
+  });
+});
+
 describe('the version history', () => {
   it('says what each version holds: its note, its page, or the version it reused', () => {
     const [v2, v1] = versionFixtures;
@@ -48,6 +59,10 @@ describe('the version history', () => {
     expect(versionOrigin(v2)).toBe('Thêm bảng so sánh mắc cài');
     expect(versionOrigin(v1)).toBe('Lưu từ trang “Niềng răng tháng 9”');
     expect(versionOrigin({ ...v1, version: 3, reusedFrom: 1 })).toBe('Dùng lại nội dung v1');
+    // Saved from a site the member does not see: the API names no page.
+    expect(versionOrigin({ ...v1, source: { pageId: null, pageTitle: null, kind: 'draft' } })).toBe(
+      'Lưu từ một trang ở site khác',
+    );
     expect(versionUsedLabel(2)).toBe('Đã tạo 2 trang');
     expect(versionUsedLabel(0)).toBe('Chưa tạo trang nào');
   });

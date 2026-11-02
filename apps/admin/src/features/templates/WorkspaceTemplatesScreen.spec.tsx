@@ -345,6 +345,28 @@ describe('WorkspaceTemplatesScreen (board 19)', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Tiêu đề của Hero quá dài');
   });
 
+  it('never sends back a site deleted since the list was read, from “Sửa thông tin”', async () => {
+    const user = userEvent.setup();
+    const deleted = '64b0000000000000000000dd';
+    const limited = {
+      ...kitchenMenu,
+      scope: { kind: 'sites' as const, siteIds: [kitchen.id, deleted] },
+    };
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.updateWorkspaceTemplate
+        ? Promise.resolve(limited)
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderScreen({ templates: [own, limited, stored] });
+    await user.click(menuOf(limited.name));
+    await user.click(screen.getByRole('menuitem', { name: 'Sửa thông tin' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Sửa thông tin template' });
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu thông tin' }));
+    expect(lastCallTo(apiMock, endpoints.updateWorkspaceTemplate).options).toMatchObject({
+      body: { scope: { kind: 'sites', siteIds: [kitchen.id] } },
+    });
+  });
+
   it('says when a site picked in “Sửa thông tin” was refused, which no field shows', async () => {
     const user = userEvent.setup();
     apiMock.mockImplementation((endpoint) =>
