@@ -26,6 +26,7 @@ import { api, ApiError } from '../../lib/api';
 import { displayUrl, internalVisitUrl } from '../../lib/site-url';
 import { siteQueryKeys } from '../dashboard/queries';
 import { PageDetailHeader } from '../page-header/PageDetailHeader';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { pageHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -419,7 +420,7 @@ export function HistoryScreen({
               loading={historyQuery.isFetchingNextPage}
               onClick={() => {
                 expectMore();
-                void historyQuery.fetchNextPage();
+                void fetchNextPageAfterRead(historyQuery);
               }}
             >
               {olderEntriesLabel(releaseCount, loadedReleaseCount(items))}

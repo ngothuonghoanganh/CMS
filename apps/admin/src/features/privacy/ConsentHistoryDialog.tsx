@@ -5,6 +5,7 @@ import { Button, Callout, Dialog, Spinner } from '@plp/ui';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { problemMessage } from '../shell/problem-message';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import styles from './PrivacyScreen.module.css';
@@ -79,7 +80,7 @@ export function ConsentHistoryDialog({ siteId, open, onOpenChange }: ConsentHist
           loading={versions.isFetchingNextPage}
           onClick={() => {
             expectMore();
-            void versions.fetchNextPage();
+            void fetchNextPageAfterRead(versions);
           }}
         >
           Xem thêm

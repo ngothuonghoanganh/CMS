@@ -16,6 +16,7 @@ import { useIsMutating, useMutation } from '@tanstack/react-query';
 import Image from 'next/image';
 import { type RefObject, useId, useRef, useState } from 'react';
 import { ApiError, uploadAsset } from '../../lib/api';
+import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import styles from './assets.module.css';
 import {
@@ -296,7 +297,7 @@ function AssetGrid({
             loading={query.isFetchingNextPage}
             onClick={() => {
               expectMore();
-              void query.fetchNextPage();
+              void fetchNextPageAfterRead(query);
             }}
           >
             Xem thêm

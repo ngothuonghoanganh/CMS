@@ -45,7 +45,8 @@ export function adoptServerRenderKeepingPages(
     return;
   }
   if ((state?.data?.pages.length ?? 0) > 1) {
-    // A read already running (the screen refreshed its own lists) is the one to wait for.
+    // A read already running is the one to wait for: the screen refreshed its own lists, or "Xem
+    // thêm" adds to what such a refresh read (`fetchNextPageAfterRead`).
     void queryClient.invalidateQueries({ queryKey, exact: true }, { cancelRefetch: false });
     return;
   }
