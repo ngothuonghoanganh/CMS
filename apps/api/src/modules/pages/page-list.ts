@@ -1,6 +1,11 @@
-import type { PageCounts, PageListResponse, PageStatusKind, PageSummary } from '@plp/contracts';
+import {
+  foldVietnamese,
+  type PageCounts,
+  type PageListResponse,
+  type PageStatusKind,
+  type PageSummary,
+} from '@plp/contracts';
 import { decodeCursor, encodeCursor } from '../../shared/cursor.js';
-import { foldVietnamese } from '../leads/domain/lead-search.js';
 
 /** A page of the list with what the dashboard needs about it. */
 export interface ListedPage {
