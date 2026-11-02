@@ -26,6 +26,7 @@ import {
   siteSchema,
   SUGGESTED_MARKETING_CONSENT_TEXT,
   type ThemePresetId,
+  workspaceTemplateSchema,
 } from '@plp/contracts';
 import { siteOrigin, urls } from '../urls.js';
 import { clinicImage } from './fixtures.js';
@@ -594,6 +595,24 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
     dataRequestDetailSchema,
   );
   await recorded('delete', { name: 'Lê Mai Anh', phone: '0987 106 223', email: '' }, 20);
+
+  // Board 19's first template, saved from the live promotion with its photo (ADR-030).
+  await call(
+    request,
+    'POST',
+    endpoints.createWorkspaceTemplate.path(site.workspaceId),
+    workspaceTemplateSchema,
+    {
+      source: { siteId: site.id, pageId: created.promo.page.id, kind: 'live' },
+      content: 'keep',
+      note: '',
+      name: 'Tư vấn niềng răng trả góp',
+      description: 'Bản đã dùng cho Smile Care, gồm bảng so sánh mắc cài.',
+      goal: 'lead',
+      industry: 'dental_health',
+      scope: { kind: 'workspace' },
+    },
+  );
 
   const pages = Object.fromEntries(
     await Promise.all(

@@ -91,6 +91,14 @@ function adminScreens(): Array<{
         await expect(page.getByRole('region', { name: /^Bản xem trước/ })).toBeVisible();
       },
     },
+    {
+      name: 'Template của workspace',
+      path: `${workspace}/templates?source=workspace`,
+      ready: async (page) => {
+        await heading('Template của workspace')(page);
+        await expect(page.getByRole('table').getByRole('row').nth(1)).toBeVisible();
+      },
+    },
     { name: 'Tài khoản', path: '/account', ready: heading('Tài khoản') },
   ];
 }
