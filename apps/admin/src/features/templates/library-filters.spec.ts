@@ -8,11 +8,13 @@ import {
   NO_FILTERS,
   tabCounts,
   tabOf,
+  templateMeta,
+  templateTags,
   visibleTemplates,
   withGoal,
   withIndustry,
 } from './library-filters';
-import { summaryFixture, templateSummaries } from './test-fixtures';
+import { summaryFixture, templateSummaries, workspaceSummaryFixture } from './test-fixtures';
 
 const ALL: LibraryQuery = { tab: 'all', query: '', filters: NO_FILTERS };
 
@@ -29,8 +31,43 @@ describe('tabs', () => {
   });
 
   it('counts the templates of each tab', () => {
-    expect(tabCounts(templateSummaries)).toEqual({ all: 12, system: 12 });
+    expect(tabCounts(templateSummaries)).toEqual({ all: 12, system: 12, workspace: 0 });
     expect(names({ tab: 'system' })).toHaveLength(12);
+  });
+
+  it('lists the workspace’s own templates in “Tất cả” and in “Của workspace” (G2)', () => {
+    const own = workspaceSummaryFixture();
+    const library = [...templateSummaries, own];
+    expect(tabOf('workspace')).toBe('workspace');
+    expect(tabCounts(library)).toEqual({ all: 13, system: 12, workspace: 1 });
+    expect(visibleTemplates(library, { ...ALL, tab: 'workspace' })).toEqual([own]);
+    expect(visibleTemplates(library, ALL)).toContain(own);
+  });
+});
+
+describe('workspace templates in the library', () => {
+  it('may have no goal or industry: they are out of those filters, never out of the search', () => {
+    const open = workspaceSummaryFixture({ goal: null, industry: null, name: 'Lớp thử miễn phí' });
+    const library = [...templateSummaries, open];
+    expect(matchesQuery(open, 'lop thu')).toBe(true);
+    expect(
+      visibleTemplates(library, { ...ALL, filters: withGoal(NO_FILTERS, 'lead', true) }),
+    ).not.toContain(open);
+    expect(
+      visibleTemplates(library, {
+        ...ALL,
+        filters: withIndustry(NO_FILTERS, 'fitness', true),
+      }),
+    ).not.toContain(open);
+    expect(templateTags(open)).toBe('');
+  });
+
+  it('says where a card comes from: the workspace’s name for its own', () => {
+    expect(templateMeta(summaryFixture(), 'Mây Xanh Agency')).toBe('Thu lead tư vấn · 8 section');
+    expect(templateMeta(workspaceSummaryFixture(), 'Mây Xanh Agency')).toBe(
+      'Thu lead tư vấn · 8 section · Mây Xanh Agency',
+    );
+    expect(templateTags(workspaceSummaryFixture())).toBe('Thu lead tư vấn · Nha khoa & y tế');
   });
 });
 

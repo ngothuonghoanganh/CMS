@@ -20,8 +20,10 @@ import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { leadRecipientsHref, privacyHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { SaveTemplateDialog } from '../templates/SaveTemplateDialog';
 import { ThemePickerDialog } from '../theme';
 import { AddSectionDialog } from './AddSectionDialog';
+import { ApplyTemplateInEditorDialog } from './ApplyTemplateInEditorDialog';
 import { Canvas } from './Canvas';
 import { ConflictDialog } from './ConflictDialog';
 import { DraftNotice } from './DraftNotice';
@@ -133,6 +135,17 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
 
   const [addSection, setAddSection] = useState({ open: false, index: 0, key: 0 });
   const [theme, setTheme] = useState({ open: false, key: 0 });
+  // "Lưu thành template" and "Áp dụng mẫu…" (ADR-030); a new form for every opening.
+  const [template, setTemplate] = useState<{
+    kind: 'save' | 'apply';
+    open: boolean;
+    key: number;
+  } | null>(null);
+  const sitesQuery = useQuery({
+    queryKey: ['workspaces', site.workspaceId, 'sites'],
+    queryFn: () => api(endpoints.listSites, [site.workspaceId]),
+    enabled: template?.kind === 'save',
+  });
   const [publishOpen, setPublishOpen] = useState(false);
   const [previewPending, setPreviewPending] = useState(false);
   const seoHref = `/sites/${siteId}/pages/${pageId}/seo`;
@@ -171,6 +184,27 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
       await refreshPageSummary(store);
     } catch (error) {
       console.error('Refreshing the page summary after a site change failed', error);
+    }
+  }
+
+  function openTemplate(kind: 'save' | 'apply') {
+    setTemplate((current) => ({ kind, open: true, key: (current?.key ?? 0) + 1 }));
+  }
+
+  /** The draft saved as it is on the screen is what a template is saved from. */
+  async function saveAsTemplate() {
+    try {
+      await ensureSaved();
+      openTemplate('save');
+    } catch (error) {
+      if (!(error instanceof DraftConflictError)) {
+        reportUnexpected('Saving the draft before saving it as a template failed', error);
+      }
+      toast({
+        tone: 'danger',
+        title: 'Chưa lưu được bản nháp',
+        description: previewErrorMessage(error),
+      });
     }
   }
 
@@ -229,6 +263,13 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
           onOpenPublish={() => {
             setPublishOpen(true);
           }}
+          onTemplate={(action) => {
+            if (action === 'save') {
+              void saveAsTemplate();
+            } else {
+              openTemplate('apply');
+            }
+          }}
         />
         <DraftNotice ensureSaved={ensureSaved} />
         <main className={styles.workspace}>
@@ -278,6 +319,34 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
         role,
         userId,
       })}
+      {template?.kind === 'apply' ? (
+        <ApplyTemplateInEditorDialog
+          key={`apply-template-${template.key}`}
+          open={template.open}
+          onOpenChange={(open) => {
+            setTemplate((current) => (current === null ? null : { ...current, open }));
+          }}
+        />
+      ) : null}
+      {template?.kind === 'save' ? (
+        <SaveTemplateDialog
+          key={`save-template-${template.key}`}
+          workspaceId={site.workspaceId}
+          // The other sites join "Ai được dùng" once they are read.
+          sites={sitesQuery.data?.items ?? [site]}
+          source={{ kind: 'page', siteId, pageId }}
+          open={template.open}
+          onOpenChange={(open) => {
+            setTemplate((current) => (current === null ? null : { ...current, open }));
+          }}
+          onSaved={(saved) => {
+            toast({
+              tone: 'success',
+              title: `Đã lưu template “${saved.name}”, phiên bản ${saved.currentVersion}`,
+            });
+          }}
+        />
+      ) : null}
       <ConflictDialog />
       {guard.dialog}
       {region}

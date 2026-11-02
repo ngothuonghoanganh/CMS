@@ -162,3 +162,13 @@
     max-width: none;
   }
 }
+
+/* "Xem v3" and "Template của workspace" inside a note. */
+.inlineLink {
+  font-weight: 600;
+  color: var(--color-primary-ink);
+}
+
+.inlineLink:hover {
+  color: var(--color-primary-pressed);
+}

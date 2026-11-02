@@ -9,6 +9,7 @@ import {
   type Site,
   type TemplateSummary,
   templateSourceLabels,
+  templateUsableIn,
 } from '@plp/contracts';
 import {
   Badge,
@@ -36,7 +37,7 @@ import {
   emptyMessage,
   filterChips,
   filterGroups,
-  goalLabel,
+  templateMeta,
   hasFilters,
   type LibraryFilters,
   type LibraryTab,
@@ -87,10 +88,20 @@ interface CardProps {
   template: TemplateSummary;
   href: string;
   themePresetId: Site['themePresetId'];
+  workspaceName: string;
   onUse: (() => void) | null;
+  /** The template is limited to other sites than the one chosen ("Tạo trang cho"). */
+  otherSites: boolean;
 }
 
-function TemplateCard({ template, href, themePresetId, onUse }: CardProps) {
+function TemplateCard({
+  template,
+  href,
+  themePresetId,
+  workspaceName,
+  onUse,
+  otherSites,
+}: CardProps) {
   const headingId = useId();
   return (
     <li className={styles.cardItem}>
@@ -105,16 +116,19 @@ function TemplateCard({ template, href, themePresetId, onUse }: CardProps) {
         </div>
         <div className={styles.cardBody}>
           <div className={styles.badges}>
-            <Badge size="sm">{templateSourceLabels[template.source].toUpperCase()}</Badge>
+            <Badge size="sm" tone={template.source === 'workspace' ? 'info' : 'neutral'}>
+              {templateSourceLabels[template.source].toUpperCase()}
+            </Badge>
             {template.hasForm ? <Badge size="sm">Có form</Badge> : null}
           </div>
           <h2 id={headingId} className={styles.cardTitle}>
             {template.name}
           </h2>
           <p className={styles.cardDescription}>{template.description}</p>
-          <p className={styles.cardMeta}>
-            {goalLabel(template.goal)} · {template.sections.length} section
-          </p>
+          <p className={styles.cardMeta}>{templateMeta(template, workspaceName)}</p>
+          {otherSites ? (
+            <p className={styles.cardMeta}>Mẫu này chỉ dùng cho các site đã chọn khi lưu.</p>
+          ) : null}
           <div className={styles.cardActions}>
             <ButtonLink as={Link} href={href} variant="secondary" size="sm" fullWidth>
               Xem trước <VisuallyHidden>{template.name}</VisuallyHidden>
@@ -362,21 +376,27 @@ export function TemplateLibrary({
             />
           ) : (
             <ul className={styles.grid}>
-              {shown.map((template) => (
-                <TemplateCard
-                  key={`${template.source}:${template.id}`}
-                  template={template}
-                  href={templateHref(workspace.id, template.id, siteId ?? undefined)}
-                  themePresetId={themePresetId}
-                  onUse={
-                    targets.length > 0
-                      ? () => {
-                          setDialog({ templateId: template.id, open: true });
-                        }
-                      : null
-                  }
-                />
-              ))}
+              {shown.map((template) => {
+                // A workspace template limited to some sites is used only there (ADR-030).
+                const usable = siteId === null || templateUsableIn(template.siteIds, siteId);
+                return (
+                  <TemplateCard
+                    key={`${template.source}:${template.id}`}
+                    template={template}
+                    href={templateHref(workspace.id, template.id, siteId ?? undefined)}
+                    themePresetId={themePresetId}
+                    workspaceName={workspace.name}
+                    otherSites={targets.length > 0 && !usable}
+                    onUse={
+                      targets.length > 0 && usable
+                        ? () => {
+                            setDialog({ templateId: template.id, open: true });
+                          }
+                        : null
+                    }
+                  />
+                );
+              })}
             </ul>
           )}
         </section>
@@ -386,7 +406,7 @@ export function TemplateLibrary({
         <CreateFromTemplateDialog
           workspaceId={workspace.id}
           template={using}
-          sites={targets}
+          sites={targets.filter((target) => templateUsableIn(using.siteIds, target.id))}
           initialSiteId={siteId}
           role={role}
           open={dialog?.open === true}

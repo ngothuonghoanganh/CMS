@@ -33,6 +33,7 @@ import {
   listMinimum,
   setAtPath,
   validateComposition,
+  withFreshSectionIds,
 } from '@plp/sections/schema';
 import { type Draft, produce } from 'immer';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -146,6 +147,11 @@ export interface EditorState {
   setMobileOrder: (sectionId: string, order: MobileOrder) => boolean;
   updateSeo: (patch: Partial<Seo>, options?: UpdateOptions) => boolean;
   setSlug: (slug: string, options?: UpdateOptions) => boolean;
+  /**
+   * "Áp dụng mẫu…" (ADR-030): every section replaced with the template's, under fresh ids, as one
+   * undo step. The slug and SEO stay. Load the template's images first (`addAssets`).
+   */
+  applyTemplate: (composition: Composition) => boolean;
   undo: () => boolean;
   redo: () => boolean;
   /** Ends the merged undo step started by an update with `{ merge: true }`. */
@@ -641,6 +647,26 @@ export function createEditorStore(init: EditorInit): EditorStore {
             return true;
           },
           { mergeKey: options.merge ? 'slug' : null },
+        );
+      },
+
+      applyTemplate(composition) {
+        // New ids for every section, unique among themselves; buttons follow their section.
+        const taken = new Set<string>();
+        const fresh = withFreshSectionIds(composition, () => {
+          let id = newId();
+          while (taken.has(id)) {
+            id = newId();
+          }
+          taken.add(id);
+          return id;
+        });
+        return edit(
+          (draft) => {
+            draft.composition.sections = fresh.sections;
+            return true;
+          },
+          { selection: { sectionId: null, fieldPath: null } },
         );
       },
 

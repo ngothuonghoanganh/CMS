@@ -518,3 +518,71 @@ describe('editor store: server state', () => {
     expect(Object.keys(store.getState().assetsById)).toHaveLength(1);
   });
 });
+
+describe('editor store: applying a template (ADR-030)', () => {
+  function template() {
+    const hero = createSectionInstance('hero', 'centered', 'tplhero00001');
+    return {
+      version: 1 as const,
+      sections: [
+        createSectionInstance('navbar', undefined, 'tplnav000001'),
+        {
+          ...hero,
+          // A button of the template leading to its own call to action.
+          content: {
+            ...hero.content,
+            primaryCta: {
+              label: 'Đặt lịch',
+              link: { kind: 'section', sectionId: 'tplcta000001' },
+            },
+          },
+        },
+        createSectionInstance('cta_band', undefined, 'tplcta000001'),
+        createSectionInstance('footer', undefined, 'tplfoot00001'),
+      ],
+    };
+  }
+
+  it('replaces every section under fresh ids, as one undo step, keeping the slug and SEO', () => {
+    const store = makeStore();
+    store.getState().select(HERO);
+    const before = store.getState().draft;
+    expect(store.getState().applyTemplate(template())).toBe(true);
+
+    const after = store.getState().draft;
+    expect(after.composition.sections.map((section) => section.type)).toEqual([
+      'navbar',
+      'hero',
+      'cta_band',
+      'footer',
+    ]);
+    const ids = sectionIds(store);
+    expect(ids.some((id) => id.startsWith('tpl'))).toBe(false);
+    expect(new Set(ids).size).toBe(4);
+    // The button still leads to the template's call to action, under its new id.
+    expect(getAtPath(after.composition.sections[1]?.content, 'primaryCta.link')).toEqual({
+      kind: 'section',
+      sectionId: ids[2],
+    });
+    expect(after.slug).toBe(before.slug);
+    expect(after.seo).toEqual(before.seo);
+    expect(store.getState().selection).toEqual({ sectionId: null, fieldPath: null });
+    expect(store.getState().history.past).toHaveLength(1);
+    expect(store.getState().saveState).toBe('dirty');
+
+    // Ctrl+Z brings every section back at once.
+    expect(store.getState().undo()).toBe(true);
+    expect(store.getState().draft).toEqual(before);
+    expect(sectionIds(store)).toEqual([NAVBAR, HERO, BENEFITS, FAQ, FOOTER]);
+  });
+
+  it('refuses a composition the registry refuses, changing nothing', () => {
+    const store = makeStore();
+    const before = store.getState().draft;
+    const broken = template();
+    broken.sections.reverse();
+    expect(store.getState().applyTemplate(broken)).toBe(false);
+    expect(store.getState().draft).toBe(before);
+    expect(store.getState().history.past).toHaveLength(0);
+  });
+});
