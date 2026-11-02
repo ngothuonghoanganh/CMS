@@ -92,8 +92,11 @@ export function filterPages(pages: readonly ListedPage[], filter: PageListFilter
     if (query === '') {
       return true;
     }
+    // A slug's dashes stand for spaces: "khuyen mai" finds "khuyen-mai".
     return (
-      foldVietnamese(summary.title).includes(query) || foldVietnamese(summary.slug).includes(query)
+      foldVietnamese(summary.title).includes(query) ||
+      foldVietnamese(summary.slug.replaceAll('-', ' ')).includes(query) ||
+      foldVietnamese(summary.slug).includes(query)
     );
   });
 }

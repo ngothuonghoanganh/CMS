@@ -80,6 +80,8 @@ function AddressCard({
 }) {
   const status = address.primaryStatus;
   const broken = status !== null && status !== 'active';
+  // A certificate being issued needs nobody: the edge finishes it within minutes (ADR-022).
+  const fixable = broken && status !== 'issuing';
   return (
     <Card className={styles.card}>
       <span className={styles.label}>Địa chỉ live</span>
@@ -99,12 +101,14 @@ function AddressCard({
         <p className={styles.addressProblem}>
           Khách vẫn mở được trang qua{' '}
           <span className={styles.mono}>{hostOf(site.defaultOrigin)}</span>.
-          {canManageDomains ? null : ` ${holdersOf('domains.manage')} sửa được tên miền.`}
+          {canManageDomains || !fixable
+            ? null
+            : ` ${holdersOf('domains.manage')} sửa được tên miền.`}
         </p>
       ) : null}
       {canManageDomains ? (
         <Link href={domainsHref(site.id)} className={styles.link}>
-          {broken ? 'Xem cách sửa' : 'Quản lý tên miền'}
+          {fixable ? 'Xem cách sửa' : 'Quản lý tên miền'}
           <Arrow />
         </Link>
       ) : null}

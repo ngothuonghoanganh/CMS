@@ -504,6 +504,25 @@ describe('Dashboard', () => {
     );
   });
 
+  it('has nothing to fix while the certificate of the primary domain is being issued', () => {
+    const site = siteFixture({ publicOrigin: 'https://go.smilecare.vn' });
+    const issuing: SiteAddressStatus = { primaryStatus: 'issuing', customDomainActive: false };
+    const { unmount } = renderDashboard({ site, address: issuing });
+    const summary = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(summary).queryByRole('link', { name: /Xem cách sửa/ })).toBeNull();
+    expect(within(summary).getByRole('link', { name: /Quản lý tên miền/ })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/domain`,
+    );
+    unmount();
+
+    renderDashboard({ site, address: issuing, role: 'editor', leadCounts: null });
+    const forEditor = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(forEditor).getByText(/Khách vẫn mở được trang qua/)).not.toHaveTextContent(
+      'sửa được tên miền',
+    );
+  });
+
   it('tells a Biên tập who takes the setup steps of the site instead of linking to read-only settings', () => {
     renderDashboard({ role: 'editor', leadCounts: null, pages: pageListFixture([draftPage]) });
     for (const label of [

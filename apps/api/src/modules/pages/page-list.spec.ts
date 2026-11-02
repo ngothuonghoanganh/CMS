@@ -97,6 +97,8 @@ describe('page list helpers', () => {
     expect(filterPages(pages, { q: 'UU   ĐÃI' })).toEqual([promo]);
     expect(filterPages(pages, { q: 'dat lich ha noi' })).toEqual([hanoi]);
     expect(filterPages(pages, { q: 'KHUYẾN-MÃI' })).toEqual([promo]);
+    // A slug's dashes are spaces to whoever types.
+    expect(filterPages(pages, { q: 'khuyen mai' })).toEqual([promo]);
     expect(filterPages(pages, { q: 'uu dai', status: 'draft' })).toEqual([]);
   });
 
