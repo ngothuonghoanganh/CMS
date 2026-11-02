@@ -15,6 +15,7 @@ import {
 import { TEST_ADMIN_ORIGIN, TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
 import { newLinkToken } from './account-links.js';
 import { SessionsRepository } from './sessions.repository.js';
+import { UsersRepository } from './users.repository.js';
 
 const RESET_SUBJECT = 'Đặt lại mật khẩu';
 const NEW_PASSWORD = 'mat-khau-moi-an-toan-456';
@@ -24,6 +25,15 @@ interface StoredReset {
   tokenHash: string;
   expiresAt: Date;
   createdAt: Date;
+}
+
+/** A promise and the function that settles it. */
+function gate(): { opened: Promise<void>; open: () => void } {
+  let open = (): void => undefined;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { opened, open };
 }
 
 /** ADR-026: a forgotten password set again from an emailed link, and a changed one. */
@@ -307,6 +317,136 @@ describe('passwords', () => {
         .expect(422);
       expect(problemSchema.parse(response.body).issues?.[0]?.path).toEqual(['newPassword']);
       expect(await storedAttempts(input.email)).toBeNull();
+    });
+  });
+
+  describe('racing a reset (ADR-026)', () => {
+    const userOf = (email: string) =>
+      t.connection
+        .collection<{ _id: Types.ObjectId; credentialsVersion?: number }>('users')
+        .findOne({ email });
+
+    it('leaves no session to a login that read the old password before the reset', async () => {
+      const input = signupInput();
+      await signUp(t.app, input);
+      const token = await resetToken(input.email);
+      const users = t.app.get(UsersRepository);
+      const findByEmail = users.findByEmail.bind(users);
+      const read = gate();
+      const resetDone = gate();
+      // The login has read the account, old password hash and all, and waits there.
+      const spy = vi.spyOn(users, 'findByEmail').mockImplementationOnce(async (email) => {
+        const found = await findByEmail(email);
+        read.open();
+        await resetDone.opened;
+        return found;
+      });
+      const thief = new TestClient(t.app);
+      const owner = new TestClient(t.app);
+      try {
+        const loggingIn = thief
+          .post('/auth/login', { email: input.email, password: input.password })
+          .then((response) => response);
+        await read.opened;
+        await owner.post('/auth/password/reset', { token, password: NEW_PASSWORD }).expect(200);
+        resetDone.open();
+        // The login proved the password it read, so it answers as a login does...
+        expect((await loggingIn).status).toBe(200);
+      } finally {
+        spy.mockRestore();
+      }
+
+      // ...but its session was issued against the password the reset replaced.
+      const refused = await thief.get('/auth/me').expect(401);
+      expect(problemSchema.parse(refused.body).code).toBe('unauthenticated');
+      await owner.get('/auth/me').expect(200);
+      await login(input.email, input.password).expect(401);
+      await login(input.email, NEW_PASSWORD).expect(200);
+    });
+
+    it('refuses a change that proved the old password before the reset, and changes nothing', async () => {
+      const input = signupInput();
+      const { client: thief } = await signedUpClient(t.app, input);
+      const token = await resetToken(input.email);
+      const users = t.app.get(UsersRepository);
+      const setPassword = users.setPassword.bind(users);
+      const proven = gate();
+      const resetDone = gate();
+      // The change has proven the current password and waits before its write.
+      const spy = vi
+        .spyOn(users, 'setPassword')
+        .mockImplementationOnce(async (...args: Parameters<UsersRepository['setPassword']>) => {
+          proven.open();
+          await resetDone.opened;
+          return setPassword(...args);
+        });
+      const owner = new TestClient(t.app);
+      try {
+        const changing = thief
+          .post('/auth/password', {
+            currentPassword: input.password,
+            newPassword: 'mat-khau-cua-ke-trom-789',
+          })
+          .then((response) => response);
+        await proven.opened;
+        await owner.post('/auth/password/reset', { token, password: NEW_PASSWORD }).expect(200);
+        resetDone.open();
+
+        const refused = await changing;
+        expect(refused.status).toBe(409);
+        expect(problemSchema.parse(refused.body)).toMatchObject({
+          code: 'password_changed',
+          title: 'Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.',
+        });
+        expect(refused.headers['content-type']).toContain('application/problem+json');
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The reset stands: its password, and the session it signed the owner in with.
+      await owner.get('/auth/me').expect(200);
+      await thief.get('/auth/me').expect(401);
+      await login(input.email, 'mat-khau-cua-ke-trom-789').expect(401);
+      await login(input.email, NEW_PASSWORD).expect(200);
+    });
+
+    it('moves the user to a new credentials version with every reset and change', async () => {
+      const input = signupInput();
+      const { client } = await signedUpClient(t.app, input);
+      expect((await userOf(input.email))?.credentialsVersion).toBe(0);
+
+      await client
+        .post('/auth/password', { currentPassword: input.password, newPassword: NEW_PASSWORD })
+        .expect(204);
+      expect((await userOf(input.email))?.credentialsVersion).toBe(1);
+      // The session that changed it goes on under the new version.
+      await client.get('/auth/me').expect(200);
+
+      const token = await resetToken(input.email);
+      await new TestClient(t.app)
+        .post('/auth/password/reset', { token, password: 'mat-khau-thu-ba-789' })
+        .expect(200);
+      expect((await userOf(input.email))?.credentialsVersion).toBe(2);
+      await client.get('/auth/me').expect(401);
+    });
+
+    it('takes accounts and sessions from before the credentials version as version 0', async () => {
+      const input = signupInput();
+      const { client, me } = await signedUpClient(t.app, input);
+      const userId = new Types.ObjectId(me.user.id);
+      await t.connection
+        .collection('users')
+        .updateOne({ _id: userId }, { $unset: { credentialsVersion: '' } });
+      await t.connection
+        .collection('sessions')
+        .updateMany({ userId }, { $unset: { credentialsVersion: '' } });
+
+      await client.get('/auth/me').expect(200);
+      await client
+        .post('/auth/password', { currentPassword: input.password, newPassword: NEW_PASSWORD })
+        .expect(204);
+      expect((await userOf(input.email))?.credentialsVersion).toBe(1);
+      await client.get('/auth/me').expect(200);
     });
   });
 

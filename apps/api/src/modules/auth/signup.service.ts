@@ -154,7 +154,7 @@ export class SignupService {
       // An account made in the same moment; the sign-up goes once its link is opened again.
       throw isDuplicateKeyError(error, USERS_EMAIL_INDEX) ? emailTaken(error) : error;
     }
-    return this.auth.issueSession({ id: userId, name: owner.name, email: pending.email });
+    return this.auth.issueSession({ id: userId, name: owner.name, email: pending.email }, 0);
   }
 
   private async activeSignup(token: string): Promise<PendingSignupRecord> {

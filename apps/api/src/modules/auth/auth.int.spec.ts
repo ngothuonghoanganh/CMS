@@ -150,7 +150,7 @@ describe('auth', () => {
     const tokenHash = hashSessionToken(newSessionToken());
     // An hour ahead, so the TTL monitor leaves the record alone and only the query decides.
     const expiresAt = new Date(Date.now() + 3_600_000);
-    await sessions.create(new Types.ObjectId(), tokenHash, expiresAt, null);
+    await sessions.create(new Types.ObjectId(), tokenHash, expiresAt, null, 0);
     const at = (now: Date) => sessions.findActive([tokenHash], now, null);
 
     expect(await at(new Date())).toMatchObject({ tokenHash, expiresAt });
@@ -164,8 +164,8 @@ describe('auth', () => {
     const hostOnly = hashSessionToken(newSessionToken());
     const onDomain = hashSessionToken(newSessionToken());
     const expiresAt = new Date(Date.now() + 3_600_000);
-    await sessions.create(new Types.ObjectId(), hostOnly, expiresAt, null);
-    await sessions.create(new Types.ObjectId(), onDomain, expiresAt, 'app.example.vn');
+    await sessions.create(new Types.ObjectId(), hostOnly, expiresAt, null, 0);
+    await sessions.create(new Types.ObjectId(), onDomain, expiresAt, 'app.example.vn', 0);
     const now = new Date();
 
     expect(await sessions.findActive([hostOnly, onDomain], now, null)).toMatchObject({

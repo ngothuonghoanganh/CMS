@@ -123,6 +123,20 @@ describe('AccountScreen (ADR-026)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Nhập sai mật khẩu quá nhiều lần');
   });
 
+  it('says to log in again when the password was changed elsewhere meanwhile', async () => {
+    const events = userEvent.setup();
+    apiMock.mockRejectedValueOnce(
+      apiError(409, 'password_changed', 'Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.'),
+    );
+    renderWithProviders(<AccountScreen user={user} />);
+
+    await changePassword(events, 'mat-khau-cu-123', 'mat-khau-moi-123');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Mật khẩu vừa được đổi ở nơi khác. Đăng nhập lại.',
+    );
+  });
+
   it('asks again when the new passwords differ, and sends nothing', async () => {
     const events = userEvent.setup();
     renderWithProviders(<AccountScreen user={user} />);

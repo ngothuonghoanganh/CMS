@@ -16,6 +16,7 @@ import { PasswordAttempts, type PasswordCheckUse } from './password-attempts.js'
 import { hashPassword, timingSafeDummyHash, verifyPassword } from './password.js';
 import { hashSessionToken, newSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
+import { credentialsVersionOf } from './user.schema.js';
 import { USERS_EMAIL_INDEX, UsersRepository } from './users.repository.js';
 
 export interface IssuedSession {
@@ -79,12 +80,14 @@ export class AuthService {
       }
       throw error;
     }
-    return this.issueSession({ id: userId, name: input.name, email: invitation.email });
+    return this.issueSession({ id: userId, name: input.name, email: invitation.email }, 0);
   }
 
   /**
    * Each account allows `LOGIN_FAILURE_LIMIT` failed attempts per window; the attempt is counted
    * before the password is checked and a success clears the count (ADR-004, `PasswordAttempts`).
+   * The session is issued against the credentials version read with the password: a reset that
+   * commits meanwhile leaves it nothing (ADR-026).
    */
   async login(input: LoginRequest): Promise<IssuedSession> {
     const user = await this.passwordAttempts.check(input.email, LOGIN, async () => {
@@ -97,7 +100,10 @@ export class AuthService {
     if (!user) {
       throw new AppError(401, 'invalid_credentials', 'Email hoặc mật khẩu không đúng');
     }
-    return this.issueSession({ id: user._id, name: user.name, email: user.email });
+    return this.issueSession(
+      { id: user._id, name: user.name, email: user.email },
+      credentialsVersionOf(user),
+    );
   }
 
   /** Ends every session the browser presented (ADR-025: up to one per cookie scope). */
@@ -129,8 +135,11 @@ export class AuthService {
     };
   }
 
-  /** A new session of `user`, for the cookie, with what `/auth/me` answers. */
-  async issueSession(user: AuthenticatedUser): Promise<IssuedSession> {
+  /**
+   * A new session of `user`, for the cookie, with what `/auth/me` answers. `credentialsVersion` is
+   * the user's as read with the password that was proven, or set (ADR-026).
+   */
+  async issueSession(user: AuthenticatedUser, credentialsVersion: number): Promise<IssuedSession> {
     const token = newSessionToken();
     const expiresAt = new Date(Date.now() + this.env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
     await this.sessions.create(
@@ -138,6 +147,7 @@ export class AuthService {
       hashSessionToken(token),
       expiresAt,
       this.env.SESSION_COOKIE_DOMAIN ?? null,
+      credentialsVersion,
     );
     return { token, expiresAt, me: await this.me(user) };
   }
