@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import {
+  type ApplyTemplateRequest,
+  applyTemplateRequestSchema,
   createPageRequestSchema,
   type PageCountResponse,
   type PageDetailResponse,
@@ -13,11 +15,15 @@ import {
   type SaveDraftResponse,
   type SlugAvailability,
   slugAvailabilityQuerySchema,
+  type TemplateCompositionResponse,
+  type TemplateRef,
+  templateRefSchema,
 } from '@plp/contracts';
 import { ZodPipe } from '../../shared/zod.pipe.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { PageDeletionService } from './page-deletion.service.js';
+import { PageTemplatesService } from './page-templates.service.js';
 import {
   type CreatePageValues,
   type PageListQueryValues,
@@ -30,6 +36,7 @@ export class PagesController {
   constructor(
     private readonly pages: PagesService,
     private readonly deletion: PageDeletionService,
+    private readonly templates: PageTemplatesService,
   ) {}
 
   @Get('sites/:siteId/pages')
@@ -114,5 +121,29 @@ export class PagesController {
     @Body(new ZodPipe(restoreDraftRequestSchema)) body: RestoreDraftRequest,
   ): Promise<PageDetailResponse> {
     return this.pages.restoreDraft(user, siteId, pageId, body);
+  }
+
+  /** "Áp dụng vào trang đang sửa…" (board 18, ADR-030). */
+  @Post('sites/:siteId/pages/:pageId/draft/template')
+  @HttpCode(200)
+  applyTemplate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('pageId') pageId: string,
+    @Body(new ZodPipe(applyTemplateRequestSchema)) body: ApplyTemplateRequest,
+  ): Promise<PageDetailResponse> {
+    return this.templates.apply(user, siteId, pageId, body);
+  }
+
+  /** "Áp dụng mẫu…" of the editor (ADR-030): nothing is saved here. */
+  @Post('sites/:siteId/pages/:pageId/template-composition')
+  @HttpCode(200)
+  templateComposition(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('pageId') pageId: string,
+    @Body(new ZodPipe(templateRefSchema)) body: TemplateRef,
+  ): Promise<TemplateCompositionResponse> {
+    return this.templates.composition(user, siteId, pageId, body);
   }
 }

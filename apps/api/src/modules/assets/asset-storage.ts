@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
@@ -13,6 +14,11 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 /** Object storage for uploaded images. Only keys under `public/` are anonymously readable. */
 export interface AssetStorage {
   put(key: string, body: Buffer, contentType: string): Promise<void>;
+  /**
+   * Copies an object inside the storage, never through the API (`CopyObject`): a template's images
+   * and the pages made from it get copies of their own (ADR-030).
+   */
+  copy(sourceKey: string, targetKey: string): Promise<void>;
   /** Deletes one object; a key that holds nothing is not an error. */
   delete(key: string): Promise<void>;
   /** Deletes every object whose key starts with `prefix`; returns how many went. */
@@ -37,6 +43,19 @@ export function assetStorageKey(input: {
 /** The prefix of every object of a site's assets: what deleting the site removes (ADR-027). */
 export function siteStoragePrefix(site: { workspaceId: ObjectId; siteId: ObjectId }): string {
   return `public/${site.workspaceId.toHexString()}/${site.siteId.toHexString()}/`;
+}
+
+/**
+ * `public/{workspaceId}/templates/{assetId}.{ext}`: an image of a workspace template (ADR-030). It
+ * is outside every site's prefix, so deleting the site it was saved from leaves it; `templates` is
+ * never a site id (24 hex digits). Public like the pages' images, for the template's preview.
+ */
+export function templateAssetStorageKey(input: {
+  workspaceId: ObjectId;
+  assetId: ObjectId;
+  extension: string;
+}): string {
+  return `public/${input.workspaceId.toHexString()}/templates/${input.assetId.toHexString()}.${input.extension}`;
 }
 
 /** S3 deletes at most 1,000 keys per request, the size of a listing page. */
@@ -81,6 +100,26 @@ export class S3AssetStorage implements AssetStorage, OnModuleDestroy {
       throw new Error(`Could not store asset object "${key}" in bucket "${this.bucket}"`, {
         cause: error,
       });
+    }
+  }
+
+  async copy(sourceKey: string, targetKey: string): Promise<void> {
+    try {
+      await this.client.send(
+        new CopyObjectCommand({
+          Bucket: this.bucket,
+          Key: targetKey,
+          CopySource: `${this.bucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
+          // The source's content type and cache headers come with it: keys are still unique per
+          // image and objects never change.
+          MetadataDirective: 'COPY',
+        }),
+      );
+    } catch (error) {
+      throw new Error(
+        `Could not copy asset object "${sourceKey}" to "${targetKey}" in bucket "${this.bucket}"`,
+        { cause: error },
+      );
     }
   }
 

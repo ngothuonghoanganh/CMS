@@ -20,6 +20,7 @@ describe('TopBar', () => {
         onPreview={vi.fn()}
         previewPending={false}
         onOpenPublish={vi.fn()}
+        onTemplate={vi.fn()}
       />,
       { store },
     );
@@ -55,10 +56,40 @@ describe('TopBar', () => {
         onPreview={vi.fn()}
         previewPending={false}
         onOpenPublish={vi.fn()}
+        onTemplate={vi.fn()}
       />,
       { store: makeStore({ role: 'contributor', detail }) },
     );
     expect(screen.getByRole('button', { name: 'Đang chờ duyệt' })).toBeInTheDocument();
     expect(screen.getByText('Chờ duyệt')).toBeInTheDocument();
+  });
+
+  it('offers "Lưu thành template" to templates.manage and "Áp dụng mẫu…" to every editor (ADR-030)', async () => {
+    const user = userEvent.setup();
+    const onTemplate = vi.fn();
+    const props = {
+      siteId: SITE_ID,
+      pageId: PAGE_ID,
+      onRetrySave: vi.fn(),
+      onPreview: vi.fn(),
+      previewPending: false,
+      onOpenPublish: vi.fn(),
+      onTemplate,
+    };
+    const { unmount } = renderEditor(<TopBar {...props} />, {
+      store: makeStore({ role: 'editor' }),
+    });
+    await user.click(screen.getByRole('button', { name: 'Thao tác khác với trang' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Lưu thành template' }));
+    expect(onTemplate).toHaveBeenLastCalledWith('save');
+    await user.click(screen.getByRole('button', { name: 'Thao tác khác với trang' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Áp dụng mẫu…' }));
+    expect(onTemplate).toHaveBeenLastCalledWith('apply');
+    unmount();
+
+    renderEditor(<TopBar {...props} />, { store: makeStore({ role: 'contributor' }) });
+    await user.click(screen.getByRole('button', { name: 'Thao tác khác với trang' }));
+    expect(screen.queryByRole('menuitem', { name: 'Lưu thành template' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Áp dụng mẫu…' })).toBeInTheDocument();
   });
 });

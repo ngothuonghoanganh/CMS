@@ -16,7 +16,10 @@ import { goalDefinitions } from '@plp/sections/schema';
  * filters by goal, industry and "Có form thu lead", with their counts and removable chips.
  */
 
-/** "Tất cả" and one tab per source; "Của workspace" joins with slice G2. */
+/**
+ * "Tất cả" and one tab per source. "Của workspace" is board 19, the list of the workspace's own
+ * templates, at the same address (`?source=workspace`).
+ */
 export type LibraryTab = 'all' | TemplateSource;
 
 export interface LibraryTabDefinition {
@@ -29,6 +32,7 @@ export interface LibraryTabDefinition {
 export const libraryTabs: readonly LibraryTabDefinition[] = [
   { tab: 'all', label: 'Tất cả', sources: templateSources },
   { tab: 'system', label: 'Hệ thống', sources: ['system'] },
+  { tab: 'workspace', label: 'Của workspace', sources: ['workspace'] },
 ];
 
 /** The tab of `?source=`; anything else is "Tất cả". */
@@ -42,6 +46,33 @@ export function inTab(template: Pick<TemplateSummary, 'source'>, tab: LibraryTab
 
 export function goalLabel(goal: PageGoal): string {
   return goalDefinitions[goal].title;
+}
+
+/**
+ * The line under a card's description: "Thu lead · 8 section", and the workspace's name for its
+ * own templates ("Thu lead · 7 section · Mây Xanh Agency"). A workspace template may have no goal.
+ */
+export function templateMeta(
+  template: Pick<TemplateSummary, 'goal' | 'sections' | 'source'>,
+  workspaceName: string,
+): string {
+  return [
+    template.goal === null ? null : goalLabel(template.goal),
+    `${template.sections.length} section`,
+    template.source === 'workspace' ? workspaceName : null,
+  ]
+    .filter((part) => part !== null)
+    .join(' · ');
+}
+
+/** Goal and industry of a template, "Thu lead · Nha khoa & y tế", as far as they are set. */
+export function templateTags(template: Pick<TemplateSummary, 'goal' | 'industry'>): string {
+  return [
+    template.goal === null ? null : goalLabel(template.goal),
+    template.industry === null ? null : templateIndustryLabels[template.industry],
+  ]
+    .filter((part) => part !== null)
+    .join(' · ');
 }
 
 export interface LibraryFilters {
@@ -76,14 +107,7 @@ export function matchesQuery(template: TemplateSummary, query: string): boolean 
   if (last === undefined) {
     return true;
   }
-  const haystack = wordsOf(
-    [
-      template.name,
-      template.description,
-      templateIndustryLabels[template.industry],
-      goalLabel(template.goal),
-    ].join(' '),
-  );
+  const haystack = wordsOf([template.name, template.description, templateTags(template)].join(' '));
   return (
     words.every((word) => haystack.includes(word)) && haystack.some((word) => word.startsWith(last))
   );
@@ -100,11 +124,14 @@ function matchesFilters(
   filters: LibraryFilters,
   except?: FilterGroup,
 ): boolean {
+  const { goal, industry } = template;
   return (
-    (except === 'goals' || filters.goals.length === 0 || filters.goals.includes(template.goal)) &&
+    (except === 'goals' ||
+      filters.goals.length === 0 ||
+      (goal !== null && filters.goals.includes(goal))) &&
     (except === 'industries' ||
       filters.industries.length === 0 ||
-      filters.industries.includes(template.industry)) &&
+      (industry !== null && filters.industries.includes(industry))) &&
     (except === 'withForm' || !filters.withForm || template.hasForm)
   );
 }

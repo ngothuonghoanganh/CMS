@@ -96,6 +96,8 @@ describe('RolesScreen', () => {
     // A Cộng tác viên asks; Chủ sở hữu and Quản trị approve (ADR-023).
     expect(rowOf('Xuất bản, cập nhật trang live')).toBe('yyyrnn');
     expect(rowOf('Duyệt hoặc từ chối yêu cầu xuất bản')).toBe('yynnnn');
+    // Workspace templates (ADR-030), in "Nội dung" as board 16 draws it.
+    expect(rowOf('Lưu và quản lý template của workspace')).toBe('yyynnn');
     expect(within(table).getAllByText('(phải được duyệt)')).toHaveLength(1);
     const legend = screen.getByRole('list', { name: 'Chú thích' });
     expect(legend).toHaveTextContent('Yêu cầuPhải được duyệt');
@@ -194,7 +196,7 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
 
     const created: CustomRole = {
       ...contentLead,
-      permissions: ['pages.edit', 'pages.publish', 'leads.view'],
+      permissions: ['pages.edit', 'templates.manage', 'pages.publish', 'leads.view'],
       memberCount: 0,
     };
     // The list is read again after saving, and never answers here: the editor must open on the
@@ -209,7 +211,7 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
         body: {
           name: 'Trưởng nhóm nội dung',
           basedOn: 'editor',
-          permissions: ['pages.edit', 'pages.publish', 'leads.view'],
+          permissions: ['pages.edit', 'templates.manage', 'pages.publish', 'leads.view'],
           wholeWorkspace: false,
         },
       },

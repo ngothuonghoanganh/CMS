@@ -163,5 +163,32 @@ test.describe('Design capture', () => {
     await page.getByRole('button', { name: 'Tạo trang từ mẫu' }).click();
     await expect(page.getByRole('dialog', { name: 'Tạo trang từ mẫu' })).toBeVisible();
     await capture(page, 'TemplateDetail-create');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Áp dụng vào trang đang sửa…' }).click();
+    await expect(
+      page.getByRole('dialog', { name: 'Áp dụng mẫu vào trang đang sửa' }).getByText('Giữ nguyên'),
+    ).toBeVisible();
+    await capture(page, 'TemplateDetail-applyToPage');
+  });
+
+  test('19 WorkspaceTemplates', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`/workspaces/${board.site.workspaceId}/templates?source=workspace`);
+    await expect(page.getByRole('table').getByRole('row').nth(1)).toBeVisible();
+    await capture(page, 'WorkspaceTemplates');
+    await page
+      .getByRole('button', { name: /^Phiên bản của/ })
+      .first()
+      .click();
+    await expect(page.getByRole('dialog').getByRole('listitem').first()).toBeVisible();
+    await capture(page, 'WorkspaceTemplates-versions');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Lưu trang thành template' }).click();
+    await expect(
+      page
+        .getByRole('dialog', { name: 'Lưu trang thành template' })
+        .getByRole('combobox', { name: 'Lấy từ' }),
+    ).toBeEnabled();
+    await capture(page, 'WorkspaceTemplates-saveDialog');
   });
 });

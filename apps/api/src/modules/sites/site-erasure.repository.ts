@@ -20,6 +20,7 @@ import { CONSENT_VERSION_COLLECTION } from '../privacy/consent-version.schema.js
 import { APPROVAL_COLLECTION } from '../publishing/approval.schema.js';
 import { REDIRECT_COLLECTION } from '../publishing/redirect.schema.js';
 import { RELEASE_COLLECTION } from '../publishing/release.schema.js';
+import { TEMPLATE_COLLECTION } from '../templates/template.schema.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { SITE_COLLECTION } from './site.schema.js';
 
@@ -61,6 +62,16 @@ export class SiteErasureRepository {
     await this.deleteAll(scope, ANALYTICS_DAILY_COLLECTION, owned, tx);
     // No `workspaceId` in this one; in the workspace's own database `siteId` alone is the site.
     await this.deleteAll(scope, ANALYTICS_SEEN_COLLECTION, { siteId }, tx);
+    // Workspace templates stay, with their own images (ADR-030): the site only leaves the list of
+    // sites that may use them.
+    await this.databases
+      .model(scope, TEMPLATE_COLLECTION)
+      .updateMany(
+        { workspaceId: scope.workspaceId, 'scope.siteIds': siteId },
+        { $pull: { 'scope.siteIds': siteId } },
+        tx === undefined ? {} : { session: tx },
+      )
+      .exec();
   }
 
   private async deleteAll<T extends SiteDocument>(

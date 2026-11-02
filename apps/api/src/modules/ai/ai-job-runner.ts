@@ -372,7 +372,7 @@ export class AiJobRunner implements OnModuleDestroy {
             goal: job.brief.goal,
             composition,
             createdFrom: null,
-            templateName: null,
+            template: null,
           },
           tx,
         );

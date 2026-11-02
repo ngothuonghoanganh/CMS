@@ -3,10 +3,17 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
-import { renderWithProviders } from '../shell/test-utils';
+import {
+  pageFixture,
+  pageListFixture,
+  SITE_ID,
+  siteFixture,
+  WORKSPACE_ID,
+} from '../dashboard/test-fixtures';
+import { PAGE_ID, pageDetail, sampleComposition } from '../editor/test-fixtures';
+import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { TemplateDetailScreen } from './TemplateDetailScreen';
-import { detailFixture, readinessFixture } from './test-fixtures';
+import { detailFixture, readinessFixture, WORKSPACE_TEMPLATE_ID } from './test-fixtures';
 
 const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
@@ -159,6 +166,107 @@ describe('TemplateDetailScreen', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('3 trang trong các site của bạn')).toBeInTheDocument();
+  });
+
+  it('applies the template to a page of the site with its revision, then opens the editor (G3)', async () => {
+    const user = userEvent.setup();
+    const live = pageFixture({
+      id: PAGE_ID,
+      status: { kind: 'live_with_changes', changeCount: 2, changes: [] },
+    });
+    const detail = pageDetail(sampleComposition(), {
+      liveRelease: live.liveRelease,
+      latestVersion: 12,
+    });
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.listPages) {
+        return Promise.resolve(pageListFixture([live]));
+      }
+      if (endpoint === endpoints.getPage) {
+        return Promise.resolve(detail);
+      }
+      if (endpoint === endpoints.applyTemplate) {
+        return Promise.resolve(detail);
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    renderDetail();
+    await user.click(screen.getByRole('button', { name: 'Áp dụng vào trang đang sửa…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Áp dụng mẫu vào trang đang sửa' });
+    expect(await within(dialog).findByRole('combobox', { name: 'Trang' })).toHaveTextContent(
+      'Ưu đãi niềng răng tháng 11 · Live · Có thay đổi',
+    );
+    // Only "Thay toàn bộ section", with the real counts; "Chỉ đổi theme" is not offered (ADR-030).
+    const replace = await within(dialog).findByRole('radio', { name: 'Thay toàn bộ section' });
+    expect(replace).toBeChecked();
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(1);
+    expect(
+      await within(dialog).findByText(
+        /5 section hiện có trong bản nháp được thay bằng 8 section của mẫu, kèm chữ mẫu\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Trang live v12, tên trang, đường dẫn, SEO\./),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('Hoàn tác được')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Thay bản nháp và mở editor' }));
+    expect(lastCallTo(apiMock, endpoints.applyTemplate)).toEqual({
+      args: [SITE_ID, PAGE_ID],
+      options: {
+        body: {
+          baseRevision: 3,
+          template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+        },
+      },
+    });
+    expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+  });
+
+  it('shows an earlier version of a workspace template, and an archived one, without making pages', () => {
+    const earlier = detailFixture('nha-khoa-uu-dai', {
+      id: WORKSPACE_TEMPLATE_ID,
+      source: 'workspace',
+      version: 1,
+      currentVersion: 3,
+    });
+    const { unmount } = renderDetail({ template: earlier });
+    expect(screen.getByText('WORKSPACE')).toBeInTheDocument();
+    expect(screen.getByText(/Bạn đang xem v1\./)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Xem v3' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/templates/${WORKSPACE_TEMPLATE_ID}?site=${SITE_ID}`,
+    );
+    expect(screen.queryByRole('button', { name: 'Tạo trang từ mẫu' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Áp dụng vào trang đang sửa…' })).toBeNull();
+    unmount();
+
+    renderDetail({
+      template: detailFixture('nha-khoa-uu-dai', {
+        id: WORKSPACE_TEMPLATE_ID,
+        source: 'workspace',
+        archived: true,
+      }),
+    });
+    expect(screen.getByRole('link', { name: 'Template của workspace' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/templates?source=workspace&archived=1`,
+    );
+    expect(screen.queryByRole('button', { name: 'Tạo trang từ mẫu' })).toBeNull();
+  });
+
+  it('offers a template limited to other sites to none of the member’s sites', () => {
+    renderDetail({
+      template: detailFixture('nha-khoa-uu-dai', {
+        id: WORKSPACE_TEMPLATE_ID,
+        source: 'workspace',
+        siteIds: [],
+      }),
+    });
+    expect(screen.queryByRole('button', { name: 'Tạo trang từ mẫu' })).toBeNull();
+    expect(
+      screen.getByText('Mẫu này chỉ dùng cho các site đã chọn khi lưu, không có site nào của bạn.'),
+    ).toBeInTheDocument();
   });
 
   it('says what any site needs when there is no site to check, and the default theme', () => {

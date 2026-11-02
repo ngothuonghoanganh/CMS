@@ -242,6 +242,62 @@ export class PagesRepository {
       .exec();
   }
 
+  /**
+   * "ĐÃ TẠO" of board 19: pages made from each of the workspace templates given, any version, in
+   * the sites given (null: every site), keyed by template id hex, in one aggregation on the index.
+   * Templates without pages are absent.
+   */
+  async countCreatedFromWorkspaceTemplates(
+    scope: WorkspaceScope,
+    templateIds: readonly string[],
+    siteIds: readonly ObjectId[] | null,
+  ): Promise<Map<string, number>> {
+    if (templateIds.length === 0) {
+      return new Map();
+    }
+    const groups = await this.pages(scope)
+      .aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            'createdFrom.templateId': { $in: [...templateIds] },
+            'createdFrom.source': 'workspace',
+            ...(siteIds === null ? {} : { siteId: { $in: [...siteIds] } }),
+          },
+        },
+        { $group: { _id: '$createdFrom.templateId', count: { $sum: 1 } } },
+      ])
+      .hint(PAGES_CREATED_FROM_INDEX)
+      .exec();
+    return new Map(groups.map(({ _id, count }) => [_id, count]));
+  }
+
+  /**
+   * "Đã tạo N trang" of each version of a workspace template, in the sites given (null: every
+   * site), keyed by version. It reads the pages made from that template only.
+   */
+  async countCreatedFromByVersion(
+    scope: WorkspaceScope,
+    templateId: string,
+    siteIds: readonly ObjectId[] | null,
+  ): Promise<Map<number, number>> {
+    const groups = await this.pages(scope)
+      .aggregate<{ _id: number; count: number }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            'createdFrom.templateId': templateId,
+            'createdFrom.source': 'workspace',
+            ...(siteIds === null ? {} : { siteId: { $in: [...siteIds] } }),
+          },
+        },
+        { $group: { _id: '$createdFrom.version', count: { $sum: 1 } } },
+      ])
+      .hint(PAGES_CREATED_FROM_INDEX)
+      .exec();
+    return new Map(groups.map(({ _id, count }) => [_id, count]));
+  }
+
   /** How many pages of the site are live: what deleting the site takes off the web (ADR-027). */
   countLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
     return this.pages(scope)

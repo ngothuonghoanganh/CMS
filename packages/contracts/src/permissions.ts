@@ -9,6 +9,7 @@ import { idSchema } from './common.js';
 export const permissionSchema = z.enum([
   'pages.view',
   'pages.edit',
+  'templates.manage',
   'pages.publish',
   'pages.requestPublish',
   'publishApprovals.decide',
@@ -41,7 +42,7 @@ const grants: Record<Role, readonly Permission[]> = {
   admin: permissionSchema.options.filter(
     (permission) => !ownerOnly.includes(permission) && !askOnly.includes(permission),
   ),
-  editor: ['pages.view', 'pages.edit', 'pages.publish', 'pages.manageLive'],
+  editor: ['pages.view', 'pages.edit', 'templates.manage', 'pages.publish', 'pages.manageLive'],
   contributor: ['pages.view', 'pages.edit', 'pages.requestPublish'],
   support: ['pages.view', 'leads.view', 'leads.handle'],
   viewer: ['pages.view'],
@@ -109,6 +110,8 @@ export const permissionGroups: readonly PermissionGroup[] = [
     rows: [
       { permission: 'pages.view', label: 'Xem trang, bản nháp và hiệu quả' },
       { permission: 'pages.edit', label: 'Sửa bản nháp, section, SEO, tải ảnh lên' },
+      // With `pages.view` on the page it is saved from (ADR-030).
+      { permission: 'templates.manage', label: 'Lưu và quản lý template của workspace' },
     ],
   },
   {

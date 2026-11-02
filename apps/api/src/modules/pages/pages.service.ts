@@ -37,7 +37,10 @@ import { ASSET_NOT_IN_SITE_MESSAGE } from '../sites/site-management.service.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
-import { templateComposition, templateForStart } from '../templates/template-catalog.js';
+import {
+  type MaterializedTemplate,
+  TemplateMaterializer,
+} from '../templates/template-materializer.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
 import { revisionConflict } from './page-errors.js';
@@ -58,8 +61,8 @@ export interface InitialPage {
   composition: Composition;
   goal: PageGoal | null;
   createdFrom: PageCreatedFromRecord | null;
-  /** The template's name then, for "tạo trang từ mẫu" (ADR-030); null otherwise. */
-  templateName: string | null;
+  /** The template it is made from, with its copied images (ADR-030); null otherwise. */
+  template: MaterializedTemplate | null;
 }
 
 function firstIssueMessage(issues: readonly { message: string }[]): string {
@@ -83,6 +86,7 @@ export class PagesService {
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
     private readonly leads: LeadsRepository,
+    private readonly templates: TemplateMaterializer,
   ) {}
 
   /**
@@ -168,10 +172,18 @@ export class PagesService {
     input: CreatePageValues,
   ): Promise<PageDetailResponse> {
     const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
-    const initial = this.initialPage(site, input.start);
-    const page = await this.transactions.run((tx) =>
-      this.insertPage(scope, site, { title: input.title, slug: input.slug, ...initial }, tx),
-    );
+    const initial = await this.initialPage(scope, site, input.start);
+    let page: PageRecord;
+    try {
+      page = await this.transactions.run((tx) =>
+        this.insertPage(scope, site, { title: input.title, slug: input.slug, ...initial }, tx),
+      );
+    } catch (error) {
+      if (initial.template !== null) {
+        await this.templates.discardImages(initial.template, site._id);
+      }
+      throw error;
+    }
     return this.detail(scope, site, page);
   }
 
@@ -207,16 +219,20 @@ export class PagesService {
       },
       tx,
     );
+    if (input.template !== null) {
+      // The template's images, copied as the site's assets (ADR-030).
+      await this.templates.insertImages(scope, input.template, tx);
+    }
     const pageRef = { id: created._id, title: created.title };
     await this.activity.record(
       scope,
-      input.createdFrom === null
+      input.template === null
         ? { siteId: site._id, type: 'page.created', page: pageRef }
         : {
             siteId: site._id,
             type: 'page.created_from_template',
             page: pageRef,
-            data: { version: input.createdFrom.version, template: input.templateName },
+            data: { version: input.template.version, template: input.template.name },
           },
       tx,
     );
@@ -358,35 +374,34 @@ export class PagesService {
     return { page: evaluated.summary, draft: evaluated.draft, checks: evaluated.checks };
   }
 
-  private initialPage(site: SiteRecord, start: CreatePageValues['start']): InitialPage {
+  private async initialPage(
+    scope: WorkspaceScope,
+    site: SiteRecord,
+    start: CreatePageValues['start'],
+  ): Promise<InitialPage> {
     switch (start.kind) {
       case 'blank':
         return {
           composition: { version: 1, sections: [] },
           goal: null,
           createdFrom: null,
-          templateName: null,
+          template: null,
         };
       case 'goal':
         return {
           composition: this.goalComposition(site, start),
           goal: start.goal,
           createdFrom: null,
-          templateName: null,
+          template: null,
         };
       case 'template': {
-        // Fresh section ids for every page: two pages from one template never share one.
-        const template = templateForStart(start);
+        // The template is checked after `pages.edit` on the site, then its version (ADR-030).
+        const template = await this.templates.materialize(scope, site._id, start);
         return {
-          composition: templateComposition(template, newSectionId),
+          composition: template.composition,
           goal: template.goal,
-          createdFrom: {
-            kind: 'template',
-            source: start.source,
-            templateId: template.id,
-            version: template.version,
-          },
-          templateName: template.name,
+          createdFrom: template.createdFrom,
+          template,
         };
       }
     }

@@ -60,6 +60,21 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
             : `tạo trang ${quoted(item)} từ mẫu “${data.template}”${data.version === null ? '' : ` v${data.version}`}`,
         tone: 'primary',
       };
+    case 'page.template_applied':
+      // "áp dụng mẫu “Ưu đãi dịch vụ nha khoa” vào bản nháp của “…”" (ADR-030).
+      return {
+        text:
+          data.template === null
+            ? `áp dụng mẫu vào bản nháp của ${quoted(item)}`
+            : `áp dụng mẫu “${data.template}” vào bản nháp của ${quoted(item)}`,
+        tone: 'primary',
+      };
+    case 'template.saved':
+      // "lưu template “Tư vấn niềng răng trả góp”, phiên bản 3 từ trang “…”" (ADR-030).
+      return {
+        text: `lưu template “${data.template ?? ''}”${data.version === null ? '' : `, phiên bản ${data.version}`} từ trang ${quoted(item)}`,
+        tone: 'primary',
+      };
     case 'page.deleted':
       return { text: `xóa trang ${quoted(item)}`, tone: 'muted' };
     case 'page.draft_restored':

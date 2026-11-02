@@ -36,7 +36,9 @@ export function toPointerEvent(record: ActivityRecord, by: UserRef): PointerEven
     case 'page.created':
     case 'page.created_from_template':
     case 'page.draft_restored':
+    case 'page.template_applied':
     case 'page.deleted':
+    case 'template.saved':
     case 'asset.uploaded':
     case 'privacy.updated':
     case 'consent.version_created':

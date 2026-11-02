@@ -142,6 +142,19 @@ export class WorkspacesRepository {
     }
   }
 
+  /**
+   * Increments `templateSeq` in the transaction that creates a workspace template (ADR-030). The
+   * templates live in the workspace database; one transaction writes both (ADR-025).
+   */
+  async recordTemplateCreation(scope: WorkspaceScope, tx: Tx): Promise<void> {
+    const result = await this.workspaces
+      .updateOne({ _id: scope.workspaceId }, { $inc: { templateSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Workspace ${scope.workspaceId.toHexString()} of the scope does not exist`);
+    }
+  }
+
   /** Increments `customRoleSeq` in the transaction that creates a custom role (ADR-024). */
   async recordCustomRole(scope: WorkspaceScope, tx: Tx): Promise<void> {
     const result = await this.workspaces

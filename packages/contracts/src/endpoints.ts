@@ -135,9 +135,19 @@ import {
   updateSiteRequestSchema,
 } from './site.js';
 import {
+  applyTemplateRequestSchema,
+  createTemplateVersionRequestSchema,
+  createWorkspaceTemplateRequestSchema,
+  reuseTemplateVersionRequestSchema,
+  templateCompositionResponseSchema,
   templateDetailQuerySchema,
   templateDetailSchema,
   templateListResponseSchema,
+  templateRefSchema,
+  templateVersionListResponseSchema,
+  updateWorkspaceTemplateRequestSchema,
+  workspaceTemplateListResponseSchema,
+  workspaceTemplateSchema,
 } from './templates.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -845,6 +855,92 @@ export const endpoints = {
     response: templateDetailSchema,
   }),
 
+  /*
+   * Workspace templates (board 19, ADR-030). Every member sees those a site of theirs may use;
+   * changing them needs `templates.manage`, and saving a page also `pages.view` on its site.
+   */
+  listWorkspaceTemplates: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/workspace-templates`,
+    request: null,
+    query: null,
+    response: workspaceTemplateListResponseSchema,
+  }),
+  /** "Lưu trang thành template" as a new template. 409 `template_limit_reached` past 100. */
+  createWorkspaceTemplate: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/workspace-templates`,
+    request: createWorkspaceTemplateRequestSchema,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+  /** "Sửa thông tin": name, description, goal, industry and who may use it. */
+  updateWorkspaceTemplate: endpoint({
+    method: 'PATCH',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}`,
+    request: updateWorkspaceTemplateRequestSchema,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+  /** "Nhân bản": a new template whose v1 is the current version's content. */
+  duplicateWorkspaceTemplate: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}/duplicate`,
+    request: null,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+  /** "Lưu trữ": out of the library; pages made from it stay as they are. */
+  archiveWorkspaceTemplate: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}/archive`,
+    request: null,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+  /** "Khôi phục": back in the library. */
+  restoreWorkspaceTemplate: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}/restore`,
+    request: null,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+  /** "Lịch sử phiên bản", newest first. */
+  listTemplateVersions: endpoint({
+    method: 'GET',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}/versions`,
+    request: null,
+    query: null,
+    response: templateVersionListResponseSchema,
+  }),
+  /**
+   * "Lưu trang thành template" as a new version. 409 `template_changed` when `baseVersion` is no
+   * longer the current one, `template_version_limit_reached` past 50.
+   */
+  createTemplateVersion: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}/versions`,
+    request: createTemplateVersionRequestSchema,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+  /** "Dùng lại vN": a new version with the content of vN; versions never change. */
+  reuseTemplateVersion: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, templateId: string, version: string) =>
+      `/workspaces/${e(workspaceId)}/workspace-templates/${e(templateId)}/versions/${e(version)}/reuse`,
+    request: reuseTemplateVersionRequestSchema,
+    query: null,
+    response: workspaceTemplateSchema,
+  }),
+
   // Pages and drafts
   listPages: endpoint({
     method: 'GET',
@@ -904,6 +1000,31 @@ export const endpoints = {
     request: restoreDraftRequestSchema,
     query: null,
     response: pageDetailResponseSchema,
+  }),
+  /**
+   * `pages.edit` (ADR-030), "Áp dụng vào trang đang sửa…" of board 18: the draft's sections are
+   * replaced with the template's, at `baseRevision` like autosave (409 `revision_conflict`); its
+   * images are copied to the site. Title, slug, SEO and the live page stay.
+   */
+  applyTemplate: endpoint({
+    method: 'POST',
+    path: (siteId: string, pageId: string) =>
+      `/sites/${e(siteId)}/pages/${e(pageId)}/draft/template`,
+    request: applyTemplateRequestSchema,
+    query: null,
+    response: pageDetailResponseSchema,
+  }),
+  /**
+   * `pages.edit` (ADR-030), "Áp dụng mẫu…" of the editor: the template's sections for this page,
+   * its images copied to the site. Nothing is saved: the editor applies them with one command.
+   */
+  templateComposition: endpoint({
+    method: 'POST',
+    path: (siteId: string, pageId: string) =>
+      `/sites/${e(siteId)}/pages/${e(pageId)}/template-composition`,
+    request: templateRefSchema,
+    query: null,
+    response: templateCompositionResponseSchema,
   }),
   /**
    * `pages.manageLive` (ADR-027): deletes a page that is not live, with its versions (except those

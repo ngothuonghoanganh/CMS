@@ -7,7 +7,7 @@ import {
   systemTemplateOrNotFound,
   systemTemplateSummaries,
   templateComposition,
-  templateForStart,
+  systemTemplateForRef,
   toTemplateSummary,
 } from './template-catalog.js';
 
@@ -57,15 +57,15 @@ describe('the system catalog as the API serves it', () => {
   });
 });
 
-describe('templateForStart', () => {
+describe('systemTemplateForRef', () => {
   it('returns the template at the version the user previewed', () => {
-    const template = templateForStart({ ...start, version: 1 });
+    const template = systemTemplateForRef({ ...start, version: 1 });
     expect(template.id).toBe('nha-khoa-uu-dai');
   });
 
   it('refuses any other version with the current one, rather than make it unseen', () => {
     for (const version of [2, 99]) {
-      expect(errorOf(() => templateForStart({ ...start, version }))).toMatchObject({
+      expect(errorOf(() => systemTemplateForRef({ ...start, version }))).toMatchObject({
         status: 409,
         code: 'template_changed',
         title: 'Mẫu “Ưu đãi dịch vụ nha khoa” đã có phiên bản mới (v1)',
@@ -76,7 +76,8 @@ describe('templateForStart', () => {
 
   it('answers 404 for an unknown template, before its version', () => {
     expect(
-      errorOf(() => templateForStart({ ...start, templateId: 'khong-co-mau', version: 1 })).status,
+      errorOf(() => systemTemplateForRef({ ...start, templateId: 'khong-co-mau', version: 1 }))
+        .status,
     ).toBe(404);
   });
 });

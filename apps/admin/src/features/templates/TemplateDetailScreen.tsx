@@ -10,12 +10,14 @@ import {
   type TemplateDetail,
   templateIndustryLabels,
   templateSourceLabels,
+  templateUsableIn,
 } from '@plp/contracts';
 import { themePresets } from '@plp/sections/schema';
 import {
   ArrowLeftIcon,
   Badge,
   Button,
+  Callout,
   Card,
   CheckIcon,
   DesktopIcon,
@@ -29,8 +31,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { formatDate } from '../../lib/format';
-import { templatesHref } from '../shell/navigation';
+import { templateHref, templatesHref, workspaceTemplatesHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
+import { ApplyTemplateDialog } from './ApplyTemplateDialog';
 import { CreateFromTemplateDialog } from './CreateFromTemplateDialog';
 import { goalLabel } from './library-filters';
 import { type ReadinessItem, readinessItems } from './readiness';
@@ -58,7 +61,8 @@ export interface TemplateDetailScreenProps {
 /**
  * One template (board 18, ADR-030): its page on a computer or a phone in the chosen site's theme,
  * its sections, what that site still needs before a page from it goes live, and "Tạo trang từ
- * mẫu". "Áp dụng vào trang đang sửa…" comes with slice G3.
+ * mẫu" and "Áp dụng vào trang đang sửa…". An earlier version of a workspace template, or an
+ * archived one, is shown without them.
  */
 export function TemplateDetailScreen({
   workspace,
@@ -71,8 +75,15 @@ export function TemplateDetailScreen({
   const router = useRouter();
   const [device, setDevice] = useState<PreviewDevice>('desktop');
   const [createOpen, setCreateOpen] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
   const site = sites.find((item) => item.id === siteId) ?? null;
-  const targets = can(role, 'pages.edit') ? sites : [];
+  // A workspace template limited to some sites is used only there (ADR-030).
+  const targets = can(role, 'pages.edit')
+    ? sites.filter((item) => templateUsableIn(template.siteIds, item.id))
+    : [];
+  // An earlier version is shown, never made into a page; an archived template neither.
+  const earlier = template.version !== template.currentVersion;
+  const usable = !earlier && !template.archived;
   const theme = themePresets[site?.themePresetId ?? DEFAULT_THEME_PRESET];
   const items = readinessItems({
     hasForm: template.hasForm,
@@ -96,9 +107,13 @@ export function TemplateDetailScreen({
       <header className={styles.header}>
         <div className={styles.heading}>
           <div className={styles.badges}>
-            <Badge size="sm">{templateSourceLabels[template.source].toUpperCase()}</Badge>
-            <Badge size="sm">{goalLabel(template.goal)}</Badge>
-            <Badge size="sm">{templateIndustryLabels[template.industry]}</Badge>
+            <Badge size="sm" tone={template.source === 'workspace' ? 'info' : 'neutral'}>
+              {templateSourceLabels[template.source].toUpperCase()}
+            </Badge>
+            {template.goal === null ? null : <Badge size="sm">{goalLabel(template.goal)}</Badge>}
+            {template.industry === null ? null : (
+              <Badge size="sm">{templateIndustryLabels[template.industry]}</Badge>
+            )}
           </div>
           <h1 className={styles.title}>{template.name}</h1>
           <p className={styles.details}>{template.details}</p>
@@ -124,6 +139,7 @@ export function TemplateDetailScreen({
             name={template.name}
             composition={template.composition}
             themePresetId={theme.id}
+            images={template.images}
             siteName={site?.name ?? 'Tên site'}
             device={device}
           />
@@ -131,21 +147,56 @@ export function TemplateDetailScreen({
 
         <div className={styles.aside}>
           <Card className={styles.panel}>
-            {initialSiteId === undefined ? (
+            {earlier ? (
+              <Callout tone="info">
+                Bạn đang xem v{template.version}. Trang mới được tạo từ phiên bản đang dùng, v
+                {template.currentVersion}.{' '}
+                <Link
+                  href={templateHref(workspace.id, template.id, site?.id)}
+                  className={styles.inlineLink}
+                >
+                  Xem v{template.currentVersion}
+                </Link>
+              </Callout>
+            ) : template.archived ? (
+              <Callout tone="info">
+                Mẫu này đã được lưu trữ. Khôi phục ở{' '}
+                <Link
+                  href={workspaceTemplatesHref(workspace.id, true)}
+                  className={styles.inlineLink}
+                >
+                  Template của workspace
+                </Link>{' '}
+                để dùng lại.
+              </Callout>
+            ) : initialSiteId === undefined ? (
               <p className={styles.note}>
-                {can(role, 'pages.edit')
-                  ? 'Chưa có site nào để tạo trang từ mẫu.'
-                  : `Chỉ ${holdersOf('pages.edit')} tạo được trang từ mẫu.`}
+                {!can(role, 'pages.edit')
+                  ? `Chỉ ${holdersOf('pages.edit')} tạo được trang từ mẫu.`
+                  : template.siteIds === null
+                    ? 'Chưa có site nào để tạo trang từ mẫu.'
+                    : 'Mẫu này chỉ dùng cho các site đã chọn khi lưu, không có site nào của bạn.'}
               </p>
             ) : (
-              <Button
-                fullWidth
-                onClick={() => {
-                  setCreateOpen(true);
-                }}
-              >
-                Tạo trang từ mẫu
-              </Button>
+              <>
+                <Button
+                  fullWidth
+                  onClick={() => {
+                    setCreateOpen(true);
+                  }}
+                >
+                  Tạo trang từ mẫu
+                </Button>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => {
+                    setApplyOpen(true);
+                  }}
+                >
+                  Áp dụng vào trang đang sửa…
+                </Button>
+              </>
             )}
             <p className={styles.note}>
               Chữ mẫu được đánh dấu. Checklist xuất bản sẽ nhắc bạn thay trước khi live.
@@ -203,20 +254,32 @@ export function TemplateDetailScreen({
         </div>
       </div>
 
-      {initialSiteId === undefined ? null : (
-        <CreateFromTemplateDialog
-          workspaceId={workspace.id}
-          template={template}
-          sites={targets}
-          initialSiteId={initialSiteId}
-          initialReadiness={initialSiteId === site?.id ? template.site : undefined}
-          role={role}
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          onTemplateChanged={() => {
-            router.refresh();
-          }}
-        />
+      {initialSiteId === undefined || !usable ? null : (
+        <>
+          <CreateFromTemplateDialog
+            workspaceId={workspace.id}
+            template={template}
+            sites={targets}
+            initialSiteId={initialSiteId}
+            initialReadiness={initialSiteId === site?.id ? template.site : undefined}
+            role={role}
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+            onTemplateChanged={() => {
+              router.refresh();
+            }}
+          />
+          <ApplyTemplateDialog
+            template={template}
+            sites={targets}
+            initialSiteId={initialSiteId}
+            open={applyOpen}
+            onOpenChange={setApplyOpen}
+            onTemplateChanged={() => {
+              router.refresh();
+            }}
+          />
+        </>
       )}
     </PageContainer>
   );

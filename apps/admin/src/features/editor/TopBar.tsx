@@ -1,5 +1,6 @@
 'use client';
 
+import { can } from '@plp/contracts';
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
@@ -7,12 +8,17 @@ import {
   Button,
   CheckCircleIcon,
   CheckIcon,
+  CopyIcon,
   DesktopIcon,
+  DropdownMenu,
+  DropdownMenuItem,
   EyeIcon,
+  GridIcon,
   HistoryIcon,
   IconButton,
   IconButtonLink,
   MobileIcon,
+  MoreHorizontalIcon,
   RedoIcon,
   SegmentedControl,
   SettingsIcon,
@@ -105,6 +111,8 @@ export interface TopBarProps {
   previewPending: boolean;
   /** Opens the publish dialog (screen 05). */
   onOpenPublish: () => void;
+  /** "Lưu thành template" and "Áp dụng mẫu…" of the "…" menu (ADR-030). */
+  onTemplate: (action: 'save' | 'apply') => void;
 }
 
 export function TopBar({
@@ -114,6 +122,7 @@ export function TopBar({
   onPreview,
   previewPending,
   onOpenPublish,
+  onTemplate,
 }: TopBarProps) {
   const store = useEditorStoreApi();
   const page = useEditor((state) => state.page);
@@ -244,6 +253,34 @@ export function TopBar({
           icon={<SettingsIcon size={20} />}
           size="sm"
         />
+        <DropdownMenu
+          trigger={
+            <IconButton
+              size="sm"
+              aria-label="Thao tác khác với trang"
+              icon={<MoreHorizontalIcon size={20} />}
+            />
+          }
+        >
+          {can(role, 'templates.manage') ? (
+            <DropdownMenuItem
+              icon={<CopyIcon size={18} />}
+              onSelect={() => {
+                onTemplate('save');
+              }}
+            >
+              Lưu thành template
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem
+            icon={<GridIcon size={18} />}
+            onSelect={() => {
+              onTemplate('apply');
+            }}
+          >
+            Áp dụng mẫu…
+          </DropdownMenuItem>
+        </DropdownMenu>
         <Button
           variant="secondary"
           leadingIcon={<EyeIcon size={18} />}

@@ -15,7 +15,7 @@ describe('the custom role editor (board 16, ADR-024)', () => {
     expect(newDraft()).toEqual({
       name: '',
       basedOn: 'editor',
-      permissions: ['pages.edit', 'pages.publish', 'pages.manageLive'],
+      permissions: ['pages.edit', 'templates.manage', 'pages.publish', 'pages.manageLive'],
       wholeWorkspace: false,
     });
     const named = { ...newDraft(), name: 'Trưởng nhóm', wholeWorkspace: true };
@@ -57,7 +57,12 @@ describe('the custom role editor (board 16, ADR-024)', () => {
     const editor = newDraft().permissions;
     expect(publishLevelOf(editor)).toBe('on');
     const asking = withPublishLevel(editor, 'request');
-    expect(asking).toEqual(['pages.edit', 'pages.manageLive', 'pages.requestPublish']);
+    expect(asking).toEqual([
+      'pages.edit',
+      'templates.manage',
+      'pages.manageLive',
+      'pages.requestPublish',
+    ]);
     expect(publishLevelOf(asking)).toBe('request');
     expect(
       withPublishLevel(['pages.edit', 'pages.publish', 'publishApprovals.decide'], 'off'),

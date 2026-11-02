@@ -7,8 +7,10 @@ import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { PrivacyCoreModule } from '../privacy/privacy-core.module.js';
 import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
+import { TemplatesCoreModule } from '../templates/templates-core.module.js';
 import { PageAccessService } from './page-access.service.js';
 import { PageDeletionService } from './page-deletion.service.js';
+import { PageTemplatesService } from './page-templates.service.js';
 import { PageEvaluator } from './page-evaluator.service.js';
 import { PAGE_COLLECTION } from './page.schema.js';
 import { PagesController } from './pages.controller.js';
@@ -32,9 +34,18 @@ import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-d
     PrivacyCoreModule,
     PublishingCoreModule,
     SitesCoreModule,
+    // Pages and drafts made from a template, its images copied to the site (ADR-030).
+    TemplatesCoreModule,
   ],
   controllers: [PagesController],
-  providers: [PagesRepository, PageAccessService, PageEvaluator, PagesService, PageDeletionService],
+  providers: [
+    PagesRepository,
+    PageAccessService,
+    PageEvaluator,
+    PagesService,
+    PageDeletionService,
+    PageTemplatesService,
+  ],
   exports: [PagesRepository, PageAccessService, PageEvaluator, PagesService],
 })
 export class PagesModule {}

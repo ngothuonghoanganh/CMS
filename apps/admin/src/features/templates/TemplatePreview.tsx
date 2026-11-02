@@ -1,6 +1,6 @@
 'use client';
 
-import type { Composition, ThemePresetId } from '@plp/contracts';
+import type { Composition, PublicImage, ThemePresetId } from '@plp/contracts';
 import { PageView, type RenderContext } from '@plp/sections/react';
 import { useMemo, useRef } from 'react';
 import { frameLayout, frameStyle } from '../editor/presentation';
@@ -19,6 +19,8 @@ export interface TemplatePreviewProps {
   composition: Composition;
   /** The theme of the site the page would be made for: the page is drawn as it would look. */
   themePresetId: ThemePresetId;
+  /** The template's own images by asset id (ADR-030); none for a system template. */
+  images: Readonly<Record<string, PublicImage>>;
   /** Shown where the page uses the site's name (navigation bar, footer). */
   siteName: string;
   device: PreviewDevice;
@@ -27,12 +29,14 @@ export interface TemplatePreviewProps {
 /**
  * A template's page drawn by the same `PageView` as the editor and the renderer, laid out at a
  * real device width and scaled to fit, like the editor's canvas (ADR-008). Nothing in it is
- * editable or leads anywhere: texts are plain, buttons are drawn, image frames are empty.
+ * editable or leads anywhere: texts are plain and buttons are drawn. A system template's image
+ * frames are empty; a workspace template shows its own copies of its images.
  */
 export function TemplatePreview({
   name,
   composition,
   themePresetId,
+  images,
   siteName,
   device,
 }: TemplatePreviewProps) {
@@ -42,12 +46,12 @@ export function TemplatePreview({
     () => ({
       mode: 'edit',
       site: { name: siteName, logo: null },
-      images: {},
+      images,
       pagePaths: {},
       // The form's consent texts belong to the site (ADR-017); the canvas says they come from it.
       leadCapture: null,
     }),
-    [siteName],
+    [images, siteName],
   );
   return (
     // Scrolled with the keyboard too: the region takes focus (WCAG 2.1.1).

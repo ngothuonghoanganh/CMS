@@ -1,0 +1,56 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quiet {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.box {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-2);
+}
+
+.box strong {
+  display: block;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.box[data-tone='success'] {
+  background: var(--color-success-soft);
+  color: var(--color-success-ink);
+}
+
+.box[data-tone='warning'] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-ink);
+}
+
+.box[data-tone='success'] strong,
+.box[data-tone='warning'] strong {
+  color: inherit;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}

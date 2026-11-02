@@ -73,10 +73,36 @@ export function templatesHref(workspaceId: string, search = ''): string {
   return `${workspaceHref(workspaceId)}/templates${search}`;
 }
 
-/** One template (board 18), previewed for a site when one is given. */
-export function templateHref(workspaceId: string, templateId: string, siteId?: string): string {
-  const search = siteId === undefined ? '' : `?site=${encodeURIComponent(siteId)}`;
-  return templatesHref(workspaceId, `/${encodeURIComponent(templateId)}${search}`);
+/**
+ * One template (board 18), previewed for a site when one is given, at an earlier version of a
+ * workspace template when one is given ("Xem trước" of its versions, board 19).
+ */
+export function templateHref(
+  workspaceId: string,
+  templateId: string,
+  siteId?: string,
+  version?: number,
+): string {
+  const params = new URLSearchParams();
+  if (siteId !== undefined) {
+    params.set('site', siteId);
+  }
+  if (version !== undefined) {
+    params.set('version', String(version));
+  }
+  const search = params.toString();
+  return templatesHref(
+    workspaceId,
+    `/${encodeURIComponent(templateId)}${search === '' ? '' : `?${search}`}`,
+  );
+}
+
+/** "Template của workspace" (board 19): the library's tab, active or archived templates. */
+export function workspaceTemplatesHref(workspaceId: string, archived = false): string {
+  return templatesHref(
+    workspaceId,
+    archived ? '?source=workspace&archived=1' : '?source=workspace',
+  );
 }
 
 /** "Tạo site khách hàng" in the workspace. */

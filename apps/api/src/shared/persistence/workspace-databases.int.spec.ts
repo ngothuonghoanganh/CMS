@@ -42,6 +42,8 @@ const WORKSPACE_COLLECTIONS = [
   'redirects',
   'releases',
   'sites',
+  'template_versions',
+  'templates',
 ];
 
 /** ADR-025: a master DB for accounts and routing, and one database per workspace for its data. */

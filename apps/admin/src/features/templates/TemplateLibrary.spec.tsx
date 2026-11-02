@@ -1,4 +1,4 @@
-import { type Access, endpoints, type Membership } from '@plp/contracts';
+import { type Access, endpoints, type Membership, type TemplateSummary } from '@plp/contracts';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +7,7 @@ import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { renderWithProviders } from '../shell/test-utils';
 import type { LibraryTab } from './library-filters';
 import { TemplateLibrary } from './TemplateLibrary';
-import { readinessFixture, templateSummaries } from './test-fixtures';
+import { readinessFixture, templateSummaries, workspaceSummaryFixture } from './test-fixtures';
 
 const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
@@ -37,13 +37,14 @@ function renderLibrary(
     tab?: LibraryTab;
     sites?: (typeof smile)[];
     siteId?: string | null;
+    templates?: TemplateSummary[];
   } = {},
 ) {
   return renderWithProviders(
     <TemplateLibrary
       workspace={workspace}
       role={options.role ?? 'owner'}
-      templates={templateSummaries}
+      templates={options.templates ?? templateSummaries}
       sites={options.sites ?? [smile, kitchen]}
       initialSiteId={options.siteId === undefined ? KITCHEN_ID : options.siteId}
       tab={options.tab ?? 'all'}
@@ -216,6 +217,36 @@ describe('TemplateLibrary', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
+  });
+
+  it('lists the workspace’s own templates with their source, and uses them only in their sites (G2)', () => {
+    const own = workspaceSummaryFixture();
+    const smileOnly = workspaceSummaryFixture({
+      id: '64b0000000000000000000f2',
+      name: 'Chỉ cho Smile Care',
+      siteIds: [SITE_ID],
+    });
+    renderLibrary({ templates: [...templateSummaries, own, smileOnly] });
+    const tabs = screen.getByRole('navigation', { name: 'Nguồn mẫu' });
+    // "Của workspace" leads to board 19, the workspace's own templates.
+    expect(within(tabs).getByRole('link', { name: 'Của workspace · 2' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/templates?source=workspace&site=${KITCHEN_ID}`,
+    );
+    const card = screen.getByRole('article', { name: 'Tư vấn niềng răng trả góp' });
+    expect(within(card).getByText('WORKSPACE')).toBeInTheDocument();
+    expect(
+      within(card).getByText('Thu lead tư vấn · 8 section · Mây Xanh Agency'),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', { name: 'Dùng mẫu Tư vấn niềng răng trả góp' }),
+    ).toBeInTheDocument();
+    // "Tạo trang cho" is Bếp Nhà Mây, which may not use the second one.
+    const limited = screen.getByRole('article', { name: 'Chỉ cho Smile Care' });
+    expect(within(limited).queryByRole('button', { name: /Dùng mẫu/ })).toBeNull();
+    expect(
+      within(limited).getByText('Mẫu này chỉ dùng cho các site đã chọn khi lưu.'),
+    ).toBeInTheDocument();
   });
 
   it('marks the tab of the source being shown', () => {

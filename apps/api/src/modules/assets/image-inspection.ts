@@ -24,7 +24,8 @@ export const IMAGES_BUSY_MESSAGE = 'Đang xử lý nhiều ảnh cùng lúc. Th�
  */
 const encoding = new TaskLimiter({ running: 1, waiting: 8 });
 
-const extensionByMimeType: Record<AssetMimeType, string> = {
+/** The file extension of a stored image's key; a copy of it keeps the same one (ADR-030). */
+export const extensionByMimeType: Record<AssetMimeType, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',

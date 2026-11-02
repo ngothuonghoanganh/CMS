@@ -27,6 +27,11 @@ export interface WorkspaceRecord {
    * count each other against the limit (ADR-024).
    */
   customRoleSeq?: number;
+  /**
+   * Workspace templates created so far, in the workspace database; each creation increments it
+   * in its transaction, so two at once count each other against the limit (ADR-030).
+   */
+  templateSeq?: number;
   createdBy: Types.ObjectId;
   createdAt: Date;
 }
@@ -38,6 +43,7 @@ export const workspaceSchema = new Schema<WorkspaceRecord>(
     siteSeq: { type: Number, default: 0 },
     inviteSeq: { type: Number, default: 0 },
     customRoleSeq: { type: Number, default: 0 },
+    templateSeq: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },
   },

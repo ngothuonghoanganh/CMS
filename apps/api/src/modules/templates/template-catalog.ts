@@ -1,9 +1,4 @@
-import type {
-  Composition,
-  CreatePageRequest,
-  TemplateSource,
-  TemplateSummary,
-} from '@plp/contracts';
+import type { Composition, TemplateRef, TemplateSource, TemplateSummary } from '@plp/contracts';
 import {
   buildCompositionFromTemplate,
   findSystemTemplate,
@@ -17,8 +12,6 @@ import { AppError, notFound } from '../../shared/errors.js';
 
 export const TEMPLATE_NOT_FOUND = 'Không tìm thấy mẫu';
 
-export type TemplateStart = Extract<CreatePageRequest['start'], { kind: 'template' }>;
-
 /** The system template with this id; an unknown one is 404, like any resource (ADR-030). */
 export function systemTemplateOrNotFound(id: string): SystemTemplate {
   const template = findSystemTemplate(id);
@@ -29,21 +22,28 @@ export function systemTemplateOrNotFound(id: string): SystemTemplate {
 }
 
 /**
- * The template a page is created from, at the version the user previewed. A newer version is
- * refused rather than made unseen: the admin shows the new one, then the user creates again.
+ * 409 for a version that is no longer the template's current one. A newer version is refused
+ * rather than made unseen: the admin shows the new one, then the user tries again.
  */
-export function templateForStart(start: TemplateStart): SystemTemplate {
-  const template = systemTemplateOrNotFound(start.templateId);
-  if (template.version !== start.version) {
-    throw new AppError(
-      409,
-      'template_changed',
-      `Mẫu “${template.name}” đã có phiên bản mới (v${template.version})`,
-      {
-        detail: 'Xem lại bản xem trước của phiên bản mới rồi tạo trang.',
-        context: { currentVersion: template.version },
-      },
-    );
+export function templateChanged(name: string, currentVersion: number): AppError {
+  return new AppError(
+    409,
+    'template_changed',
+    `Mẫu “${name}” đã có phiên bản mới (v${currentVersion})`,
+    {
+      detail: 'Xem lại bản xem trước của phiên bản mới rồi thử lại.',
+      context: { currentVersion },
+    },
+  );
+}
+
+/** The system template a page is created from, at the version the user previewed. */
+export function systemTemplateForRef(
+  ref: Pick<TemplateRef, 'templateId' | 'version'>,
+): SystemTemplate {
+  const template = systemTemplateOrNotFound(ref.templateId);
+  if (template.version !== ref.version) {
+    throw templateChanged(template.name, template.version);
   }
   return template;
 }
@@ -90,6 +90,8 @@ export function toTemplateSummary(template: SystemTemplate): TemplateSummary {
     industry: template.industry,
     hasForm: templateHasForm(template),
     sections: templateSections(template),
+    // A system template may be used in every site.
+    siteIds: null,
   };
 }
 

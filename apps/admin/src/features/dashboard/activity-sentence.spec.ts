@@ -80,6 +80,23 @@ describe('activitySentence', () => {
     expect(sentence({ type: 'page.created_from_template', data: noVersions })).toBe(
       'Ngọc Anh tạo trang “Ưu đãi niềng răng tháng 11” từ mẫu [primary]',
     );
+    // Workspace templates (ADR-030, G2 and G3).
+    expect(
+      sentence({
+        type: 'template.saved',
+        data: { ...noVersions, version: 3, template: 'Tư vấn niềng răng trả góp' },
+      }),
+    ).toBe(
+      'Ngọc Anh lưu template “Tư vấn niềng răng trả góp”, phiên bản 3 từ trang “Ưu đãi niềng răng tháng 11” [primary]',
+    );
+    expect(
+      sentence({
+        type: 'page.template_applied',
+        data: { ...noVersions, version: 1, template: 'Ưu đãi dịch vụ nha khoa' },
+      }),
+    ).toBe(
+      'Ngọc Anh áp dụng mẫu “Ưu đãi dịch vụ nha khoa” vào bản nháp của “Ưu đãi niềng răng tháng 11” [primary]',
+    );
     expect(sentence({ type: 'site.created', page: null, data: noVersions })).toBe(
       'Ngọc Anh tạo site [primary]',
     );
