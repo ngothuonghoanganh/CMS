@@ -526,6 +526,24 @@ describe('parseComposition', () => {
     ]);
   });
 
+  it('keeps review paths of the AI like sample paths: text fields and button labels, once', () => {
+    const hero = createSectionInstance('hero', 'split', id(1));
+    expect(hero.reviewPaths).toEqual([]);
+    const parsed = parseComposition({
+      version: 1,
+      sections: [
+        {
+          ...hero,
+          reviewPaths: ['subheading', 'subheading', 'primaryCta.label', 'image.alt', 'nope'],
+        },
+      ],
+    });
+    if (!parsed.success) {
+      throw new Error(JSON.stringify(parsed.issues));
+    }
+    expect(parsed.composition.sections[0]?.reviewPaths).toEqual(['subheading', 'primaryCta.label']);
+  });
+
   it('fails with every issue and returns no composition', () => {
     const hero = createSectionInstance('hero', 'split', id(1));
     const result = parseComposition({

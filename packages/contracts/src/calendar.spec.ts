@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addVnDays,
   businessDeadline,
+  nextVnMonthStart,
   recentDaysWindow,
   vnDateTimeOf,
   vnDayOf,
@@ -9,7 +10,23 @@ import {
   vnDayStart,
   vnDaysWindow,
   vnInstantOf,
+  vnMonthOf,
 } from './calendar.js';
+
+describe('Vietnamese calendar months (the AI quota, ADR-031)', () => {
+  it('changes month at 00:00 in Vietnam, 17:00 UTC the day before', () => {
+    expect(vnMonthOf(new Date('2026-11-30T16:59:59.999Z'))).toBe('2026-11');
+    expect(vnMonthOf(new Date('2026-11-30T17:00:00.000Z'))).toBe('2026-12');
+    // Still the 1st in UTC, already the 1st in Vietnam too: the same month.
+    expect(vnMonthOf(new Date('2026-12-01T00:00:00.000Z'))).toBe('2026-12');
+  });
+
+  it('gives back the uses on the first day of the next month, across years', () => {
+    expect(nextVnMonthStart('2026-11')).toBe('2026-12-01');
+    expect(nextVnMonthStart('2026-12')).toBe('2027-01-01');
+    expect(nextVnMonthStart('2028-02')).toBe('2028-03-01');
+  });
+});
 
 describe('Vietnamese calendar days', () => {
   it('starts a day at 00:00 in Vietnam, 17:00 UTC the day before', () => {

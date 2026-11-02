@@ -19,6 +19,9 @@ describe('endpoints', () => {
       endpoints.completeDataRequest.path(SITE_ID, ID),
       endpoints.undoActivity.path(SITE_ID, ID),
       endpoints.updateAsset.path(SITE_ID, ID),
+      endpoints.getAiPageJob.path(SITE_ID, ID),
+      endpoints.retryAiPageJob.path(SITE_ID, ID),
+      endpoints.cancelAiPageJob.path(SITE_ID, ID),
     ];
     for (const path of paths) {
       expect(path.startsWith(`/sites/${SITE_ID}/`)).toBe(true);

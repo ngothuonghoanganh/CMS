@@ -7,7 +7,13 @@ export interface ControlProps<F> {
   path: string;
 }
 
-/** Marks text that is still sample copy; publishing warns about it. */
+/**
+ * Marks text that is still sample copy, or that the AI wrote with a figure, a price or a claim to
+ * check (ADR-031); publishing warns about both.
+ */
 export function sampleNote(section: SectionInstance, path: string): string | undefined {
-  return section.samplePaths.includes(path) ? 'nội dung mẫu' : undefined;
+  if (section.samplePaths.includes(path)) {
+    return 'nội dung mẫu';
+  }
+  return section.reviewPaths.includes(path) ? 'AI viết · cần kiểm tra' : undefined;
 }

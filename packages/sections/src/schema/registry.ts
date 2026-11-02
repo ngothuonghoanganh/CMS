@@ -258,12 +258,14 @@ export function createSectionInstance(
     mobileOrder: 'auto',
     content,
     samplePaths: samplePathsOf(draft),
+    reviewPaths: [],
   };
 }
 
 /**
- * Paths a section may mark as sample text: its text fields and button labels, including the fields
- * the variant hides and every list item that exists (the candidates of `samplePathsOf`).
+ * Paths a section may mark as sample text or as text to review: its text fields and button labels,
+ * including the fields the variant hides and every list item that exists (the candidates of
+ * `samplePathsOf`).
  */
 function samplePathCandidates(
   section: Pick<SectionInstance, 'type' | 'variant' | 'content'>,
@@ -382,7 +384,7 @@ function checkSections(
 /**
  * Validates every section against its own definition and returns the composition as validated:
  * each content as its section schema parsed it, so keys no schema knows (in the content, a button,
- * a link) are dropped, and sample paths that name no text field are dropped too. Store and publish
+ * a link) are dropped, and sample and review paths that name no text field are dropped too. Store and publish
  * this result, never the input. Issues are those of `validateComposition`. The frame
  * (`compositionSchema`) must already be valid.
  */
@@ -400,6 +402,7 @@ export function parseComposition(composition: Composition): CompositionParseResu
       mobileOrder: section.mobileOrder,
       content,
       samplePaths: [...new Set(section.samplePaths)].filter((path) => known.has(path)),
+      reviewPaths: [...new Set(section.reviewPaths)].filter((path) => known.has(path)),
     });
   });
   return issues.length > 0
