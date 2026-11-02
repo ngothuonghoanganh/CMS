@@ -5,7 +5,7 @@ import {
   endpoints,
   type SlugAvailability,
 } from '@plp/contracts';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, streamEndpoint } from '../../lib/api';
@@ -98,6 +98,30 @@ function serve(events: AiJobEvent[] = [], usageNow: AiUsage = usage()) {
     }
     return Promise.resolve();
   });
+}
+
+/** A run whose stream the test drives: it has started, and ends or breaks when told. */
+interface HeldStream {
+  push: (event: AiJobEvent) => void;
+  end: () => void;
+  fail: (error: Error) => void;
+}
+
+function holdStream(started: AiJob): HeldStream {
+  const held: HeldStream = { push: () => undefined, end: () => undefined, fail: () => undefined };
+  streamMock.mockImplementation((_endpoint, _args, _options, _schema, onEvent) => {
+    held.push = (event) => {
+      act(() => {
+        onEvent(event);
+      });
+    };
+    onEvent({ type: 'started', job: started });
+    return new Promise<void>((resolve, reject) => {
+      held.end = resolve;
+      held.fail = reject;
+    });
+  });
+  return held;
 }
 
 function renderScreen(usageNow: AiUsage = usage()) {
@@ -210,6 +234,62 @@ describe('AiCreateScreen (board 20)', () => {
     expect(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' })).toBeEnabled();
   });
 
+  it('keeps focus on the moved row when it reaches the navigation bar', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderScreen();
+    const list = await toStructure(user);
+    await user.click(screen.getByRole('button', { name: 'Đưa Lợi ích chính lên' }));
+    expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent('Lợi ích chính');
+    // Right after the navigation bar it cannot go up any more: the other arrow takes the focus.
+    expect(screen.getByRole('button', { name: 'Đưa Lợi ích chính lên' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Đưa Lợi ích chính xuống' })).toHaveFocus();
+  });
+
+  it('says each section’s progress in one sentence, and shows the use the run reserved', async () => {
+    const user = userEvent.setup();
+    serve([], usage());
+    renderScreen();
+    await toStructure(user);
+    serve([], usage({ used: 3, remaining: 97 }));
+    const stream = holdStream(QUEUED);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    // The run reserved one use when it started: the header says so while it writes.
+    expect(await screen.findByText('Còn 97/100 lượt tháng này')).toBeInTheDocument();
+
+    const progress = screen.getByRole('list', { name: 'Tiến độ viết' });
+    expect(progress).not.toHaveAttribute('aria-live');
+    stream.push({ type: 'section', sectionId: 'section00001', status: 'writing' });
+    expect(screen.getByRole('status')).toHaveTextContent('Đang viết Hero + nút đặt lịch…');
+    stream.push({ type: 'section', sectionId: 'section00001', status: 'done' });
+    expect(screen.getByRole('status')).toHaveTextContent('Đã viết xong Hero + nút đặt lịch.');
+    stream.push({ type: 'section', sectionId: 'section00002', status: 'failed' });
+    expect(screen.getByRole('status')).toHaveTextContent('Chưa viết được Lợi ích chính.');
+  });
+
+  it('gives the use back on the header when the run is cancelled', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderScreen();
+    await toStructure(user);
+    serve([], usage({ used: 3, remaining: 97 }));
+    const stream = holdStream(QUEUED);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    expect(await screen.findByText('Còn 97/100 lượt tháng này')).toBeInTheDocument();
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.cancelAiPageJob) {
+        stream.push({ type: 'finished', job: { ...QUEUED, status: 'cancelled' } });
+        stream.end();
+        return Promise.resolve({ ...QUEUED, status: 'cancelled' });
+      }
+      return endpoint === endpoints.aiUsage
+        ? Promise.resolve(usage())
+        : Promise.reject(new Error('unexpected call'));
+    });
+    await user.click(screen.getByRole('button', { name: 'Hủy' }));
+    expect(await screen.findByText('Còn 98/100 lượt tháng này')).toBeInTheDocument();
+  });
+
   it('writes the content, showing each section, then opens the draft in the editor', async () => {
     const user = userEvent.setup();
     const done = job(['done', 'done', 'done', 'done', 'done', 'done', 'kept'], {
@@ -314,8 +394,91 @@ describe('AiCreateScreen (board 20)', () => {
     expect(alert).toHaveTextContent(
       'Dịch vụ AI đang quá tải. Không có bản nháp nào được tạo và lượt này không bị tính.',
     );
+    // Board 20 shows no progress once nothing was written: every row would say "Chờ".
+    expect(screen.queryByRole('list', { name: 'Tiến độ viết' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Sửa cấu trúc' }));
     expect(screen.getByRole('list', { name: 'Các section của trang' })).toBeInTheDocument();
+  });
+
+  it('“Thử lại” after a failure keeps the focus on the screen, not on <body>', async () => {
+    const user = userEvent.setup();
+    serve([
+      { type: 'started', job: QUEUED },
+      {
+        type: 'finished',
+        job: job(['failed', 'failed', 'failed', 'failed', 'failed', 'failed', 'kept'], {
+          status: 'failed',
+          failure: 'ai_overloaded',
+        }),
+      },
+    ]);
+    renderScreen();
+    await toStructure(user);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    await screen.findByRole('alert');
+    holdStream(QUEUED);
+    await user.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Đang viết nội dung' })).toHaveFocus();
+    });
+  });
+
+  it('“Thử lại N section” keeps the focus on the screen while the sections are written again', async () => {
+    const user = userEvent.setup();
+    const partial = job(['done', 'done', 'done', 'done', 'failed', 'done', 'kept'], {
+      status: 'done',
+      pageId: PAGE_ID,
+      failure: 'ai_invalid_output',
+    });
+    serve([
+      { type: 'started', job: QUEUED },
+      { type: 'finished', job: partial },
+    ]);
+    renderScreen();
+    await toStructure(user);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    await screen.findByRole('heading', { level: 1, name: 'Gần xong' });
+    holdStream({ ...partial, status: 'running' });
+    await user.click(screen.getByRole('button', { name: 'Thử lại 1 section' }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Đang viết nội dung' })).toHaveFocus();
+    });
+  });
+
+  it('keeps the last progress when the stream breaks, and “Xem tiến độ” keeps the focus', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderScreen();
+    await toStructure(user);
+    const stream = holdStream(QUEUED);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    stream.push({ type: 'section', sectionId: 'section00001', status: 'done' });
+    await act(async () => {
+      stream.fail(new TypeError('network error'));
+      await Promise.resolve();
+    });
+    expect(await screen.findByText('Mất kết nối với máy chủ.')).toBeInTheDocument();
+    const rows = within(screen.getByRole('list', { name: 'Tiến độ viết' })).getAllByRole(
+      'listitem',
+    );
+    expect(rows[1]).toHaveTextContent('Hero + nút đặt lịchXong');
+    expect(rows[6]).toHaveTextContent('Bạn tự điền');
+
+    const partial = job(['done', 'done', 'done', 'done', 'failed', 'done', 'kept'], {
+      status: 'done',
+      pageId: PAGE_ID,
+    });
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.getAiPageJob) {
+        return Promise.resolve(partial);
+      }
+      return endpoint === endpoints.aiUsage
+        ? Promise.resolve(usage())
+        : Promise.reject(new Error('unexpected call'));
+    });
+    await user.click(screen.getByRole('button', { name: 'Xem tiến độ' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Gần xong' })).toHaveFocus();
   });
 
   it('cancels a running job: back to the structure, the use not counted', async () => {
