@@ -548,6 +548,7 @@ export function MembersScreen({
           customRoles={customRoles}
           members={members}
           invitations={invitations}
+          now={now}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           onInvited={invited}

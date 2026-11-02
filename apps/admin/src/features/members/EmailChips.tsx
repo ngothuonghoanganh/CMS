@@ -76,7 +76,9 @@ export function EmailChips({ control, value, known, onChange }: EmailChipsProps)
       return;
     }
     const last = emails.at(-1);
-    if (event.key === 'Backspace' && draft === '' && last !== undefined) {
+    // A held Backspace repeats: it empties the input as typing does, then stops at the chips
+    // instead of removing them all, one per repeat.
+    if (event.key === 'Backspace' && draft === '' && last !== undefined && !event.repeat) {
       event.preventDefault();
       remove(last);
     }
@@ -149,7 +151,14 @@ export function EmailChips({ control, value, known, onChange }: EmailChipsProps)
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          onBlur={commit}
+          onBlur={(event) => {
+            // The window lost the focus (another app, another tab), not the input: it keeps the
+            // focus and the half-typed email for when the user comes back.
+            if (document.activeElement === event.currentTarget) {
+              return;
+            }
+            commit();
+          }}
         />
       </div>
       {/* Mounted from the start, so each change is read out (a region mounted with its text is

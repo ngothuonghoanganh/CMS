@@ -5,6 +5,7 @@ import {
   assignableRoles,
   invitationStatus,
   inviteEmailProblem,
+  inviteEmailProblemLabels,
   knownEmails,
   matchesFilters,
   type PeopleFilters,
@@ -90,11 +91,43 @@ describe('member presentation', () => {
     expect(splitEmailInput('Thuy@')).toEqual({ complete: [], rest: 'Thuy@' });
   });
 
+  it('takes the addresses of contacts copied from Gmail, without their names', () => {
+    expect(splitEmailInput('Nguyễn Văn An <an@bep.vn>, "Thuỷ" <thuy@smilecare.vn>')).toEqual({
+      complete: ['an@bep.vn', 'thuy@smilecare.vn'],
+      rest: '',
+    });
+    // A quoted name may hold a comma, and a bare address may sit among named ones.
+    expect(
+      splitEmailInput('"Trần, Thuỷ" <Thuy@SmileCare.vn>, khoa@mayxanh.vn, "an@bep.vn" <an@bep.vn>'),
+    ).toEqual({ complete: ['thuy@smilecare.vn', 'khoa@mayxanh.vn', 'an@bep.vn'], rest: '' });
+  });
+
+  it('takes the addresses of contacts copied from Outlook, without their names', () => {
+    expect(splitEmailInput('Nguyễn Văn An <an@bep.vn>; Trần Thuỷ <thuy@smilecare.vn>')).toEqual({
+      complete: ['an@bep.vn', 'thuy@smilecare.vn'],
+      rest: '',
+    });
+    // "Last, First" names and single quotes, as Outlook may write them.
+    expect(splitEmailInput("Tran, Thuy <thuy@smilecare.vn>; 'Khoa Le' <khoa@mayxanh.vn>;")).toEqual(
+      { complete: ['thuy@smilecare.vn', 'khoa@mayxanh.vn'], rest: '' },
+    );
+  });
+
   it('tells at once which emails are not to be invited, whatever their case', () => {
-    const known = knownEmails([{ email: 'khoa@mayxanh.vn' }], [{ email: 'an.tran@bepnhamay.vn' }]);
+    const known = knownEmails(
+      [{ email: 'khoa@mayxanh.vn' }],
+      [
+        { email: 'an.tran@bepnhamay.vn', expiresAt: '2026-11-06T03:00:00.000Z' },
+        { email: 'Le@SpaLaXanh.vn', expiresAt: '2026-10-31T03:00:00.000Z' },
+      ],
+      NOW,
+    );
     expect(inviteEmailProblem('thuy@smilecare.vn', known)).toBeNull();
     expect(inviteEmailProblem('Khoa@MayXanh.vn', known)).toBe('member');
     expect(inviteEmailProblem('an.tran@bepnhamay.vn', known)).toBe('invited');
+    // Its link no longer works, yet it holds the email: "Gửi lại" renews it (ADR-021).
+    expect(inviteEmailProblem('le@spalaxanh.vn', known)).toBe('expired');
+    expect(inviteEmailProblemLabels.expired).toBe('Lời mời đã hết hạn — dùng Gửi lại');
     expect(inviteEmailProblem('khong-hop-le', known)).toBe('invalid');
     expect(inviteEmailProblem('thuy@', known)).toBe('invalid');
   });

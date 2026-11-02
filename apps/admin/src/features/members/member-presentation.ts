@@ -176,38 +176,66 @@ export function normalizeEmail(text: string): string {
   return text.trim().toLowerCase();
 }
 
+/** An address in angle brackets, as mail apps write a contact: `Nguyễn Văn An <an@bep.vn>`. */
+const BRACKETED_ADDRESS = /<([^<>\s]+@[^<>\s]+)>/g;
+/** A quoted display name, which may hold commas: `"Trần, Thuỷ" <thuy@smilecare.vn>`. */
+const QUOTED_NAME = /"[^"]*"/g;
+
 /**
  * What was typed into "Mời thành viên": the emails a separator ended, and the text after the last
  * one, still being typed ("An@bep.vn, thuy@" gives `an@bep.vn` and "thuy@").
+ *
+ * Contacts copied from Gmail or Outlook come with names: `Nguyễn Văn An <an@bep.vn>, "Thuỷ"
+ * <thuy@smilecare.vn>`. Such a list is complete; its addresses are the ones in angle brackets
+ * and any bare one among them, and the names around them (with spaces, commas, quotes) are
+ * dropped rather than made into invalid emails.
  */
 export function splitEmailInput(text: string): { complete: string[]; rest: string } {
+  if (text.match(BRACKETED_ADDRESS) !== null) {
+    const complete = text
+      .replace(QUOTED_NAME, ' ')
+      .replace(BRACKETED_ADDRESS, ' $1 ')
+      .split(EMAIL_SEPARATORS)
+      .filter((part) => part.includes('@'))
+      .map(normalizeEmail);
+    return { complete, rest: '' };
+  }
   const parts = text.split(EMAIL_SEPARATORS);
   const rest = parts.pop() ?? '';
   return { complete: parts.map(normalizeEmail).filter((part) => part !== ''), rest };
 }
 
 /** Why an email of "Mời thành viên" will not be invited. */
-export type InviteEmailProblem = 'invalid' | 'member' | 'invited';
+export type InviteEmailProblem = 'invalid' | 'member' | 'invited' | 'expired';
 
 export const inviteEmailProblemLabels: Record<InviteEmailProblem, string> = {
   invalid: 'Email không hợp lệ',
   member: 'Đã là thành viên',
   invited: 'Đang có lời mời',
+  // The expired invitation still holds the email (ADR-021): "Gửi lại" gives it a new link.
+  expired: 'Lời mời đã hết hạn — dùng Gửi lại',
 };
 
 /** The emails of the workspace's members and pending invitations, as screen 15 loaded them. */
 export interface KnownEmails {
   members: ReadonlySet<string>;
   invited: ReadonlySet<string>;
+  /** Pending invitations whose link expired, by now. */
+  expired: ReadonlySet<string>;
 }
 
 export function knownEmails(
   members: readonly { email: string }[],
-  invitations: readonly { email: string }[],
+  invitations: readonly Pick<Invitation, 'email' | 'expiresAt'>[],
+  now: number,
 ): KnownEmails {
+  const expired = invitations.filter(
+    (invitation) => new Date(invitation.expiresAt).getTime() <= now,
+  );
   return {
     members: new Set(members.map((member) => normalizeEmail(member.email))),
     invited: new Set(invitations.map((invitation) => normalizeEmail(invitation.email))),
+    expired: new Set(expired.map((invitation) => normalizeEmail(invitation.email))),
   };
 }
 
@@ -222,6 +250,9 @@ export function inviteEmailProblem(email: string, known: KnownEmails): InviteEma
   const address = normalizeEmail(email);
   if (known.members.has(address)) {
     return 'member';
+  }
+  if (known.expired.has(address)) {
+    return 'expired';
   }
   return known.invited.has(address) ? 'invited' : null;
 }
