@@ -32,6 +32,7 @@ import { CONSENT_TEXTS, configurePrivacy, PRIVACY_SETTINGS } from '../../../test
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addMember, createSite } from '../../../test/resources.js';
 import type { FakeAiTextModel } from './adapters/fake-ai-text-model.js';
+import { AiQuota } from './ai-quota.service.js';
 import { AiError } from './ai-text-model.js';
 
 const QUOTA = 20;
@@ -335,6 +336,42 @@ describe('the assistant of the editor (ADR-031, board 21)', () => {
       expect(aborted).toBe(true);
       expect((await usage(f.client, f.site.id)).used).toBe(0);
     });
+  });
+
+  it('gives the use back when the client goes away after the AI answered, before the result', async () => {
+    const f = await fixture();
+    let signalOfRun: AbortSignal | null = null;
+    fake.respondWith((_request, signal) => {
+      signalOfRun = signal;
+      return undefined;
+    });
+    const pending = postSuggestion(f.client, f.site.id, f.pageId, heroRewrite(f));
+    // The answer was kept and the result is being made: "Hủy" lands now.
+    const quota = t.app.get(AiQuota);
+    const usageOf = quota.usageOf.bind(quota);
+    const spy = vi.spyOn(quota, 'usageOf').mockImplementationOnce(async (ref) => {
+      pending.abort();
+      await vi.waitFor(() => {
+        expect(signalOfRun?.aborted).toBe(true);
+      });
+      return usageOf(ref);
+    });
+    // Superagent sends on `then`; the request is cut before its result, so neither is awaited.
+    pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      await vi.waitFor(() => {
+        expect(spy).toHaveBeenCalled();
+      });
+      // No result reached the client: its use goes back.
+      await vi.waitFor(async () => {
+        expect((await usage(f.client, f.site.id)).used).toBe(0);
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('refuses a path the AI may not write before reserving anything', async () => {
