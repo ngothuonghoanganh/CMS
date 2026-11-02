@@ -37,6 +37,7 @@ export function Text({
       <EditableText
         as={as}
         className={classes}
+        path={path}
         value={value}
         multiline={multiline}
         placeholder={placeholder}

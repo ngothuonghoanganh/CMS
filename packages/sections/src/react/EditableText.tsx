@@ -6,6 +6,8 @@ import frame from './frame.module.css';
 export interface EditableTextProps {
   as: ElementType;
   className: string | undefined;
+  /** Content path of the text, e.g. "items.0.title": the admin's assistant reads which is edited. */
+  path: string;
   value: string;
   multiline: boolean;
   placeholder: string;
@@ -19,6 +21,7 @@ export interface EditableTextProps {
 export function EditableText({
   as: Tag,
   className,
+  path,
   value,
   multiline,
   placeholder,
@@ -80,6 +83,7 @@ export function EditableText({
       aria-multiline={multiline}
       aria-label={placeholder}
       data-placeholder={placeholder}
+      data-content-path={path}
       onBlur={commit}
       onKeyDown={onKeyDown}
     />
