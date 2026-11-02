@@ -1,4 +1,5 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { AI_PRODUCT, fillAiBrief } from '../support/ai.js';
 import { expectAccessible, SCAN_VIEWPORTS } from '../support/axe.js';
 import { Editor } from '../support/editor.js';
 import { setUpSite, uniqueId } from '../support/setup.js';
@@ -8,23 +9,6 @@ import { setUpSite, uniqueId } from '../support/setup.js';
  * (playwright.config.ts): fixed Vietnamese copy, written at once, the Hero headed with the product
  * and its figure marked for review.
  */
-
-const PRODUCT = 'Niềng răng trong suốt Invisalign';
-
-async function fillBrief(page: Page, slug: string): Promise<void> {
-  await page.getByLabel('Sản phẩm hoặc dịch vụ').fill(PRODUCT);
-  await page.getByLabel('Khách hàng mục tiêu').fill('Người đi làm 22–35 tuổi ở TP.HCM');
-  await page
-    .getByLabel('Điểm khác biệt và thông điệp chính')
-    .fill('Bác sĩ nhiều năm kinh nghiệm chỉnh nha. Chụp phim 3D miễn phí.');
-  await page.getByRole('radio', { name: 'Chuyên nghiệp' }).check();
-  await page
-    .getByLabel('Nội dung bạn đã có · tùy chọn')
-    .fill('Trả góp 0% trong 12 tháng, không cần thẻ tín dụng.');
-  await expect(page.getByLabel('Tên trang')).toHaveValue(PRODUCT);
-  await page.getByLabel('Đường dẫn').fill(slug);
-  await expect(page.getByText('Đường dẫn này dùng được.')).toBeVisible();
-}
 
 test.describe('G4 · create a page with AI', () => {
   test('brief, structure and writing open the draft, whose AI sentences the checklist flags', async ({
@@ -40,7 +24,7 @@ test.describe('G4 · create a page with AI', () => {
     await expect(page.getByText('Còn 100/100 lượt tháng này')).toBeVisible();
 
     // Brief: the board's fields, and the page's name and path.
-    await fillBrief(page, `nieng-rang-ai-${uniqueId()}`);
+    await fillAiBrief(page, `nieng-rang-ai-${uniqueId()}`);
     await page.getByRole('button', { name: 'Đề xuất cấu trúc trang' }).click();
 
     // Structure: the goal's outline, arranged before any use.
@@ -59,7 +43,7 @@ test.describe('G4 · create a page with AI', () => {
     await page.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }).click();
     await expect(page).toHaveURL(/\/pages\/[a-f0-9]{24}\/edit$/);
     const editor = new Editor(page);
-    await expect(editor.heroCanvasHeading).toHaveText(PRODUCT);
+    await expect(editor.heroCanvasHeading).toHaveText(AI_PRODUCT);
     await expect(editor.rows).toHaveCount(7);
     await expect(editor.topBar.getByText('Chưa xuất bản', { exact: true })).toBeVisible();
 
@@ -108,7 +92,7 @@ test.describe('G4 · create a page with AI', () => {
       await expect(page.getByText('Nhập sản phẩm hoặc dịch vụ')).toBeVisible();
       await expectAccessible(page, 'Tạo trang bằng AI · brief chưa đủ');
 
-      await fillBrief(page, `ai-a11y-${uniqueId()}`);
+      await fillAiBrief(page, `ai-a11y-${uniqueId()}`);
       await page.getByRole('button', { name: 'Đề xuất cấu trúc trang' }).click();
       await expect(page.getByRole('heading', { level: 1, name: 'Cấu trúc đề xuất' })).toBeVisible();
       await expectAccessible(page, 'Tạo trang bằng AI · cấu trúc');
