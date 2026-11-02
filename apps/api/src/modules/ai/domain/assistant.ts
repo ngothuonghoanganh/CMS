@@ -445,7 +445,8 @@ export interface SuggestionTask {
 function taskText(task: SuggestionTask): string {
   switch (task.action) {
     case 'rewrite':
-      return 'Rewrite every field to be clearer and more persuasive, keeping its meaning, its facts and about its length.';
+      // Small models otherwise hand most fields back as they were.
+      return 'Rewrite every field in new words, clearer and more persuasive, keeping its meaning, its facts and about its length. Do not return a field unchanged.';
     case 'shorten':
       return 'Make every field shorter and tighter, about half its length, keeping its meaning and its facts.';
     case 'change_tone':
