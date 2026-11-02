@@ -1,0 +1,372 @@
+/* The "Trợ lý AI" tab of the editor's right column (board 21). */
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.legend {
+  padding: 0 0 6px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.scopes {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-badge-bg);
+}
+
+.scopeOption {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  color: var(--color-ink-2);
+  text-align: center;
+  cursor: pointer;
+}
+
+.scopeOption:has(input:checked) {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.scopeOption:has(input:disabled) {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.scopeOption input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip:not(:disabled, [aria-disabled='true']):hover {
+  background: var(--color-hover);
+}
+
+/* Blocked by the scope: still focusable, so its reason is read, but not a choice. */
+.chip:disabled,
+.chip[aria-disabled='true'] {
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.request {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.request:focus-within {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.requestInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
+.requestInput::placeholder {
+  color: var(--color-muted);
+}
+
+.send {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+
+.send:disabled {
+  background: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.quota,
+.conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-strong-ink);
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+}
+
+.quota {
+  display: block;
+}
+
+.notice {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.running {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-focus-ring);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-tint);
+}
+
+.runningText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.runningText strong {
+  font-size: var(--text-body);
+  color: var(--color-ink);
+}
+
+.failed,
+.disabled {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+}
+
+.failed {
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-ink);
+}
+
+.disabled {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-2);
+}
+
+.boxTitle {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 700;
+}
+
+.boxTitle:focus {
+  outline: none;
+}
+
+.boxTitle:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.boxActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.boxAction {
+  align-self: flex-start;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resultTitle {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.resultTitle:focus {
+  outline: none;
+}
+
+.resultTitle:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.change {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.changeHead {
+  min-height: 24px;
+}
+
+.changeLabel {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-2);
+}
+
+.before,
+.after {
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.before {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-ink);
+  text-decoration: line-through;
+}
+
+.after {
+  background: var(--color-success-soft);
+  color: var(--color-success-strong-ink);
+}
+
+.partFailed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-body-sm);
+  color: var(--color-warning-ink);
+}
+
+.review,
+.retryNote {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-warning-ink);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.resultActions {
+  display: flex;
+  gap: 8px;
+}
+
+.discard {
+  flex: 1;
+}
+
+.apply {
+  flex: 2;
+}
+
+.usage {
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}

@@ -6,6 +6,7 @@ import { pageCapturesLeads } from '@plp/sections/schema';
 import { Button, EmptyState, PlusIcon } from '@plp/ui';
 import { type MouseEvent, type ReactElement, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useContentWidth } from '../shell/use-content-width';
+import { AiAppliedNotice } from './assistant/AiAppliedNotice';
 import styles from './Canvas.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { canvasLabels, frameLayout, frameStyle, livePathOf } from './presentation';
@@ -134,6 +135,7 @@ export function Canvas() {
           />
         )}
       </div>
+      <AiAppliedNotice />
     </section>
   );
 }

@@ -22,6 +22,7 @@ import { leadRecipientsHref, privacyHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ThemePickerDialog } from '../theme';
 import { AddSectionDialog } from './AddSectionDialog';
+import { AiAssistantProvider } from './assistant/ai-assistant-context';
 import { Canvas } from './Canvas';
 import { ConflictDialog } from './ConflictDialog';
 import { DraftNotice } from './DraftNotice';
@@ -34,8 +35,8 @@ import {
 import styles from './EditorApp.module.css';
 import { focusTarget } from './focus-target';
 import { LIST_LIMIT, loadAllPages } from './load-editor-data';
-import { PropertiesPanel } from './PropertiesPanel';
 import { refreshPageSummary, useLatestServerDraft } from './server-draft';
+import { type SideTab, SidePanel } from './SidePanel';
 import { markSiteScreensStale } from './stale-screens';
 import { createEditorStore, type EditorStore } from './store';
 import { StructurePanel } from './StructurePanel';
@@ -133,6 +134,7 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
 
   const [addSection, setAddSection] = useState({ open: false, index: 0, key: 0 });
   const [theme, setTheme] = useState({ open: false, key: 0 });
+  const [sideTab, setSideTab] = useState<SideTab>('properties');
   const [publishOpen, setPublishOpen] = useState(false);
   const [previewPending, setPreviewPending] = useState(false);
   const seoHref = `/sites/${siteId}/pages/${pageId}/seo`;
@@ -150,6 +152,10 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
       },
       announce,
       focusTarget: (target) => {
+        // A field to fix is in "Thuộc tính", even while the assistant's tab is open.
+        if (target.kind === 'section') {
+          setSideTab('properties');
+        }
         focusTarget(store, target, {
           navigate,
           seoHref,
@@ -217,30 +223,32 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
 
   return (
     <EditorServicesProvider services={services}>
-      <div className={styles.app}>
-        <TopBar
-          siteId={siteId}
-          pageId={pageId}
-          onRetrySave={retry}
-          onPreview={() => {
-            void preview();
-          }}
-          previewPending={previewPending}
-          onOpenPublish={() => {
-            setPublishOpen(true);
-          }}
-        />
-        <DraftNotice ensureSaved={ensureSaved} />
-        <main className={styles.workspace}>
-          <StructurePanel
-            onOpenTheme={() => {
-              setTheme((current) => ({ open: true, key: current.key + 1 }));
+      <AiAssistantProvider store={store} siteId={siteId} pageId={pageId} announce={announce}>
+        <div className={styles.app}>
+          <TopBar
+            siteId={siteId}
+            pageId={pageId}
+            onRetrySave={retry}
+            onPreview={() => {
+              void preview();
+            }}
+            previewPending={previewPending}
+            onOpenPublish={() => {
+              setPublishOpen(true);
             }}
           />
-          <Canvas />
-          <PropertiesPanel />
-        </main>
-      </div>
+          <DraftNotice ensureSaved={ensureSaved} />
+          <main className={styles.workspace}>
+            <StructurePanel
+              onOpenTheme={() => {
+                setTheme((current) => ({ open: true, key: current.key + 1 }));
+              }}
+            />
+            <Canvas />
+            <SidePanel tab={sideTab} onTabChange={setSideTab} />
+          </main>
+        </div>
+      </AiAssistantProvider>
       <AddSectionDialog
         key={`add-${addSection.key}`}
         open={addSection.open}
