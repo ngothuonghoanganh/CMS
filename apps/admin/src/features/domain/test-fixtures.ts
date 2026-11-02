@@ -31,6 +31,7 @@ export function domainFixture(overrides: Partial<Domain> = {}): Domain {
 export function domainList(
   items: Domain[],
   primaryDomainId: string | null = null,
+  livePages: DomainListResponse['livePages'] = { count: 6, exampleSlug: 'uu-dai-nieng-rang' },
 ): DomainListResponse {
-  return { items, defaultHost: 'smilecare.payload.site', primaryDomainId };
+  return { items, defaultHost: 'smilecare.payload.site', primaryDomainId, livePages };
 }

@@ -344,3 +344,15 @@
 .suggestion {
   align-self: flex-start;
 }
+
+/* The live region of the domain check stays in place, empty while there is nothing to say. */
+.availability {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+  color: var(--color-muted);
+}
+
+.availability:empty {
+  margin-top: -14px;
+}

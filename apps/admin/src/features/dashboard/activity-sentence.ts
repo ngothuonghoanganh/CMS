@@ -4,7 +4,7 @@ import type { ActivityItem } from '@plp/contracts';
 export type ActivityTone = 'success' | 'warning' | 'muted' | 'primary';
 
 export interface ActivitySentence {
-  /** Who did it, shown in bold. */
+  /** Who did it, shown in bold: a member, or "Hệ thống" for the domain checks (ADR-022). */
   actor: string;
   /** The rest of the sentence, e.g. "xuất bản v12 của “Ưu đãi niềng răng tháng 11”". */
   text: string;
@@ -103,10 +103,28 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
             : `hoàn tất một yêu cầu về dữ liệu (${data.count} lead)`,
         tone: 'success',
       };
+    case 'domain.added':
+      return { text: `thêm tên miền ${host(item)}`, tone: 'primary' };
+    case 'domain.removed':
+      return { text: `ngắt kết nối ${host(item)}`, tone: 'muted' };
+    case 'domain.primary_changed':
+      return { text: `đặt ${host(item)} làm địa chỉ chính`, tone: 'primary' };
+    case 'domain.activated':
+      return { text: `cấp chứng chỉ HTTPS cho ${host(item)}`, tone: 'primary' };
+    case 'domain.lost':
+      return { text: `phát hiện ${host(item)} mất kết nối`, tone: 'warning' };
   }
 }
 
+/** The domain of a domain event; every one stores it (ADR-022). */
+function host(item: ActivityItem): string {
+  return item.data.hostname ?? 'một tên miền';
+}
+
+/** Who did the events the domain checks record on their own. */
+export const SYSTEM_ACTOR = 'Hệ thống';
+
 /** One line of "Hoạt động xuất bản gần đây", as on the dashboard board. */
 export function activitySentence(item: ActivityItem): ActivitySentence {
-  return { actor: item.actor.name, ...describe(item) };
+  return { actor: item.actor?.name ?? SYSTEM_ACTOR, ...describe(item) };
 }

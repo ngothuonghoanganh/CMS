@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  apexOf,
   type Domain,
   domainKind,
   endpoints,
@@ -34,9 +35,16 @@ import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ScrollRegion } from '../shell/ScrollRegion';
 import { useNow } from '../shell/use-now';
-import { connectStep, recordStateLabels, recordStateTones, statusBox } from './domain-presentation';
+import {
+  connectHeading,
+  connectStep,
+  recordStateLabels,
+  recordStateTones,
+  statusBox,
+} from './domain-presentation';
 import { connectHref } from './DomainsScreen';
 import { domainQueryKeys } from './queries';
+import { type DomainAvailabilityState, useDomainAvailability } from './use-domain-availability';
 import styles from './Domains.module.css';
 
 export interface DomainConnectScreenProps {
@@ -99,6 +107,32 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
+/** What the check of a typed domain says in the live region under the field. */
+function availabilityNote(state: DomainAvailabilityState): string {
+  switch (state.kind) {
+    case 'checking':
+      return 'Đang kiểm tra tên miền…';
+    case 'available':
+      return 'Chưa site nào dùng tên miền này.';
+    case 'failed':
+      return 'Chưa kiểm tra được tên miền. Bạn vẫn có thể bấm Tiếp tục.';
+    default:
+      return '';
+  }
+}
+
+/** A problem the check found that adding the domain would refuse too. */
+function availabilityError(state: DomainAvailabilityState): string | undefined {
+  switch (state.kind) {
+    case 'already_added':
+      return 'Site này đã có tên miền này';
+    case 'invalid':
+      return state.reason;
+    default:
+      return undefined;
+  }
+}
+
 function HostnameForm({
   site,
   baseDomain,
@@ -112,6 +146,9 @@ function HostnameForm({
   const [problem, setProblem] = useState<{ message: string; suggestion: string | null } | null>(
     null,
   );
+  const availability = useDomainAvailability(site.id, value, baseDomain);
+  const taken = availability.kind === 'taken';
+  const refused = availabilityError(availability);
   const add = useMutation({
     mutationFn: (hostname: string) => api(endpoints.addDomain, [site.id], { body: { hostname } }),
     onSuccess: onAdded,
@@ -140,11 +177,12 @@ function HostnameForm({
         label="Tên miền"
         id="domain-hostname"
         help={
-          problem === null
+          problem === null && refused === undefined
             ? 'Ví dụ go.tenmien.vn. Nên dùng tên miền phụ cho landing page để không ảnh hưởng website chính.'
             : undefined
         }
-        error={problem?.message}
+        error={problem?.message ?? refused}
+        announceMessages
       >
         <Input
           type="text"
@@ -172,12 +210,23 @@ function HostnameForm({
           Dùng {problem.suggestion}
         </Button>
       ) : null}
-      {checked?.ok === true ? (
-        <Callout tone="info">
+      {/* One persistent live region: what the check says is announced as it changes. */}
+      <p className={styles.availability} role="status">
+        {problem === null ? availabilityNote(availability) : ''}
+      </p>
+      {taken ? (
+        <Callout tone="warning" role="alert" title="Tên miền này đang được một site khác dùng">
+          Vì lý do bảo mật, chúng tôi không cho biết site đó thuộc ai. Nếu bạn sở hữu tên miền, hãy
+          thêm bản ghi TXT ở bước sau. Sau khi xác minh, tên miền chuyển về site này và site kia
+          ngừng dùng nó.
+        </Callout>
+      ) : null}
+      {checked?.ok === true && !taken && refused === undefined ? (
+        <Callout tone={availability.kind === 'available' ? 'success' : 'info'}>
           {domainKind(checked.hostname) === 'subdomain' ? (
             <>
-              <strong>Tên miền phụ.</strong> Bạn chỉ cần thêm một bản ghi CNAME và một bản ghi TXT
-              xác minh.
+              <strong>Tên miền phụ</strong> của {apexOf(checked.hostname)}. Bạn chỉ cần thêm một bản
+              ghi CNAME và một bản ghi TXT xác minh.
             </>
           ) : (
             <>
@@ -189,7 +238,7 @@ function HostnameForm({
       ) : null}
       <div>
         <Button type="submit" loading={add.isPending}>
-          Tiếp tục
+          {taken ? 'Tiếp tục để xác minh quyền sở hữu' : 'Tiếp tục'}
         </Button>
       </div>
     </form>
@@ -248,6 +297,7 @@ export function DomainConnectScreen({
   });
   const currentPrimary =
     list.data?.items.find((item) => item.primary)?.hostname ?? list.data?.defaultHost ?? null;
+  const livePageCount = list.data?.livePages.count ?? 0;
 
   const step = domain === null ? 0 : connectStep(domain.status) - 1;
   const box = domain === null ? null : statusBox(domain);
@@ -278,13 +328,7 @@ export function DomainConnectScreen({
           <div className={styles.stepHead}>
             <span className={styles.eyebrow}>BƯỚC {Math.min(step + 1, 5)} / 5</span>
             <h2 id="step-title" className={styles.heading}>
-              {domain === null
-                ? 'Bạn muốn dùng tên miền nào?'
-                : domain.status === 'active'
-                  ? 'Đã kết nối'
-                  : domain.status === 'misconfigured'
-                    ? 'Sửa bản ghi DNS'
-                    : 'Thêm bản ghi DNS'}
+              {connectHeading(domain?.status ?? null)}
             </h2>
           </div>
 
@@ -355,8 +399,7 @@ export function DomainConnectScreen({
                           {
                             value: 'this' as const,
                             label: `Đặt ${domain.hostname} làm địa chỉ chính`,
-                            description:
-                              'Các trang đang live đổi địa chỉ ngay. Link cũ tự chuyển hướng 301, sitemap và canonical được cập nhật.',
+                            description: `${livePageCount > 0 ? `${livePageCount} trang` : 'Các trang'} đang live đổi địa chỉ ngay. Link cũ tự chuyển hướng 301, sitemap và canonical được cập nhật.`,
                           },
                         ]),
                   ]}

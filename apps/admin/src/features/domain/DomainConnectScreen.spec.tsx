@@ -1,4 +1,4 @@
-import { type Domain, endpoints } from '@plp/contracts';
+import { type Domain, type DomainAvailability, endpoints } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,9 +57,25 @@ beforeEach(() => {
   router.replace.mockReset();
 });
 
+/** The API: the check of a typed domain answers `state`; adding one answers `added`. */
+function answer(state: DomainAvailability['state'], added: Domain = waiting) {
+  apiMock.mockImplementation((endpoint, _args, options) => {
+    if (endpoint === endpoints.domainAvailability) {
+      const query = (options as { query?: { hostname?: string } } | undefined)?.query;
+      return Promise.resolve({
+        hostname: query?.hostname ?? '',
+        state,
+        reason: null,
+      } satisfies DomainAvailability);
+    }
+    return Promise.resolve(endpoint === endpoints.addDomain ? added : undefined);
+  });
+}
+
 describe('DomainConnectScreen', () => {
   it('takes only a domain, suggesting it from a URL (board 14)', async () => {
     const user = userEvent.setup();
+    answer('available');
     renderScreen(null);
     await user.type(screen.getByLabelText('Tên miền'), 'https://uudai.smilecare.vn/');
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
@@ -68,15 +84,75 @@ describe('DomainConnectScreen', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Dùng uudai.smilecare.vn' }));
     expect(screen.getByLabelText('Tên miền')).toHaveValue('uudai.smilecare.vn');
-    expect(screen.getByText(/Tên miền phụ\./)).toBeInTheDocument();
+    expect(screen.getByText(/của smilecare\.vn\. Bạn chỉ cần thêm/)).toBeInTheDocument();
 
-    apiMock.mockResolvedValueOnce(waiting);
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
     expect(lastCallTo(apiMock, endpoints.addDomain).options).toEqual({
       body: { hostname: 'uudai.smilecare.vn' },
     });
     expect(router.replace).toHaveBeenCalledWith(
       `/sites/${site.id}/domain/connect?domain=${waiting.id}`,
+    );
+  });
+
+  it('checks a typed domain and says at once that another site has it, never which', async () => {
+    const user = userEvent.setup();
+    answer('taken');
+    renderScreen(null);
+    await user.type(screen.getByLabelText('Tên miền'), ' UuDai.SmileCare.vn ');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Tên miền này đang được một site khác dùng');
+    expect(alert).toHaveTextContent('hãy thêm bản ghi TXT ở bước sau');
+    expect(lastCallTo(apiMock, endpoints.domainAvailability)).toEqual({
+      args: [site.id],
+      options: {
+        query: { hostname: 'uudai.smilecare.vn' },
+        signal: expect.any(AbortSignal) as AbortSignal,
+      },
+    });
+    // Asked once the typing stopped, not for every letter.
+    expect(
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.domainAvailability),
+    ).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục để xác minh quyền sở hữu' }));
+    expect(lastCallTo(apiMock, endpoints.addDomain).options).toEqual({
+      body: { hostname: 'uudai.smilecare.vn' },
+    });
+  });
+
+  it('says in a live region what the check found', async () => {
+    const user = userEvent.setup();
+    answer('available');
+    renderScreen(null);
+    const field = screen.getByLabelText('Tên miền');
+    await user.type(field, 'go.smilecare.vn');
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Đang kiểm tra tên miền…');
+    await vi.waitFor(() => {
+      expect(status).toHaveTextContent('Chưa site nào dùng tên miền này.');
+    });
+
+    answer('already_added');
+    await user.clear(field);
+    await user.type(field, 'uudai.smilecare.vn');
+    expect(await screen.findByText('Site này đã có tên miền này')).toBeInTheDocument();
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('heads each step as the domain stands, and says the certificate renews itself', () => {
+    const { unmount } = renderScreen({ ...waiting, status: 'issuing' });
+    expect(screen.getByRole('heading', { level: 2, name: 'Đang bật HTTPS' })).toBeInTheDocument();
+    unmount();
+    const second = renderScreen({ ...waiting, status: 'taken' });
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Xác minh quyền sở hữu' }),
+    ).toBeInTheDocument();
+    second.unmount();
+    apiMock.mockResolvedValue(domainList([]));
+    renderScreen(domainFixture({ hostname: 'uudai.smilecare.vn' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Đã kết nối' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'uudai.smilecare.vn đã hoạt động với HTTPS.Mọi trang đang live đã mở được qua địa chỉ này. Chứng chỉ tự gia hạn trước khi hết hạn.',
     );
   });
 
@@ -123,9 +199,13 @@ describe('DomainConnectScreen', () => {
     );
     renderScreen(active);
     expect(screen.getByRole('status')).toHaveTextContent('uudai.smilecare.vn đã hoạt động');
-    await user.click(
-      await screen.findByRole('radio', { name: /Đặt uudai.smilecare.vn làm địa chỉ chính/ }),
-    );
+    const choice = await screen.findByRole('radio', {
+      name: /Đặt uudai.smilecare.vn làm địa chỉ chính/,
+    });
+    await vi.waitFor(() => {
+      expect(choice).toHaveAccessibleDescription(/^6 trang đang live đổi địa chỉ ngay\./);
+    });
+    await user.click(choice);
     await user.click(screen.getByRole('button', { name: 'Xong' }));
     await vi.waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${site.id}/domain`);

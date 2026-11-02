@@ -129,6 +129,7 @@ export function activityFixture(overrides: Partial<ActivityItem> = {}): Activity
       toVersion: 12,
       count: null,
       slug: null,
+      hostname: null,
       revalidationFailed: false,
     },
     reason: null,
