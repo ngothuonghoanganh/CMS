@@ -66,6 +66,10 @@ export interface DropdownMenuItemProps {
   icon?: ReactNode;
   /** `danger` for destructive actions such as "Gỡ xuất bản". */
   tone?: 'default' | 'danger' | undefined;
+  /**
+   * The item cannot be chosen now. It stays focusable, as the APG menu pattern recommends, so the
+   * arrow keys and screen readers still reach it and the reason under it.
+   */
   disabled?: boolean | undefined;
   /**
    * A second line under the label, e.g. why the item is disabled ("Gỡ xuất bản trước khi xóa").
@@ -84,10 +88,18 @@ export function DropdownMenuItem({
   description,
 }: DropdownMenuItemProps) {
   const described = description !== undefined && description !== null;
+  // Radix's own `disabled` takes the item out of the arrow-key order. The item is marked instead,
+  // and choosing it does nothing: the menu stays open.
+  const select = disabled
+    ? (event: Event) => {
+        event.preventDefault();
+      }
+    : onSelect;
   return (
     <RadixMenu.Item
-      {...(onSelect === undefined ? {} : { onSelect })}
-      disabled={disabled}
+      {...(select === undefined ? {} : { onSelect: select })}
+      aria-disabled={disabled ? true : undefined}
+      data-disabled={disabled ? '' : undefined}
       className={cx(styles.item, tone === 'danger' && styles.danger, described && styles.twoLines)}
       data-tone={tone}
     >

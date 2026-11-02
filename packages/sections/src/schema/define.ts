@@ -63,6 +63,12 @@ export interface ListField extends FieldBase {
 
 export type FieldDescriptor = LeafField | ListField;
 
+/** What a list and one of its items are called: "Các lợi ích" and "Lợi ích". */
+export interface ListLabels {
+  label: string;
+  itemLabel: string;
+}
+
 export interface SectionVariant {
   id: string;
   label: string;
@@ -82,6 +88,11 @@ export interface SectionVariant {
   listMin?: Readonly<Record<string, number>>;
   /** Item maximums of list fields that are lower in this variant: at most 5 steps. */
   listMax?: Readonly<Record<string, number>>;
+  /**
+   * Names of list fields and their items in this variant, by list key, when the field's own do not
+   * fit: a process lists steps, not benefits.
+   */
+  listLabels?: Readonly<Record<string, ListLabels>>;
 }
 
 export type SectionCategory =
@@ -131,8 +142,8 @@ export interface SectionDefinition<C extends Record<string, unknown> = Record<st
   oneButtonRequired?: readonly string[];
   /** Fresh sample content for a newly added section in a variant (a process has steps). */
   sampleContent(variantId: string): C;
-  /** One line for the page structure list, e.g. the heading or "3 nhận xét". */
-  summarize(content: C): string;
+  /** One line for the page structure list, e.g. the heading or "3 nhận xét" ("3 bước"). */
+  summarize(content: C, variantId: string): string;
 }
 
 export type AnySectionDefinition = SectionDefinition;

@@ -509,19 +509,26 @@ describe('section specifics', () => {
   it('numbers the steps of a process in an ordered list, without icons or images', () => {
     const steps = section('benefits', 'steps');
     const markup = render(steps, liveCtx());
-    expect(count(markup, '<ol')).toBe(1);
+    // WebKit takes the list semantics from a list without bullets unless it has the role.
+    expect(markup).toContain(`<ol class="${cls(benefitsStyles.steps)}" role="list">`);
     expect(count(markup, '<li')).toBe(3);
     expect(count(markup, '<h3')).toBe(3);
     expect(markup).toContain('<h2');
-    // The list is ordered already: the drawn number is not read out a second time.
+    // Each step says its number in words, and the drawn number is not read out a second time.
     for (const number of [1, 2, 3]) {
       expect(markup).toContain(
-        `<span class="${cls(benefitsStyles.stepNumber)}" aria-hidden="true">${number}</span>`,
+        `<span class="${cls(benefitsStyles.stepLabel)}">Bước ${number}:</span>` +
+          `<span class="${cls(benefitsStyles.stepNumber)}" aria-hidden="true">${number}</span>`,
       );
     }
     expect(markup).not.toContain('<svg');
     expect(markup).not.toContain('<img');
     expect(markup).toContain('>Để lại thông tin</h3>');
+    // On the canvas, an empty title asks for a step's title, not a benefit's.
+    expect(count(render(steps, editCtx()), 'aria-label="Tiêu đề bước"')).toBe(3);
+    expect(
+      count(render(section('benefits', 'grid'), editCtx()), 'aria-label="Tiêu đề lợi ích"'),
+    ).toBe(3);
     const five = withContent(steps, 'items', [
       ...(steps.content['items'] as unknown[]),
       ...(steps.content['items'] as unknown[]).slice(0, 2),

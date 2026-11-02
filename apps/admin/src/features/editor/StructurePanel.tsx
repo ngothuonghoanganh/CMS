@@ -48,7 +48,7 @@ function kindOf(section: SectionInstance): string {
 }
 
 function summaryOf(section: SectionInstance): string {
-  return getSectionDefinition(section.type).summarize(section.content);
+  return getSectionDefinition(section.type).summarize(section.content, section.variant);
 }
 
 interface SmallButtonProps {

@@ -16,6 +16,7 @@ import {
   createSectionInstance,
   getSectionDefinition,
   insertionIndex,
+  listLabelsOf,
   listMaximum,
   listMinimum,
   leadFormSectionOf,
@@ -230,20 +231,42 @@ describe('section registry', () => {
       {
         path: ['sections', 0, 'content', 'items'],
         code: 'too_big',
-        message: 'Bố cục “Quy trình 3 bước” có tối đa 5 lợi ích',
+        message: 'Bố cục “Quy trình 3 bước” có tối đa 5 bước',
       },
     ]);
     expect(validateComposition({ version: 1, sections: [steps(2)] })).toEqual([
       {
         path: ['sections', 0, 'content', 'items'],
         code: 'too_small',
-        message: 'Bố cục “Quy trình 3 bước” cần ít nhất 3 lợi ích',
+        message: 'Bố cục “Quy trình 3 bước” cần ít nhất 3 bước',
       },
     ]);
     // Over the field's own maximum, the schema alone reports it.
     expect(
       validateComposition({ version: 1, sections: [steps(7)] }).map((issue) => issue.code),
     ).toEqual(['too_big']);
+  });
+
+  it('calls the items of a process steps, and benefits in the other layouts', () => {
+    const items = getSectionDefinition('benefits').fields.find((field) => field.key === 'items');
+    if (items?.kind !== 'list') {
+      throw new Error('Benefits have no item list');
+    }
+    expect(listLabelsOf('benefits', 'steps', items)).toEqual({
+      label: 'Các bước',
+      itemLabel: 'Bước',
+    });
+    for (const variant of ['grid', 'alternate']) {
+      expect(listLabelsOf('benefits', variant, items)).toEqual({
+        label: 'Các lợi ích',
+        itemLabel: 'Lợi ích',
+      });
+    }
+    const steps = createSectionInstance('benefits', 'steps', id(1));
+    const grid = createSectionInstance('benefits', 'grid', id(2));
+    const definition = getSectionDefinition('benefits');
+    expect(definition.summarize({ ...steps.content, heading: '' }, steps.variant)).toBe('3 bước');
+    expect(definition.summarize({ ...grid.content, heading: '' }, grid.variant)).toBe('3 lợi ích');
   });
 
   it('starts a process with steps of its own, not with benefits', () => {

@@ -23,6 +23,7 @@ import {
   isLinkComplete,
   type LeafOccurrence,
   leadFormSectionOf,
+  listLabelsOf,
   validateComposition,
 } from '@plp/sections/schema';
 import type { LeadCaptureGap } from './lead-capture.js';
@@ -162,15 +163,20 @@ function lowerFirst(text: string): string {
   return text.charAt(0).toLocaleLowerCase('vi') + text.slice(1);
 }
 
-/** Where a field sits, for titles: "section “Hero”" or "Câu hỏi 2 trong section “Câu hỏi thường gặp”". */
-function placeOf(definition: AnySectionDefinition, path: string): string {
+/**
+ * Where a field sits, for titles: "section “Hero”" or "Câu hỏi 2 trong section “Câu hỏi thường
+ * gặp”". An item is named as the panel names it in the section's variant: "Bước 2" in a process.
+ */
+function placeOf(context: SectionContext, path: string): string {
+  const { definition } = context;
   const section = `section “${definition.label}”`;
   const [listKey, index] = path.split('.');
   const list = definition.fields.find((field) => field.key === listKey);
   if (list?.kind !== 'list' || index === undefined || !/^\d+$/.test(index)) {
     return section;
   }
-  return `${list.itemLabel} ${Number(index) + 1} trong ${section}`;
+  const { itemLabel } = listLabelsOf(definition.type, context.section.variant, list);
+  return `${itemLabel} ${Number(index) + 1} trong ${section}`;
 }
 
 function isTopLevel(path: string): boolean {
@@ -224,7 +230,7 @@ function checkTextLeaf(findings: Findings, context: SectionContext, leaf: LeafOc
   if (typeof leaf.value === 'string' && leaf.value.trim() !== '') {
     return;
   }
-  const place = placeOf(context.definition, leaf.path);
+  const place = placeOf(context, leaf.path);
   findings.add(
     'blocking',
     'required_field_empty',
@@ -240,8 +246,8 @@ function checkCtaLeaf(findings: Findings, context: SectionContext, leaf: LeafOcc
     return;
   }
   const cta = parsed.data;
-  const { section, definition } = context;
-  const place = placeOf(definition, leaf.path);
+  const { section } = context;
+  const place = placeOf(context, leaf.path);
   const used = isCtaUsed(cta);
   const required = leaf.field.required === true;
   const linkTarget = sectionTarget(section, `${leaf.path}.link`);
@@ -303,7 +309,7 @@ function checkImageLeaf(findings: Findings, context: SectionContext, leaf: LeafO
   }
   const image = parsed.data;
   const { section, definition } = context;
-  const place = placeOf(definition, leaf.path);
+  const place = placeOf(context, leaf.path);
   const target = sectionTarget(section, leaf.path);
   if (image.assetId === null) {
     if (leaf.field.required) {
@@ -332,11 +338,13 @@ function checkImageLeaf(findings: Findings, context: SectionContext, leaf: LeafO
       isTopLevel(leaf.path) && leaf.field.label === 'Ảnh'
         ? `Ảnh ${definition.label}`
         : `${leaf.field.label} của ${place}`;
+    // Named as the panel names the description: a logo's is the partner's name.
+    const altLabel = leaf.field.kind === 'image' ? leaf.field.altLabel : undefined;
     findings.add(
       'warning',
       'image_alt_missing',
       target,
-      `${subject} chưa có mô tả`,
+      `${subject} chưa có ${altLabel === undefined ? 'mô tả' : lower(altLabel)}`,
       'Người dùng trình đọc màn hình và công cụ tìm kiếm không biết ảnh nói gì.',
     );
   }

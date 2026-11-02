@@ -113,7 +113,7 @@ describe('AddSectionDialog', () => {
     expect(store.getState().selection.sectionId).toBe(added?.id);
     expect(sectionIds(store)).toHaveLength(6);
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(screen.getByText('Đã thêm Cảm nhận khách hàng ở vị trí 3.')).toBeInTheDocument();
+    expect(screen.getByText('Đã thêm “Trích dẫn nổi bật” ở vị trí 3.')).toBeInTheDocument();
   });
 
   it('puts a navigation bar first even when asked for another index', async () => {
@@ -186,7 +186,23 @@ describe('AddSectionDialog', () => {
         zalo: { label: 'Nhắn Zalo', link: { kind: 'zalo', phone: '' } },
       },
     });
-    expect(screen.getByText('Đã thêm Gọi / Zalo nhanh ở vị trí 3.')).toBeInTheDocument();
+    expect(screen.getByText('Đã thêm “Gọi / Zalo nhanh” ở vị trí 3.')).toBeInTheDocument();
+  });
+
+  it('names a process by its card, not as benefits', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
+      store,
+    });
+    await user.click(categoryNav().getByRole('button', { name: /^Lợi ích & tính năng/ }));
+    await user.click(screen.getByRole('button', { name: /^Quy trình 3 bước/ }));
+    await user.click(screen.getByRole('button', { name: 'Thêm “Quy trình 3 bước”' }));
+    expect(store.getState().draft.composition.sections[2]).toMatchObject({
+      type: 'benefits',
+      variant: 'steps',
+    });
+    expect(screen.getByText('Đã thêm “Quy trình 3 bước” ở vị trí 3.')).toBeInTheDocument();
   });
 
   it('opens the first category with something to add', () => {

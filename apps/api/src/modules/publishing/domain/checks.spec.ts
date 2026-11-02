@@ -517,7 +517,9 @@ describe('evaluateChecks: sections of the 2026-11-02 cards (ADR-007)', () => {
     const result = run([heroSection(), unnamed]);
     expect(result.blocking).toEqual([]);
     const warning = only(result.warnings, 'image_alt_missing');
-    expect(warning.title).toBe('Logo của Đối tác 2 trong section “Logo đối tác” chưa có mô tả');
+    expect(warning.title).toBe(
+      'Logo của Đối tác 2 trong section “Logo đối tác” chưa có tên đối tác',
+    );
     expect(warning.target).toMatchObject({ fieldPath: 'items.1.image' });
   });
 
@@ -600,7 +602,7 @@ describe('evaluateChecks: sections of the 2026-11-02 cards (ADR-007)', () => {
       'items.1.title': '',
     });
     const item = only(run([steps]).blocking, 'required_field_empty');
-    expect(item.title).toBe('Lợi ích 2 trong section “Lợi ích” chưa có tiêu đề');
+    expect(item.title).toBe('Bước 2 trong section “Lợi ích” chưa có tiêu đề');
     expect(codes(run([steps]).warnings)).toEqual([]);
   });
 });

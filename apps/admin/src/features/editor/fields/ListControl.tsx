@@ -1,8 +1,11 @@
 'use client';
 
+import { imageRefSchema, type SectionInstance } from '@plp/contracts';
 import {
   getAtPath,
   isPathWithin,
+  type LeafField,
+  listLabelsOf,
   listMaximum,
   listMinimum,
   type ListField,
@@ -15,6 +18,7 @@ import {
   IconButton,
   PlusIcon,
   TrashIcon,
+  WarningTriangleIcon,
 } from '@plp/ui';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { isFieldHidden, listItemsOf } from '../content-fields';
@@ -43,6 +47,29 @@ function describeItem(field: ListField, item: Record<string, unknown>) {
   return { title, summary };
 }
 
+/**
+ * The image an item still needs before publishing (a partner's logo), if any: its row says so
+ * while collapsed, as the image's own field does once open.
+ */
+function missingRequiredImage(
+  section: SectionInstance,
+  field: ListField,
+  path: string,
+  item: Record<string, unknown>,
+): LeafField | undefined {
+  return field.itemFields.find((itemField) => {
+    if (
+      itemField.kind !== 'image' ||
+      itemField.required !== true ||
+      isFieldHidden(section, `${path}.${itemField.key}`)
+    ) {
+      return false;
+    }
+    const image = imageRefSchema.safeParse(item[itemField.key]);
+    return !image.success || image.data.assetId === null;
+  });
+}
+
 type ItemControl = 'toggle' | 'up' | 'down';
 
 /** The control to focus after a move or a delete re-renders the list. */
@@ -51,7 +78,8 @@ type FocusRequest = { index: number; control: ItemControl } | { index: null; con
 /**
  * A repeatable group ("Các lợi ích", "Câu hỏi"): items expand to their fields, move up or down,
  * and are added or removed within the list's limits, which disable the buttons beforehand. The
- * minimum can depend on the variant (the benefits grid needs 3 items).
+ * limits and the names of the items can depend on the variant (the benefits grid needs 3 items,
+ * a process lists "Các bước").
  */
 export function ListControl({ section, field, path }: ControlProps<ListField>) {
   const store = useEditorStoreApi();
@@ -62,7 +90,8 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
     state.selection.sectionId === section.id ? state.selection.fieldPath : null,
   );
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
-  const itemLabel = lowerFirst(field.itemLabel);
+  const labels = listLabelsOf(section.type, section.variant, field);
+  const itemLabel = lowerFirst(labels.itemLabel);
   const minimum = listMinimum(section.type, section.variant, path);
   const maximum = listMaximum(section.type, section.variant, path);
   const atMin = items.length <= minimum;
@@ -161,7 +190,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
   return (
     <fieldset ref={listRef} data-field-path={path} className={styles.list}>
       <legend className={styles.listLegend}>
-        {field.label}
+        {labels.label}
         <span className={styles.listCount}>
           {items.length} / {maximum}
         </span>
@@ -170,6 +199,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
         {items.map((item, index) => {
           const open = isExpanded(index);
           const { title, summary } = describeItem(field, item);
+          const missingImage = missingRequiredImage(section, field, path, item);
           const bodyId = `${baseId}-item-${index}`;
           const name = `${itemLabel} ${index + 1}`;
           return (
@@ -191,9 +221,19 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
                   <span className={styles.itemText}>
                     <span className={styles.itemTitle}>
                       {/* Numbered while untitled: four new logos are not four "Đối tác". */}
-                      {title === '' ? `${field.itemLabel} ${index + 1}` : title}
+                      {title === '' ? `${labels.itemLabel} ${index + 1}` : title}
                     </span>
                     {summary === '' ? null : <span className={styles.itemSummary}>{summary}</span>}
+                    {missingImage === undefined ? null : (
+                      <>
+                        {/* The space keeps the cue a word apart in the button's name; the flex
+                            column puts it on a line of its own and draws no space. */}{' '}
+                        <span className={styles.itemWarning}>
+                          <WarningTriangleIcon size={12} strokeWidth={2} />
+                          Chưa có {lowerFirst(missingImage.label)}
+                        </span>
+                      </>
+                    )}
                   </span>
                 </button>
                 <IconButton

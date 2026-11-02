@@ -32,6 +32,7 @@ const BENEFITS_GRID_MIN = 3;
 const BENEFITS_MAX = 6;
 const STEPS_MIN = 3;
 const STEPS_MAX = 5;
+const STEPS_LABELS = { label: 'Các bước', itemLabel: 'Bước' };
 
 const benefitItemSchema = z.object({
   icon: z.enum(benefitIcons),
@@ -82,6 +83,7 @@ export const benefitsSection = defineSection<BenefitsContent>({
       hiddenFields: ['items.icon', 'items.image'],
       listMin: { items: STEPS_MIN },
       listMax: { items: STEPS_MAX },
+      listLabels: { items: STEPS_LABELS },
     },
   ],
   defaultVariant: 'grid',
@@ -157,6 +159,8 @@ export const benefitsSection = defineSection<BenefitsContent>({
             sampleItem('clock', 'Lợi ích thứ ba', 'Mô tả ngắn: bạn khác đối thủ ở đâu.'),
           ],
         },
-  summarize: (content) =>
-    content.heading.trim() === '' ? `${content.items.length} lợi ích` : `“${content.heading}”`,
+  summarize: (content, variant) =>
+    content.heading.trim() === ''
+      ? `${content.items.length} ${variant === 'steps' ? 'bước' : 'lợi ích'}`
+      : `“${content.heading}”`,
 });

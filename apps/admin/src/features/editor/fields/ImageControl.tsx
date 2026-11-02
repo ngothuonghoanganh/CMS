@@ -2,11 +2,12 @@
 
 import { EMPTY_IMAGE, imageRefSchema } from '@plp/contracts';
 import { getAtPath, type ImageField } from '@plp/sections/schema';
-import { Button, Checkbox, Field, Input } from '@plp/ui';
-import { useRef, useState } from 'react';
+import { Button, Checkbox, Field, Input, WarningTriangleIcon } from '@plp/ui';
+import { useId, useRef, useState } from 'react';
 import { AssetPickerDialog, AssetThumb } from '../../assets';
 import { ALT_MAX_LENGTH } from '../content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor-context';
+import { lowerFirst } from '../presentation';
 import type { ControlProps } from './field-shared';
 import styles from './fields.module.css';
 
@@ -25,8 +26,12 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
     image.assetId === null ? undefined : state.assetsById[image.assetId],
   );
   const chosen = image.assetId !== null;
+  // Like a required text: the draft may stay without it, publishing may not (ADR-007).
+  const missing = field.required === true && !chosen;
+  const missingId = useId();
   const missingAlt = chosen && !image.decorative && image.alt.trim() === '';
   const altPath = `${path}.alt`;
+  const altLabel = field.altLabel ?? 'Mô tả ảnh cho người dùng trình đọc màn hình';
 
   return (
     <fieldset data-field-path={path} className={styles.group}>
@@ -38,6 +43,7 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
           variant="secondary"
           size="sm"
           data-field-focus={chosen ? undefined : ''}
+          aria-describedby={missing ? missingId : undefined}
           onClick={() => {
             setPickerOpen(true);
           }}
@@ -58,6 +64,12 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
           </Button>
         ) : null}
       </div>
+      {missing ? (
+        <p id={missingId} className={styles.warning}>
+          <WarningTriangleIcon size={14} strokeWidth={2} />
+          Cần chọn ảnh trước khi xuất bản.
+        </p>
+      ) : null}
       {chosen && !asset ? (
         <p className={styles.note}>Ảnh này không còn trong thư viện của site. Hãy chọn ảnh khác.</p>
       ) : null}
@@ -66,8 +78,12 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
       ) : null}
       <div data-field-path={altPath}>
         <Field
-          label={field.altLabel ?? 'Mô tả ảnh cho người dùng trình đọc màn hình'}
-          warning={missingAlt ? 'Cảnh báo: chưa có mô tả ảnh' : undefined}
+          label={altLabel}
+          warning={
+            missingAlt
+              ? `Cảnh báo: chưa có ${field.altLabel === undefined ? 'mô tả ảnh' : lowerFirst(altLabel)}`
+              : undefined
+          }
           counter={{ length: image.alt.length, max: ALT_MAX_LENGTH }}
         >
           <Input

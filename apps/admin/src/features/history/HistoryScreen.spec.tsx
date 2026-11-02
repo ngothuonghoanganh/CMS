@@ -788,6 +788,35 @@ describe('HistoryScreen', () => {
     });
   });
 
+  it('reads nothing more of a page deleted from its header, so no error shows before the list opens', async () => {
+    const user = userEvent.setup();
+    const unpublished = historyPage({
+      status: { kind: 'unpublished', changeCount: 0, changes: [] },
+      liveRelease: null,
+      liveUrl: null,
+    });
+    // Once deleted, every read of the page answers 404.
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.deletePage
+        ? Promise.resolve(undefined)
+        : Promise.reject(apiError(404, 'not_found', 'Không tìm thấy trang')),
+    );
+    renderAt(unpublished, historyFixture(initialHistory.items, { liveReleaseId: null }));
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Xóa trang' }),
+    );
+    await vi.waitFor(() => {
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
+    });
+    // Time for a read started by the refresh of the site's lists to answer.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).toEqual([endpoints.deletePage]);
+    expect(screen.queryByText(/Không tải lại được lịch sử/)).toBeNull();
+  });
+
   it('keeps the focus in the header when a teammate unpublished first and the read catches up', async () => {
     const user = userEvent.setup();
     const unpublished = historyPage({

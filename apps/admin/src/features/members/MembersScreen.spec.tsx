@@ -5,7 +5,7 @@ import {
   type Member,
   type MemberListResponse,
 } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -118,6 +118,23 @@ function renderScreen(overrides: Partial<MembersScreenProps> = {}) {
 }
 
 const accepted = { ...viewer, role: 'editor', siteIds: [smile.id, kitchen.id] };
+
+/** Screen 15 with "Mời thành viên" open. */
+async function openInvite(
+  user: ReturnType<typeof userEvent.setup>,
+  overrides: Partial<MembersScreenProps> = {},
+): Promise<HTMLElement> {
+  renderScreen(overrides);
+  await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+  return screen.findByRole('dialog', { name: 'Mời thành viên' });
+}
+
+/** The chips of "Mời thành viên", as their text reads. */
+function chipTexts(dialog: HTMLElement): (string | null)[] {
+  return within(within(dialog).getByRole('list', { name: 'Địa chỉ đã nhập' }))
+    .getAllByRole('listitem')
+    .map((chip) => chip.textContent);
+}
 
 beforeEach(() => {
   apiMock.mockReset();
@@ -527,6 +544,75 @@ describe('MembersScreen', () => {
     expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).not.toContain(
       endpoints.createInvitations,
     );
+  });
+
+  it('makes chips of the addresses of pasted contacts, leaving their names out', async () => {
+    const user = userEvent.setup();
+    const dialog = await openInvite(user);
+    await user.click(within(dialog).getByLabelText('Email'));
+    await user.paste('Nguyễn Văn An <an@bep.vn>, "Thuỷ" <thuy@smilecare.vn>');
+    expect(chipTexts(dialog)).toEqual(['an@bep.vn', 'thuy@smilecare.vn']);
+    expect(within(dialog).getByRole('button', { name: 'Gửi 2 lời mời' })).toBeInTheDocument();
+  });
+
+  it('says why nothing was sent on the email field, focused, until the bad chip goes', async () => {
+    const user = userEvent.setup();
+    const dialog = await openInvite(user);
+    const input = within(dialog).getByLabelText('Email');
+    await user.type(input, 'thuy@smilecare.vn, khong-hop-le,');
+    await user.click(within(dialog).getByRole('button', { name: 'Gửi 1 lời mời' }));
+
+    // Read out where it appears, and again on the field that now has the focus.
+    const refusal = within(dialog).getByText('Email không hợp lệ: khong-hop-le');
+    expect(refusal.closest('[aria-live="polite"]')).not.toBeNull();
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription(/^Email không hợp lệ: khong-hop-le/);
+
+    // Removing the bad chip takes the refusal with it.
+    await user.click(within(dialog).getByRole('button', { name: 'Bỏ khong-hop-le' }));
+    expect(within(dialog).queryByText(/Email không hợp lệ/)).toBeNull();
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('removes one chip per press of Backspace, not one per repeat while it is held', async () => {
+    const user = userEvent.setup();
+    const dialog = await openInvite(user);
+    await user.type(within(dialog).getByLabelText('Email'), 'a@bep.vn b@bep.vn c@bep.vn ');
+    await user.keyboard('{Backspace>4/}');
+    expect(chipTexts(dialog)).toEqual(['a@bep.vn', 'b@bep.vn']);
+    await user.keyboard('{Backspace}');
+    expect(chipTexts(dialog)).toEqual(['a@bep.vn']);
+  });
+
+  it('keeps a half-typed email as it is while the window is away', async () => {
+    const user = userEvent.setup();
+    const dialog = await openInvite(user);
+    const input = within(dialog).getByLabelText('Email');
+    await user.type(input, 'thuy@smile');
+    // Another window takes the focus: the input loses it with the page, and keeps the text.
+    fireEvent.blur(input);
+    expect(within(dialog).queryByRole('list', { name: 'Địa chỉ đã nhập' })).toBeNull();
+    expect(input).toHaveValue('thuy@smile');
+    await user.type(input, 'care.vn');
+    // Leaving the input for another field ends the email.
+    await user.tab();
+    expect(chipTexts(dialog)).toEqual(['thuy@smilecare.vn']);
+  });
+
+  it('points to "Gửi lại" for an email whose invitation expired (ADR-021)', async () => {
+    const user = userEvent.setup();
+    const expired = { ...invitation, expiresAt: '2026-10-31T03:00:00.000Z' };
+    apiMock.mockImplementation((endpoint) =>
+      Promise.resolve(
+        endpoint === endpoints.listMembers
+          ? members
+          : { items: endpoint === endpoints.listInvitations ? [expired] : [] },
+      ),
+    );
+    const dialog = await openInvite(user, { initialInvitations: { items: [expired] } });
+    await user.type(within(dialog).getByLabelText('Email'), 'an.tran@bepnhamay.vn,');
+    expect(chipTexts(dialog)).toEqual(['an.tran@bepnhamay.vn · Lời mời đã hết hạn — dùng Gửi lại']);
   });
 
   it('invites with a custom role, given on every site when set to it (ADR-024)', async () => {

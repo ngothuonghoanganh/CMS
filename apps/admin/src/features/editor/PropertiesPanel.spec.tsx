@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getAtPath } from '@plp/sections/schema';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { PropertiesPanel } from './PropertiesPanel';
@@ -343,6 +345,72 @@ describe('PropertiesPanel', () => {
     expect(list.getByRole('button', { name: /^Bệnh viện Hòa Bình/ })).toBeInTheDocument();
   });
 
+  it('says a logo without a partner name lacks the name the field asks for', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().addSection('logos', 'row', 2);
+    const id = store.getState().draft.composition.sections[2]?.id ?? '';
+    store
+      .getState()
+      .updateContent(id, 'items.0.image', { assetId: ASSET_ID, alt: '', decorative: false });
+    renderEditor(<PropertiesPanel />, { store });
+    const list = within(fieldBox('items'));
+    await user.click(list.getByRole('button', { name: /^Đối tác 1/ }));
+    expect(list.getByLabelText(/^Tên đối tác/)).toHaveAccessibleDescription(
+      'Cảnh báo: chưa có tên đối tác 0 / 250',
+    );
+  });
+
+  it('asks for the images publishing needs, on the field and on the collapsed rows', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().addSection('logos', 'row', 2);
+    const logos = store.getState().draft.composition.sections[2]?.id ?? '';
+    store
+      .getState()
+      .updateContent(logos, 'items.1.image', { assetId: ASSET_ID, alt: '', decorative: true });
+    renderEditor(<PropertiesPanel />, { store });
+
+    // Each collapsed partner without its logo says so; the one with a logo does not.
+    const list = within(fieldBox('items'));
+    expect(list.getByRole('button', { name: 'Đối tác 1 Chưa có logo' })).toBeInTheDocument();
+    expect(list.getByRole('button', { name: 'Đối tác 2' })).toBeInTheDocument();
+    expect(list.getAllByText('Chưa có logo')).toHaveLength(3);
+    await user.click(list.getByRole('button', { name: /^Đối tác 1/ }));
+    const logo = within(fieldBox('items.0.image'));
+    expect(logo.getByRole('button', { name: 'Chọn ảnh' })).toHaveAccessibleDescription(
+      'Cần chọn ảnh trước khi xuất bản.',
+    );
+
+    // A photo of a before and after is required too; once chosen, the cue goes.
+    act(() => {
+      store.getState().addSection('before_after', 'side_by_side', 3);
+    });
+    const pair = store.getState().draft.composition.sections[3]?.id ?? '';
+    const before = within(fieldBox('beforeImage'));
+    expect(before.getByRole('button', { name: 'Chọn ảnh' })).toHaveAccessibleDescription(
+      'Cần chọn ảnh trước khi xuất bản.',
+    );
+    act(() => {
+      store
+        .getState()
+        .updateContent(pair, 'beforeImage', { assetId: ASSET_ID, alt: '', decorative: false });
+    });
+    expect(before.getByRole('button', { name: 'Thay ảnh' })).not.toHaveAccessibleDescription();
+    expect(before.queryByText('Cần chọn ảnh trước khi xuất bản.')).toBeNull();
+    expect(
+      within(fieldBox('afterImage')).getByText('Cần chọn ảnh trước khi xuất bản.'),
+    ).toBeInTheDocument();
+
+    // An image that is not required, as the Hero's, asks for nothing.
+    act(() => {
+      store.getState().select(HERO);
+    });
+    expect(
+      within(fieldBox('image')).getByRole('button', { name: 'Chọn ảnh' }),
+    ).not.toHaveAccessibleDescription();
+  });
+
   it('keeps a process to 5 steps, and says why it cannot be chosen with more', async () => {
     const user = userEvent.setup();
     const store = makeStore();
@@ -353,24 +421,33 @@ describe('PropertiesPanel', () => {
     expect(sectionById(store, BENEFITS).variant).toBe('steps');
     let list = within(fieldBox('items'));
     expect(list.getByText('3 / 5')).toBeInTheDocument();
+    // A process lists steps, in the panel's words too.
+    expect(screen.getByRole('group', { name: /^Các bước/ })).toBe(fieldBox('items'));
     // The step number takes the place of the icon; there is no image either.
     await user.click(list.getByRole('button', { name: /Lợi ích thứ nhất/ }));
     expect(list.queryByLabelText('Biểu tượng')).toBeNull();
     expect(document.querySelector('[data-field-path="items.0.image"]')).toBeNull();
-    const add = list.getByRole('button', { name: 'Thêm lợi ích' });
+    const add = list.getByRole('button', { name: 'Thêm bước' });
     await user.click(add);
+    expect(screen.getByText('Đã thêm bước 4.')).toBeInTheDocument();
     await user.click(add);
     expect(add).toBeDisabled();
-    expect(add).toHaveAccessibleDescription('Tối đa 5 lợi ích');
+    expect(add).toHaveAccessibleDescription('Tối đa 5 bước');
+    expect(list.getByRole('button', { name: 'Xóa bước 5' })).toBeInTheDocument();
 
     // Six benefits in the grid: the process cannot take them all, and nothing is dropped.
     await user.click(within(variants).getByRole('button', { name: /^Lưới 3–6 lợi ích/ }));
     list = within(fieldBox('items'));
     await user.click(list.getByRole('button', { name: 'Thêm lợi ích' }));
     const steps = within(variants).getByRole('button', { name: /^Quy trình 3 bước/ });
+    const blocker = '“Quy trình 3 bước” có tối đa 5 bước. Xóa bớt lợi ích để chọn bố cục này.';
     expect(steps).toHaveAttribute('aria-disabled', 'true');
-    expect(steps).toHaveAccessibleDescription(
-      '“Quy trình 3 bước” có tối đa 5 lợi ích. Xóa bớt lợi ích để chọn bố cục này.',
+    expect(steps).toHaveAccessibleDescription(blocker);
+    // Pointing at it tells the same reason, not what the layout is for.
+    expect(steps).toHaveAttribute('title', blocker);
+    expect(within(variants).getByRole('button', { name: /^Xen kẽ ảnh và chữ/ })).toHaveAttribute(
+      'title',
+      'Giải thích chi tiết từng điểm mạnh, mỗi điểm một ảnh.',
     );
     await user.click(steps);
     expect(sectionById(store, BENEFITS).variant).toBe('grid');
@@ -384,5 +461,30 @@ describe('PropertiesPanel', () => {
     renderEditor(<PropertiesPanel />, { store });
     await user.click(screen.getByRole('button', { name: 'Đóng bảng thuộc tính' }));
     expect(store.getState().selection.sectionId).toBeNull();
+  });
+});
+
+describe('PropertiesPanel styles', () => {
+  /** Declarations by selector, comments left out. */
+  function rules(): Map<string, string> {
+    const css = readFileSync(join(import.meta.dirname, 'PropertiesPanel.module.css'), 'utf8');
+    const bySelector = new Map<string, string>();
+    for (const [, selectors = '', body = ''] of css
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      for (const selector of selectors.split(',').map((part) => part.trim())) {
+        bySelector.set(selector, body);
+      }
+    }
+    return bySelector;
+  }
+
+  it('draws a layout blocked by its items as unavailable, with no hover', () => {
+    const css = rules();
+    const blocked = css.get(".variant[aria-disabled='true']") ?? '';
+    expect(blocked).toMatch(/(?<![\w-])cursor:\s*not-allowed;/);
+    expect(blocked).toMatch(/(?<![\w-])color:\s*var\(--color-muted\);/);
+    expect(css.has('.variant:hover')).toBe(false);
+    expect(css.has(".variant:not([aria-disabled='true']):hover")).toBe(true);
   });
 });

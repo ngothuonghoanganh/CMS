@@ -6,6 +6,7 @@ import {
   endpoints,
   INVITATION_VALID_DAYS,
   INVITE_EMAILS_MAX,
+  type Invitation,
   type RoleChoice,
   type Site,
 } from '@plp/contracts';
@@ -18,6 +19,7 @@ import { PermissionSummary, SiteScopeFields } from './ChangeAccessDialog';
 import { EmailChips, type EmailChipsValue } from './EmailChips';
 import {
   inviteEmailProblem,
+  type KnownEmails,
   knownEmails,
   normalizeEmail,
   permissionSummary,
@@ -32,10 +34,33 @@ export interface InviteDialogProps {
   customRoles: readonly CustomRole[];
   /** Screen 15's members and pending invitations: their emails need no invitation. */
   members: readonly { email: string }[];
-  invitations: readonly { email: string }[];
+  invitations: readonly Pick<Invitation, 'email' | 'expiresAt'>[];
+  /** Screen 15's clock: an invitation past its expiry is renewed with "Gửi lại", not here. */
+  now: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInvited: (result: CreateInvitationsResponse) => void;
+}
+
+/** The email field's id: a refusal to send moves the focus there. */
+const EMAILS_ID = 'invite-emails';
+
+/** What keeps these emails from being sent, if anything. */
+function emailsProblem(emails: readonly string[], known: KnownEmails): string | null {
+  const invalid = emails.filter((email) => inviteEmailProblem(email, known) === 'invalid');
+  const invitable = emails.filter((email) => inviteEmailProblem(email, known) === null);
+  if (emails.length === 0) {
+    return 'Nhập ít nhất một email';
+  }
+  if (invalid.length > 0) {
+    return `Email không hợp lệ: ${invalid.join(', ')}`;
+  }
+  if (invitable.length === 0) {
+    return 'Các email này đã là thành viên hoặc đang có lời mời';
+  }
+  return invitable.length > INVITE_EMAILS_MAX
+    ? `Mỗi lần mời tối đa ${INVITE_EMAILS_MAX} email`
+    : null;
 }
 
 /**
@@ -48,6 +73,7 @@ export function InviteDialog({
   customRoles,
   members,
   invitations,
+  now,
   open,
   onOpenChange,
   onInvited,
@@ -61,14 +87,22 @@ export function InviteDialog({
   const [scope, setScope] = useState<'all' | 'sites'>(sites.length > 1 ? 'sites' : 'all');
   const [chosen, setChosen] = useState<string[]>([]);
   const [sitesError, setSitesError] = useState<string | null>(null);
-  const known = knownEmails(members, invitations);
+  const known = knownEmails(members, invitations, now);
   // What is still being typed counts as well: sending makes it a chip first.
   const draft = normalizeEmail(chips.draft);
   const emails =
     draft === '' || chips.emails.includes(draft) ? chips.emails : [...chips.emails, draft];
-  const invalid = emails.filter((email) => inviteEmailProblem(email, known) === 'invalid');
   // Only these are sent: someone already a member or invited needs no new link.
   const invitable = emails.filter((email) => inviteEmailProblem(email, known) === null);
+
+  function changeChips(next: EmailChipsValue) {
+    setChips(next);
+    // A refusal said what blocked sending: it follows the chips (removing the bad one clears it),
+    // never judging the email still being typed, and waits for the next send once none is left.
+    if (emailsError !== null) {
+      setEmailsError(next.emails.length === 0 ? null : emailsProblem(next.emails, known));
+    }
+  }
 
   const send = useMutation({
     mutationFn: (body: { emails: string[]; role: RoleChoice; siteIds: string[] | null }) =>
@@ -82,20 +116,15 @@ export function InviteDialog({
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setChips({ emails, draft: '' });
-    const emailProblem =
-      emails.length === 0
-        ? 'Nhập ít nhất một email'
-        : invalid.length > 0
-          ? `Email không hợp lệ: ${invalid.join(', ')}`
-          : invitable.length === 0
-            ? 'Các email này đã là thành viên hoặc đang có lời mời'
-            : invitable.length > INVITE_EMAILS_MAX
-              ? `Mỗi lần mời tối đa ${INVITE_EMAILS_MAX} email`
-              : null;
+    const emailProblem = emailsProblem(emails, known);
     const wholeWorkspace = option?.wholeWorkspace === true || scope === 'all';
     const sitesProblem = !wholeWorkspace && chosen.length === 0 ? 'Chọn ít nhất một site' : null;
     setEmailsError(emailProblem);
     setSitesError(sitesProblem);
+    if (emailProblem !== null) {
+      // The send button keeps the focus otherwise, away from the chips to fix.
+      document.getElementById(EMAILS_ID)?.focus();
+    }
     if (option === null || emailProblem !== null || sitesProblem !== null || send.isPending) {
       return;
     }
@@ -140,12 +169,14 @@ export function InviteDialog({
       <form id="invite-members" className={styles.form} onSubmit={submit} noValidate>
         <Field
           label="Email"
-          id="invite-emails"
+          id={EMAILS_ID}
           help={`Cách nhau bằng dấu phẩy, khoảng trắng hoặc Enter. Tối đa ${INVITE_EMAILS_MAX} email mỗi lần.`}
           error={emailsError ?? undefined}
+          // The refusal changes with the chips; each change is read out.
+          announceMessages
         >
           {(control) => (
-            <EmailChips control={control} value={chips} known={known} onChange={setChips} />
+            <EmailChips control={control} value={chips} known={known} onChange={changeChips} />
           )}
         </Field>
         <RadioCardGroup<RoleChoice>

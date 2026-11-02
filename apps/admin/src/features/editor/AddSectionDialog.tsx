@@ -60,7 +60,8 @@ export function AddSectionDialog({ open, onOpenChange, requestedIndex }: AddSect
       return;
     }
     if (store.getState().addSection(selected.type, selected.variant, requestedIndex)) {
-      announce(`Đã thêm ${selected.sectionLabel} ở vị trí ${index + 1}.`);
+      // Named as the card just chosen: "Quy trình 3 bước" is a process, not "Lợi ích".
+      announce(`Đã thêm “${selected.name}” ở vị trí ${index + 1}.`);
       onOpenChange(false);
     }
   }

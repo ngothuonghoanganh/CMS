@@ -8,6 +8,8 @@ import {
 import type {
   AnySectionDefinition,
   LeafField,
+  ListField,
+  ListLabels,
   SectionDefinition,
   SectionVariant,
 } from './define.js';
@@ -171,6 +173,15 @@ export function listMaximum(type: SectionType, variantId: string, listKey: strin
 }
 
 /**
+ * What a list field and its items are called in a variant: the field's own names, or the variant's
+ * (a process lists "Các bước", each a "Bước"). The panel, validation and publish checks all say it.
+ */
+export function listLabelsOf(type: SectionType, variantId: string, field: ListField): ListLabels {
+  const variantLabels = getVariant(getSectionDefinition(type), variantId)?.listLabels?.[field.key];
+  return variantLabels ?? { label: field.label, itemLabel: field.itemLabel };
+}
+
+/**
  * Where a new section of this type goes when inserted at `requestedIndex`: fixed-position sections
  * go to their place, others stay between them.
  */
@@ -326,7 +337,7 @@ function checkSections(
         issues.push({
           path: ['sections', index, 'content', listKey],
           code: 'too_small',
-          message: `Bố cục “${variant?.label ?? section.variant}” cần ít nhất ${minimum} ${field.itemLabel.toLowerCase()}`,
+          message: `Bố cục “${variant?.label ?? section.variant}” cần ít nhất ${minimum} ${listLabelsOf(section.type, section.variant, field).itemLabel.toLowerCase()}`,
         });
       }
     }
@@ -343,7 +354,7 @@ function checkSections(
         issues.push({
           path: ['sections', index, 'content', listKey],
           code: 'too_big',
-          message: `Bố cục “${variant?.label ?? section.variant}” có tối đa ${maximum} ${field.itemLabel.toLowerCase()}`,
+          message: `Bố cục “${variant?.label ?? section.variant}” có tối đa ${maximum} ${listLabelsOf(section.type, section.variant, field).itemLabel.toLowerCase()}`,
         });
       }
     }
