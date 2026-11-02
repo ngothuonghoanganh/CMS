@@ -28,7 +28,10 @@ export interface RadioCardGroupProps<V extends string> {
   /** Selected value, or `null` when nothing is chosen yet. */
   value: V | null;
   onChange: (value: V) => void;
-  /** Minimum card width in pixels before the grid wraps. Defaults to 220. */
+  /**
+   * Minimum card width in pixels before the grid wraps. Defaults to 220. A group narrower than it
+   * (a dialog on a phone) has one column as wide as the group, never one that scrolls sideways.
+   */
   minColumnWidth?: number | undefined;
   /**
    * Id of a message about the whole group, such as an error shown under it: each radio is
@@ -63,7 +66,9 @@ export function RadioCardGroup<V extends string>({
       <legend className={showLegend ? styles.legend : styles.visuallyHidden}>{legend}</legend>
       <div
         className={styles.grid}
-        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${minColumnWidth}px, 1fr))` }}
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(min(${minColumnWidth}px, 100%), 1fr))`,
+        }}
       >
         {options.map((option, index) => {
           const checked = option.value === value;
