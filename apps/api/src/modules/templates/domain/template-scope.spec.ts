@@ -1,5 +1,5 @@
-import { Types } from 'mongoose';
 import { describe, expect, it } from 'vitest';
+import { toObjectId } from '../../../shared/persistence/object-id.js';
 import {
   scopeAfterChange,
   scopeDto,
@@ -9,9 +9,9 @@ import {
   visibleSiteIds,
 } from './template-scope.js';
 
-const SMILE = new Types.ObjectId('64b000000000000000000001');
-const KITCHEN = new Types.ObjectId('64b000000000000000000002');
-const SPA = new Types.ObjectId('64b000000000000000000003');
+const SMILE = toObjectId('64b000000000000000000001');
+const KITCHEN = toObjectId('64b000000000000000000002');
+const SPA = toObjectId('64b000000000000000000003');
 
 const everywhere: TemplateScopeRecord = { kind: 'workspace' };
 const smileAndSpa: TemplateScopeRecord = { kind: 'sites', siteIds: [SMILE, SPA] };
