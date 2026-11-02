@@ -3,11 +3,11 @@ import {
   can,
   type Composition,
   type createPageRequestSchema,
-  type PageGoal,
   EMPTY_SEO,
   MAX_PAGES_PER_SITE,
   type PageCountResponse,
   type PageDetailResponse,
+  type PageGoal,
   type PageListResponse,
   type pageListQuerySchema,
   type PageRefListResponse,
@@ -25,7 +25,7 @@ import { buildCompositionFromGoal, parseComposition, splitPath } from '@plp/sect
 import type { z } from 'zod';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
-import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { TransactionRunner, type Tx } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -51,10 +51,10 @@ export type PageListQueryValues = z.output<typeof pageListQuerySchema>;
 export type CreatePageValues = z.output<typeof createPageRequestSchema>;
 export type SlugAvailabilityQuery = z.output<typeof slugAvailabilityQuerySchema>;
 
-const PAGE_LIMIT_MESSAGE = `Mỗi site có tối đa ${MAX_PAGES_PER_SITE} trang`;
+export const PAGE_LIMIT_MESSAGE = `Mỗi site có tối đa ${MAX_PAGES_PER_SITE} trang`;
 
 /** What a new page starts with, and how its creation is logged. */
-interface InitialPage {
+export interface InitialPage {
   composition: Composition;
   goal: PageGoal | null;
   createdFrom: PageCreatedFromRecord | null;
@@ -169,43 +169,58 @@ export class PagesService {
   ): Promise<PageDetailResponse> {
     const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
     const initial = this.initialPage(site, input.start);
-    const page = await this.transactions.run(async (tx) => {
-      if (!(await this.sitesRepository.recordPageCreation(scope, site._id, tx))) {
-        // Deleted since it was read (ADR-027).
-        throw notFound(SITE_NOT_FOUND);
-      }
-      if ((await this.pages.countForSite(scope, site._id, tx)) >= MAX_PAGES_PER_SITE) {
-        throw new AppError(409, 'page_limit_reached', PAGE_LIMIT_MESSAGE);
-      }
-      const created = await this.pages.create(
-        scope,
-        {
-          siteId: site._id,
-          title: input.title,
-          goal: initial.goal,
-          slug: input.slug,
-          composition: initial.composition,
-          seo: { ...EMPTY_SEO },
-          createdFrom: initial.createdFrom,
-        },
-        tx,
-      );
-      const pageRef = { id: created._id, title: created.title };
-      await this.activity.record(
-        scope,
-        initial.createdFrom === null
-          ? { siteId: site._id, type: 'page.created', page: pageRef }
-          : {
-              siteId: site._id,
-              type: 'page.created_from_template',
-              page: pageRef,
-              data: { version: initial.createdFrom.version, template: initial.templateName },
-            },
-        tx,
-      );
-      return created;
-    });
+    const page = await this.transactions.run((tx) =>
+      this.insertPage(scope, site, { title: input.title, slug: input.slug, ...initial }, tx),
+    );
     return this.detail(scope, site, page);
+  }
+
+  /**
+   * Inserts a page with its activity in `tx`: creating a page here, and the draft an AI job writes
+   * (ADR-031) in the transaction that ends the job. `composition` is already parsed by the
+   * registry. 404 when the site was deleted meanwhile (ADR-027), 409 `page_limit_reached` or
+   * `slug_taken`.
+   */
+  async insertPage(
+    scope: WorkspaceScope,
+    site: SiteRecord,
+    input: { title: string; slug: string } & InitialPage,
+    tx: Tx,
+  ): Promise<PageRecord> {
+    if (!(await this.sitesRepository.recordPageCreation(scope, site._id, tx))) {
+      // Deleted since it was read (ADR-027).
+      throw notFound(SITE_NOT_FOUND);
+    }
+    if ((await this.pages.countForSite(scope, site._id, tx)) >= MAX_PAGES_PER_SITE) {
+      throw new AppError(409, 'page_limit_reached', PAGE_LIMIT_MESSAGE);
+    }
+    const created = await this.pages.create(
+      scope,
+      {
+        siteId: site._id,
+        title: input.title,
+        goal: input.goal,
+        slug: input.slug,
+        composition: input.composition,
+        seo: { ...EMPTY_SEO },
+        createdFrom: input.createdFrom,
+      },
+      tx,
+    );
+    const pageRef = { id: created._id, title: created.title };
+    await this.activity.record(
+      scope,
+      input.createdFrom === null
+        ? { siteId: site._id, type: 'page.created', page: pageRef }
+        : {
+            siteId: site._id,
+            type: 'page.created_from_template',
+            page: pageRef,
+            data: { version: input.createdFrom.version, template: input.templateName },
+          },
+      tx,
+    );
+    return created;
   }
 
   async get(user: AuthenticatedUser, siteId: string, pageId: string): Promise<PageDetailResponse> {

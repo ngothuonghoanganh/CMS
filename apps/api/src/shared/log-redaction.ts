@@ -2,9 +2,16 @@
 export const REDACTED = '[redacted]';
 
 /**
- * Request and response fields pino replaces with "[Redacted]": session secrets, and a visitor's
- * address and user agent relayed by the renderer for the lead form (ADR-016, rule 10). Bodies are
- * never logged.
+ * Fields that hold what the AI is told or answers (ADR-031): the brief, the system text and prompt
+ * of a request, its chat messages and the AI's output. No log needs them, wherever they sit.
+ */
+export const AI_TEXT_FIELDS = ['brief', 'system', 'prompt', 'messages', 'output'] as const;
+
+/**
+ * Fields pino replaces with "[Redacted]": session secrets, a visitor's address and user agent
+ * relayed by the renderer for the lead form (ADR-016, rule 10), and AI text in a logged object or
+ * one level into it. Bodies are never logged; `serializeError` covers AI text at any depth of an
+ * error.
  */
 export const LOG_REDACT_PATHS = [
   'req.headers.cookie',
@@ -13,7 +20,9 @@ export const LOG_REDACT_PATHS = [
   'req.headers["x-plp-client-ip"]',
   'req.headers["x-plp-client-ua"]',
   'req.headers["x-plp-renderer-signature"]',
-] as const;
+  ...AI_TEXT_FIELDS,
+  ...AI_TEXT_FIELDS.map((field) => `*.${field}`),
+];
 
 /** `/public/preview/{token}`: the path segment is a signed preview token (ADR-010). */
 const PREVIEW_TOKEN_IN_PATH = /(\/public\/preview\/)([^/?#]+)/;
@@ -38,11 +47,15 @@ function hasToJson(value: object): value is { toJSON: () => unknown } {
 /**
  * A copy of `value` with `map` applied to each of its strings, at any depth, in what the log
  * writes for it: an object's `toJSON()` (an ObjectId's hex string, a Date's ISO string) and an
- * error's own fields, which are not enumerable. A value met again is the copy already made, so a
- * cycle, also one through what a `toJSON()` returns, ends the walk instead of the stack. The value
- * itself is not changed.
+ * error's own fields, which are not enumerable. A field named in `hidden` is replaced whole. A
+ * value met again is the copy already made, so a cycle, also one through what a `toJSON()`
+ * returns, ends the walk instead of the stack. The value itself is not changed.
  */
-function mapStrings(value: unknown, map: (text: string) => string): unknown {
+function mapStrings(
+  value: unknown,
+  map: (text: string) => string,
+  hidden: ReadonlySet<string> = new Set(),
+): unknown {
   const copies = new WeakMap<object, unknown>();
   function walk(item: unknown): unknown {
     if (typeof item === 'string') {
@@ -85,7 +98,7 @@ function mapStrings(value: unknown, map: (text: string) => string): unknown {
       }
     }
     for (const [key, entry] of Object.entries(written)) {
-      copy[key] = walk(entry);
+      copy[key] = hidden.has(key) ? REDACTED : walk(entry);
     }
     return copy;
   }
@@ -164,14 +177,18 @@ export const HASH_PLACEHOLDER = '[hash]';
  */
 const HEX_RUN = /[0-9a-f]{64,}/gi;
 
+const HIDDEN_ERROR_FIELDS: ReadonlySet<string> = new Set(AI_TEXT_FIELDS);
+
 /**
  * pino's error serializer (`err`, after the standard one, which folds the causes' messages and
  * stacks into the error's own): every run of 64 hex digits in the logged error becomes `[hash]`,
  * in its message and stack, the driver's `errmsg` and `keyValue`, and its nested `cause` and
  * `errors` (AggregateError), at any depth. A net under logs that pass an error on whole, e.g. a
  * duplicate key error on a limit key that holds the hash of an address, rethrown as the cause of
- * a 500 (`ProblemFilter`). Returns a copy; the error itself is not changed.
+ * a 500 (`ProblemFilter`). AI text (`AI_TEXT_FIELDS`) carried anywhere in it, e.g. a request kept
+ * by a cause or a stored job in a driver error, becomes `[redacted]`. Returns a copy; the error
+ * itself is not changed.
  */
 export function serializeError(error: unknown): unknown {
-  return mapStrings(error, (text) => text.replace(HEX_RUN, HASH_PLACEHOLDER));
+  return mapStrings(error, (text) => text.replace(HEX_RUN, HASH_PLACEHOLDER), HIDDEN_ERROR_FIELDS);
 }

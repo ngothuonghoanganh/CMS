@@ -19,6 +19,7 @@ import {
 import { Types } from 'mongoose';
 import type { Response } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { aiJobBody, postAiJob, postAiRetry } from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
@@ -88,6 +89,8 @@ interface Row {
 }
 
 const DAY_MS = 86_400_000;
+/** An AI job id no workspace has. */
+const NO_AI_JOB = '64b0000000000000000000a1';
 
 /** The custom role of the matrix: edits, asks to publish and sees leads (ADR-024). */
 const CUSTOM_ROLE = {
@@ -424,6 +427,43 @@ const ROWS: Row[] = [
     status: 201,
     call: (client, { site, pageId }) =>
       client.post(`/sites/${site.id}/pages/${pageId}/preview-links`, { kind: 'draft' }),
+  },
+  // Creating a page with AI (ADR-031): `pages.edit`, for both the screen and the job
+  {
+    action: 'Lượt AI còn lại',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/ai/usage`),
+  },
+  {
+    action: 'Tạo trang bằng AI',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => postAiJob(client, site.id, aiJobBody()),
+  },
+  // A job of nobody: the permission is checked first, then the job is looked for.
+  {
+    action: 'Xem lần tạo trang bằng AI',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) => client.get(`/sites/${site.id}/ai/page-jobs/${NO_AI_JOB}`),
+  },
+  {
+    action: 'Thử lại section AI chưa viết được',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) => postAiRetry(client, site.id, NO_AI_JOB),
+  },
+  {
+    action: 'Hủy tạo trang bằng AI',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) => client.post(`/sites/${site.id}/ai/page-jobs/${NO_AI_JOB}/cancel`),
   },
   // Publishing
   {
@@ -786,6 +826,8 @@ describe('the six roles on every endpoint', () => {
   beforeAll(async () => {
     t = await createTestApp('plp_test_role_matrix', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
+      // The AI endpoints answer with the fake AI (ADR-031).
+      env: { AI_PROVIDER: 'fake' },
     });
     stranger = (await signedUpClient(t.app)).client;
     members = new Map(
@@ -955,6 +997,8 @@ describe('the six roles on every endpoint', () => {
       requests,
       versions,
       approvals,
+      aiJobs,
+      aiUsage,
     ] = await Promise.all([
       db.collection('sites').findOne({ _id: siteId }),
       db.collection('sites').countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
@@ -966,6 +1010,8 @@ describe('the six roles on every endpoint', () => {
       collection('data_requests'),
       collection('consent_versions'),
       collection('publish_approvals'),
+      collection('ai_jobs'),
+      db.collection('ai_usage').find().sort({ _id: 1 }).toArray(),
     ]);
     const ofWorkspace = (name: string) =>
       t.connection
@@ -1006,6 +1052,8 @@ describe('the six roles on every endpoint', () => {
       requests,
       versions,
       approvals,
+      aiJobs,
+      aiUsage,
       activity,
       limits,
       memberships,

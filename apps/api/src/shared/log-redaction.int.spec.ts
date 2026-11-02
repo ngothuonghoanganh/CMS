@@ -12,6 +12,14 @@ import { Logger as PinoNestLogger } from 'nestjs-pino';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import {
+  aiJobBody,
+  AI_BRIEF,
+  fakeAi,
+  finishedJob,
+  postAiJob,
+  streamEvents,
+} from '../../test/ai.js';
 import { createTestApp, type TestApp } from '../../test/app.js';
 import { requestSignup, signupInput, signupVerifyBody, TestClient } from '../../test/client.js';
 import { formDraft, leadFormSection } from '../../test/compositions.js';
@@ -27,6 +35,7 @@ import { addConfirmedRecipient } from '../../test/recipients.js';
 import { createSite } from '../../test/resources.js';
 import { LeadLimitsRepository } from '../modules/leads/lead-limits.repository.js';
 import { inviteLimitKeys } from '../modules/notifications/domain/notification-rules.js';
+import { AiError } from '../modules/ai/ai-text-model.js';
 import { LeadRecipientsService } from '../modules/notifications/lead-recipients.service.js';
 import { HASH_PLACEHOLDER, REDACTED } from './log-redaction.js';
 
@@ -76,7 +85,8 @@ describe('request log', () => {
   beforeAll(async () => {
     t = await createTestApp('plp_test_request_log', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
-      env: { LOG_LEVEL: 'info' },
+      // The fake AI writes pages, so a job's prompts and answers can be looked for (ADR-031).
+      env: { LOG_LEVEL: 'info', AI_PROVIDER: 'fake' },
       logDestination: new Writable({
         write(chunk: Buffer, _encoding, done) {
           output.push(chunk.toString('utf8'));
@@ -293,5 +303,59 @@ describe('request log', () => {
       return line;
     });
     expect(logged).toContain('vong-lap');
+  });
+  it('keeps the brief, the prompts and the AI’s answers out of the log (ADR-031)', async () => {
+    const brief = {
+      ...AI_BRIEF,
+      product: 'Sản phẩm-bí-mật-trong-brief',
+      differentiators: 'Thông-điệp-bí-mật-của-khách',
+      existingContent: 'Nội-dung-bí-mật-đã-có',
+    };
+    const answer = 'Câu-trả-lời-bí-mật-của-AI';
+    const fake = fakeAi(t);
+    fake.respondWith((request) => {
+      if (request.schema.name === 'section_hero') {
+        // An adapter that kept the request on the error it threw, and its cause.
+        throw Object.assign(
+          new AiError('unavailable', 'The AI service answered HTTP 500', {
+            status: 500,
+            cause: Object.assign(new Error('upstream'), { output: request.prompt }),
+          }),
+          { request: { system: request.system, prompt: request.prompt } },
+        );
+      }
+      if (request.schema.name === 'section_faq') {
+        return {
+          text: `{"heading": "${answer}", "items": "${answer}"}`,
+          usage: { inputTokens: 1, outputTokens: 1 },
+          truncated: false,
+        };
+      }
+      return undefined;
+    });
+    t.app.useLogger(t.app.get(PinoNestLogger));
+    try {
+      const response = await postAiJob(owner, site.id, aiJobBody({ brief }))
+        .set('x-request-id', 'log-ai')
+        .expect(200);
+      expect(finishedJob(streamEvents(response)).status).toBe('done');
+    } finally {
+      fake.reset();
+    }
+
+    expect((await requestLine('log-ai')).res.statusCode).toBe(200);
+    const logged = await vi.waitFor(() => {
+      const line = output
+        .join('')
+        .split('\n')
+        .find((text) => text.includes('"AI section not written"'));
+      if (line === undefined) {
+        throw new Error('The failed section logged nothing');
+      }
+      return line;
+    });
+    expect(logged).toContain('"sectionType":"hero"');
+    expect(logged).toContain(REDACTED);
+    expectNotLogged(brief.product, brief.differentiators, brief.existingContent, answer);
   });
 });

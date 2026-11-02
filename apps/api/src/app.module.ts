@@ -9,6 +9,7 @@ import type { Options as PinoHttpOptions } from 'pino-http';
 import type { Env } from './config/env.js';
 import { HealthModule } from './health/health.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
+import { AiModule } from './modules/ai/ai.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
@@ -87,6 +88,7 @@ export class AppModule {
         PrivacyModule,
         PublicDeliveryModule,
         RevalidationModule,
+        AiModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemFilter },

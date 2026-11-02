@@ -333,6 +333,45 @@ describe('serializeError', () => {
     expect(lines.join('')).not.toContain(HASH);
   });
 
+  it('keeps AI text out of an error, at any depth (ADR-031)', () => {
+    const prompt = 'Product or service: Niềng răng bí mật';
+    const request = { system: 'You write copy', prompt, schema: { name: 'section_hero' } };
+    const error = new Error('AI request failed', {
+      cause: Object.assign(new Error('upstream'), { request, output: '{"heading":"Bí mật"}' }),
+    });
+    const serialized = written(serializeError(error));
+    expect(serialized).toContain('section_hero');
+    expect(serialized).toContain(REDACTED);
+    for (const text of [prompt, 'You write copy', 'Bí mật']) {
+      expect(serialized).not.toContain(text);
+    }
+    // A driver error naming the job it could not store.
+    const stored = new DriverError({
+      errmsg: 'Document failed validation',
+      code: 121,
+      keyValue: { brief: { product: 'Niềng răng bí mật' } },
+    });
+    expect(written(serializeError(stored))).not.toContain('Niềng răng bí mật');
+  });
+
+  it('keeps AI text out of a pino log line, in the object logged or one level in', () => {
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        lines.push(chunk.toString('utf8'));
+        done();
+      },
+    });
+    const logger = pino({ redact: [...LOG_REDACT_PATHS] }, sink);
+    logger.warn({ prompt: 'Lời nhắn bí mật', jobId: 'job-1' }, 'AI section not written');
+    logger.warn({ request: { brief: 'Brief bí mật', system: 'Hệ thống bí mật' } }, 'AI');
+    const output = lines.join('');
+    expect(output).toContain('job-1');
+    for (const text of ['Lời nhắn bí mật', 'Brief bí mật', 'Hệ thống bí mật']) {
+      expect(output).not.toContain(text);
+    }
+  });
+
   it('keeps the hash out of an error a pino log line carries', () => {
     const lines: string[] = [];
     const sink = new Writable({
