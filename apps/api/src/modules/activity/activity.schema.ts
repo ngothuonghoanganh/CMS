@@ -6,7 +6,10 @@ const ACTIVITY_MODEL = 'Activity';
 
 /** Versions and releases an event involves; unused fields stay null (or false). */
 export interface ActivityData {
-  /** Release version for `page.published` and `page.draft_restored`. */
+  /**
+   * Release version for `page.published` and `page.draft_restored`; the template's version for
+   * `page.created_from_template`.
+   */
   version: number | null;
   /** Pointer moves: the live version before and after. */
   fromVersion: number | null;
@@ -20,6 +23,8 @@ export interface ActivityData {
   slug: string | null;
   /** The domain of a domain event, or the default address made primary again (ADR-022). */
   hostname: string | null;
+  /** The template's name then, for `page.created_from_template` (ADR-030). */
+  template: string | null;
   /** Set after the commit when the renderer could not be revalidated (ADR-009). */
   revalidationFailed: boolean;
 }
@@ -33,6 +38,7 @@ export const EMPTY_ACTIVITY_DATA: ActivityData = {
   count: null,
   slug: null,
   hostname: null,
+  template: null,
   revalidationFailed: false,
 };
 
@@ -72,6 +78,7 @@ const activitySchema = new Schema<ActivityRecord>(
       count: { type: Number, default: null },
       slug: { type: String, default: null },
       hostname: { type: String, default: null },
+      template: { type: String, default: null },
       revalidationFailed: { type: Boolean, default: false },
     },
     reason: { type: String, default: null },

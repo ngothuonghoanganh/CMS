@@ -40,6 +40,8 @@ export function toActivityItem(
       slug: record.data.slug ?? null,
       // Only domain events have one (ADR-022), the same.
       hostname: record.data.hostname ?? null,
+      // Only `page.created_from_template` has one (ADR-030), the same.
+      template: record.data.template ?? null,
       revalidationFailed: record.data.revalidationFailed,
     },
     reason: record.reason,

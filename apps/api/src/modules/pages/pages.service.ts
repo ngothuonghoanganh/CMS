@@ -3,6 +3,7 @@ import {
   can,
   type Composition,
   type createPageRequestSchema,
+  type PageGoal,
   EMPTY_SEO,
   MAX_PAGES_PER_SITE,
   type PageCountResponse,
@@ -36,12 +37,13 @@ import { ASSET_NOT_IN_SITE_MESSAGE } from '../sites/site-management.service.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
+import { templateComposition, templateForStart } from '../templates/template-catalog.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
 import { revisionConflict } from './page-errors.js';
 import { PageEvaluator } from './page-evaluator.service.js';
 import { attentionOf, countPages, filterPages, liveSiteUrlOf, paginatePages } from './page-list.js';
-import type { PageRecord } from './page.schema.js';
+import type { PageCreatedFromRecord, PageRecord } from './page.schema.js';
 import { type DraftContent, PagesRepository } from './pages.repository.js';
 import { newSectionId } from './section-id.js';
 
@@ -50,6 +52,15 @@ export type CreatePageValues = z.output<typeof createPageRequestSchema>;
 export type SlugAvailabilityQuery = z.output<typeof slugAvailabilityQuerySchema>;
 
 const PAGE_LIMIT_MESSAGE = `Mỗi site có tối đa ${MAX_PAGES_PER_SITE} trang`;
+
+/** What a new page starts with, and how its creation is logged. */
+interface InitialPage {
+  composition: Composition;
+  goal: PageGoal | null;
+  createdFrom: PageCreatedFromRecord | null;
+  /** The template's name then, for "tạo trang từ mẫu" (ADR-030); null otherwise. */
+  templateName: string | null;
+}
 
 function firstIssueMessage(issues: readonly { message: string }[]): string {
   const issue = issues[0];
@@ -146,9 +157,10 @@ export class PagesService {
   }
 
   /**
-   * A blank page or a page built for a goal (screen 02), and its `page.created` activity. The
-   * limit is checked inside the transaction, after a write to the site that serializes concurrent
-   * creations in it, so the 201st page is refused even when requests race (ADR-014).
+   * A blank page, a page built for a goal (screen 02) or a page made from a template (screen 18,
+   * ADR-030), and its activity. The limit is checked inside the transaction, after a write to the
+   * site that serializes concurrent creations in it, so the 201st page is refused even when
+   * requests race (ADR-014).
    */
   async create(
     user: AuthenticatedUser,
@@ -156,7 +168,7 @@ export class PagesService {
     input: CreatePageValues,
   ): Promise<PageDetailResponse> {
     const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
-    const composition = this.initialComposition(site, input.start);
+    const initial = this.initialPage(site, input.start);
     const page = await this.transactions.run(async (tx) => {
       if (!(await this.sitesRepository.recordPageCreation(scope, site._id, tx))) {
         // Deleted since it was read (ADR-027).
@@ -170,16 +182,25 @@ export class PagesService {
         {
           siteId: site._id,
           title: input.title,
-          goal: input.start.kind === 'goal' ? input.start.goal : null,
+          goal: initial.goal,
           slug: input.slug,
-          composition,
+          composition: initial.composition,
           seo: { ...EMPTY_SEO },
+          createdFrom: initial.createdFrom,
         },
         tx,
       );
+      const pageRef = { id: created._id, title: created.title };
       await this.activity.record(
         scope,
-        { siteId: site._id, type: 'page.created', page: { id: created._id, title: created.title } },
+        initial.createdFrom === null
+          ? { siteId: site._id, type: 'page.created', page: pageRef }
+          : {
+              siteId: site._id,
+              type: 'page.created_from_template',
+              page: pageRef,
+              data: { version: initial.createdFrom.version, template: initial.templateName },
+            },
         tx,
       );
       return created;
@@ -322,10 +343,44 @@ export class PagesService {
     return { page: evaluated.summary, draft: evaluated.draft, checks: evaluated.checks };
   }
 
-  private initialComposition(site: SiteRecord, start: CreatePageValues['start']): Composition {
-    if (start.kind === 'blank') {
-      return { version: 1, sections: [] };
+  private initialPage(site: SiteRecord, start: CreatePageValues['start']): InitialPage {
+    switch (start.kind) {
+      case 'blank':
+        return {
+          composition: { version: 1, sections: [] },
+          goal: null,
+          createdFrom: null,
+          templateName: null,
+        };
+      case 'goal':
+        return {
+          composition: this.goalComposition(site, start),
+          goal: start.goal,
+          createdFrom: null,
+          templateName: null,
+        };
+      case 'template': {
+        // Fresh section ids for every page: two pages from one template never share one.
+        const template = templateForStart(start);
+        return {
+          composition: templateComposition(template, newSectionId),
+          goal: template.goal,
+          createdFrom: {
+            kind: 'template',
+            source: start.source,
+            templateId: template.id,
+            version: template.version,
+          },
+          templateName: template.name,
+        };
+      }
     }
+  }
+
+  private goalComposition(
+    site: SiteRecord,
+    start: Extract<CreatePageValues['start'], { kind: 'goal' }>,
+  ): Composition {
     const composition = buildCompositionFromGoal({
       goal: start.goal,
       brief: start.brief,

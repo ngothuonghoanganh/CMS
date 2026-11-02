@@ -339,6 +339,42 @@ const ROWS: Row[] = [
         start: { kind: 'blank' },
       }),
   },
+  // Templates (ADR-030)
+  {
+    action: 'Thư viện template',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/templates`),
+  },
+  {
+    action: 'Xem trước template',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.get(`/workspaces/${workspaceId}/templates/nha-khoa-uu-dai`),
+  },
+  {
+    action: 'Site cần gì cho mẫu',
+    permission: 'pages.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { workspaceId, site }) =>
+      client.get(`/workspaces/${workspaceId}/templates/nha-khoa-uu-dai?siteId=${site.id}`),
+  },
+  {
+    action: 'Tạo trang từ mẫu',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 201,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/pages`, {
+        title: 'Ưu đãi tẩy trắng răng',
+        slug: uniqueSlug('mau'),
+        start: { kind: 'template', source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+      }),
+  },
   {
     action: 'Xem trang và bản nháp',
     permission: 'pages.view',

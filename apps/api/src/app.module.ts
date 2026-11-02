@@ -24,6 +24,7 @@ import { RevalidationModule } from './modules/revalidation/revalidation.module.j
 import { DomainsModule } from './modules/domains/domains.module.js';
 import { MembersModule } from './modules/members/members.module.js';
 import { SitesModule } from './modules/sites/sites.module.js';
+import { TemplatesModule } from './modules/templates/templates.module.js';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 import { EnvModule } from './shared/env.js';
 import { LOG_REDACT_PATHS, serializeError, serializeRequest } from './shared/log-redaction.js';
@@ -76,6 +77,7 @@ export class AppModule {
         ActivityModule,
         AssetsModule,
         PagesModule,
+        TemplatesModule,
         PublishingModule,
         LeadsModule,
         DataRequestsModule,
