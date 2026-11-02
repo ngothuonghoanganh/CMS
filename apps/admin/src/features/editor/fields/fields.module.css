@@ -41,6 +41,23 @@
   color: var(--color-muted);
 }
 
+/* What still blocks publishing, worded and drawn like a field's warning. */
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--color-warning-ink);
+}
+
+.warning > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 .list {
   display: flex;
   flex-direction: column;
@@ -141,6 +158,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.itemWarning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-warning-ink);
+}
+
+.itemWarning > svg {
+  flex: none;
 }
 
 .itemBody {

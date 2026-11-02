@@ -121,7 +121,7 @@
   cursor: pointer;
 }
 
-.variant:hover {
+.variant:not([aria-disabled='true']):hover {
   border-color: var(--color-border-strong);
 }
 
@@ -131,6 +131,13 @@
   background: var(--color-primary-tint);
   color: var(--color-primary-ink);
   font-weight: 600;
+}
+
+/* Blocked by the number of items: still focusable, so its reason is read, but not a choice. */
+.variant[aria-disabled='true'] {
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  cursor: not-allowed;
 }
 
 .schemes {

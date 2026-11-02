@@ -12,6 +12,7 @@ import {
   type AnySectionDefinition,
   getSectionDefinition,
   getVariant,
+  listLabelsOf,
   listMaximum,
   type SectionVariant,
   themePresets,
@@ -32,6 +33,7 @@ import { useEditor, useEditorServices, useEditorStoreApi } from './editor-contex
 import { FieldControl } from './fields/FieldControl';
 import { focusOutlineRow, PROPERTIES_PANEL_ID } from './focus-target';
 import { GuardedLink } from './GuardedLink';
+import { lowerFirst } from './presentation';
 import styles from './PropertiesPanel.module.css';
 import { SectionThumbnail } from './SectionThumbnail';
 
@@ -63,8 +65,11 @@ function variantBlocker(
     }
     const maximum = listMaximum(section.type, variant.id, field.key);
     if (listItemsOf(section.content, field.key).length > maximum) {
-      const item = field.itemLabel.toLowerCase();
-      return `“${variant.label}” có tối đa ${maximum} ${item}. Xóa bớt ${item} để chọn bố cục này.`;
+      // Each layout names the items its own way: a process holds at most 5 steps, and the grid
+      // shown now has benefits to remove.
+      const limited = lowerFirst(listLabelsOf(section.type, variant.id, field).itemLabel);
+      const current = lowerFirst(listLabelsOf(section.type, section.variant, field).itemLabel);
+      return `“${variant.label}” có tối đa ${maximum} ${limited}. Xóa bớt ${current} để chọn bố cục này.`;
     }
   }
   return null;
@@ -86,7 +91,8 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
         <>
           <div role="group" aria-label="Kiểu bố cục" className={styles.variants}>
             {definition.variants.map((variant, index) => {
-              const blocked = blockers[index] !== null;
+              const blocker = blockers[index] ?? null;
+              const blocked = blocker !== null;
               return (
                 <button
                   key={variant.id}
@@ -95,7 +101,8 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
                   aria-disabled={blocked ? true : undefined}
                   aria-describedby={blocked ? `${blockerId}-${variant.id}` : undefined}
                   className={styles.variant}
-                  title={variant.description}
+                  // Pointing at a blocked layout says why it cannot be chosen, not what it is.
+                  title={blocker ?? variant.description}
                   onClick={() => {
                     if (!blocked) {
                       store.getState().setVariant(section.id, variant.id);
