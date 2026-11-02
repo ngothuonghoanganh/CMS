@@ -351,6 +351,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Số thay đổi sẽ mất nằm trong một vùng `role="status"`, nên trình đọc màn hình đọc nó khi có kết quả. Mỗi lần mở hộp thoại bắt đầu lại từ "Đang kiểm tra bản nháp hiện tại…".
 - **Amended 2026-11-02 (khớp thiết kế màn 01):** tìm trang theo tên hoặc đường dẫn không phân biệt dấu và hoa thường, cùng cách chuẩn hóa với hộp thư lead (ADR-018): "uu dai" tìm ra "Ưu đãi tháng 11".
 - **Amended 2026-11-02 (ADR-027):** activity có thêm `page.deleted`, và các sự kiện tên miền của ADR-022.
+- **Amended 2026-11-02 (ADR-030, lát G1):** activity có thêm `page.created_from_template`; trang có thêm `createdFrom`.
 
 ### ADR-006 — Kiểm tra, publish, rollback, gỡ trang
 
@@ -1995,6 +1996,42 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - tạo trang từ mẫu hệ thống;
     - lưu trang thành template rồi tạo trang ở site khác;
     - áp mẫu trong editor rồi hoàn tác.
+- **Chi tiết khi làm (lát G1):**
+  - **Mẫu hệ thống** (`systemTemplates` trong `@plp/sections/schema`):
+    - `id` kebab-case luôn có dấu gạch ngang (`systemTemplateIdSchema`), nên không bao giờ đọc như ObjectId: một đoạn đường dẫn gọi được cả mẫu hệ thống lẫn template của workspace (G2). `version` bắt đầu từ 1; `updatedOn` là ngày của phiên bản.
+    - Ngành nằm trong contracts (`templateIndustries`, 6 ngành của bộ lọc màn 17), mục tiêu là `pageGoalIds`. Mỗi ngành 2 mẫu, mục tiêu nào cũng có mẫu.
+    - Mỗi mẫu có một nhịp màu (`PageStyle` của S6) thay cho color scheme ghi tay. Ảnh thu nhỏ và preview vẽ bằng theme của site chọn ở "Tạo trang cho" (ADR-004); không có site thì theme mặc định.
+    - Nút của thanh điều hướng và nút chính của Hero dẫn tới form của trang, không có form thì tới "Gọi / Zalo nhanh", như blueprint (ADR-016).
+    - Helper chữ mẫu (`benefit`, `faq`, `testimonial`, `SampleSection`) tách ra `sample-sections.ts`, dùng chung với blueprint, không export khỏi package.
+  - **API:**
+    - `GET /workspaces/:id/templates` trả `{ items }`, mỗi mục có `source: 'system'`. Không phân trang: danh sách có chặn trên (12 mẫu hệ thống, 100 template của workspace).
+    - `GET /workspaces/:id/templates/:templateId?siteId=` trả composition để preview (id section cố định, đã parse bằng registry), `sections` (loại, variant, color scheme, nhãn), `usedCount` và `site`.
+      - `usedCount` đếm trang có `createdFrom` của mẫu, mọi phiên bản, trong các site thành viên mở được (ADR-020). Index mới `pages_created_from_template { workspaceId, createdFrom.templateId, createdFrom.source, siteId }` trả lời mà không đọc trang; mỗi workspace DB thêm một index (khoảng 47, ADR-025, ADR-028).
+      - `site` là `{ confirmedRecipients, recipientEmail, consentVersion, consentGaps }`. Email nhận lead chỉ trả cho vai trò có `leads.view`; vai trò khác thấy số lượng. Site ngoài phạm vi hay của workspace khác: 404.
+      - Cả hai endpoint cần membership rồi `pages.view` (mọi vai trò); người ngoài: 404. Mẫu không có: 404 "Không tìm thấy mẫu".
+    - **Tạo trang:** kiểm tra `pages.edit` trên site trước, rồi mẫu (404), rồi phiên bản.
+      - Phiên bản khác phiên bản hiện tại: 409 `template_changed` kèm `currentVersion`. Người dùng không bao giờ nhận một phiên bản chưa xem trước.
+      - Server cấp id section mới (`newSectionId`) và parse bằng registry. Trang mang `goal` của mẫu ("Hợp mục tiêu" ở "Thêm section").
+    - `pages.createdFrom { kind: 'template', source, templateId, version }`: null với trang trắng và trang theo mục tiêu, trang cũ không có trường này. Chưa có trong contract của trang vì chưa màn nào đọc.
+    - Activity `page.created_from_template` thay cho `page.created`: `data.version` là phiên bản mẫu, `data.template` là tên mẫu lúc đó. Câu hiển thị: "tạo trang “…” từ mẫu “Ưu đãi dịch vụ nha khoa” v1".
+  - **Admin:**
+    - **Màn 17:**
+      - Tab là link (`?source=system`). G2 thêm "Của workspace" bằng một mục của `libraryTabs`.
+      - Tìm không dấu: mỗi từ phải có trong tên, mô tả, ngành hoặc mục tiêu.
+      - Số cạnh mỗi lựa chọn lọc đếm theo lựa chọn của các nhóm khác. Bỏ một chip thì focus tới chip kế tiếp, hết chip thì về ô tìm. Số mẫu đang hiện nằm trong một `role="status"`.
+      - Nhãn mục tiêu là tên mục tiêu của màn 02 (`goalDefinitions`), không phải nhãn của board ("Webinar", "Bán sản phẩm"), vì mục tiêu là `pageGoalIds`.
+      - "Tạo trang cho" chỉ hiện với `pages.edit`, gồm các site của thành viên; mặc định là site của `?site=`, rồi site mở gần nhất. Vai trò không sửa trang chỉ xem, kèm ghi chú ai được tạo.
+      - "Dùng mẫu" mở hộp "Tạo trang từ mẫu" ngay trên thư viện; "Xem trước" mở màn 18.
+    - **Màn 18:**
+      - Preview là `PageView` ở chế độ edit không có `onTextChange`: chữ thuần, nút không dẫn đi đâu, khung ảnh trống. Trang dựng ở độ rộng thiết bị rồi thu nhỏ như canvas (`frameLayout`). Vùng cuộn nhận focus để cuộn bằng bàn phím.
+      - "Cần có trước khi xuất bản" có thêm "Ảnh của bạn" khi mẫu có khung ảnh hiển thị; ảnh bắt buộc (Trước & sau) được ghi là bắt buộc.
+      - "Đã dùng" ghi "trong các site của bạn" với thành viên bị giới hạn site.
+    - **Hộp "Tạo trang từ mẫu":**
+      - Đổi site thì đọc lại site cần gì.
+      - Ghi chú createNeedsSetup dẫn tới "Dữ liệu & đồng ý" và "Nơi nhận lead" với vai trò có `privacy.manage`; vai trò khác thấy ai cần thiết lập.
+      - 409 `template_changed` khóa nút tạo và có "Xem phiên bản mới", đọc lại màn.
+    - **Sidebar v2:** "Templates" (`GridIcon`) ngay sau "Sites", với mọi vai trò; `aria-current="true"` trên màn 18.
+  - **Để lại cho G2–G4:** tab "Của workspace", `templates.manage` và hàng của màn 16; "Áp dụng vào trang đang sửa…"; "Tạo bằng AI"; mọi phần Marketplace.
 
 ### ADR-031 — AI: cổng adapter, tạo trang từ brief, trợ lý trong editor
 
@@ -2179,7 +2216,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 
 | Lát | Nội dung                                                                                                               | Màn                | Trạng thái |
 | --- | ---------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
-| G1  | 12 mẫu hệ thống, thư viện, chi tiết và preview, tạo trang từ mẫu, mục Templates của Sidebar v2 (ADR-030)               | 17, 18, Sidebar v2 | Chưa làm   |
+| G1  | 12 mẫu hệ thống, thư viện, chi tiết và preview, tạo trang từ mẫu, mục Templates của Sidebar v2 (ADR-030)               | 17, 18, Sidebar v2 | Xong       |
 | G2  | Template của workspace: lưu trang thành template, phiên bản, phạm vi site, lưu trữ, chép ảnh, quyền `templates.manage` | 19, 17, 16         | Chưa làm   |
 | G3  | Áp dụng mẫu vào bản nháp: từ màn 18 và từ editor, một bước hoàn tác (ADR-030)                                          | 18, 03             | Chưa làm   |
 | G4  | Cổng AI và adapter `openai-compatible`/`fake`, hạn mức, job, tạo trang bằng AI, `reviewPaths` và cảnh báo `ai_review`  | 20, 05             | Chưa làm   |

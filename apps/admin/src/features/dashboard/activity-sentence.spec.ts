@@ -15,6 +15,7 @@ const noVersions = {
   count: null,
   slug: null,
   hostname: null,
+  template: null,
   revalidationFailed: false,
 };
 
@@ -39,6 +40,7 @@ describe('activitySentence', () => {
           count: null,
           slug: null,
           hostname: null,
+          template: null,
           revalidationFailed: false,
         },
       }),
@@ -66,6 +68,17 @@ describe('activitySentence', () => {
   it('describes page and site creation and uploads', () => {
     expect(sentence({ type: 'page.created', data: noVersions })).toBe(
       'Ngọc Anh tạo trang “Ưu đãi niềng răng tháng 11” [primary]',
+    );
+    expect(
+      sentence({
+        type: 'page.created_from_template',
+        data: { ...noVersions, version: 1, template: 'Ưu đãi dịch vụ nha khoa' },
+      }),
+    ).toBe(
+      'Ngọc Anh tạo trang “Ưu đãi niềng răng tháng 11” từ mẫu “Ưu đãi dịch vụ nha khoa” v1 [primary]',
+    );
+    expect(sentence({ type: 'page.created_from_template', data: noVersions })).toBe(
+      'Ngọc Anh tạo trang “Ưu đãi niềng răng tháng 11” từ mẫu [primary]',
     );
     expect(sentence({ type: 'site.created', page: null, data: noVersions })).toBe(
       'Ngọc Anh tạo site [primary]',
@@ -117,6 +130,7 @@ describe('activitySentence', () => {
           count: null,
           slug: null,
           hostname: null,
+          template: null,
           revalidationFailed: false,
         },
       }),
@@ -134,6 +148,7 @@ describe('activitySentence', () => {
           count: null,
           slug: null,
           hostname: null,
+          template: null,
           revalidationFailed: false,
         },
       }),

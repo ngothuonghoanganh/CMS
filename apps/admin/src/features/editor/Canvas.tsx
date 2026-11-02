@@ -4,16 +4,8 @@ import type { PublicImage, SectionInstance } from '@plp/contracts';
 import { PageView, type RenderContext } from '@plp/sections/react';
 import { pageCapturesLeads } from '@plp/sections/schema';
 import { Button, EmptyState, PlusIcon } from '@plp/ui';
-import {
-  type MouseEvent,
-  type ReactElement,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type MouseEvent, type ReactElement, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useContentWidth } from '../shell/use-content-width';
 import styles from './Canvas.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { canvasLabels, frameLayout, frameStyle, livePathOf } from './presentation';
@@ -24,27 +16,6 @@ function preventNavigation(event: MouseEvent<HTMLDivElement>) {
   if (event.target instanceof Element && event.target.closest('a[href]')) {
     event.preventDefault();
   }
-}
-
-/** Content width of an element, kept up to date; null where ResizeObserver is unavailable. */
-function useContentWidth(ref: RefObject<HTMLElement | null>): number | null {
-  const [width, setWidth] = useState<number | null>(null);
-  useEffect(() => {
-    const element = ref.current;
-    if (!element || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) {
-        setWidth(Math.floor(entry.contentRect.width));
-      }
-    });
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-    };
-  }, [ref]);
-  return width;
 }
 
 /**

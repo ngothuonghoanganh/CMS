@@ -30,6 +30,7 @@ function adminScreens(): Array<{
   ready: (page: Page) => Promise<void>;
 }> {
   const site = `/sites/${board.site.id}`;
+  const workspace = `/workspaces/${board.site.workspaceId}`;
   const heading = (name: string) => async (page: Page) => {
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
   };
@@ -74,6 +75,22 @@ function adminScreens(): Array<{
       ready: heading('Dữ liệu cá nhân & đồng ý'),
     },
     { name: 'Hiệu quả', path: `${site}/analytics`, ready: heading('Hiệu quả') },
+    {
+      name: 'Templates',
+      path: `${workspace}/templates`,
+      ready: async (page) => {
+        await heading('Templates')(page);
+        await expect(page.getByRole('article').first()).toBeVisible();
+      },
+    },
+    {
+      name: 'Chi tiết template',
+      path: `${workspace}/templates/nha-khoa-uu-dai`,
+      ready: async (page) => {
+        await heading('Ưu đãi dịch vụ nha khoa')(page);
+        await expect(page.getByRole('region', { name: /^Bản xem trước/ })).toBeVisible();
+      },
+    },
     { name: 'Tài khoản', path: '/account', ready: heading('Tài khoản') },
   ];
 }

@@ -34,6 +34,7 @@ export const errorCodes = [
   'custom_role_in_use',
   'domain_exists',
   'domain_limit_reached',
+  'template_changed',
   'rate_limited',
   'payload_too_large',
   'unsupported_media_type',

@@ -48,6 +48,7 @@ describe('icons', () => {
       'SlidersIcon',
       'ClockIcon',
       'ChartBarIcon',
+      'GridIcon',
     ];
     expect(Object.keys(icons)).toEqual(expect.arrayContaining(required));
   });

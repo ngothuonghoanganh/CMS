@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   FileIcon,
   GlobeIcon,
+  GridIcon,
   type IconComponent,
   InboxIcon,
   LockIcon,
@@ -69,6 +70,7 @@ const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   privacy: ShieldCheckIcon,
   settings: SettingsIcon,
   sites: BrowserIcon,
+  templates: GridIcon,
   members: UsersIcon,
   roles: LockIcon,
 };

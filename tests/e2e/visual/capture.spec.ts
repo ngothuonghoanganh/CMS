@@ -150,4 +150,18 @@ test.describe('Design capture', () => {
     ).toBeVisible();
     await capture(page, 'Consent');
   });
+
+  test('17 TemplateLibrary and 18 TemplateDetail', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    const workspace = `/workspaces/${board.site.workspaceId}`;
+    await page.goto(`${workspace}/templates`);
+    await expect(page.getByRole('article').first()).toBeVisible();
+    await capture(page, 'TemplateLibrary');
+    await page.goto(`${workspace}/templates/nha-khoa-uu-dai?site=${board.site.id}`);
+    await expect(page.getByRole('region', { name: /^Bản xem trước/ })).toBeVisible();
+    await capture(page, 'TemplateDetail');
+    await page.getByRole('button', { name: 'Tạo trang từ mẫu' }).click();
+    await expect(page.getByRole('dialog', { name: 'Tạo trang từ mẫu' })).toBeVisible();
+    await capture(page, 'TemplateDetail-create');
+  });
 });

@@ -130,6 +130,7 @@ export function activityFixture(overrides: Partial<ActivityItem> = {}): Activity
       count: null,
       slug: null,
       hostname: null,
+      template: null,
       revalidationFailed: false,
     },
     reason: null,

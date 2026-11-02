@@ -133,6 +133,11 @@ import {
   subdomainAvailabilitySchema,
   updateSiteRequestSchema,
 } from './site.js';
+import {
+  templateDetailQuerySchema,
+  templateDetailSchema,
+  templateListResponseSchema,
+} from './templates.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -816,6 +821,27 @@ export const endpoints = {
     request: confirmLeadRecipientRequestSchema,
     query: null,
     response: confirmLeadRecipientResponseSchema,
+  }),
+
+  // Templates (ADR-030): every member sees the library; creating a page from one is `createPage`
+  listTemplates: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/templates`,
+    request: null,
+    query: null,
+    response: templateListResponseSchema,
+  }),
+  /**
+   * One template with its preview and use count; with `siteId`, a site the member may open, also
+   * what that site still needs before a page from it can be published.
+   */
+  getTemplate: endpoint({
+    method: 'GET',
+    path: (workspaceId: string, templateId: string) =>
+      `/workspaces/${e(workspaceId)}/templates/${e(templateId)}`,
+    request: null,
+    query: templateDetailQuerySchema,
+    response: templateDetailSchema,
   }),
 
   // Pages and drafts

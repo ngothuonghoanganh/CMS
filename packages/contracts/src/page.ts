@@ -3,6 +3,7 @@ import { checkCountsSchema, checksResultSchema } from './checks.js';
 import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { briefSchema, pageGoalSchema, pageStyleSchema } from './goals.js';
+import { systemTemplateIdSchema, templateVersionSchema } from './templates.js';
 
 /**
  * Paths the renderer answers itself, so a page published there could never be served at its URL:
@@ -256,6 +257,17 @@ export const createPageRequestSchema = z.object({
       goal: pageGoalSchema,
       brief: briefSchema,
       style: pageStyleSchema,
+    }),
+    /**
+     * A template of the library (ADR-030), at the version the user previewed: a newer one is
+     * refused (409 `template_changed`) rather than made unseen. Workspace templates (G2) add
+     * `source: 'workspace'` with their own id.
+     */
+    z.object({
+      kind: z.literal('template'),
+      source: z.literal('system'),
+      templateId: systemTemplateIdSchema,
+      version: templateVersionSchema,
     }),
   ]),
 });

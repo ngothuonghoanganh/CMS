@@ -4,6 +4,7 @@ import { cursorQuerySchema, idSchema, isoDateTimeSchema, userRefSchema } from '.
 export const activityTypes = [
   'site.created',
   'page.created',
+  'page.created_from_template',
   'page.published',
   'page.rolled_back',
   'page.rollback_undone',
@@ -96,6 +97,8 @@ export const activityItemSchema = z.object({
    * data request covered, or how many addresses receive leads after a change; activity never holds
    * personal data (rule 10). `slug` is the address a deleted page had (`page.deleted`).
    * `hostname` is the domain of a domain event, or the default address made primary again.
+   * `template` is the name of the template a page was made from, with its version in `version`
+   * (ADR-030).
    */
   data: z.object({
     version: z.number().int().positive().nullable(),
@@ -104,6 +107,7 @@ export const activityItemSchema = z.object({
     count: z.number().int().nonnegative().nullable(),
     slug: z.string().nullable(),
     hostname: z.string().nullable(),
+    template: z.string().nullable(),
     revalidationFailed: z.boolean(),
   }),
   reason: z.string().nullable(),

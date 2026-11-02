@@ -34,6 +34,7 @@ export function toPointerEvent(record: ActivityRecord, by: UserRef): PointerEven
       return { type: 'unpublished', version: null, by, at };
     case 'site.created':
     case 'page.created':
+    case 'page.created_from_template':
     case 'page.draft_restored':
     case 'page.deleted':
     case 'asset.uploaded':

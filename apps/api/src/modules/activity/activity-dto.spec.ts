@@ -39,6 +39,7 @@ describe('toActivityItem', () => {
         count: null,
         slug: null,
         hostname: null,
+        template: null,
         revalidationFailed: false,
       },
       reason: null,
@@ -76,6 +77,7 @@ describe('toActivityItem', () => {
       count: null,
       slug: null,
       hostname: null,
+      template: null,
       revalidationFailed: true,
     });
     expect(item.reason).toBe('Sai giá');
@@ -133,6 +135,20 @@ describe('toActivityItem', () => {
     const { hostname: _hostname, ...before } = EMPTY_ACTIVITY_DATA;
     const older = activityRecord({ data: before as typeof EMPTY_ACTIVITY_DATA });
     expect(toActivityItem(older, actor, false, NONE_DELETED).data.hostname).toBeNull();
+  });
+
+  it('maps a page made from a template with the template’s name and version (ADR-030)', () => {
+    const record = activityRecord({
+      type: 'page.created_from_template',
+      pageId: newObjectId(),
+      pageTitle: 'Ưu đãi tẩy trắng răng',
+      data: { ...EMPTY_ACTIVITY_DATA, version: 1, template: 'Ưu đãi dịch vụ nha khoa' },
+    });
+    const item = activityItemSchema.parse(toActivityItem(record, actor, false, NONE_DELETED));
+    expect(item.data).toMatchObject({ version: 1, template: 'Ưu đãi dịch vụ nha khoa' });
+    const { template: _template, ...before } = EMPTY_ACTIVITY_DATA;
+    const older = activityRecord({ data: before as typeof EMPTY_ACTIVITY_DATA });
+    expect(toActivityItem(older, actor, false, NONE_DELETED).data.template).toBeNull();
   });
 
   it('fails loudly when a page event lost its title snapshot', () => {

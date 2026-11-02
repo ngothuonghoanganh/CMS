@@ -8,8 +8,10 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   PAGE_COLLECTION,
+  PAGES_CREATED_FROM_INDEX,
   PAGES_DRAFT_SLUG_INDEX,
   PAGES_PUBLISHED_SLUG_INDEX,
+  type PageCreatedFromRecord,
   type PageRecord,
 } from './page.schema.js';
 import {
@@ -45,6 +47,7 @@ export interface CreatePageInput {
   slug: string;
   composition: Composition;
   seo: Seo;
+  createdFrom: PageCreatedFromRecord | null;
 }
 
 export interface DraftContent {
@@ -219,6 +222,26 @@ export class PagesRepository {
     );
   }
 
+  /**
+   * Pages made from a template, any version, in the sites given (null: every site of the
+   * workspace): "Đã dùng N trang" (ADR-030). The index answers it without reading the pages.
+   */
+  countCreatedFrom(
+    scope: WorkspaceScope,
+    template: Pick<PageCreatedFromRecord, 'source' | 'templateId'>,
+    siteIds: readonly ObjectId[] | null,
+  ): Promise<number> {
+    return this.pages(scope)
+      .countDocuments({
+        workspaceId: scope.workspaceId,
+        'createdFrom.templateId': template.templateId,
+        'createdFrom.source': template.source,
+        ...(siteIds === null ? {} : { siteId: { $in: [...siteIds] } }),
+      })
+      .hint(PAGES_CREATED_FROM_INDEX)
+      .exec();
+  }
+
   /** How many pages of the site are live: what deleting the site takes off the web (ADR-027). */
   countLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
     return this.pages(scope)
@@ -288,6 +311,7 @@ export class PagesRepository {
       publishedReleaseId: null,
       publishedSlug: null,
       releaseSeq: 0,
+      createdFrom: input.createdFrom,
       createdBy: scope.userId,
       createdAt: now,
       updatedAt: now,
