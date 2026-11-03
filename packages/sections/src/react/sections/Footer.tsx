@@ -2,6 +2,7 @@ import { isCtaUsed, isLinkComplete, linkHref } from '../../schema/links.js';
 import type { FooterContent } from '../../schema/sections/footer.js';
 import frame from '../frame.module.css';
 import { CtaButton, Text } from '../primitives.js';
+import { MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './Footer.module.css';
 
@@ -46,7 +47,7 @@ export function FooterSection({ section, content, ctx }: SectionProps<FooterCont
   return (
     <div className={styles.root}>
       <div className={styles.main}>
-        <div className={styles.info}>
+        <div className={styles.info} {...MOTION_TEXT}>
           <Text
             ctx={ctx}
             sectionId={section.id}
@@ -97,7 +98,7 @@ export function FooterSection({ section, content, ctx }: SectionProps<FooterCont
           )}
         </div>
         {(links.length > 0 || showPolicy) && (
-          <ul className={styles.links}>
+          <ul className={styles.links} {...MOTION_TEXT}>
             {links.map(({ cta, index }) => (
               <li key={index}>
                 <CtaButton
@@ -133,6 +134,7 @@ export function FooterSection({ section, content, ctx }: SectionProps<FooterCont
         ctx={ctx}
         sectionId={section.id}
         path="copyright"
+        part
         value={content.copyright}
         as="p"
         className={styles.copyright}

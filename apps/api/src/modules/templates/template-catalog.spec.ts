@@ -42,7 +42,7 @@ describe('the system catalog as the API serves it', () => {
       goal: 'lead',
       industry: 'dental_health',
       hasForm: true,
-      updatedAt: '2026-11-02T00:00:00.000Z',
+      updatedAt: '2026-11-04T00:00:00.000Z',
     });
     expect(summary.sections).toHaveLength(8);
     expect(toTemplateSummary(systemTemplateOrNotFound('nha-hang-thuc-don')).hasForm).toBe(false);
@@ -59,17 +59,18 @@ describe('the system catalog as the API serves it', () => {
 
 describe('systemTemplateForRef', () => {
   it('returns the template at the version the user previewed', () => {
-    const template = systemTemplateForRef({ ...start, version: 1 });
+    const template = systemTemplateForRef({ ...start, version: 2 });
     expect(template.id).toBe('nha-khoa-uu-dai');
   });
 
   it('refuses any other version with the current one, rather than make it unseen', () => {
-    for (const version of [2, 99]) {
+    // Version 1 is the one before motion styles (ADR-032).
+    for (const version of [1, 99]) {
       expect(errorOf(() => systemTemplateForRef({ ...start, version }))).toMatchObject({
         status: 409,
         code: 'template_changed',
-        title: 'Mẫu “Ưu đãi dịch vụ nha khoa” đã có phiên bản mới (v1)',
-        context: { currentVersion: 1 },
+        title: 'Mẫu “Ưu đãi dịch vụ nha khoa” đã có phiên bản mới (v2)',
+        context: { currentVersion: 2 },
       });
     }
   });
@@ -89,6 +90,8 @@ describe('templateComposition', () => {
       previewSectionIds(),
     );
     expect(compositionSchema.parse(composition)).toEqual(composition);
+    // The template's motion style comes along, in the parsed composition (ADR-032).
+    expect(composition.motion?.style).toBe('luxe');
     expect(composition.sections.map((section) => section.id)).toEqual(
       composition.sections.map((_section, index) => `preview${String(index + 1).padStart(5, '0')}`),
     );

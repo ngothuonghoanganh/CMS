@@ -1,5 +1,6 @@
 import type { TestimonialsContent } from '../../schema/sections/testimonials.js';
 import { SectionImage, Text } from '../primitives.js';
+import { MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './Testimonials.module.css';
 
@@ -57,8 +58,10 @@ export function TestimonialsSection({
     const showSeparator = ctx.mode === 'edit' || item.detail.trim() !== '';
     return (
       <div className={styles.featured}>
-        <h2 className={styles.eyebrow}>Cảm nhận khách hàng</h2>
-        <figure className={styles.featuredFigure}>
+        <h2 className={styles.eyebrow} {...MOTION_TEXT}>
+          Cảm nhận khách hàng
+        </h2>
+        <figure className={styles.featuredFigure} {...MOTION_TEXT}>
           {quoteText(item, 0, styles.featuredQuote)}
           <figcaption className={styles.featuredCaption}>
             {name(item, 0)}
@@ -76,6 +79,7 @@ export function TestimonialsSection({
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -83,7 +87,7 @@ export function TestimonialsSection({
       />
       <ul className={styles.cards}>
         {content.items.map((item, index) => (
-          <li key={index} className={styles.cardItem}>
+          <li key={index} className={styles.cardItem} {...MOTION_TEXT}>
             <figure className={styles.card}>
               {quoteText(item, index, styles.quote)}
               <figcaption className={styles.caption}>

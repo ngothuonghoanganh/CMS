@@ -50,7 +50,7 @@ describe('ApplyTemplateInEditorDialog ("Áp dụng mẫu…", ADR-030)', () => {
         return Promise.resolve({
           composition: dentalComposition(),
           assets: [image],
-          template: { name: 'Ưu đãi dịch vụ nha khoa', version: 1 },
+          template: { name: 'Ưu đãi dịch vụ nha khoa', version: 2 },
         });
       }
       return Promise.reject(new Error('unexpected call'));
@@ -75,7 +75,7 @@ describe('ApplyTemplateInEditorDialog ("Áp dụng mẫu…", ADR-030)', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' }));
     expect(apiMock).toHaveBeenCalledWith(endpoints.templateComposition, [SITE_ID, PAGE_ID], {
-      body: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+      body: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 2 },
     });
     await vi.waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -123,7 +123,7 @@ describe('ApplyTemplateInEditorDialog ("Áp dụng mẫu…", ADR-030)', () => {
     answer({
       composition: dentalComposition(),
       assets: [],
-      template: { name: 'Ưu đãi dịch vụ nha khoa', version: 1 },
+      template: { name: 'Ưu đãi dịch vụ nha khoa', version: 2 },
     });
     await vi.waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);

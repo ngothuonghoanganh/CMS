@@ -24,12 +24,14 @@ export const heroSection = defineSection<HeroContent>({
       label: 'Chữ · Ảnh',
       description: 'Tiêu đề, mô tả, 1–2 nút và ảnh bên cạnh.',
       hasMedia: true,
+      motion: { accents: ['lines', 'image'] },
     },
     {
       id: 'centered',
       label: 'Căn giữa',
       description: 'Thông điệp ngắn, một nút nổi bật.',
       hasMedia: false,
+      motion: { accents: ['lines'] },
       hiddenFields: ['image', 'secondaryCta'],
     },
     {
@@ -38,6 +40,7 @@ export const heroSection = defineSection<HeroContent>({
       description: 'Ảnh lớn phía sau, chữ đặt trên lớp phủ đủ tương phản.',
       // The photo sits behind the text: there is no order to change on mobile.
       hasMedia: false,
+      motion: { accents: ['lines'] },
     },
   ],
   defaultVariant: 'split',

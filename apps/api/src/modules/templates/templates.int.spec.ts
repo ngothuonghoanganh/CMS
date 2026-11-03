@@ -22,10 +22,12 @@ import { addMember, createSite } from '../../../test/resources.js';
 
 const TEMPLATE_ID = 'nha-khoa-uu-dai';
 const TEMPLATE_NAME = 'Ưu đãi dịch vụ nha khoa';
+/** Version 2 added the motion style (ADR-032). */
+const TEMPLATE_VERSION = 2;
 
 function fromTemplate(
   templateId = TEMPLATE_ID,
-  version = 1,
+  version = TEMPLATE_VERSION,
   title = 'Ưu đãi tẩy trắng răng',
 ): CreatePageRequest {
   return {
@@ -84,7 +86,7 @@ describe('template library', () => {
       expect(new Set(items.map((item) => item.source))).toEqual(new Set(['system']));
       expect(items.find((item) => item.id === TEMPLATE_ID)).toMatchObject({
         name: TEMPLATE_NAME,
-        version: 1,
+        version: TEMPLATE_VERSION,
         goal: 'lead',
         industry: 'dental_health',
         hasForm: true,
@@ -172,7 +174,7 @@ describe('template library', () => {
       kind: 'template',
       source: 'system',
       templateId: TEMPLATE_ID,
-      version: 1,
+      version: TEMPLATE_VERSION,
     });
 
     const activity = activityListResponseSchema.parse(
@@ -181,7 +183,7 @@ describe('template library', () => {
     expect(activity.items[0]).toMatchObject({
       type: 'page.created_from_template',
       page: { id: created.page.id, title: 'Ưu đãi tẩy trắng răng' },
-      data: { version: 1, template: TEMPLATE_NAME },
+      data: { version: TEMPLATE_VERSION, template: TEMPLATE_NAME },
     });
 
     // A second page from the same template gets ids of its own.
@@ -213,14 +215,14 @@ describe('template library', () => {
 
   it('refuses another version with the current one, and an unknown template, creating nothing', async () => {
     const before = await pageCount(smile.id);
-    for (const version of [2, 99]) {
+    for (const version of [1, 99]) {
       const response = await owner
         .post(`/sites/${smile.id}/pages`, fromTemplate(TEMPLATE_ID, version))
         .expect(409);
       expect(problemSchema.parse(response.body)).toMatchObject({
         code: 'template_changed',
-        title: `Mẫu “${TEMPLATE_NAME}” đã có phiên bản mới (v1)`,
-        context: { currentVersion: 1 },
+        title: `Mẫu “${TEMPLATE_NAME}” đã có phiên bản mới (v${TEMPLATE_VERSION})`,
+        context: { currentVersion: TEMPLATE_VERSION },
       });
     }
     const unknown = await owner

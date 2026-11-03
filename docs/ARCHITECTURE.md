@@ -2426,7 +2426,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Ba lớp, đều là preset** (không free styling, §2 quy tắc 8):
     1. Phong cách của cả trang: Không hiệu ứng (mặc định trang mới), Tinh tế, Mượt mà, Năng động, Sang trọng, Vui tươi. Mỗi phong cách quy định cách xuất hiện, thứ tự và điểm nhấn mặc định.
     2. Tùy chỉnh thêm: mức độ Nhẹ / Vừa / Rõ, bật tắt từng điểm nhấn, và "Giảm chuyển động trên điện thoại".
-    3. Ghi đè từng section: cách xuất hiện, thứ tự, điểm nhấn. Không ghi đè là "theo cài đặt trang".
+    3. Ghi đè từng section: cách xuất hiện, thứ tự, điểm nhấn. Không ghi đè là "theo cài đặt trang". Trang để "Không hiệu ứng" thì không section nào chuyển động, kể cả section có ghi đè: tắt toàn bộ luôn là một lựa chọn.
   - **Hiệu ứng:**
 
     | Nhóm           | Id                                            | Tên                                                                                     |
@@ -2437,24 +2437,25 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
     | Phong cách | Xuất hiện | Thứ tự   | Điểm nhấn           | Thời lượng | Bước   |
     | ---------- | --------- | -------- | ------------------- | ---------- | ------ |
-    | Tinh tế    | `fade`    | together | —                   | 320 ms     | 0      |
+    | Tinh tế    | `fade`    | together | —                   | 320 ms     | 60 ms  |
     | Mượt mà    | `up`      | stagger  | lines, count, steps | 360 ms     | 70 ms  |
     | Năng động  | `side`    | stagger  | count, steps        | 280 ms     | 55 ms  |
     | Sang trọng | `reveal`  | stagger  | lines, image        | 480 ms     | 110 ms |
     | Vui tươi   | `pop`     | rows     | count, steps        | 380 ms     | 70 ms  |
+    - "Bước" là khoảng cách giữa hai phần khi thứ tự là Lần lượt (Tinh tế dùng nó khi một section chọn Lần lượt); Theo hàng nghỉ hai bước giữa hai hàng. Quy trình có "Các bước nối nhau" luôn hiện từng bước, cách nhau ít nhất 180 ms (ba bước của phong cách), để đường nối kịp vẽ.
     - Mức độ: khoảng trượt 8 / 12 / 16 px, thu nhỏ ban đầu .98 / .96 / .94 (Bật lên .94 / .9 / .86), thời lượng × .85 / 1 / 1.15.
     - Thời lượng theo khung 250–400 ms của ghi chú thiết kế, không theo mockup (380–750 ms cho dễ xem). Sang trọng 480 ms để giữ "hé lộ chậm". Các con số nằm ở một bảng (`MOTION_STYLES`) và cần thử lại trên thiết bị thật.
 
   - **Dữ liệu nằm trong composition** (ADR-007), nên đi theo bản nháp, release, JSON công khai và template:
 
     ```ts
-    Composition     = { version: 1, motion: PageMotion, sections: SectionInstance[] }
+    Composition     = { version: 1, motion?: PageMotion, sections: SectionInstance[] }
     PageMotion      = { style, level: 'low'|'mid'|'high', accents: Partial<Record<Accent, boolean>>,
                         reduceOnMobile: boolean }
     SectionInstance = { …, motion?: { enter?, order?, accents?: Partial<Record<Accent, boolean>> } }
     ```
 
-    - `motion` của trang có default `{ style: 'none', level: 'mid', accents: {}, reduceOnMobile: false }`, nên composition và release cũ đọc ra "Không hiệu ứng". `version` vẫn là 1, không cần `upgrade()`.
+    - `motion` của trang vắng nghĩa là `DEFAULT_PAGE_MOTION`, `{ style: 'none', level: 'mid', accents: {}, reduceOnMobile: false }`, nên composition và release cũ đọc ra "Không hiệu ứng". `parseComposition` bỏ `motion` bằng giá trị đó, nên trang cũ và trang được đặt lại "Không hiệu ứng" giống hệt nhau. `version` vẫn là 1, không cần `upgrade()`.
     - `accents` của trang chỉ chứa điểm nhấn người dùng đã chỉnh khác phong cách ("đã chỉnh" / "theo phong cách"). Đổi phong cách xóa các chỉnh này, như board 37.
     - `motion` của section vắng nghĩa là theo trang. `parseComposition` bỏ ghi đè rỗng, nên một thay đổi không có tác dụng không thành chip.
     - Mỗi variant khai báo năng lực chuyển động (`SectionVariant.motion`): dạng lưới hay không, và các điểm nhấn có nội dung tương ứng. `resolveSectionMotion` (`@plp/sections/schema`, thuần) gộp phong cách, ghi đè, năng lực và khóa; renderer, canvas, panel, chip xuất bản và AI dùng chung hàm này.
@@ -2468,8 +2469,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Editor đứng yên. Hiệu ứng chạy khi bấm "Chạy thử" (cả trang, một section, ¼ tốc độ, như thiết bị bật giảm chuyển động) và ở link xem trước.
     - Hover nút, mở câu hỏi, gửi form là phản hồi của hệ thống, giống nhau ở mọi phong cách; chuyển động không đổi chúng.
   - **Hiển thị** (`@plp/sections/react`):
-    - `SectionFrame` gắn cách xuất hiện, thứ tự, điểm nhấn và thời lượng đã phân giải thành thuộc tính `data-motion-*` và biến CSS. Section đánh dấu các phần chuyển động (chữ hay ảnh). CSS Module chứa keyframes.
-    - `MotionRuntime` là client component nhỏ, chỉ có ở trang có phong cách khác "Không hiệu ứng". Nó dùng `IntersectionObserver`, chỉ ghi thuộc tính trạng thái và biến CSS mà React không render, sau hydration. Không có `IntersectionObserver` hay thiết bị giảm chuyển động thì nó không làm gì.
+    - `SectionFrame` gắn cách xuất hiện, thứ tự, điểm nhấn và thời lượng đã phân giải thành thuộc tính `data-motion-enter|order|accents` và biến CSS `--plp-m-dur`, `--plp-m-step`. Gốc của trang có `data-motion-root` và khoảng trượt, tỉ lệ của mức độ.
+    - Section đánh dấu các phần chuyển động bằng `data-m="text"` hay `data-m="media"` (`Text`, `CtaButton` nhận `part`); một phần không chứa phần khác. CSS Module `motion.module.css` chứa keyframes, và chỉ ẩn phần của section đang `data-motion="wait"`.
+    - `MotionRuntime` là client component nhỏ, chỉ có ở trang có phong cách khác "Không hiệu ứng", trên trang live và xem trước. Sau hydration nó:
+      - để nguyên section đang nằm trong vùng nhìn; đặt `wait` cho section khác và chạy chúng (`run`) khi đỉnh của chúng qua 85% chiều cao vùng nhìn;
+      - ghi thứ tự của từng phần (`--plp-m-i`): thứ tự trong trang, hay hàng theo vị trí;
+      - với "Tiêu đề từng dòng", tách từng từ của tiêu đề (`h1`, `h2`) vào khung che và đánh số dòng theo vị trí, đặt `aria-label` là cả tiêu đề, rồi trả lại đúng các text node cũ khi chạy xong;
+      - chạy xong thì bỏ `data-motion`, nên section trở về như chưa từng có hiệu ứng.
+      - Nó chỉ ghi những thuộc tính và biến CSS mà React không render. Không có `IntersectionObserver` hay thiết bị giảm chuyển động thì nó không làm gì.
     - In trang luôn hiện hết. Không đổi header hay CSP của renderer.
   - **Chip thay đổi:** đổi `motion` của trang là chip "Chuyển động: <phong cách>" (kind `motion`); đổi `motion` của section là "Sửa: <section>".
   - **Template:** mẫu hệ thống có phong cách theo ngành. Template của workspace mang `motion` trong composition của nó. Áp mẫu vào bản nháp thay cả `motion`, hoàn tác được.

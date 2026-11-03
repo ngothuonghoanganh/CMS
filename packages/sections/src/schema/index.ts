@@ -2,6 +2,8 @@ export * from './ai-copy.js';
 export * from './blueprints.js';
 export * from './define.js';
 export * from './links.js';
+export * from './motion.js';
+export * from './motion-storage.js';
 export * from './paths.js';
 export * from './registry.js';
 export * from './seo.js';

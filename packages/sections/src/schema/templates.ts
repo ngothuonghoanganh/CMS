@@ -1,11 +1,13 @@
-import type {
-  Composition,
-  PageGoal,
-  PageStyle,
-  SectionInstance,
-  SectionType,
-  TemplateIndustry,
-  TemplateSection,
+import {
+  type Composition,
+  DEFAULT_PAGE_MOTION,
+  type MotionStyle,
+  type PageGoal,
+  type PageStyle,
+  type SectionInstance,
+  type SectionType,
+  type TemplateIndustry,
+  type TemplateSection,
 } from '@plp/contracts';
 import { pageStyleSchemes } from './blueprints.js';
 import { setAtPath } from './paths.js';
@@ -32,6 +34,8 @@ export interface SystemTemplate {
   industry: TemplateIndustry;
   /** The color rhythm of its sections, within the theme of the site it is used in (ADR-004). */
   style: PageStyle;
+  /** The motion style of pages made from it, one that suits its industry (ADR-032). */
+  motion: MotionStyle;
   sections: readonly SampleSection[];
 }
 
@@ -56,7 +60,7 @@ const footer: SampleSection = {
   },
 };
 
-const UPDATED_ON = '2026-11-02';
+const UPDATED_ON = '2026-11-04';
 
 /*
  * Every text is sample text the publish checks remind to replace, and no section has an image: the
@@ -66,7 +70,7 @@ const UPDATED_ON = '2026-11-02';
 export const systemTemplates: readonly SystemTemplate[] = [
   {
     id: 'nha-khoa-uu-dai',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Ưu đãi dịch vụ nha khoa',
     description: 'Hero ưu đãi, bác sĩ, cảm nhận khách, form đặt lịch tư vấn.',
@@ -75,6 +79,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'lead',
     industry: 'dental_health',
     style: 'calm',
+    motion: 'smooth',
     sections: [
       navbar('Đặt lịch', 'Thanh điều hướng · nút đặt lịch'),
       {
@@ -195,7 +200,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'phong-kham-gioi-thieu',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Giới thiệu phòng khám',
     description: 'Câu chuyện phòng khám, dịch vụ, quy trình khám và nút gọi, nhắn Zalo.',
@@ -204,6 +209,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'about',
     industry: 'dental_health',
     style: 'minimal',
+    motion: 'subtle',
     sections: [
       navbar('Liên hệ', 'Thanh điều hướng · nút liên hệ'),
       {
@@ -302,7 +308,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'spa-dat-lich',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Đặt lịch spa & làm đẹp',
     description: 'Gói liệu trình, hình trước/sau, câu hỏi thường gặp và form đặt lịch.',
@@ -311,6 +317,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'lead',
     industry: 'spa_beauty',
     style: 'calm',
+    motion: 'luxe',
     sections: [
       navbar('Đặt lịch', 'Thanh điều hướng · nút đặt lịch'),
       {
@@ -415,7 +422,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'spa-uu-dai-lieu-trinh',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Ưu đãi liệu trình có thời hạn',
     description: 'Ưu đãi có hạn, điều kiện áp dụng, một lời khen nổi bật và form giữ suất.',
@@ -424,6 +431,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'promo',
     industry: 'spa_beauty',
     style: 'bold',
+    motion: 'subtle',
     sections: [
       navbar('Nhận ưu đãi', 'Thanh điều hướng · nút nhận ưu đãi'),
       {
@@ -504,7 +512,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'tieng-anh-hoc-thu',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Khóa học tiếng Anh trẻ em',
     description: 'Lộ trình học, giáo viên, cảm nhận phụ huynh và form đăng ký học thử.',
@@ -513,6 +521,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'lead',
     industry: 'education',
     style: 'calm',
+    motion: 'lively',
     sections: [
       navbar('Học thử', 'Thanh điều hướng · nút học thử'),
       {
@@ -618,7 +627,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'webinar-truc-tuyen',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Webinar trực tuyến',
     description: 'Diễn giả, nội dung buổi học, câu hỏi thường gặp và form đăng ký tham dự.',
@@ -627,6 +636,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'event',
     industry: 'education',
     style: 'bold',
+    motion: 'smooth',
     sections: [
       navbar('Đăng ký', 'Thanh điều hướng · nút đăng ký'),
       {
@@ -701,7 +711,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'bat-dong-san-mo-ban',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Sự kiện mở bán dự án',
     description: 'Thời gian sự kiện, tiện ích, chính sách bán hàng và form đăng ký tham dự.',
@@ -710,6 +720,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'event',
     industry: 'real_estate',
     style: 'bold',
+    motion: 'luxe',
     sections: [
       navbar('Đăng ký', 'Thanh điều hướng · nút đăng ký'),
       {
@@ -786,7 +797,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'bat-dong-san-danh-sach-cho',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Danh sách chờ ra mắt dự án',
     description: 'Một thông điệp, ba lợi ích khi đăng ký sớm và form để lại email.',
@@ -795,6 +806,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'waitlist',
     industry: 'real_estate',
     style: 'minimal',
+    motion: 'smooth',
     sections: [
       navbar('Đăng ký sớm', 'Thanh điều hướng · nút đăng ký'),
       {
@@ -839,7 +851,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'nha-hang-thuc-don',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Thực đơn mới & đặt bàn',
     description: 'Món mới theo mùa, combo, cảm nhận thực khách và nút gọi đặt bàn.',
@@ -848,6 +860,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'product',
     industry: 'food_beverage',
     style: 'calm',
+    motion: 'playful',
     sections: [
       navbar('Đặt bàn', 'Thanh điều hướng · nút đặt bàn'),
       {
@@ -923,7 +936,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'nha-hang-khai-truong',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Danh sách chờ ngày khai trương',
     description: 'Ngày khai trương, ưu đãi cho khách đăng ký sớm và form nhận thư mời.',
@@ -932,6 +945,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'waitlist',
     industry: 'food_beverage',
     style: 'bold',
+    motion: 'lively',
     sections: [
       navbar('Đăng ký', 'Thanh điều hướng · nút đăng ký'),
       {
@@ -989,7 +1003,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'phong-tap-khai-truong',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Ưu đãi khai trương phòng tập',
     description: 'Ưu đãi khai trương, lớp học, huấn luyện viên và form giữ chỗ.',
@@ -998,6 +1012,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'promo',
     industry: 'fitness',
     style: 'bold',
+    motion: 'lively',
     sections: [
       navbar('Giữ chỗ', 'Thanh điều hướng · nút giữ chỗ'),
       {
@@ -1082,7 +1097,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
   },
   {
     id: 'phong-tap-ca-nhan',
-    version: 1,
+    version: 2,
     updatedOn: UPDATED_ON,
     name: 'Gói tập cá nhân với huấn luyện viên',
     description: 'Lợi ích tập 1 kèm 1, quy trình 3 bước, trước & sau và nút gọi, nhắn Zalo.',
@@ -1091,6 +1106,7 @@ export const systemTemplates: readonly SystemTemplate[] = [
     goal: 'product',
     industry: 'fitness',
     style: 'minimal',
+    motion: 'playful',
     sections: [
       navbar('Liên hệ', 'Thanh điều hướng · nút liên hệ'),
       {
@@ -1216,11 +1232,12 @@ export function templateSections(
 
 /**
  * The draft a template starts: its sections with fresh ids from `newId`, its sample copy, every
- * text marked as sample, and the navigation and Hero buttons leading to the contact section.
+ * text marked as sample, the navigation and Hero buttons leading to the contact section, and its
+ * motion style.
  * The caller parses it with the registry before storing it, as for every composition.
  */
 export function buildCompositionFromTemplate(
-  template: Pick<SystemTemplate, 'sections' | 'style'>,
+  template: Pick<SystemTemplate, 'sections' | 'style' | 'motion'>,
   newId: () => string,
 ): Composition {
   const schemes = schemesOf(template);
@@ -1233,6 +1250,7 @@ export function buildCompositionFromTemplate(
   const contactId = contactIndex === -1 ? null : (ids[contactIndex] ?? null);
   return {
     version: 1,
+    motion: { ...DEFAULT_PAGE_MOTION, style: template.motion },
     sections: template.sections.map((entry, index): SectionInstance => {
       const id = ids[index];
       if (id === undefined) {

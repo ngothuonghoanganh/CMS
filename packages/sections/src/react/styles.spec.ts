@@ -19,9 +19,12 @@ const hero = declarations('./sections/Hero.module.css');
 const leadForm = declarations('./sections/LeadForm.module.css');
 const logos = declarations('./sections/Logos.module.css');
 
-/** Every rule of the canvas frame and of each section, by selector. */
+const motion = declarations('./motion/motion.module.css');
+
+/** Every rule of the canvas frame, of the motion presets and of each section, by selector. */
 const everyRule = [
   ...frame,
+  ...motion,
   ...readdirSync(new URL('./sections/', import.meta.url))
     .filter((file) => file.endsWith('.module.css'))
     .flatMap((file) => [...declarations(`./sections/${file}`)]),
@@ -114,9 +117,10 @@ describe('send button of the lead form', () => {
   });
 });
 
-/** Every stylesheet the sections draw with: the frame and one per section. */
+/** Every stylesheet the sections draw with: the frame, the motion presets and one per section. */
 const STYLESHEETS = [
   './frame.module.css',
+  './motion/motion.module.css',
   ...readdirSync(new URL('./sections/', import.meta.url))
     .filter((file) => file.endsWith('.module.css'))
     .map((file) => `./sections/${file}`),
@@ -157,5 +161,58 @@ describe('device breakpoints', () => {
     expect(holding('.hideMobile').map(({ condition }) => condition)).toEqual([
       'plp-page (width < 768px)',
     ]);
+  });
+});
+
+describe('motion presets', () => {
+  it('hide a part only while the runtime holds its section, so pages without JavaScript show all', () => {
+    // Keyframes start from 0 opacity; they only run once a section is `run`.
+    const keyframe = /^(from|to|\d+%)$/;
+    const hiding = everyRule.filter(
+      ([selector, body]) => !keyframe.test(selector) && /(?<![\w-])opacity:\s*0\s*;/.test(body),
+    );
+    expect(hiding.length).toBeGreaterThanOrEqual(1);
+    for (const [selector] of hiding) {
+      expect(selector).toContain("[data-motion='wait']");
+    }
+  });
+
+  it('move parts with transform and opacity only', () => {
+    const css = readFileSync(new URL('./motion/motion.module.css', import.meta.url), 'utf8');
+    for (const [, frames = ''] of css.matchAll(
+      /@keyframes[^{]+\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}/g,
+    )) {
+      for (const [, property = ''] of frames.matchAll(/([\w-]+)\s*:/g)) {
+        expect(['opacity', 'transform']).toContain(property);
+      }
+    }
+  });
+
+  it('draw the line between the steps of a process, and leave it drawn without motion', () => {
+    const benefits = readFileSync(
+      new URL('./sections/Benefits.module.css', import.meta.url),
+      'utf8',
+    );
+    expect(benefits).toMatch(
+      /\[data-motion='run'\]\[data-motion-accents~='steps'\] \.step:not\(:last-child\)::after \{[^}]*animation-name: draw;/,
+    );
+    const still = conditionalBlocks('./sections/Benefits.module.css').filter(({ condition }) =>
+      ['(prefers-reduced-motion: reduce)', 'print'].includes(condition),
+    );
+    expect(still).toHaveLength(2);
+    for (const { rules } of still) {
+      expect(rules).toMatch(/transform:\s*none !important;/);
+    }
+  });
+
+  it('show every part on a device that asks for less motion, and in print', () => {
+    const blocks = conditionalBlocks('./motion/motion.module.css').filter(({ condition }) =>
+      ['(prefers-reduced-motion: reduce)', 'print'].includes(condition),
+    );
+    expect(blocks).toHaveLength(2);
+    for (const { rules } of blocks) {
+      expect(rules).toMatch(/animation:\s*none !important;/);
+      expect(rules).toMatch(/opacity:\s*1 !important;/);
+    }
   });
 });

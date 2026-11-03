@@ -1,5 +1,6 @@
 import type { FaqContent } from '../../schema/sections/faq.js';
 import { Text } from '../primitives.js';
+import { MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './Faq.module.css';
 
@@ -34,6 +35,7 @@ export function FaqSection({ section, content, ctx }: SectionProps<FaqContent>) 
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -43,7 +45,7 @@ export function FaqSection({ section, content, ctx }: SectionProps<FaqContent>) 
         {content.items.map((item, index) =>
           editing ? (
             // Typing inside a <summary> would toggle it, so the canvas shows every item open.
-            <div key={index} className={[styles.item, styles.itemOpen].join(' ')}>
+            <div key={index} className={[styles.item, styles.itemOpen].join(' ')} {...MOTION_TEXT}>
               {question(item.question, index)}
               {answer(item.answer, index)}
             </div>
@@ -51,7 +53,7 @@ export function FaqSection({ section, content, ctx }: SectionProps<FaqContent>) 
             // A question is required to publish; an unfinished one in a preview is left out
             // rather than drawn as an empty toggle.
             item.question.trim() !== '' && (
-              <details key={index} className={styles.item}>
+              <details key={index} className={styles.item} {...MOTION_TEXT}>
                 <summary className={styles.summary}>{question(item.question, index)}</summary>
                 {answer(item.answer, index)}
               </details>

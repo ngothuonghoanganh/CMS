@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pageMotionSchema, sectionMotionSchema } from './motion.js';
 import { colorSchemeIdSchema, spacingPresetSchema } from './themes.js';
 
 export const sectionTypes = [
@@ -50,6 +51,8 @@ export const sectionInstanceSchema = z.object({
    * edits them (ADR-031). Drafts and releases stored before it read as `[]`.
    */
   reviewPaths: z.array(z.string().max(200)).max(300).default([]),
+  /** What the section changes of the page's motion (ADR-032); absent follows the page. */
+  motion: sectionMotionSchema.optional(),
 });
 export type SectionInstance = z.infer<typeof sectionInstanceSchema>;
 
@@ -58,6 +61,8 @@ export const MAX_SECTIONS = 30;
 export const compositionSchema = z
   .object({
     version: z.literal(1),
+    /** The page's motion style (ADR-032); absent is `DEFAULT_PAGE_MOTION`, no motion. */
+    motion: pageMotionSchema.optional(),
     sections: z
       .array(sectionInstanceSchema)
       .max(MAX_SECTIONS, `Một trang có tối đa ${MAX_SECTIONS} section`),

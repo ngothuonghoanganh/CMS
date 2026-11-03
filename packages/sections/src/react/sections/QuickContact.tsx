@@ -1,6 +1,7 @@
 import { isCtaUsed } from '../../schema/links.js';
 import type { QuickContactContent } from '../../schema/sections/quick-contact.js';
 import { CtaButton, Text } from '../primitives.js';
+import { MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './QuickContact.module.css';
 
@@ -13,6 +14,7 @@ export function QuickContactSection({ section, content, ctx }: SectionProps<Quic
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -22,6 +24,7 @@ export function QuickContactSection({ section, content, ctx }: SectionProps<Quic
         ctx={ctx}
         sectionId={section.id}
         path="text"
+        part
         value={content.text}
         as="p"
         className={styles.text}
@@ -29,7 +32,7 @@ export function QuickContactSection({ section, content, ctx }: SectionProps<Quic
         placeholder="Mô tả ngắn (không bắt buộc)"
       />
       {hasButton && (
-        <div className={styles.actions}>
+        <div className={styles.actions} {...MOTION_TEXT}>
           <CtaButton
             ctx={ctx}
             sectionId={section.id}

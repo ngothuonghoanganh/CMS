@@ -2,6 +2,7 @@
 import {
   type Composition,
   type Cta,
+  DEFAULT_PAGE_MOTION,
   type Link,
   type PublicImage,
   type SectionInstance,
@@ -20,6 +21,7 @@ import type { RenderContext } from './context.js';
 import type { LeadFormViewProps } from './lead-form-view.js';
 import frame from './frame.module.css';
 import { LEAD_SUBMISSION_FIELD, LeadFormSent, LeadFormView } from './lead-form-view.js';
+import motionStyles from './motion/motion.module.css';
 import { MAIN_CONTENT_ID, PageView } from './PageView.js';
 import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
@@ -68,7 +70,7 @@ function withContent(target: SectionInstance, path: string, value: unknown): Sec
 
 function render(target: SectionInstance, ctx: RenderContext): string {
   return renderToStaticMarkup(
-    <SectionFrame section={target} theme={themePresets.mint}>
+    <SectionFrame section={target} theme={themePresets.mint} motion={null}>
       {renderSectionContent(target, ctx)}
     </SectionFrame>,
   );
@@ -974,5 +976,81 @@ describe('PageView', () => {
     const visible = render(hero, liveCtx());
     expect(visible).not.toContain(cls(frame.hideMobile));
     expect(visible).not.toContain(cls(frame.hideDesktop));
+  });
+});
+
+describe('motion', () => {
+  function moving(types: readonly SectionType[], style: 'none' | 'smooth' = 'smooth'): Composition {
+    return {
+      version: 1,
+      motion: { ...DEFAULT_PAGE_MOTION, style, reduceOnMobile: true },
+      sections: types.map((type) => section(type)),
+    };
+  }
+
+  it('leaves a page without a style as it always was', () => {
+    for (const composition of [
+      { version: 1 as const, sections: [section('navbar'), section('faq')] },
+      moving(['navbar', 'hero', 'faq'], 'none'),
+    ]) {
+      const markup = renderToStaticMarkup(
+        <PageView composition={composition} themePresetId="mint" ctx={liveCtx()} />,
+      );
+      expect(markup).not.toContain('data-motion');
+      expect(markup).not.toContain(cls(motionStyles.root));
+      expect(markup).not.toContain('<span hidden');
+    }
+  });
+
+  it('writes how each section enters, keeping the navigation bar and first section still', () => {
+    const composition = moving(['navbar', 'hero', 'faq', 'footer']);
+    const [navbar, hero, faq] = composition.sections;
+    const markup = renderToStaticMarkup(
+      <PageView composition={composition} themePresetId="mint" ctx={liveCtx()} />,
+    );
+    expect(markup).toContain('data-motion-root=""');
+    expect(markup).toContain('data-motion-reduce-mobile=""');
+    expect(markup).toContain(cls(motionStyles.root));
+    expect(markup).toContain('--plp-m-distance:12px');
+    const opening = (target: SectionInstance | undefined) => {
+      const start = markup.indexOf(`id="section-${target?.id ?? ''}"`);
+      return markup.slice(start, markup.indexOf('>', start));
+    };
+    expect(opening(navbar)).not.toContain('data-motion');
+    expect(opening(hero)).not.toContain('data-motion');
+    expect(opening(faq)).toContain('data-motion-enter="up"');
+    expect(opening(faq)).toContain('data-motion-order="stagger"');
+    expect(opening(faq)).toContain('data-motion-accents="lines"');
+    expect(opening(faq)).toContain('--plp-m-dur:360ms');
+    expect(opening(faq)).toContain('--plp-m-step:70ms');
+  });
+
+  it('moves on live pages and previews only: the canvas stays still', () => {
+    const composition = moving(['navbar', 'hero', 'faq']);
+    const live = renderToStaticMarkup(
+      <PageView composition={composition} themePresetId="mint" ctx={liveCtx()} />,
+    );
+    const canvas = renderToStaticMarkup(
+      <PageView composition={composition} themePresetId="mint" ctx={editCtx()} />,
+    );
+    expect(count(live, '<span hidden')).toBe(1);
+    expect(canvas).not.toContain('<span hidden');
+  });
+
+  it('keeps every text and image in the HTML, so a page without JavaScript shows them all', () => {
+    const composition = moving(['navbar', 'hero', 'benefits', 'faq', 'cta_band', 'footer']);
+    const still = renderToStaticMarkup(
+      <PageView
+        composition={{ ...composition, motion: DEFAULT_PAGE_MOTION }}
+        themePresetId="mint"
+        ctx={liveCtx()}
+      />,
+    );
+    const markup = renderToStaticMarkup(
+      <PageView composition={composition} themePresetId="mint" ctx={liveCtx()} />,
+    );
+    const text = (html: string) => html.replace(/<[^>]*>/g, '');
+    expect(text(markup)).toBe(text(still));
+    expect(markup).not.toContain('data-motion="');
   });
 });

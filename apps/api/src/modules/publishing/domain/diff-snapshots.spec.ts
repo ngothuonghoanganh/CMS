@@ -1,4 +1,10 @@
-import { type ChangeItem, EMPTY_SEO, type SectionInstance } from '@plp/contracts';
+import {
+  type ChangeItem,
+  DEFAULT_PAGE_MOTION,
+  EMPTY_SEO,
+  type PageMotion,
+  type SectionInstance,
+} from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   cleanSeo,
@@ -24,6 +30,31 @@ describe('diffSnapshots', () => {
   const hero = heroSection({ id: 'hero00000001' });
   const benefits = sampleSection('benefits', 'grid', 'bene00000001');
   const faq = sampleSection('faq', undefined, 'faqs00000001');
+
+  function withMotion(motion: PageMotion | undefined): PageSnapshot {
+    const base = snapshot([hero, benefits]);
+    return {
+      ...base,
+      composition: { ...base.composition, ...(motion === undefined ? {} : { motion }) },
+    };
+  }
+
+  it('reports a change of the page motion once, named after the style it ends with', () => {
+    const smooth: PageMotion = { ...DEFAULT_PAGE_MOTION, style: 'smooth' };
+    expect(diffSnapshots(withMotion(undefined), withMotion(smooth))).toEqual([
+      { kind: 'motion', label: 'Chuyển động: Mượt mà', sectionId: null },
+    ]);
+    expect(
+      labels(diffSnapshots(withMotion(smooth), withMotion({ ...smooth, level: 'high' }))),
+    ).toEqual(['Chuyển động: Mượt mà']);
+    expect(labels(diffSnapshots(withMotion(smooth), withMotion(undefined)))).toEqual([
+      'Chuyển động: Không hiệu ứng',
+    ]);
+  });
+
+  it('finds no motion change between a page made before motion and one that does not move', () => {
+    expect(diffSnapshots(withMotion(undefined), withMotion(DEFAULT_PAGE_MOTION))).toEqual([]);
+  });
 
   it('finds nothing between identical snapshots', () => {
     const base = snapshot([hero, benefits, faq]);
@@ -53,6 +84,7 @@ describe('diffSnapshots', () => {
     ['spacing', { spacing: 'spacious' as const }],
     ['visibility', { visibility: { desktop: true, mobile: false } }],
     ['mobileOrder', { mobileOrder: 'media-first' as const }],
+    ['motion', { motion: { enter: 'pop' as const } }],
   ])('reports a %s change as "Sửa"', (_property, patch) => {
     const changes = diffSnapshots(snapshot([hero]), snapshot([{ ...hero, ...patch }]));
     expect(changes).toEqual([{ kind: 'modified', label: 'Sửa: Hero', sectionId: hero.id }]);

@@ -1,5 +1,5 @@
 import type { ChangeItem, SectionInstance, Seo } from '@plp/contracts';
-import { getSectionDefinition } from '@plp/sections/schema';
+import { getSectionDefinition, MOTION_STYLES, pageMotionOf } from '@plp/sections/schema';
 import { deepEqual } from './deep-equal.js';
 import type { PageSnapshot } from './snapshot.js';
 
@@ -12,6 +12,7 @@ const SECTION_PROPERTIES = [
   'visibility',
   'mobileOrder',
   'content',
+  'motion',
 ] as const satisfies readonly (keyof SectionInstance)[];
 
 const SEO_LABELS: { field: keyof Seo; label: string }[] = [
@@ -64,8 +65,8 @@ function longestIncreasingIndexes(sequence: readonly number[]): Set<number> {
 
 /**
  * What changed from `base` to `next`, as the chips shown on the status, the publish dialog and the
- * release history ("Sửa: Hero", "SEO: tiêu đề"…). Sections are matched by instance id; a section
- * that changed and moved is reported once, as modified.
+ * release history ("Sửa: Hero", "SEO: tiêu đề", "Chuyển động: Mượt mà"…). Sections are matched by
+ * instance id; a section that changed and moved is reported once, as modified.
  */
 export function diffSnapshots(base: PageSnapshot, next: PageSnapshot): ChangeItem[] {
   const baseSections = base.composition.sections;
@@ -113,6 +114,14 @@ export function diffSnapshots(base: PageSnapshot, next: PageSnapshot): ChangeIte
   }
   if (base.slug !== next.slug) {
     changes.push({ kind: 'slug', label: SLUG_CHANGE_LABEL, sectionId: null });
+  }
+  const nextMotion = pageMotionOf(next.composition);
+  if (!deepEqual(pageMotionOf(base.composition), nextMotion)) {
+    changes.push({
+      kind: 'motion',
+      label: `Chuyển động: ${MOTION_STYLES[nextMotion.style].label}`,
+      sectionId: null,
+    });
   }
   for (const { field, label } of SEO_LABELS) {
     if (!deepEqual(base.seo[field], next.seo[field])) {

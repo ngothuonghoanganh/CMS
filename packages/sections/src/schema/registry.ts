@@ -13,6 +13,7 @@ import type {
   SectionDefinition,
   SectionVariant,
 } from './define.js';
+import { storedPageMotion, storedSectionMotion } from './motion-storage.js';
 import { getAtPath } from './paths.js';
 import { beforeAfterSection } from './sections/before-after.js';
 import { benefitsSection } from './sections/benefits.js';
@@ -384,14 +385,15 @@ function checkSections(
 /**
  * Validates every section against its own definition and returns the composition as validated:
  * each content as its section schema parsed it, so keys no schema knows (in the content, a button,
- * a link) are dropped, and sample and review paths that name no text field are dropped too. Store and publish
- * this result, never the input. Issues are those of `validateComposition`. The frame
- * (`compositionSchema`) must already be valid.
+ * a link) are dropped, sample and review paths that name no text field are dropped too, and motion
+ * that changes nothing is left out (ADR-032). Store and publish this result, never the input.
+ * Issues are those of `validateComposition`. The frame (`compositionSchema`) must already be valid.
  */
 export function parseComposition(composition: Composition): CompositionParseResult {
   const sections: SectionInstance[] = [];
   const issues = checkSections(composition, (section, content) => {
     const known = samplePathCandidates({ ...section, content });
+    const motion = storedSectionMotion(section.motion);
     sections.push({
       id: section.id,
       type: section.type,
@@ -403,11 +405,21 @@ export function parseComposition(composition: Composition): CompositionParseResu
       content,
       samplePaths: [...new Set(section.samplePaths)].filter((path) => known.has(path)),
       reviewPaths: [...new Set(section.reviewPaths)].filter((path) => known.has(path)),
+      ...(motion === undefined ? {} : { motion }),
     });
   });
+  const motion = storedPageMotion(composition.motion);
   return issues.length > 0
     ? { success: false, issues }
-    : { success: true, composition: { version: composition.version, sections }, issues: [] };
+    : {
+        success: true,
+        composition: {
+          version: composition.version,
+          ...(motion === undefined ? {} : { motion }),
+          sections,
+        },
+        issues: [],
+      };
 }
 
 /**

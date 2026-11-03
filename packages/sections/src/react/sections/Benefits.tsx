@@ -1,5 +1,6 @@
 import type { BenefitsContent, benefitIcons } from '../../schema/sections/benefits.js';
 import { SectionImage, Text } from '../primitives.js';
+import { MOTION_MEDIA, MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './Benefits.module.css';
 
@@ -54,6 +55,7 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -63,6 +65,7 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
         ctx={ctx}
         sectionId={section.id}
         path="intro"
+        part
         value={content.intro}
         as="p"
         className={styles.intro}
@@ -111,8 +114,10 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
         >
           {content.items.map((item, index) => (
             <li key={index} className={styles.row}>
-              <div className={styles.rowText}>{itemText(index, item.title, item.description)}</div>
-              <div className={styles.media}>
+              <div className={styles.rowText} {...MOTION_TEXT}>
+                {itemText(index, item.title, item.description)}
+              </div>
+              <div className={styles.media} {...MOTION_MEDIA}>
                 <SectionImage
                   ctx={ctx}
                   image={item.image}
@@ -136,7 +141,7 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
         {header}
         <ol className={styles.steps} role="list">
           {content.items.map((item, index) => (
-            <li key={index} className={styles.step}>
+            <li key={index} className={styles.step} {...MOTION_TEXT}>
               <span className={styles.stepLabel}>{`Bước ${index + 1}:`}</span>
               <span className={styles.stepNumber} aria-hidden="true">
                 {index + 1}
@@ -155,7 +160,7 @@ export function BenefitsSection({ section, content, ctx, leading }: SectionProps
       {header}
       <ul className={styles.grid}>
         {content.items.map((item, index) => (
-          <li key={index} className={styles.card}>
+          <li key={index} className={styles.card} {...MOTION_TEXT}>
             <BenefitIconSvg icon={item.icon} />
             <div className={styles.cardText}>{itemText(index, item.title, item.description)}</div>
           </li>

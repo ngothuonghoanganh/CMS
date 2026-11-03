@@ -29,6 +29,7 @@ export const quickContactSection = defineSection<QuickContactContent>({
       label: 'Gọi / Zalo nhanh',
       description: 'Hai nút liên hệ trực tiếp, không cần form.',
       hasMedia: false,
+      motion: { accents: ['lines'] },
     },
   ],
   defaultVariant: 'buttons',

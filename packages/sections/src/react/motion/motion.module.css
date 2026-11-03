@@ -1,0 +1,219 @@
+/*
+ * Motion presets (ADR-032). Only the runtime hides parts, by marking their section `wait`, and
+ * starts them (`run`); without JavaScript every part shows as it is. Parts move with transform and
+ * opacity only. Timings come from the section (`--plp-m-dur`, `--plp-m-step`), distances from the
+ * page's level, and a part's place in its order from the runtime (`--plp-m-i`).
+ */
+
+.root [data-motion='wait'] [data-m] {
+  opacity: 0;
+}
+
+.root [data-motion='run'] [data-m] {
+  animation-duration: calc(var(--plp-m-dur) * var(--plp-m-speed, 1));
+  animation-delay: calc(var(--plp-m-i, 0) * var(--plp-m-step) * var(--plp-m-speed, 1));
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.root [data-motion='run'][data-motion-enter='fade'] [data-m] {
+  animation-name: fade;
+}
+
+.root [data-motion='run'][data-motion-enter='up'] [data-m] {
+  animation-name: up;
+}
+
+/* Text comes from the left and images from the right, as the layout places them. */
+.root [data-motion='run'][data-motion-enter='side'] [data-m='text'] {
+  animation-name: from-left;
+}
+
+.root [data-motion='run'][data-motion-enter='side'] [data-m='media'] {
+  animation-name: from-right;
+}
+
+.root [data-motion='run'][data-motion-enter='zoom'] [data-m] {
+  animation-name: zoom;
+}
+
+.root [data-motion='run'][data-motion-enter='pop'] [data-m] {
+  animation-name: pop;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.root [data-motion='run'][data-motion-enter='reveal'] [data-m] {
+  animation-name: reveal;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * "Tiêu đề hiện từng dòng": the runtime wraps each word of the heading in a mask while it runs, and
+ * the words of each line rise out of it together.
+ */
+.root [data-motion='run'] [data-m-lines] {
+  animation-name: none;
+  opacity: 1;
+}
+
+.root [data-m-mask] {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  /* Room for descenders, which the mask would otherwise cut. */
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+
+.root [data-motion='run'] [data-m-word] {
+  display: inline-block;
+  animation-name: line;
+  animation-duration: calc(var(--plp-m-dur) * 1.5 * var(--plp-m-speed, 1));
+  animation-delay: calc(
+    (var(--plp-m-i, 0) * var(--plp-m-step) + var(--plp-m-line, 0) * 110ms) * var(--plp-m-speed, 1)
+  );
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* "Ảnh hé lộ": the frame fades in while the image settles into it. */
+.root [data-motion='run'][data-motion-accents~='image'] [data-m='media'] {
+  animation-name: fade;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.root [data-motion='run'][data-motion-accents~='image'] [data-m='media'] img {
+  animation-name: settle;
+  animation-duration: calc(var(--plp-m-dur) * 1.6 * var(--plp-m-speed, 1));
+  animation-delay: calc(var(--plp-m-i, 0) * var(--plp-m-step) * var(--plp-m-speed, 1));
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* "Giảm chuyển động trên điện thoại": phones only fade in, all at once. */
+@container plp-page (width < 768px) {
+  .root[data-motion-reduce-mobile] [data-motion='run'] [data-m] {
+    animation-name: fade;
+    animation-delay: 0s;
+  }
+
+  .root[data-motion-reduce-mobile] [data-motion='run'] [data-m] img {
+    animation-name: none;
+  }
+}
+
+/* A device that asks for less motion, and a printed page, always show every part as it is. */
+@media (prefers-reduced-motion: reduce) {
+  .root [data-m],
+  .root [data-m] img,
+  .root [data-m-word] {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+@media print {
+  .root [data-m],
+  .root [data-m] img,
+  .root [data-m-word] {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes up {
+  from {
+    opacity: 0;
+    transform: translateY(var(--plp-m-distance));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes from-left {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--plp-m-distance) * -2));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes from-right {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--plp-m-distance) * 2));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes zoom {
+  from {
+    opacity: 0;
+    transform: scale(var(--plp-m-scale));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(var(--plp-m-pop));
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--plp-m-distance) * 2));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes line {
+  from {
+    transform: translateY(105%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes settle {
+  from {
+    transform: scale(1.08);
+  }
+  to {
+    transform: none;
+  }
+}

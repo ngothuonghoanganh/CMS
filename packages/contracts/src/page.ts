@@ -60,9 +60,10 @@ export const pageTitleSchema = z
   .max(120, 'Tên trang tối đa 120 ký tự');
 
 /**
- * Section changes, SEO fields and the slug come from the draft; `site` is a site look setting
- * that differs from the snapshot a release was published with (ADR-015), `privacy` a personal
- * data or consent setting that differs from the snapshot of a page with a form (ADR-017).
+ * Section changes, SEO fields, the slug and the page's motion style (ADR-032) come from the
+ * draft; `site` is a site look setting that differs from the snapshot a release was published with
+ * (ADR-015), `privacy` a personal data or consent setting that differs from the snapshot of a page
+ * with a form (ADR-017).
  */
 export const changeKinds = [
   'added',
@@ -71,6 +72,7 @@ export const changeKinds = [
   'moved',
   'seo',
   'slug',
+  'motion',
   'site',
   'privacy',
 ] as const;
