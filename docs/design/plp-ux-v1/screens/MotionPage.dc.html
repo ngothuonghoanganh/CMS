@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Cài đặt trang — Phong cách chuyển động</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.mx-i1{--mx-d:8px;--mx-s:.98;--mx-p:.94}
+.mx-i2{--mx-d:12px;--mx-s:.96;--mx-p:.9}
+.mx-i3{--mx-d:16px;--mx-s:.94;--mx-p:.86}
+@keyframes mxFade{from{opacity:0}to{opacity:1}}
+@keyframes mxUp{from{opacity:0;transform:translateY(var(--mx-d,12px))}to{opacity:1;transform:none}}
+@keyframes mxLeft{from{opacity:0;transform:translateX(calc(var(--mx-d,12px) * -2))}to{opacity:1;transform:none}}
+@keyframes mxRight{from{opacity:0;transform:translateX(calc(var(--mx-d,12px) * 2))}to{opacity:1;transform:none}}
+@keyframes mxZoom{from{opacity:0;transform:scale(var(--mx-s,.96))}to{opacity:1;transform:none}}
+@keyframes mxPop{0%{opacity:0;transform:scale(var(--mx-p,.9))}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes mxReveal{from{opacity:0;transform:translateY(calc(var(--mx-d,12px) * 2))}to{opacity:1;transform:none}}
+@keyframes mxLine{from{transform:translateY(105%)}to{transform:none}}
+@keyframes mxImg{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:none}}
+@keyframes mxDraw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes mxScrollD{from{transform:none}to{transform:translateY(-300px)}}
+@keyframes mxScrollT{from{transform:none}to{transform:translateY(-320px)}}
+@keyframes mxScrollM{from{transform:none}to{transform:translateY(-1500px)}}
+.mx-a{animation-fill-mode:both;animation-timing-function:cubic-bezier(.2,.7,.3,1)}
+.mx-fade{animation-name:mxFade}
+.mx-up{animation-name:mxUp}
+.mx-left{animation-name:mxLeft}
+.mx-right{animation-name:mxRight}
+.mx-zoom{animation-name:mxZoom}
+.mx-pop{animation-name:mxPop;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}
+.mx-reveal{animation-name:mxReveal;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-line{animation-name:mxLine;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-img{animation-name:mxImg;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-draw{animation-name:mxDraw;transform-origin:left center;animation-timing-function:linear}
+.mx-scroll{animation-fill-mode:both;animation-timing-function:cubic-bezier(.45,0,.25,1)}
+.mx-scroll-desktop{animation-name:mxScrollD}
+.mx-scroll-tablet{animation-name:mxScrollT}
+.mx-scroll-mobile{animation-name:mxScrollM}
+.mx-demo-btn{transition:transform 160ms ease,box-shadow 160ms ease}
+.mx-demo-btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,94,85,.28)}
+.mx-demo-faq summary{list-style:none}
+.mx-demo-faq summary::-webkit-details-marker{display:none}
+.mx-demo-faq .mx-chev{transition:transform 200ms ease}
+.mx-demo-faq[open] .mx-chev{transform:rotate(180deg)}
+@media (prefers-reduced-motion: reduce){.mx-a,.mx-scroll{animation:none!important}.mx-demo-btn,.mx-demo-faq .mx-chev{transition:none}}
+</style>
+</helmet>
+<div class="{{ levelCls }}" style="min-height: 1560px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+
+  <!-- Top bar -->
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 8px 16px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 360px">
+      <a href="Main.dc.html" aria-label="Quay lại danh sách trang" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 10px; color: #3C424E; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; min-width: 0">
+        <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Ưu đãi niềng răng tháng 11</span>
+        <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #5E6573">
+          <span style="display: inline-flex; align-items: center; gap: 4px; color: #0B6B45"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Đã lưu bản nháp · vừa xong</span>
+          <span aria-hidden="true">·</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; background: #FFF1D6; color: #8A5300; font-weight: 600"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: #E39A12"></span>Live v12 · {{ changeCount }} thay đổi chưa xuất bản</span>
+        </span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px">
+      <div role="group" aria-label="Xem theo thiết bị" style="display: flex; gap: 2px; padding: 3px; background: #F0F2F5; border-radius: 10px">
+        <button type="button" aria-label="Máy tính" aria-pressed="{{ dev.desktop.pressed }}" onClick="{{ setDesktop }}" style="width: 38px; height: 34px; border: 0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: {{ dev.desktop.bg }}; color: {{ dev.desktop.fg }}; box-shadow: {{ dev.desktop.shadow }}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"></rect><path d="M8 20h8M12 16v4"></path></svg>
+        </button>
+        <button type="button" aria-label="Máy tính bảng" aria-pressed="{{ dev.tablet.pressed }}" onClick="{{ setTablet }}" style="width: 38px; height: 34px; border: 0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: {{ dev.tablet.bg }}; color: {{ dev.tablet.fg }}; box-shadow: {{ dev.tablet.shadow }}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>
+        </button>
+        <button type="button" aria-label="Điện thoại" aria-pressed="{{ dev.mobile.pressed }}" onClick="{{ setMobile }}" style="width: 38px; height: 34px; border: 0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: {{ dev.mobile.bg }}; color: {{ dev.mobile.fg }}; box-shadow: {{ dev.mobile.shadow }}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>
+        </button>
+      </div>
+      <span aria-hidden="true" style="width: 1px; height: 24px; background: #E2E5EA"></span>
+      <button type="button" aria-label="Hoàn tác" title="Hoàn tác (Ctrl+Z)" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L4 11l5 5"></path><path d="M4 11h11a5 5 0 0 1 0 10h-3"></path></svg>
+      </button>
+      <button type="button" aria-label="Làm lại" title="Làm lại (Ctrl+Shift+Z)" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #A8AEB9; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l5 5-5 5"></path><path d="M20 11H9a5 5 0 0 0 0 10h3"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; flex: 1 1 360px">
+      <a href="Publish.dc.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: 8px; background: #FDEBE9; color: #B42318; text-decoration: none; font-size: 13px; font-weight: 600">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.2v.1"></path></svg>
+        1 lỗi · 2 cảnh báo
+      </a>
+      <a href="History.dc.html" aria-label="Lịch sử phiên bản" title="Lịch sử phiên bản" style="width: 40px; height: 40px; border-radius: 8px; color: #3C424E; display: inline-flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5"></path><path d="M4 4v4.5h4.5M12 8v4l3 2"></path></svg>
+      </a>
+      <button type="button" aria-label="Cài đặt trang" aria-pressed="true" title="Cài đặt trang" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: #EEF0FF; color: #3730A3; cursor: pointer; display: inline-flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+      </button>
+      <a href="PublicPage.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; text-decoration: none; font-size: 14px; font-weight: 600">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"></path><circle cx="12" cy="12" r="2.8"></circle></svg>
+        Xem trước
+      </a>
+      <a href="Publish.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">
+        Xuất bản thay đổi
+        <span style="min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 999px; background: rgba(255,255,255,0.22); font-size: 12px; display: inline-flex; align-items: center; justify-content: center">{{ changeCount }}</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Draft notice -->
+  <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; padding: 8px 20px; background: #FFFBF2; border-bottom: 1px solid #F3E2BD; font-size: 13px; color: #5C3D00">
+    <span style="display: flex; align-items: center; gap: 8px">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.8v.1"></path></svg>
+      <span>Bạn đang sửa <strong>bản nháp</strong>. Trang live <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">go.smilecare.vn/uu-dai-thang-11</span> giữ nguyên đến khi bạn xuất bản.</span>
+    </span>
+    <button type="button" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #5C3D00; font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer">Hủy thay đổi, quay về bản live</button>
+  </div>
+
+  <!-- Workspace -->
+  <div style="flex: 1; display: flex; flex-wrap: wrap; align-items: stretch">
+
+    <!-- Outline -->
+    <nav aria-labelledby="outline-title" style="flex: 1 1 272px; max-width: 100%; box-sizing: border-box; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px">
+        <h2 id="outline-title" style="margin: 0; font-size: 13px; font-weight: 600; color: #3C424E; letter-spacing: 0.04em">CẤU TRÚC TRANG</h2>
+        <span style="font-size: 12px; color: #5E6573">9 section</span>
+      </div>
+      <ol style="list-style: none; margin: 0; padding: 4px 8px; display: flex; flex-direction: column; gap: 2px">
+        <sc-for list="{{ outline }}" as="s" hint-placeholder-count="9">
+          <li style="display: flex; align-items: center; gap: 4px; padding: 0 4px 0 2px; border-radius: 8px">
+            <span aria-hidden="true" title="Kéo để sắp xếp" style="width: 18px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; color: #A8AEB9; cursor: grab">
+              <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor"><circle cx="3" cy="3" r="1.3"></circle><circle cx="9" cy="3" r="1.3"></circle><circle cx="3" cy="8" r="1.3"></circle><circle cx="9" cy="8" r="1.3"></circle><circle cx="3" cy="13" r="1.3"></circle><circle cx="9" cy="13" r="1.3"></circle></svg>
+            </span>
+            <a href="MotionSection.dc.html" style="flex: 1; min-width: 0; min-height: 44px; padding: 4px 4px; text-decoration: none; color: inherit; display: flex; flex-direction: column; justify-content: center; gap: 1px">
+              <span style="font-size: 13px; font-weight: 600; color: #15171C">{{ s.kind }}</span>
+              <span style="font-size: 12px; color: #5E6573; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ s.label }}</span>
+            </a>
+          </li>
+        </sc-for>
+      </ol>
+      <div style="padding: 8px 12px 12px">
+        <a href="AddSection.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1.5px dashed #CDD2DA; border-radius: 10px; color: #3730A3; text-decoration: none; font-size: 14px; font-weight: 600">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+          Thêm section
+        </a>
+      </div>
+      <div style="margin-top: auto; padding: 12px; border-top: 1px solid #E2E5EA; display: flex; flex-direction: column; gap: 6px">
+        <button type="button" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px; background: #F5F6F8; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer; text-align: left">
+          <span aria-hidden="true" style="display: flex">
+            <span style="width: 14px; height: 14px; border-radius: 999px; background: #0F5E55; border: 2px solid #FFFFFF"></span>
+            <span style="width: 14px; height: 14px; border-radius: 999px; background: #EAF6F3; border: 2px solid #FFFFFF; margin-left: -6px"></span>
+            <span style="width: 14px; height: 14px; border-radius: 999px; background: #F2A33A; border: 2px solid #FFFFFF; margin-left: -6px"></span>
+          </span>
+          <span style="flex: 1">Giao diện site · màu &amp; chữ</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+        <button type="button" aria-pressed="true" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px; background: #EEF0FF; box-shadow: inset 0 0 0 1.5px #4338CA; font: inherit; font-size: 13px; font-weight: 600; color: #3730A3; cursor: pointer; text-align: left">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="1.5"></rect><path d="M7 7h10M10 3.5h4"></path></svg>
+          <span style="flex: 1">Chuyển động · {{ styleName }}</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Canvas -->
+    <section aria-label="Khung xem trước bản nháp" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 28px; background: #E6E8EC; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: #5E6573">
+        <span>{{ deviceLabel }} · Section đứng yên khi chỉnh sửa</span>
+        <span style="display: flex; align-items: center; gap: 10px">
+          <button type="button" onClick="{{ run }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; color: #15171C; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+            Chạy thử hiệu ứng
+          </button>
+          <span>100%</span>
+        </span>
+      </div>
+
+      <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="width: 100%; max-width: {{ frameW }}; margin: 0 auto; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 8px 8px 14px; border-radius: 10px; background: #15171C; color: #FFFFFF; font-size: 13px">
+          <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="#C7CBFF"><path d="M7 4.5v15l12-7.5z"></path></svg>
+            <strong style="font-weight: 600">{{ bannerTitle }}</strong>
+            <span style="color: #C9CDD4">{{ bannerDetail }}</span>
+          </span>
+          <span style="display: flex; gap: 6px">
+            <button type="button" onClick="{{ run }}" style="min-height: 32px; padding: 0 10px; border: 1px solid #5E6573; border-radius: 8px; background: transparent; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Chạy lại</button>
+            <button type="button" onClick="{{ stop }}" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: #FFFFFF; color: #15171C; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Quay lại chỉnh sửa</button>
+          </span>
+        </div>
+      </sc-if>
+
+      <div style="width: 100%; max-width: {{ frameW }}; margin: 0 auto; height: 1300px; overflow: hidden; background: #FFFFFF; border-radius: 10px; box-shadow: 0 1px 2px rgba(21,23,28,0.06), 0 8px 24px rgba(21,23,28,0.08); font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #0B2E2A">
+       <div class="{{ scroll.cls }}" style="animation-delay: {{ scroll.delay }}; animation-duration: {{ scroll.dur }}">
+
+        <div style="position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-bottom: 1px solid #E4EFEC">
+          <span style="font-size: 17px; font-weight: 700; color: #0F5E55; letter-spacing: -0.01em">Smile Care</span>
+          <span style="display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 13px; font-weight: 600">Đặt lịch</span>
+        </div>
+
+        <!-- Hero: always immediate -->
+        <div style="position: relative; background: #EAF6F3; padding: {{ heroPad }}; display: flex; flex-wrap: wrap; gap: 36px; align-items: center">
+          <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13h6l-1 8 8-10h-6z"></path></svg>
+              Đầu trang · hiện ngay
+            </span>
+          </sc-if>
+          <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+            <span style="align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: #FFFFFF; color: #0F5E55; font-size: 13px; font-weight: 600">Ưu đãi tháng 11</span>
+            <h1 style="margin: 0; font-size: {{ h1Size }}; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em">Niềng răng trong suốt, tư vấn miễn phí cùng bác sĩ</h1>
+            <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #2D4A46; max-width: 460px">Bác sĩ đánh giá khớp cắn và lên kế hoạch niềng phù hợp với bạn. Buổi tư vấn đầu tiên không mất phí.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; padding-top: 4px">
+              <span style="display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 15px; font-weight: 600">Đặt lịch tư vấn</span>
+              <span style="display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 999px; border: 1.5px solid #0F5E55; color: #0F5E55; font-size: 15px; font-weight: 600">Xem bảng giá</span>
+            </div>
+          </div>
+          <div style="flex: 1 1 260px; min-width: 0; height: 300px; border-radius: 16px; background: #CFE9E3; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #2D6E64">
+            <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg>
+            <span style="font-size: 13px; font-weight: 500">Ảnh bác sĩ tư vấn</span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div style="position: relative; padding: {{ statPad }}; background: #0F5E55; color: #FFFFFF">
+          <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 8px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #FFFFFF; color: #15171C; font-size: 11px; font-weight: 600">{{ chips.stats }}</span>
+          </sc-if>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+            <sc-for list="{{ stats }}" as="st" hint-placeholder-count="3">
+              <div class="{{ st.a.cls }}" style="display: flex; flex-direction: column; gap: 4px; animation-delay: {{ st.a.delay }}; animation-duration: {{ st.a.dur }}">
+                <span aria-label="{{ st.final }}" style="font-size: {{ statSize }}; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums">{{ st.value }}</span>
+                <span style="font-size: 13px; line-height: 1.4; color: #BFE6DE">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Benefits -->
+        <div style="position: relative; padding: {{ secPad }}; display: flex; flex-direction: column; gap: 28px; background: #FFFFFF">
+          <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">{{ chips.benefits }}</span>
+          </sc-if>
+          <h2 class="{{ b.h.cls }}" style="margin: 0; text-align: center; font-size: 26px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; animation-delay: {{ b.h.delay }}; animation-duration: {{ b.h.dur }}">
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ b.l1.cls }}" style="display: block; animation-delay: {{ b.l1.delay }}; animation-duration: {{ b.l1.dur }}">Vì sao chọn niềng trong suốt</span></span>
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ b.l2.cls }}" style="display: block; animation-delay: {{ b.l2.delay }}; animation-duration: {{ b.l2.dur }}">tại Smile Care</span></span>
+          </h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px">
+            <div class="{{ b.c1.cls }}" style="display: flex; flex-direction: column; gap: 8px; padding: 20px; border-radius: 14px; background: #F4FAF8; animation-delay: {{ b.c1.delay }}; animation-duration: {{ b.c1.dur }}">
+              <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"></path><path d="M4 4l16 16"></path></svg></span>
+              <span style="font-size: 16px; font-weight: 600">Gần như vô hình</span>
+              <span style="font-size: 14px; line-height: 1.55; color: #2D4A46">Khay trong suốt, tự tin khi giao tiếp hằng ngày.</span>
+            </div>
+            <div class="{{ b.c2.cls }}" style="display: flex; flex-direction: column; gap: 8px; padding: 20px; border-radius: 14px; background: #F4FAF8; animation-delay: {{ b.c2.delay }}; animation-duration: {{ b.c2.dur }}">
+              <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+              <span style="font-size: 16px; font-weight: 600">Tháo lắp khi ăn uống</span>
+              <span style="font-size: 14px; line-height: 1.55; color: #2D4A46">Vệ sinh dễ dàng, không kiêng khem nhiều.</span>
+            </div>
+            <div class="{{ b.c3.cls }}" style="display: flex; flex-direction: column; gap: 8px; padding: 20px; border-radius: 14px; background: #F4FAF8; animation-delay: {{ b.c3.delay }}; animation-duration: {{ b.c3.dur }}">
+              <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20c1.2-3.6 3.8-5.5 7-5.5s5.8 1.9 7 5.5"></path></svg></span>
+              <span style="font-size: 16px; font-weight: 600">Bác sĩ theo dõi sát</span>
+              <span style="font-size: 14px; line-height: 1.55; color: #2D4A46">Tái khám định kỳ, điều chỉnh theo tiến độ.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Doctor: image left, text right -->
+        <div style="position: relative; padding: {{ secPad }}; background: #F4FAF8; display: flex; flex-wrap: wrap; gap: 36px; align-items: center">
+          <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">{{ chips.doctor }}</span>
+          </sc-if>
+          <div class="{{ dr.box.cls }}" style="flex: 1 1 260px; min-width: 0; height: 260px; border-radius: 16px; overflow: hidden; animation-delay: {{ dr.box.delay }}; animation-duration: {{ dr.box.dur }}">
+            <div class="{{ dr.img.cls }}" style="width: 100%; height: 100%; background: #CFE9E3; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #2D6E64; animation-delay: {{ dr.img.delay }}; animation-duration: {{ dr.img.dur }}">
+              <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg>
+              <span style="font-size: 13px; font-weight: 500">Ảnh đội ngũ bác sĩ</span>
+            </div>
+          </div>
+          <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+            <span class="{{ dr.eyebrow.cls }}" style="font-size: 13px; font-weight: 600; color: #0F5E55; letter-spacing: 0.04em; animation-delay: {{ dr.eyebrow.delay }}; animation-duration: {{ dr.eyebrow.dur }}">BÁC SĨ PHỤ TRÁCH</span>
+            <h2 class="{{ dr.h.cls }}" style="margin: 0; font-size: 26px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; animation-delay: {{ dr.h.delay }}; animation-duration: {{ dr.h.dur }}">
+              <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ dr.l1.cls }}" style="display: block; animation-delay: {{ dr.l1.delay }}; animation-duration: {{ dr.l1.dur }}">Một bác sĩ theo bạn</span></span>
+              <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ dr.l2.cls }}" style="display: block; animation-delay: {{ dr.l2.delay }}; animation-duration: {{ dr.l2.dur }}">từ đầu đến khi tháo khay</span></span>
+            </h2>
+            <p class="{{ dr.p.cls }}" style="margin: 0; font-size: 15px; line-height: 1.6; color: #2D4A46; animation-delay: {{ dr.p.delay }}; animation-duration: {{ dr.p.dur }}">Bác sĩ khám, lên kế hoạch và tái khám cho bạn trong suốt liệu trình, nên mọi điều chỉnh đều dựa trên tiến độ thật của bạn.</p>
+          </div>
+        </div>
+
+        <!-- Steps -->
+        <div style="position: relative; padding: {{ secPad }}; display: flex; flex-direction: column; gap: 28px; background: #FFFFFF">
+          <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">{{ chips.steps }}</span>
+          </sc-if>
+          <h2 class="{{ sp.h.cls }}" style="margin: 0; text-align: center; font-size: 26px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; animation-delay: {{ sp.h.delay }}; animation-duration: {{ sp.h.dur }}">
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ sp.l1.cls }}" style="display: block; animation-delay: {{ sp.l1.delay }}; animation-duration: {{ sp.l1.dur }}">Niềng răng tại Smile Care</span></span>
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ sp.l2.cls }}" style="display: block; animation-delay: {{ sp.l2.delay }}; animation-duration: {{ sp.l2.dur }}">chỉ với 4 bước</span></span>
+          </h2>
+          <div style="position: relative; display: grid; grid-template-columns: {{ stepCols }}; gap: 24px 16px">
+            <sc-if value="{{ showConnector }}" hint-placeholder-val="{{ true }}">
+              <span aria-hidden="true" class="{{ sp.line.cls }}" style="position: absolute; top: 19px; left: 12.5%; right: 12.5%; height: 2px; background: #9CCFC5; animation-delay: {{ sp.line.delay }}; animation-duration: {{ sp.line.dur }}"></span>
+            </sc-if>
+            <sc-for list="{{ steps }}" as="stp" hint-placeholder-count="4">
+              <div class="{{ stp.a.cls }}" style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; animation-delay: {{ stp.a.delay }}; animation-duration: {{ stp.a.dur }}">
+                <span style="width: 40px; height: 40px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; box-shadow: 0 0 0 4px #FFFFFF">{{ stp.n }}</span>
+                <span style="font-size: 15px; font-weight: 600">{{ stp.title }}</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #2D4A46">{{ stp.desc }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+       </div>
+      </div>
+    </section>
+
+    <!-- Page settings panel -->
+    <aside aria-labelledby="panel-title" style="flex: 1 1 320px; max-width: 100%; box-sizing: border-box; background: #FFFFFF; border-left: 1px solid #E2E5EA; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 18px 12px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <h2 id="panel-title" style="margin: 0; font-size: 16px; font-weight: 600">Cài đặt trang</h2>
+          <span style="font-size: 12px; color: #5E6573">Áp dụng cho cả trang</span>
+        </div>
+        <a href="MotionSection.dc.html" aria-label="Đóng cài đặt trang" style="width: 36px; height: 36px; border-radius: 8px; color: #3C424E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+      </div>
+      <div style="padding: 0 18px 12px; border-bottom: 1px solid #E2E5EA">
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 3px; background: #F0F2F5; border-radius: 10px">
+          <button type="button" aria-pressed="true" style="min-height: 34px; border: 0; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.08); font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Chuyển động</button>
+          <a href="SEO.dc.html" style="min-height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: #3C424E; text-decoration: none">SEO &amp; chia sẻ</a>
+        </div>
+      </div>
+
+      <div style="flex: 1; padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 20px">
+
+        <sc-if value="{{ fromTpl }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: #F5F6F8; border: 1px solid #E2E5EA">
+            <span style="display: flex; gap: 8px; font-size: 13px; line-height: 1.5; color: #3C424E">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><rect x="3.5" y="3.5" width="17" height="17" rx="2"></rect><path d="M3.5 9h17M9 9v11.5"></path></svg>
+              <span>{{ tplText }}</span>
+            </span>
+            <button type="button" onClick="{{ tplAction }}" style="align-self: flex-start; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">{{ tplButton }}</button>
+          </div>
+        </sc-if>
+
+        <!-- Style -->
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+            <h3 style="margin: 0; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em">PHONG CÁCH CHUYỂN ĐỘNG</h3>
+            <a href="StyleLibrary.dc.html" style="font-size: 12px; font-weight: 600; text-decoration: none">So sánh</a>
+          </div>
+          <div role="group" aria-label="Phong cách chuyển động" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{ styles }}" as="sy" hint-placeholder-count="6">
+              <button type="button" aria-pressed="{{ sy.pressed }}" onClick="{{ sy.pick }}" style="display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 8px 10px; border: {{ sy.border }}; border-radius: 10px; background: {{ sy.bg }}; font: inherit; text-align: left; cursor: pointer; color: #15171C">
+                <span aria-hidden="true" style="height: 52px; border-radius: 7px; background: #F0F2F5; display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden">
+                  <sc-for list="{{ sy.thumbs }}" as="th" hint-placeholder-count="3">
+                    <span class="{{ th.cls }}" style="width: 20px; height: 24px; box-sizing: border-box; padding: 4px 3px; border-radius: 4px; background: #FFFFFF; border: 1px solid {{ sy.cardBorder }}; box-shadow: {{ sy.trail }}; display: flex; flex-direction: column; gap: 3px; animation-delay: {{ th.delay }}; animation-duration: {{ th.dur }}"><span style="height: 3px; background: {{ sy.bar }}; border-radius: 2px"></span><span style="height: 3px; width: 60%; background: #CDD2DA; border-radius: 2px"></span></span>
+                  </sc-for>
+                </span>
+                <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; font-weight: 600; color: {{ sy.fg }}">
+                  {{ sy.name }}
+                  <sc-if value="{{ sy.isDefault }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; color: #474E5C; background: #ECEEF2; border-radius: 999px; padding: 1px 7px">Mặc định</span></sc-if>
+                  <sc-if value="{{ sy.recommended }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; color: #0B6B45; background: #E3F5EC; border-radius: 999px; padding: 1px 7px">Hợp ngành</span></sc-if>
+                </span>
+                <span style="font-size: 11px; line-height: 1.4; color: #5E6573">{{ sy.trait }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: #F5F6F8">
+            <span style="font-size: 13px; line-height: 1.5; color: #15171C">{{ styleSummary }}</span>
+            <span style="font-size: 12px; color: #5E6573">Hợp với: {{ styleFits }}</span>
+          </div>
+        </div>
+
+        <div style="height: 1px; background: #EEF0F3"></div>
+
+        <!-- Advanced -->
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <button type="button" aria-expanded="{{ advExpanded }}" onClick="{{ toggleAdv }}" style="display: flex; align-items: center; justify-content: space-between; min-height: 32px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em; cursor: pointer">
+            TÙY CHỈNH THÊM
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: {{ advChevron }}"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <sc-if value="{{ advDisabled }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Chọn một phong cách để chỉnh mức độ và điểm nhấn.</span>
+          </sc-if>
+          <sc-if value="{{ advShown }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <span style="font-size: 13px; font-weight: 600">Mức độ</span>
+              <div role="group" aria-label="Mức độ chuyển động" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 3px; background: #F0F2F5; border-radius: 10px">
+                <sc-for list="{{ levels }}" as="lv" hint-placeholder-count="3">
+                  <button type="button" aria-pressed="{{ lv.pressed }}" onClick="{{ lv.pick }}" style="min-height: 34px; border: 0; border-radius: 8px; background: {{ lv.bg }}; box-shadow: {{ lv.shadow }}; font: inherit; font-size: 13px; font-weight: {{ lv.weight }}; color: {{ lv.fg }}; cursor: pointer">{{ lv.name }}</button>
+                </sc-for>
+              </div>
+              <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Hệ thống tự chọn thời lượng, khoảng dịch chuyển và độ trễ theo mức này.</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 13px; font-weight: 600">Điểm nhấn</span>
+              <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Chỉ chạy ở section có loại nội dung tương ứng.</span>
+              <ul style="list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column">
+                <sc-for list="{{ accents }}" as="ac" hint-placeholder-count="4">
+                  <li style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #F0F2F5">
+                    <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                      <span id="{{ ac.id }}" style="font-size: 13px; font-weight: 500">{{ ac.name }}</span>
+                      <span style="font-size: 12px; line-height: 1.4; color: #5E6573">{{ ac.sub }} · <span style="color: {{ ac.statusFg }}">{{ ac.status }}</span></span>
+                    </span>
+                    <button type="button" role="switch" aria-checked="{{ ac.checked }}" aria-labelledby="{{ ac.id }}" onClick="{{ ac.toggle }}" style="position: relative; width: 40px; height: 24px; flex: none; padding: 0; border: 0; border-radius: 999px; background: {{ ac.bg }}; cursor: pointer"><span aria-hidden="true" style="position: absolute; top: 3px; left: {{ ac.knob }}; width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.2)"></span></button>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="height: 1px; background: #EEF0F3"></div>
+
+        <!-- Devices -->
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <h3 style="margin: 0; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em">THEO THIẾT BỊ</h3>
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+            <span style="display: flex; flex-direction: column; gap: 3px">
+              <span id="mx-mobile" style="font-size: 13px; font-weight: 600">Giảm chuyển động trên điện thoại</span>
+              <span id="mx-mobile-help" style="font-size: 12px; line-height: 1.5; color: #5E6573">{{ mobileHelp }}</span>
+            </span>
+            <button type="button" role="switch" aria-checked="{{ mobileChecked }}" aria-labelledby="mx-mobile" aria-describedby="mx-mobile-help" onClick="{{ toggleMobile }}" style="position: relative; width: 40px; height: 24px; flex: none; padding: 0; border: 0; border-radius: 999px; background: {{ mobileBg }}; cursor: pointer"><span aria-hidden="true" style="position: absolute; top: 3px; left: {{ mobileKnob }}; width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.2)"></span></button>
+          </div>
+          <div style="display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #F5F6F8; font-size: 12px; line-height: 1.5; color: #3C424E">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><circle cx="12" cy="4.5" r="1.8"></circle><path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5l-3 6M12 14.5l3 6"></path></svg>
+            <span>Khách đã bật <strong style="font-weight: 600">Giảm chuyển động</strong> trên thiết bị sẽ thấy nội dung hiện ngay, số liệu hiện giá trị thật, kể cả khi trang đã bật hiệu ứng.</span>
+          </div>
+        </div>
+
+        <div style="height: 1px; background: #EEF0F3"></div>
+
+        <!-- System micro-interactions -->
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; flex-direction: column; gap: 3px">
+            <h3 style="margin: 0; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em">PHẢN HỒI KHI THAO TÁC</h3>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Do hệ thống thiết kế quy định, giống nhau ở mọi phong cách. Thử ngay:</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+              <button type="button" class="mx-demo-btn" style="width: 100%; min-height: 36px; border: 0; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer">Đặt lịch</button>
+              <span style="font-size: 11px; color: #5E6573">Di chuột lên nút</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+              <details class="mx-demo-faq" style="width: 100%; box-sizing: border-box; border: 1px solid #E2E5EA; border-radius: 8px; font-size: 12px">
+                <summary style="display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 0 8px; cursor: pointer; font-weight: 600">Câu hỏi<svg class="mx-chev" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></summary>
+                <span style="display: block; padding: 0 8px 8px; color: #3C424E">Trả lời mở ra mượt.</span>
+              </details>
+              <span style="font-size: 11px; color: #5E6573">Mở câu hỏi</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+              <button type="button" onClick="{{ toggleSent }}" style="width: 100%; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 8px; background: {{ sentBg }}; color: #FFFFFF; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer">
+                <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if>
+                {{ sentLabel }}
+              </button>
+              <span style="font-size: 11px; color: #5E6573">Gửi form</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Run -->
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #E2E5EA; border-radius: 12px">
+          <button type="button" onClick="{{ run }}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1.5px solid #4338CA; border-radius: 10px; background: #FFFFFF; color: #3730A3; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+            Chạy thử hiệu ứng
+          </button>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3C424E; cursor: pointer"><input type="checkbox" checked="{{ slow }}" onChange="{{ toggleSlow }}" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Xem chậm (¼ tốc độ)</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3C424E; cursor: pointer"><input type="checkbox" checked="{{ simReduced }}" onChange="{{ toggleSim }}" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Như thiết bị bật giảm chuyển động</label>
+        </div>
+
+        <div style="display: flex; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #EEF0FF; color: #26208A; font-size: 12px; line-height: 1.5">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.8v.1"></path></svg>
+          <span>Lưu vào bản nháp. Trang live chỉ đổi khi bạn xuất bản; khôi phục phiên bản cũ sẽ khôi phục cả chuyển động.</span>
+        </div>
+        <a href="MotionSection.dc.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13px; font-weight: 600; text-decoration: none">
+          Chỉnh riêng cho từng section
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </a>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"source":{"editor":"enum","options":["Trang mới","Tạo từ template"],"default":"Trang mới"},"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      device: 'desktop', style: null, level: 'mid', acc: {}, adv: true,
+      reduceMobile: false, simReduced: false, slow: false,
+      run: 'idle', el: 0, thumbPlay: null, sent: false
+    };
+    this.timer = null;
+    this.iv = null;
+    this.total = 2000;
+  }
+  componentWillUnmount() {
+    clearTimeout(this.timer);
+    clearInterval(this.iv);
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var d = s.device;
+
+    var STY = {
+      none: { name: 'Không hiệu ứng', enter: 'none', order: 'together', accents: [], dur: 0, step: 0, trait: 'Mọi thứ hiện ngay', summary: 'Mọi section hiện ngay khi trang tải, không chuyển động.', fits: 'mọi trang; mặc định cho trang mới', trail: 'none' },
+      subtle: { name: 'Tinh tế', enter: 'fade', order: 'together', accents: [], dur: 450, step: 0, trait: 'Hiện dần · cùng lúc', summary: 'Section rõ dần, các phần trong section hiện cùng lúc. Kín đáo, không gây chú ý.', fits: 'y tế, tài chính, dịch vụ chuyên nghiệp', trail: '0 0 0 3px rgba(138,145,160,0.2)' },
+      smooth: { name: 'Mượt mà', enter: 'up', order: 'stagger', accents: ['lines', 'count', 'steps'], dur: 500, step: 90, trait: 'Trượt lên · lần lượt', summary: 'Section trượt lên, các phần hiện lần lượt. Tiêu đề hiện từng dòng, số liệu đếm lên.', fits: 'hầu hết landing page', trail: '0 5px 0 -1px rgba(138,145,160,0.35)' },
+      lively: { name: 'Năng động', enter: 'side', order: 'stagger', accents: ['count', 'steps'], dur: 380, step: 70, trait: 'Trượt từ bên · nhịp nhanh', summary: 'Chữ trượt vào từ trái, ảnh từ phải, nhịp nhanh. Số liệu đếm lên, các bước nối nhau.', fits: 'sự kiện, khóa học, thể thao', trail: '-6px 0 0 -1px rgba(138,145,160,0.35)' },
+      luxe: { name: 'Sang trọng', enter: 'reveal', order: 'stagger', accents: ['lines', 'image'], dur: 750, step: 140, trait: 'Hé lộ chậm · lần lượt', summary: 'Nội dung hé lộ chậm rãi, ảnh thu nhẹ vào khung, tiêu đề hiện từng dòng.', fits: 'bất động sản, spa, thời trang', trail: '0 9px 0 -2px rgba(138,145,160,0.25)' },
+      playful: { name: 'Vui tươi', enter: 'pop', order: 'rows', accents: ['count', 'steps'], dur: 520, step: 90, trait: 'Bật lên · theo hàng', summary: 'Thẻ bật lên theo từng hàng với độ nảy nhẹ. Số liệu đếm lên, các bước nối nhau.', fits: 'ăn uống, khuyến mãi, đồ cho trẻ em', trail: '0 0 0 4px rgba(242,163,58,0.35)' }
+    };
+    var KEYS = ['none', 'subtle', 'smooth', 'lively', 'luxe', 'playful'];
+    var RECOMMENDED = { subtle: true, smooth: true };
+    var ENTER_NAMES = { none: 'Hiện ngay', fade: 'Hiện dần', up: 'Trượt lên', side: 'Trượt từ bên', zoom: 'Phóng nhẹ', pop: 'Bật lên', reveal: 'Hé lộ' };
+    var LEVELS = { low: { name: 'Nhẹ', f: 0.85, cls: 'mx-i1' }, mid: { name: 'Vừa', f: 1, cls: 'mx-i2' }, high: { name: 'Rõ', f: 1.15, cls: 'mx-i3' } };
+
+    function enterCls(kind, dir) {
+      if (kind === 'none') return '';
+      if (kind === 'side') return 'mx-a ' + (dir === 'r' ? 'mx-right' : 'mx-left');
+      return 'mx-a mx-' + kind;
+    }
+
+    var fromTpl = (this.props.source ?? 'Trang mới') === 'Tạo từ template';
+    var initial = fromTpl ? 'smooth' : 'none';
+    var st = s.style === null ? initial : s.style;
+    var S = STY[st];
+    var isMobile = d === 'mobile';
+    var mobileReduced = isMobile && s.reduceMobile && st !== 'none';
+    var reduced = s.simReduced;
+    function accOn(k) {
+      var v = s.acc[k];
+      return v === undefined ? S.accents.indexOf(k) >= 0 : v;
+    }
+    function accEff(k) {
+      if (reduced || st === 'none') return false;
+      if (mobileReduced && k !== 'count') return false;
+      return accOn(k);
+    }
+    var ek = reduced ? 'none' : (mobileReduced ? 'fade' : S.enter);
+    var order = mobileReduced ? 'together' : S.order;
+
+    // Timeline (ms at 1x); the slow toggle stretches every delay and duration.
+    var f = s.slow ? 4 : 1;
+    var running = s.run !== 'idle';
+    var dur = Math.round(S.dur * LEVELS[s.level].f);
+    var step = order === 'together' ? 0 : S.step;
+    var NONE = { cls: '', delay: '0ms', dur: '0ms' };
+    var end = 0;
+    function A(cls, delay, du) {
+      du = du || dur;
+      if (!cls) return NONE;
+      end = Math.max(end, delay + du);
+      return running ? { cls: cls, delay: Math.round(delay * f) + 'ms', dur: Math.round(du * f) + 'ms' } : NONE;
+    }
+    function at(base, i, cols) {
+      if (order === 'together') return base;
+      if (order === 'rows') return base + Math.floor(i / cols) * step * 2;
+      return base + i * step;
+    }
+    function heading(base, dir) {
+      if (accEff('lines')) {
+        return { h: NONE, l1: A('mx-a mx-line', base, Math.max(dur, 500) * 1.1), l2: A('mx-a mx-line', base + 110, Math.max(dur, 500) * 1.1) };
+      }
+      return { h: A(enterCls(ek, dir), base), l1: NONE, l2: NONE };
+    }
+
+    var bases = isMobile ? { stats: 500, benefits: 900, doctor: 1700, steps: 2500, scrollDelay: 300, scrollDur: 2600 } : { stats: 250, benefits: 600, doctor: 1050, steps: 1500, scrollDelay: 300, scrollDur: 1400 };
+    var benefitCols = isMobile ? 1 : 3;
+    var stepColsN = isMobile ? 2 : 4;
+
+    // Stats with optional count-up.
+    var countOn = running && accEff('count');
+    var p = 1;
+    if (countOn) {
+      p = Math.min(1, Math.max(0, (s.el - bases.stats * f) / (1100 * f)));
+      p = 1 - Math.pow(1 - p, 3);
+    }
+    if (accEff('count')) end = Math.max(end, bases.stats + 1100);
+    var statDefs = [
+      { label: 'năm kinh nghiệm chỉnh nha', value: String(Math.round(15 * p)), final: '15' },
+      { label: 'khách hàng đã niềng', value: Math.round(8000 * p).toLocaleString('vi-VN') + '+', final: '8.000+' },
+      { label: 'điểm đánh giá trung bình', value: (4.9 * p).toFixed(1).replace('.', ',') + '/5', final: '4,9/5' }
+    ];
+    var stats = statDefs.map(function (x, i) {
+      return Object.assign({}, x, { a: A(enterCls(ek, 'l'), at(bases.stats, i, 3)) });
+    });
+
+    // Benefits.
+    var bh = heading(bases.benefits, 'l');
+    var cardBase = bases.benefits + (step ? 160 : 0);
+    var b = {
+      h: bh.h, l1: bh.l1, l2: bh.l2,
+      c1: A(enterCls(ek, 'l'), at(cardBase, 0, benefitCols)),
+      c2: A(enterCls(ek, 'l'), at(cardBase, 1, benefitCols)),
+      c3: A(enterCls(ek, 'l'), at(cardBase, 2, benefitCols))
+    };
+
+    // Doctor: image on the left, text on the right.
+    var imgAcc = accEff('image');
+    var dh = heading(bases.doctor + 100, 'r');
+    var dr = {
+      box: imgAcc ? NONE : A(enterCls(ek, 'l'), bases.doctor),
+      img: imgAcc ? A('mx-a mx-img', bases.doctor, Math.max(dur, 500) * 1.6) : NONE,
+      eyebrow: A(enterCls(ek, 'r'), bases.doctor + (step ? 40 : 0)),
+      h: dh.h, l1: dh.l1, l2: dh.l2,
+      p: A(enterCls(ek, 'r'), bases.doctor + 100 + (step ? Math.max(step * 2, 180) : 0))
+    };
+
+    // Steps with optional connector.
+    var stepAcc = accEff('steps') && !isMobile;
+    var sh = heading(bases.steps, 'l');
+    var stepBase = bases.steps + 200;
+    var stepDefs = [
+      { n: '1', title: 'Tư vấn & chụp phim', desc: 'Bác sĩ khám và chụp phim miễn phí.' },
+      { n: '2', title: 'Lên kế hoạch 3D', desc: 'Xem trước kết quả trước khi niềng.' },
+      { n: '3', title: 'Nhận khay niềng', desc: 'Hướng dẫn đeo và vệ sinh khay.' },
+      { n: '4', title: 'Tái khám định kỳ', desc: 'Điều chỉnh theo tiến độ mỗi 6 tuần.' }
+    ];
+    var steps = stepDefs.map(function (x, i) {
+      var delay = stepAcc ? stepBase + i * 240 : at(stepBase, i, stepColsN);
+      return Object.assign({}, x, { a: A(enterCls(ek, 'l'), delay) });
+    });
+    var sp = { h: sh.h, l1: sh.l1, l2: sh.l2, line: stepAcc ? A('mx-a mx-draw', stepBase, 3 * 240 + 120) : NONE };
+
+    var scrollEnd = bases.scrollDelay + bases.scrollDur;
+    var scroll = running ? { cls: 'mx-scroll mx-scroll-' + d, delay: Math.round(bases.scrollDelay * f) + 'ms', dur: Math.round(bases.scrollDur * f) + 'ms' } : NONE;
+    this.total = (Math.max(end, scrollEnd) + 300) * f;
+
+    function chip(extra) {
+      var base = ENTER_NAMES[ek];
+      return extra ? (ek === 'none' ? extra : base + ' + ' + extra) : base;
+    }
+
+    // Style cards and their thumbnails.
+    var styles = KEYS.map(function (k) {
+      var x = STY[k];
+      var on = k === st;
+      var play = s.thumbPlay === k && k !== 'none';
+      var tdur = Math.round(x.dur * LEVELS[s.level].f);
+      var tstep = x.order === 'together' || x.order === 'rows' ? 0 : x.step;
+      return {
+        name: x.name,
+        trait: x.trait,
+        isDefault: k === 'none',
+        recommended: !!RECOMMENDED[k],
+        pressed: on ? 'true' : 'false',
+        border: on ? '1.5px solid #4338CA' : '1px solid #E2E5EA',
+        bg: on ? '#F5F5FF' : '#FFFFFF',
+        fg: on ? '#3730A3' : '#15171C',
+        cardBorder: on ? '#A5ABF5' : '#CDD2DA',
+        bar: on ? '#4338CA' : '#8A91A0',
+        trail: x.trail,
+        thumbs: [0, 1, 2].map(function (i) {
+          return play ? { cls: enterCls(x.enter, 'l'), delay: (120 + i * tstep) + 'ms', dur: tdur + 'ms' } : NONE;
+        }),
+        pick: function () {
+          clearTimeout(self.timer);
+          self.setState({ style: k, acc: {}, thumbPlay: null });
+          self.timer = setTimeout(function () { self.setState({ thumbPlay: k }); }, 30);
+        }
+      };
+    });
+
+    var levels = ['low', 'mid', 'high'].map(function (k) {
+      var on = k === s.level;
+      return {
+        name: LEVELS[k].name,
+        pressed: on ? 'true' : 'false',
+        bg: on ? '#FFFFFF' : 'transparent',
+        shadow: on ? '0 1px 2px rgba(21,23,28,0.08)' : 'none',
+        weight: on ? '600' : '500',
+        fg: on ? '#15171C' : '#3C424E',
+        pick: function () { self.setState({ level: k }); }
+      };
+    });
+
+    var ACC = [
+      { k: 'lines', name: 'Tiêu đề hiện từng dòng', sub: 'Tiêu đề section trượt lên theo dòng' },
+      { k: 'image', name: 'Ảnh hé lộ', sub: 'Ảnh rõ dần, thu nhẹ vào khung' },
+      { k: 'count', name: 'Số liệu đếm lên', sub: 'Con số chạy tới giá trị thật, một lần' },
+      { k: 'steps', name: 'Các bước nối nhau', sub: 'Đường nối giữa các bước vẽ dần' }
+    ];
+    var accents = ACC.map(function (a) {
+      var on = accOn(a.k);
+      var touched = s.acc[a.k] !== undefined;
+      return {
+        id: 'mx-acc-' + a.k,
+        name: a.name,
+        sub: a.sub,
+        checked: on ? 'true' : 'false',
+        bg: on ? '#4338CA' : '#CDD2DA',
+        knob: on ? '19px' : '3px',
+        status: touched ? 'đã chỉnh' : 'theo phong cách',
+        statusFg: touched ? '#3730A3' : '#5E6573',
+        toggle: function () {
+          var next = Object.assign({}, self.state.acc);
+          next[a.k] = !on;
+          self.setState({ acc: next });
+        }
+      };
+    });
+
+    var frames = { desktop: '100%', tablet: '768px', mobile: '390px' };
+    var labels = { desktop: 'Bản nháp · Máy tính', tablet: 'Bản nháp · Máy tính bảng (768 px)', mobile: 'Bản nháp · Điện thoại (390 px)' };
+    function btn(k) {
+      var on = k === d;
+      return { pressed: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', fg: on ? '#15171C' : '#5E6573', shadow: on ? '0 1px 2px rgba(21,23,28,0.12)' : 'none' };
+    }
+
+    var detail;
+    if (reduced) detail = 'Như thiết bị bật giảm chuyển động: nội dung hiện ngay, số liệu hiện giá trị thật.';
+    else if (st === 'none') detail = 'Trang đang để Không hiệu ứng: mọi section hiện ngay.';
+    else detail = S.name + ' · mức ' + LEVELS[s.level].name + ' · mô phỏng khách cuộn trang' + (mobileReduced ? ' · điện thoại chỉ hiện dần' : '') + (s.slow ? ' · ¼ tốc độ' : '');
+
+    var changed = st !== initial || s.level !== 'mid' || Object.keys(s.acc).length > 0 || s.reduceMobile;
+
+    return {
+      levelCls: LEVELS[s.level].cls,
+      outline: [
+        { kind: 'Thanh điều hướng', label: 'Logo · nút Đặt lịch' },
+        { kind: 'Hero', label: '“Niềng răng trong suốt, tư vấn…”' },
+        { kind: 'Số liệu nổi bật', label: '3 con số' },
+        { kind: 'Lợi ích', label: '“Vì sao chọn niềng trong suốt…”' },
+        { kind: 'Bác sĩ phụ trách', label: 'Ảnh · giới thiệu' },
+        { kind: 'Quy trình 4 bước', label: 'Tư vấn → Tái khám' },
+        { kind: 'Câu hỏi thường gặp', label: '6 câu hỏi' },
+        { kind: 'Form đăng ký tư vấn', label: 'Họ và tên · Số điện thoại' },
+        { kind: 'Chân trang', label: 'Địa chỉ · chính sách' }
+      ],
+      dev: { desktop: btn('desktop'), tablet: btn('tablet'), mobile: btn('mobile') },
+      setDesktop: function () { self.setState({ device: 'desktop', run: 'idle' }); },
+      setTablet: function () { self.setState({ device: 'tablet', run: 'idle' }); },
+      setMobile: function () { self.setState({ device: 'mobile', run: 'idle' }); },
+      frameW: frames[d],
+      deviceLabel: labels[d],
+      heroPad: isMobile ? '40px 20px' : (d === 'tablet' ? '48px 32px' : '56px 44px'),
+      h1Size: isMobile ? '28px' : (d === 'tablet' ? '34px' : '40px'),
+      secPad: isMobile ? '40px 20px' : '52px 40px 48px',
+      statPad: isMobile ? '28px 20px' : '32px 40px',
+      statSize: isMobile ? '24px' : '34px',
+      stepCols: 'repeat(' + stepColsN + ', minmax(0, 1fr))',
+      showConnector: !isMobile,
+      changeCount: changed ? 5 : 4,
+
+      styles: styles,
+      styleName: S.name,
+      styleSummary: S.summary,
+      styleFits: S.fits,
+      fromTpl: fromTpl,
+      tplText: st === 'none' ? 'Đã tắt toàn bộ chuyển động mà template chọn sẵn.' : 'Template đã dùng chọn sẵn phong cách ' + STY[initial].name + '. Bạn có thể đổi hoặc tắt.',
+      tplButton: st === 'none' ? 'Dùng lại phong cách của template' : 'Tắt toàn bộ hiệu ứng',
+      tplAction: function () { self.setState({ style: st === 'none' ? initial : 'none', acc: {} }); },
+
+      advExpanded: s.adv ? 'true' : 'false',
+      advChevron: s.adv ? 'rotate(180deg)' : 'none',
+      toggleAdv: function () { self.setState({ adv: !self.state.adv }); },
+      advDisabled: s.adv && st === 'none',
+      advShown: s.adv && st !== 'none',
+      levels: levels,
+      accents: accents,
+
+      mobileChecked: s.reduceMobile ? 'true' : 'false',
+      mobileBg: s.reduceMobile ? '#4338CA' : '#CDD2DA',
+      mobileKnob: s.reduceMobile ? '19px' : '3px',
+      mobileHelp: st === 'none' ? 'Trang đang không có hiệu ứng nên chưa áp dụng.' : 'Trên điện thoại chỉ hiện dần; tắt trượt, hé lộ và vẽ đường nối.',
+      toggleMobile: function () { self.setState({ reduceMobile: !self.state.reduceMobile }); },
+
+      sent: s.sent,
+      sentLabel: s.sent ? 'Đã gửi' : 'Gửi',
+      sentBg: s.sent ? '#0B6B45' : '#4338CA',
+      toggleSent: function () { self.setState({ sent: !self.state.sent }); },
+
+      slow: s.slow,
+      toggleSlow: function () { self.setState({ slow: !self.state.slow }); },
+      simReduced: s.simReduced,
+      toggleSim: function () { self.setState({ simReduced: !self.state.simReduced }); },
+
+      scroll: scroll,
+      stats: stats,
+      b: b,
+      dr: dr,
+      sp: sp,
+      steps: steps,
+      chips: {
+        stats: accEff('count') ? chip('đếm lên') : chip(''),
+        benefits: accEff('lines') ? chip('tiêu đề từng dòng') : chip(''),
+        doctor: imgAcc ? chip('ảnh hé lộ') : chip(''),
+        steps: stepAcc ? chip('nối các bước') : chip('')
+      },
+      showBanner: running,
+      bannerTitle: s.run === 'running' ? 'Đang chạy thử' : 'Đã chạy thử xong',
+      bannerDetail: detail,
+      run: function () {
+        clearTimeout(self.timer);
+        clearInterval(self.iv);
+        self.setState({ run: 'idle', el: 0 });
+        self.timer = setTimeout(function () {
+          var start = Date.now();
+          self.setState({ run: 'running', el: 0 });
+          self.iv = setInterval(function () {
+            var el = Date.now() - start;
+            if (el >= self.total) {
+              clearInterval(self.iv);
+              self.setState({ run: 'done', el: el });
+            } else {
+              self.setState({ el: el });
+            }
+          }, 50);
+        }, 40);
+      },
+      stop: function () {
+        clearTimeout(self.timer);
+        clearInterval(self.iv);
+        self.setState({ run: 'idle', el: 0 });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

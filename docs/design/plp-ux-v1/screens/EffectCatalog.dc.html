@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Bộ hiệu ứng mở rộng</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+@property --num{syntax:'<integer>';inherits:false;initial-value:0}
+@keyframes mxFade{from{opacity:0}to{opacity:1}}
+@keyframes mxUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes mxLeft{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
+@keyframes mxZoom{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes mxPop{0%{opacity:0;transform:scale(.86)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes mxReveal{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+@keyframes mxSettle{from{opacity:0;transform:scale(1.1)}to{opacity:1;transform:none}}
+@keyframes mxFlip{from{opacity:0;transform:perspective(500px) rotateX(-32deg)}to{opacity:1;transform:none}}
+@keyframes mxTilt{from{opacity:0;transform:translateY(12px) rotate(-4deg)}to{opacity:1;transform:none}}
+@keyframes mxLine{from{transform:translateY(105%)}to{transform:none}}
+@keyframes mxDrawX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes mxDrawY{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes mxImg{from{opacity:0;transform:scale(1.1)}to{opacity:1;transform:none}}
+@keyframes mxCurtain{from{transform:none}to{transform:translateX(101%)}}
+@keyframes mxKen{from{transform:none}to{transform:scale(1.1)}}
+@keyframes mxScrollY{from{transform:none}to{transform:translateY(-50px)}}
+@keyframes mxParaImg{from{transform:none}to{transform:translateY(26px)}}
+@keyframes mxRotate{0%,22%{transform:none}33%,55%{transform:translateY(-25%)}66%,88%{transform:translateY(-50%)}100%{transform:translateY(-75%)}}
+@keyframes mxType{from{transform:none}to{transform:translateX(100%)}}
+@keyframes mxCount{from{--num:0}to{--num:15}}
+@keyframes mxRing{from{stroke-dashoffset:175.9}to{stroke-dashoffset:44}}
+@keyframes mxNudge{0%,100%{transform:none}40%{transform:scale(1.07)}70%{transform:scale(.98)}}
+@keyframes mxArrow{0%,60%,100%{transform:none}30%{transform:translateX(6px)}80%{transform:translateX(3px)}}
+@keyframes mxPulse{0%,100%{transform:none;opacity:1}50%{transform:scale(1.07);opacity:.7}}
+@keyframes mxMarquee{from{transform:none}to{transform:translateX(-50%)}}
+.play.m-fade .el{animation:mxFade 500ms cubic-bezier(.2,.7,.3,1) both}
+.play.m-up .el{animation:mxUp 500ms cubic-bezier(.2,.7,.3,1) both}
+.play.m-side .el{animation:mxLeft 450ms cubic-bezier(.2,.7,.3,1) both}
+.play.m-zoom .el{animation:mxZoom 500ms cubic-bezier(.2,.7,.3,1) both}
+.play.m-pop .el{animation:mxPop 520ms cubic-bezier(.34,1.56,.64,1) both}
+.play.m-reveal .el{animation:mxReveal 750ms cubic-bezier(.16,1,.3,1) both}
+.play.m-settle .el{animation:mxSettle 650ms cubic-bezier(.16,1,.3,1) both}
+.play.m-flip .el{animation:mxFlip 650ms cubic-bezier(.2,.7,.3,1) both}
+.play.m-tilt .el{animation:mxTilt 600ms cubic-bezier(.34,1.3,.64,1) both}
+.play.m-mask .in{animation:mxLine 650ms cubic-bezier(.16,1,.3,1) both}
+.play .sq{animation:mxPop 450ms cubic-bezier(.34,1.56,.64,1) both}
+.play .ln,.play .wi{animation:mxLine 600ms cubic-bezier(.16,1,.3,1) both}
+.play .ul{animation:mxDrawX 600ms cubic-bezier(.2,.7,.3,1) 250ms both}
+.play .mk{animation:mxDrawX 700ms cubic-bezier(.2,.7,.3,1) 200ms both}
+.play .rl{animation:mxRotate 3s cubic-bezier(.65,0,.35,1) 2 both}
+.play .ty{animation:mxType 1.8s steps(24) both}
+.play .im{animation:mxImg 900ms cubic-bezier(.16,1,.3,1) both}
+.play .cu{animation:mxCurtain 800ms cubic-bezier(.65,0,.35,1) 150ms both}
+.play .kb{animation:mxKen 4s cubic-bezier(.2,.7,.3,1) both}
+.play .pp{animation:mxScrollY 2.4s ease-in-out both}
+.play .pi{animation:mxParaImg 2.4s ease-in-out both}
+.cnt{--num:15;counter-reset:n var(--num);font-variant-numeric:tabular-nums}
+.cnt::after{content:counter(n)}
+.play .cnt{animation:mxCount 1200ms cubic-bezier(.2,.7,.3,1) both}
+.play .br{animation:mxDrawX 800ms cubic-bezier(.2,.7,.3,1) both}
+.play .rg{animation:mxRing 1200ms cubic-bezier(.2,.7,.3,1) both}
+.play .sr,.play .sc,.play .pf{animation:mxPop 450ms cubic-bezier(.34,1.56,.64,1) both}
+.play .lx{animation:mxDrawX 700ms linear both}
+.play .ly{animation:mxDrawY 800ms linear both}
+.play .ti{animation:mxLeft 450ms cubic-bezier(.2,.7,.3,1) both}
+.play .pl,.play .lg{animation:mxUp 450ms cubic-bezier(.2,.7,.3,1) both}
+.play .nd{animation:mxNudge 700ms cubic-bezier(.34,1.56,.64,1) 300ms both}
+.play .ar{animation:mxArrow 1.1s ease-in-out 300ms both}
+.play .pg{animation:mxDrawX 2.4s linear both}
+.play .pgp{animation:mxScrollY 2.4s linear both}
+.play .mq{animation:mxMarquee 5s linear 2}
+.play .pu{animation:mxPulse 900ms ease-in-out 4}
+@media (prefers-reduced-motion: reduce){.play *{animation:none!important}}
+</style>
+</helmet>
+<div style="min-height: 3040px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <main style="box-sizing: border-box; width: 100%; max-width: 1440px; margin: 0 auto; padding: 32px 24px 40px; display: flex; flex-direction: column; gap: 22px">
+
+    <header style="display: flex; flex-direction: column; gap: 8px; max-width: 820px">
+      <span style="font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em">CHUYỂN ĐỘNG · THƯ VIỆN ĐỀ XUẤT</span>
+      <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Bộ hiệu ứng mở rộng</h1>
+      <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">{{ total }} hiệu ứng, mỗi cái có bản chạy thử. Hiệu ứng “Đề xuất thêm” có thể vào phong cách (màn 37–39) hoặc thành điểm nhấn của section. Chọn những cái muốn giữ, phần còn lại để sau.</p>
+    </header>
+
+    <section aria-label="Nguyên tắc chung" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px">
+      <sc-for list="{{ rules }}" as="r" hint-placeholder-count="5">
+        <div style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0B6B45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 13px; font-weight: 600">{{ r.title }}</span>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">{{ r.text }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </section>
+
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+        <div role="group" aria-label="Lọc theo nhóm" style="display: flex; flex-wrap: wrap; gap: 6px">
+          <sc-for list="{{ cats }}" as="c" hint-placeholder-count="6">
+            <button type="button" aria-pressed="{{ c.pressed }}" onClick="{{ c.pick }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: {{ c.border }}; border-radius: 999px; background: {{ c.bg }}; color: {{ c.fg }}; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">{{ c.name }}<span style="font-size: 11px; font-weight: 600; color: {{ c.countFg }}">{{ c.count }}</span></button>
+          </sc-for>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3C424E; cursor: pointer"><input type="checkbox" checked="{{ sim }}" onChange="{{ toggleSim }}" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Như thiết bị bật giảm chuyển động</label>
+          <button type="button" onClick="{{ playAll }}" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: #4338CA; color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+            Chạy tất cả đang hiện
+          </button>
+        </div>
+      </div>
+      <div role="group" aria-label="Lọc theo trạng thái" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+        <span style="font-size: 12px; font-weight: 600; color: #5E6573; margin-right: 4px">Trạng thái</span>
+        <sc-for list="{{ statuses }}" as="st" hint-placeholder-count="5">
+          <button type="button" aria-pressed="{{ st.pressed }}" onClick="{{ st.pick }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: {{ st.border }}; border-radius: 8px; background: {{ st.bg }}; color: {{ st.fg }}; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: {{ st.dot }}"></span>{{ st.name }} · {{ st.count }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+      <section style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em">{{ g.name }}</h2>
+          <span style="font-size: 13px; color: #5E6573">{{ g.desc }}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px">
+          <sc-for list="{{ g.items }}" as="fx" hint-placeholder-count="5">
+            <article style="display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+              <div class="{{ fx.boxCls }}" aria-hidden="true" style="position: relative; height: 120px; border-radius: 10px; background: #F4FAF8; overflow: hidden; display: flex; align-items: center; justify-content: center; color: #0B2E2A">
+
+                <sc-if value="{{ fx.is.cards }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; gap: 10px">
+                    <span class="el" style="width: 54px; height: 66px; border-radius: 8px; overflow: hidden"><span class="in" style="display: flex; flex-direction: column; gap: 5px; height: 100%; box-sizing: border-box; padding: 10px 8px; background: #FFFFFF; border: 1px solid #CFE3DE; border-radius: 8px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #0F5E55"></span><span style="height: 4px; background: #9CCFC5; border-radius: 2px"></span><span style="height: 4px; width: 60%; background: #D6EAE5; border-radius: 2px"></span></span></span>
+                    <span class="el" style="width: 54px; height: 66px; border-radius: 8px; overflow: hidden; animation-delay: 90ms"><span class="in" style="display: flex; flex-direction: column; gap: 5px; height: 100%; box-sizing: border-box; padding: 10px 8px; background: #FFFFFF; border: 1px solid #CFE3DE; border-radius: 8px; animation-delay: 90ms"><span style="width: 16px; height: 16px; border-radius: 999px; background: #0F5E55"></span><span style="height: 4px; background: #9CCFC5; border-radius: 2px"></span><span style="height: 4px; width: 60%; background: #D6EAE5; border-radius: 2px"></span></span></span>
+                    <span class="el" style="width: 54px; height: 66px; border-radius: 8px; overflow: hidden; animation-delay: 180ms"><span class="in" style="display: flex; flex-direction: column; gap: 5px; height: 100%; box-sizing: border-box; padding: 10px 8px; background: #FFFFFF; border: 1px solid #CFE3DE; border-radius: 8px; animation-delay: 180ms"><span style="width: 16px; height: 16px; border-radius: 999px; background: #0F5E55"></span><span style="height: 4px; background: #9CCFC5; border-radius: 2px"></span><span style="height: 4px; width: 60%; background: #D6EAE5; border-radius: 2px"></span></span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.grid }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: grid; grid-template-columns: repeat(3, 24px); gap: 6px">
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #0F5E55"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #2D7D72; animation-delay: 90ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #4E9A8F; animation-delay: 180ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #2D7D72; animation-delay: 90ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #4E9A8F; animation-delay: 180ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #7DB8AE; animation-delay: 270ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #4E9A8F; animation-delay: 180ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #7DB8AE; animation-delay: 270ms"></span>
+                    <span class="sq" style="height: 24px; border-radius: 5px; background: #9CCFC5; animation-delay: 360ms"></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.lines }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size: 17px; line-height: 1.3; font-weight: 700; text-align: center">
+                    <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="ln" style="display: block">Nụ cười tự tin</span></span>
+                    <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="ln" style="display: block; animation-delay: 110ms">bắt đầu từ hôm nay</span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.words }}" hint-placeholder-val="{{ false }}">
+                  <div style="max-width: 200px; font-size: 17px; line-height: 1.35; font-weight: 700; text-align: center">
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block">Nụ</span></span>
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block; animation-delay: 70ms">cười</span></span>
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block; animation-delay: 140ms">tự</span></span>
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block; animation-delay: 210ms">tin</span></span>
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block; animation-delay: 280ms">từ</span></span>
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block; animation-delay: 350ms">hôm</span></span>
+                    <span style="display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: 2px"><span class="wi" style="display: inline-block; animation-delay: 420ms">nay</span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.underline }}" hint-placeholder-val="{{ false }}">
+                  <div style="max-width: 210px; font-size: 17px; line-height: 1.45; font-weight: 700; text-align: center">Tư vấn <span style="position: relative; white-space: nowrap; color: #0F5E55">miễn phí<span class="ul" style="position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; border-radius: 2px; background: #F2A33A; transform-origin: left center"></span></span> cùng bác sĩ</div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.marker }}" hint-placeholder-val="{{ false }}">
+                  <div style="max-width: 210px; font-size: 17px; line-height: 1.45; font-weight: 700; text-align: center">Ưu đãi <span style="position: relative; z-index: 0; white-space: nowrap">tháng 11<span class="mk" style="position: absolute; left: -3px; right: -3px; top: 18%; bottom: 4%; border-radius: 3px; background: #FFDCA0; z-index: -1; transform-origin: left center"></span></span> cho khách mới</div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.rotate }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size: 17px; font-weight: 700; text-align: center">Niềng răng <span style="display: inline-block; height: 1.35em; overflow: hidden; vertical-align: bottom; color: #0F5E55"><span class="rl" style="display: flex; flex-direction: column; line-height: 1.35em"><span>an toàn</span><span>nhanh gọn</span><span>kín đáo</span><span>an toàn</span></span></span></div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.type }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: relative; overflow: hidden; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; font-weight: 500">Đặt lịch chỉ vài bước<span class="ty" style="position: absolute; inset: 0; background: #F4FAF8; transform: translateX(100%)"></span></div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.image }}" hint-placeholder-val="{{ false }}">
+                  <div style="width: 160px; height: 96px; border-radius: 10px; overflow: hidden"><div class="im" style="width: 100%; height: 100%; background: #CFE9E3; display: flex; align-items: center; justify-content: center; color: #2D6E64"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg></div></div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.curtain }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: relative; width: 160px; height: 96px; border-radius: 10px; overflow: hidden"><div style="width: 100%; height: 100%; background: #CFE9E3; display: flex; align-items: center; justify-content: center; color: #2D6E64"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg></div><span class="cu" style="position: absolute; inset: 0; background: #0F5E55; transform: translateX(101%)"></span></div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.kenburns }}" hint-placeholder-val="{{ false }}">
+                  <div style="width: 160px; height: 96px; border-radius: 10px; overflow: hidden"><div class="kb" style="width: 100%; height: 100%; background: radial-gradient(circle at 30% 40%, #9CCFC5 0 18%, transparent 19%), radial-gradient(circle at 70% 65%, #7DB8AE 0 14%, transparent 15%), #CFE9E3"></div></div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.parallax }}" hint-placeholder-val="{{ false }}">
+                  <div style="width: 170px; height: 104px; border-radius: 10px; overflow: hidden; background: #FFFFFF; border: 1px solid #CFE3DE">
+                    <div class="pp" style="display: flex; flex-direction: column; gap: 8px; padding: 8px">
+                      <div style="height: 62px; border-radius: 6px; overflow: hidden"><div class="pi" style="height: 96px; margin-top: -24px; background: repeating-linear-gradient(135deg, #CFE9E3 0 10px, #B6DCD3 10px 20px)"></div></div>
+                      <span style="height: 5px; width: 80%; background: #0F5E55; border-radius: 2px"></span>
+                      <span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 4px; width: 70%; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.count }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+                    <span style="font-size: 40px; line-height: 1; font-weight: 700; color: #0F5E55"><span class="cnt"></span></span>
+                    <span style="font-size: 12px; color: #2D4A46">năm kinh nghiệm</span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.bar }}" hint-placeholder-val="{{ false }}">
+                  <div style="width: 180px; display: flex; flex-direction: column; gap: 9px; font-size: 11px; color: #2D4A46">
+                    <span style="display: flex; flex-direction: column; gap: 3px">Tư vấn<span style="height: 7px; border-radius: 999px; background: #D6EAE5; overflow: hidden"><span class="br" style="display: block; height: 100%; width: 90%; border-radius: 999px; background: #0F5E55; transform-origin: left center"></span></span></span>
+                    <span style="display: flex; flex-direction: column; gap: 3px">Kế hoạch<span style="height: 7px; border-radius: 999px; background: #D6EAE5; overflow: hidden"><span class="br" style="display: block; height: 100%; width: 72%; border-radius: 999px; background: #0F5E55; transform-origin: left center; animation-delay: 120ms"></span></span></span>
+                    <span style="display: flex; flex-direction: column; gap: 3px">Theo dõi<span style="height: 7px; border-radius: 999px; background: #D6EAE5; overflow: hidden"><span class="br" style="display: block; height: 100%; width: 56%; border-radius: 999px; background: #0F5E55; transform-origin: left center; animation-delay: 240ms"></span></span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.ring }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 12px">
+                    <svg width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="28" fill="none" stroke="#D6EAE5" stroke-width="7"></circle><circle class="rg" cx="36" cy="36" r="28" fill="none" stroke="#0F5E55" stroke-width="7" stroke-linecap="round" stroke-dasharray="175.9" stroke-dashoffset="44" transform="rotate(-90 36 36)"></circle></svg>
+                    <span style="display: flex; flex-direction: column"><span style="font-size: 22px; font-weight: 700">75%</span><span style="font-size: 11px; color: #2D4A46">số ví dụ</span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.stars }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+                    <span style="display: flex; gap: 4px">
+                      <svg class="sr" width="24" height="24" viewBox="0 0 24 24" fill="#F2A33A"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"></path></svg>
+                      <svg class="sr" width="24" height="24" viewBox="0 0 24 24" fill="#F2A33A" style="animation-delay: 80ms"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"></path></svg>
+                      <svg class="sr" width="24" height="24" viewBox="0 0 24 24" fill="#F2A33A" style="animation-delay: 160ms"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"></path></svg>
+                      <svg class="sr" width="24" height="24" viewBox="0 0 24 24" fill="#F2A33A" style="animation-delay: 240ms"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"></path></svg>
+                      <svg class="sr" width="24" height="24" viewBox="0 0 24 24" fill="#F2A33A" style="animation-delay: 320ms"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"></path></svg>
+                    </span>
+                    <span style="font-size: 12px; color: #2D4A46">“Bác sĩ rất tận tâm”</span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.steps }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: relative; width: 190px; display: flex; justify-content: space-between">
+                    <span class="lx" style="position: absolute; top: 13px; left: 14px; right: 14px; height: 2px; background: #9CCFC5; transform-origin: left center"></span>
+                    <span class="sc" style="position: relative; width: 28px; height: 28px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span>
+                    <span class="sc" style="position: relative; width: 28px; height: 28px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; animation-delay: 300ms">2</span>
+                    <span class="sc" style="position: relative; width: 28px; height: 28px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; animation-delay: 600ms">3</span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.timeline }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: relative; width: 170px; display: flex; flex-direction: column; gap: 12px; padding-left: 22px">
+                    <span class="ly" style="position: absolute; left: 6px; top: 4px; bottom: 4px; width: 2px; background: #9CCFC5; transform-origin: center top"></span>
+                    <span class="ti" style="position: relative; display: flex; flex-direction: column; gap: 3px; animation-delay: 100ms"><span style="position: absolute; left: -20px; top: 1px; width: 10px; height: 10px; border-radius: 999px; background: #0F5E55"></span><span style="height: 5px; width: 60%; background: #0F5E55; border-radius: 2px"></span><span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span></span>
+                    <span class="ti" style="position: relative; display: flex; flex-direction: column; gap: 3px; animation-delay: 350ms"><span style="position: absolute; left: -20px; top: 1px; width: 10px; height: 10px; border-radius: 999px; background: #0F5E55"></span><span style="height: 5px; width: 50%; background: #0F5E55; border-radius: 2px"></span><span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span></span>
+                    <span class="ti" style="position: relative; display: flex; flex-direction: column; gap: 3px; animation-delay: 600ms"><span style="position: absolute; left: -20px; top: 1px; width: 10px; height: 10px; border-radius: 999px; background: #0F5E55"></span><span style="height: 5px; width: 70%; background: #0F5E55; border-radius: 2px"></span><span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.featured }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span class="pl" style="width: 50px; height: 72px; box-sizing: border-box; padding: 8px 6px; border-radius: 8px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; flex-direction: column; gap: 5px"><span style="height: 4px; width: 60%; background: #9CCFC5; border-radius: 2px"></span><span style="height: 7px; width: 80%; background: #0F5E55; border-radius: 2px"></span><span style="height: 3px; background: #D6EAE5; border-radius: 2px"></span><span style="height: 3px; background: #D6EAE5; border-radius: 2px"></span></span>
+                    <span class="pf" style="width: 58px; height: 88px; box-sizing: border-box; padding: 9px 7px; border-radius: 9px; background: #0F5E55; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 6px 14px rgba(15,94,85,0.3); animation-delay: 380ms"><span style="height: 4px; width: 60%; background: #9CCFC5; border-radius: 2px"></span><span style="height: 8px; width: 80%; background: #FFFFFF; border-radius: 2px"></span><span style="height: 3px; background: #2D7D72; border-radius: 2px"></span><span style="height: 3px; background: #2D7D72; border-radius: 2px"></span><span style="margin-top: auto; height: 10px; border-radius: 999px; background: #F2A33A"></span></span>
+                    <span class="pl" style="width: 50px; height: 72px; box-sizing: border-box; padding: 8px 6px; border-radius: 8px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; flex-direction: column; gap: 5px; animation-delay: 80ms"><span style="height: 4px; width: 60%; background: #9CCFC5; border-radius: 2px"></span><span style="height: 7px; width: 80%; background: #0F5E55; border-radius: 2px"></span><span style="height: 3px; background: #D6EAE5; border-radius: 2px"></span><span style="height: 3px; background: #D6EAE5; border-radius: 2px"></span></span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.logos }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: grid; grid-template-columns: repeat(3, 56px); gap: 8px">
+                    <span class="lg" style="height: 26px; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em">LOGO</span>
+                    <span class="lg" style="height: 26px; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em; animation-delay: 80ms">LOGO</span>
+                    <span class="lg" style="height: 26px; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em; animation-delay: 160ms">LOGO</span>
+                    <span class="lg" style="height: 26px; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em; animation-delay: 240ms">LOGO</span>
+                    <span class="lg" style="height: 26px; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em; animation-delay: 320ms">LOGO</span>
+                    <span class="lg" style="height: 26px; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em; animation-delay: 400ms">LOGO</span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.nudge }}" hint-placeholder-val="{{ false }}">
+                  <span class="nd" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 18px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 14px; font-weight: 600">Đặt lịch tư vấn</span>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.arrow }}" hint-placeholder-val="{{ false }}">
+                  <span style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1.5px solid #0F5E55; color: #0F5E55; font-size: 14px; font-weight: 600">Xem bảng giá<svg class="ar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></span>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.progress }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: relative; width: 170px; height: 104px; border-radius: 10px; overflow: hidden; background: #FFFFFF; border: 1px solid #CFE3DE">
+                    <span style="position: absolute; z-index: 1; top: 0; left: 0; right: 0; height: 3px; background: #E4EFEC"><span class="pg" style="display: block; height: 100%; background: #F2A33A; transform-origin: left center; transform: scaleX(0.35)"></span></span>
+                    <div class="pgp" style="display: flex; flex-direction: column; gap: 7px; padding: 12px 10px">
+                      <span style="height: 6px; width: 70%; background: #0F5E55; border-radius: 2px"></span>
+                      <span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 4px; width: 85%; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 30px; background: #CFE9E3; border-radius: 4px"></span>
+                      <span style="height: 4px; width: 80%; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span>
+                      <span style="height: 4px; width: 60%; background: #D6EAE5; border-radius: 2px"></span>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.marquee }}" hint-placeholder-val="{{ false }}">
+                  <div style="width: 100%; overflow: hidden">
+                    <div class="mq" style="display: flex; gap: 8px; width: max-content">
+                      <sc-for list="{{ marqueeItems }}" as="mi" hint-placeholder-count="10">
+                        <span style="width: 56px; height: 26px; flex: none; border-radius: 6px; background: #FFFFFF; border: 1px solid #CFE3DE; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #5E6573; letter-spacing: 0.08em">{{ mi.t }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ fx.is.pulse }}" hint-placeholder-val="{{ false }}">
+                  <span class="pu" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 18px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 14px; font-weight: 600">Đặt lịch ngay</span>
+                </sc-if>
+
+                <sc-if value="{{ fx.simChip }}" hint-placeholder-val="{{ false }}">
+                  <span style="position: absolute; left: 8px; bottom: 8px; right: 8px; padding: 3px 8px; border-radius: 6px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600; text-align: center">Giảm chuyển động: {{ fx.rm }}</span>
+                </sc-if>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 5px; padding: 0 4px 4px">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+                  <h3 style="margin: 0; font-size: 14px; font-weight: 600">{{ fx.name }}</h3>
+                  <button type="button" onClick="{{ fx.replay }}" aria-label="Xem lại {{ fx.name }}" title="Xem lại" style="width: 36px; height: 36px; flex: none; border: 1px solid #E2E5EA; border-radius: 8px; background: #FFFFFF; color: #3730A3; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg></button>
+                </div>
+                <span style="align-self: flex-start; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: {{ fx.stBg }}; color: {{ fx.stFg }}">{{ fx.stText }}</span>
+                <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #3C424E">{{ fx.desc }}</p>
+                <span style="font-size: 11px; line-height: 1.45; color: #5E6573">Dùng cho: {{ fx.use }}</span>
+                <span style="font-size: 11px; line-height: 1.45; color: #5E6573">{{ fx.tech }} · Giảm chuyển động: {{ fx.rm }}</span>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+      <div style="padding: 32px; border-radius: 14px; background: #FFFFFF; border: 1px dashed #CDD2DA; text-align: center; font-size: 14px; color: #5E6573">Không có hiệu ứng nào khớp bộ lọc.</div>
+    </sc-if>
+
+    <a href="MotionPage.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; font-size: 14px; font-weight: 600; text-decoration: none">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+      Về Cài đặt trang → Phong cách chuyển động
+    </a>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3040}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cat: 'all', status: 'all', run: {}, sim: false };
+    this.timer = null;
+  }
+  componentWillUnmount() {
+    clearTimeout(this.timer);
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var T = 'transform · opacity';
+    var EFFECTS = [
+      { id: 'fade', g: 'enter', st: 'has', kind: 'cards', mod: 'fade', name: 'Hiện dần', desc: 'Rõ dần tại chỗ, không dịch chuyển.', use: 'mọi section', tech: 'opacity', rm: 'hiện ngay' },
+      { id: 'up', g: 'enter', st: 'has', kind: 'cards', mod: 'up', name: 'Trượt lên', desc: 'Rõ dần và trượt lên 8–16 px.', use: 'mọi section', tech: T, rm: 'hiện ngay' },
+      { id: 'side', g: 'enter', st: 'has', kind: 'cards', mod: 'side', name: 'Trượt từ bên', desc: 'Chữ vào từ trái, ảnh vào từ phải theo bố cục.', use: 'section chữ + ảnh', tech: T, rm: 'hiện ngay' },
+      { id: 'zoom', g: 'enter', st: 'has', kind: 'cards', mod: 'zoom', name: 'Phóng nhẹ', desc: 'Rõ dần và lớn lên rất nhẹ.', use: 'thẻ, ảnh', tech: T, rm: 'hiện ngay' },
+      { id: 'pop', g: 'enter', st: 'has', kind: 'cards', mod: 'pop', name: 'Bật lên', desc: 'Bật lên với độ nảy nhẹ.', use: 'thẻ, biểu tượng', tech: T, rm: 'hiện ngay' },
+      { id: 'reveal', g: 'enter', st: 'has', kind: 'cards', mod: 'reveal', name: 'Hé lộ', desc: 'Trồi lên chậm rãi, đuôi chuyển động dài.', use: 'trang phong cách sang trọng', tech: T, rm: 'hiện ngay' },
+      { id: 'settle', g: 'enter', st: 'new', kind: 'cards', mod: 'settle', name: 'Hạ xuống', desc: 'Từ hơi to thu về đúng cỡ, như đặt xuống mặt bàn.', use: 'ảnh lớn, thẻ sản phẩm', tech: T, rm: 'hiện ngay' },
+      { id: 'flip', g: 'enter', st: 'new', kind: 'cards', mod: 'flip', name: 'Lật nhẹ', desc: 'Lật quanh trục ngang như mở một trang sách.', use: 'thẻ, bảng giá', tech: 'transform 3D · opacity', rm: 'hiện ngay' },
+      { id: 'tilt', g: 'enter', st: 'new', kind: 'cards', mod: 'tilt', name: 'Xoay nhẹ', desc: 'Trượt lên kèm nghiêng 4° rồi thẳng lại, vui mắt.', use: 'thẻ, ảnh sản phẩm', tech: T, rm: 'hiện ngay' },
+      { id: 'mask', g: 'enter', st: 'new', kind: 'cards', mod: 'mask', name: 'Trồi khỏi mép che', desc: 'Nội dung trồi lên từ một mép che vô hình, gọn và sắc.', use: 'khối chữ, thẻ', tech: 'transform trong khung che', rm: 'hiện ngay' },
+      { id: 'diagonal', g: 'enter', st: 'new', kind: 'grid', name: 'Lưới theo đường chéo', desc: 'Thứ tự mới: ô lưới hiện lan từ góc trên bên trái.', use: 'thư viện ảnh, logo, lưới thẻ', tech: T, rm: 'hiện ngay' },
+
+      { id: 'lines', g: 'text', st: 'has', kind: 'lines', name: 'Tiêu đề từng dòng', desc: 'Mỗi dòng tiêu đề trồi lên nối nhau.', use: 'tiêu đề section', tech: 'transform trong khung che', rm: 'hiện ngay' },
+      { id: 'words', g: 'text', st: 'new', kind: 'words', name: 'Từng chữ', desc: 'Từng chữ trong tiêu đề trồi lên nối tiếp.', use: 'tiêu đề ngắn, tối đa 8 chữ', tech: 'transform trong khung che', rm: 'hiện ngay' },
+      { id: 'underline', g: 'text', st: 'new', kind: 'underline', name: 'Gạch chân vẽ dần', desc: 'Một nét gạch vẽ dưới cụm từ quan trọng.', use: 'tiêu đề có cụm từ nhấn mạnh', tech: 'transform (scaleX)', rm: 'gạch chân có sẵn' },
+      { id: 'marker', g: 'text', st: 'new', kind: 'marker', name: 'Tô nổi bật từ khóa', desc: 'Nền bút dạ quang quét qua từ khóa.', use: 'ưu đãi, mốc thời gian trong câu', tech: 'transform (scaleX)', rm: 'nền tô có sẵn' },
+      { id: 'rotate', g: 'text', st: 'later', kind: 'rotate', name: 'Chữ đổi luân phiên', desc: 'Một từ trong tiêu đề đổi qua vài lựa chọn.', use: 'tiêu đề section (không dùng ở đầu trang)', tech: 'Lặp · cần nút dừng, tự dừng sau 5 giây', rm: 'chỉ hiện từ đầu tiên' },
+      { id: 'type', g: 'text', st: 'no', kind: 'type', name: 'Gõ chữ', desc: 'Chữ hiện từng ký tự như đang gõ.', use: 'không khuyên dùng', tech: 'Chậm đọc; trình đọc màn hình có thể đọc dở', rm: 'hiện ngay' },
+
+      { id: 'image', g: 'media', st: 'has', kind: 'image', name: 'Ảnh hé lộ', desc: 'Ảnh rõ dần và thu nhẹ vào khung.', use: 'ảnh trong section', tech: T, rm: 'hiện ngay' },
+      { id: 'curtain', g: 'media', st: 'new', kind: 'curtain', name: 'Màn che trượt', desc: 'Một tấm màu thương hiệu trượt đi để lộ ảnh.', use: 'ảnh lớn, ảnh trước – sau', tech: 'transform (translateX)', rm: 'không có màn che' },
+      { id: 'kenburns', g: 'media', st: 'new', kind: 'kenburns', name: 'Phóng chậm một lần', desc: 'Ảnh phóng rất chậm trong 4 giây sau khi hiện, rồi đứng yên.', use: 'ảnh nền, ảnh lớn', tech: 'transform (scale) · một lần', rm: 'đứng yên' },
+      { id: 'parallax', g: 'media', st: 'later', kind: 'parallax', name: 'Ảnh trôi khi cuộn', desc: 'Ảnh trôi chậm hơn nội dung, tạo chiều sâu.', use: 'ảnh nền', tech: 'Gắn với cuộn · dễ gây chóng mặt', rm: 'đứng yên' },
+
+      { id: 'count', g: 'data', st: 'has', kind: 'count', name: 'Số liệu đếm lên', desc: 'Con số chạy tới giá trị thật một lần.', use: 'số liệu nổi bật', tech: 'Giá trị thật có sẵn trong HTML', rm: 'hiện giá trị thật' },
+      { id: 'bar', g: 'data', st: 'new', kind: 'bar', name: 'Thanh tiến độ', desc: 'Mỗi thanh chạy tới tỷ lệ của nó, lần lượt.', use: 'tỷ lệ, so sánh, mức độ', tech: 'transform (scaleX)', rm: 'thanh đầy sẵn' },
+      { id: 'ring', g: 'data', st: 'new', kind: 'ring', name: 'Vòng tròn phần trăm', desc: 'Vòng tròn tự vẽ tới đúng phần trăm.', use: 'tỷ lệ hoàn thành, hài lòng', tech: 'SVG stroke · nhẹ', rm: 'vòng vẽ sẵn' },
+      { id: 'stars', g: 'data', st: 'new', kind: 'stars', name: 'Sao lần lượt', desc: 'Năm ngôi sao bật lên lần lượt.', use: 'đánh giá, cảm nhận khách hàng', tech: T, rm: 'hiện ngay' },
+      { id: 'steps', g: 'data', st: 'has', kind: 'steps', name: 'Các bước nối nhau', desc: 'Đường nối vẽ dần, từng bước hiện theo.', use: 'quy trình', tech: T, rm: 'hiện ngay' },
+      { id: 'timeline', g: 'data', st: 'new', kind: 'timeline', name: 'Dòng thời gian vẽ dọc', desc: 'Đường dọc vẽ xuống, các mốc hiện theo.', use: 'lịch sử, lộ trình, liệu trình', tech: 'transform (scaleY)', rm: 'hiện ngay' },
+      { id: 'featured', g: 'data', st: 'new', kind: 'featured', name: 'Gói nổi bật vào sau', desc: 'Các gói hiện trước, gói nổi bật bật lên sau cùng.', use: 'bảng giá', tech: T, rm: 'hiện ngay' },
+      { id: 'logos', g: 'data', st: 'new', kind: 'logos', name: 'Logo hiện lần lượt', desc: 'Logo hiện lần lượt rồi đứng yên; thay cho dải chạy ngang.', use: 'đối tác, báo chí', tech: T, rm: 'hiện ngay' },
+
+      { id: 'nudge', g: 'cta', st: 'new', kind: 'nudge', name: 'Nút nhấn nhẹ một lần', desc: 'Nút phóng nhẹ một lần sau khi section hiện xong.', use: 'nút cuối section; không dùng cho nút đầu trang', tech: 'transform · một lần', rm: 'đứng yên' },
+      { id: 'arrow', g: 'cta', st: 'new', kind: 'arrow', name: 'Mũi tên gợi ý', desc: 'Mũi tên trong nút nhích về phía trước hai lần.', use: 'nút “Xem thêm”, “Xem bảng giá”', tech: 'transform · một lần', rm: 'đứng yên' },
+      { id: 'progress', g: 'cta', st: 'new', kind: 'progress', name: 'Thanh tiến độ đọc', desc: 'Thanh mảnh trên đầu trang chạy theo phần đã đọc.', use: 'trang dài, bài viết', tech: 'Gắn với cuộn · nhẹ', rm: 'vẫn hiện, không chuyển tiếp mượt' },
+      { id: 'marquee', g: 'cta', st: 'later', kind: 'marquee', name: 'Logo chạy ngang', desc: 'Dải logo chạy ngang liên tục.', use: 'đối tác', tech: 'Lặp, chữ chạy · cần nút dừng', rm: 'đứng yên dạng lưới' },
+      { id: 'pulse', g: 'cta', st: 'no', kind: 'pulse', name: 'Nút nhấp nháy liên tục', desc: 'Nút phóng to thu nhỏ không ngừng.', use: 'không khuyên dùng', tech: 'Gây phân tâm; vướng WCAG 2.2.2', rm: 'đứng yên' }
+    ];
+    var GROUPS = [
+      { k: 'enter', name: 'Xuất hiện', desc: 'Cách section hoặc từng phần đi vào khung nhìn. Chạy một lần.' },
+      { k: 'text', name: 'Chữ', desc: 'Điểm nhấn cho tiêu đề và cụm từ quan trọng.' },
+      { k: 'media', name: 'Ảnh', desc: 'Cho ảnh trong section; ảnh đầu trang luôn hiện ngay.' },
+      { k: 'data', name: 'Số liệu & danh sách', desc: 'Giúp nội dung có cấu trúc dễ theo dõi hơn.' },
+      { k: 'cta', name: 'Nút, cuộn trang & lặp', desc: 'Gợi ý hành động một lần; hiệu ứng lặp và gắn với cuộn cần cân nhắc.' }
+    ];
+    var STATUS = {
+      new: { name: 'Đề xuất thêm', bg: '#E3F5EC', fg: '#0B6B45', dot: '#12A06A' },
+      has: { name: 'Đã có ở màn 37–39', bg: '#E0E2FF', fg: '#26208A', dot: '#4338CA' },
+      later: { name: 'Để sau', bg: '#FFF1D6', fg: '#8A5300', dot: '#E39A12' },
+      no: { name: 'Không khuyên dùng', bg: '#FDEBE9', fg: '#B42318', dot: '#E5484D' }
+    };
+    var KINDS = ['cards', 'grid', 'lines', 'words', 'underline', 'marker', 'rotate', 'type', 'image', 'curtain', 'kenburns', 'parallax', 'count', 'bar', 'ring', 'stars', 'steps', 'timeline', 'featured', 'logos', 'nudge', 'arrow', 'progress', 'marquee', 'pulse'];
+
+    function replay(ids) {
+      clearTimeout(self.timer);
+      var off = Object.assign({}, self.state.run);
+      ids.forEach(function (id) { off[id] = false; });
+      self.setState({ run: off });
+      self.timer = setTimeout(function () {
+        var on = Object.assign({}, self.state.run);
+        ids.forEach(function (id) { on[id] = true; });
+        self.setState({ run: on });
+      }, 40);
+    }
+    function inStatus(e) { return s.status === 'all' || e.st === s.status; }
+    function inCat(e) { return s.cat === 'all' || e.g === s.cat; }
+
+    var visibleIds = [];
+    var groups = GROUPS.filter(function (g) { return s.cat === 'all' || s.cat === g.k; }).map(function (g) {
+      var items = EFFECTS.filter(function (e) { return e.g === g.k && inStatus(e); }).map(function (e) {
+        visibleIds.push(e.id);
+        var is = {};
+        KINDS.forEach(function (k) { is[k] = k === e.kind; });
+        var stt = STATUS[e.st];
+        return {
+          name: e.name,
+          desc: e.desc,
+          use: e.use,
+          tech: e.tech,
+          rm: e.rm,
+          stText: stt.name,
+          stBg: stt.bg,
+          stFg: stt.fg,
+          is: is,
+          boxCls: 'demo m-' + (e.mod || e.kind) + (s.run[e.id] && !s.sim ? ' play' : ''),
+          simChip: s.sim,
+          replay: function () { replay([e.id]); }
+        };
+      });
+      return { name: g.name, desc: g.desc, items: items };
+    }).filter(function (g) { return g.items.length > 0; });
+
+    var cats = [{ k: 'all', name: 'Tất cả' }].concat(GROUPS).map(function (c) {
+      var on = s.cat === c.k;
+      var count = EFFECTS.filter(function (e) { return (c.k === 'all' || e.g === c.k) && inStatus(e); }).length;
+      return {
+        name: c.name,
+        count: count,
+        pressed: on ? 'true' : 'false',
+        border: on ? '1.5px solid #4338CA' : '1px solid #E2E5EA',
+        bg: on ? '#EEF0FF' : '#FFFFFF',
+        fg: on ? '#3730A3' : '#15171C',
+        countFg: on ? '#3730A3' : '#5E6573',
+        pick: function () { self.setState({ cat: c.k }); }
+      };
+    });
+    var statuses = [{ k: 'all', name: 'Tất cả', dot: '#8A91A0' }].concat(['new', 'has', 'later', 'no'].map(function (k) { return { k: k, name: STATUS[k].name, dot: STATUS[k].dot }; })).map(function (x) {
+      var on = s.status === x.k;
+      return {
+        name: x.name,
+        dot: x.dot,
+        count: EFFECTS.filter(function (e) { return (x.k === 'all' || e.st === x.k) && inCat(e); }).length,
+        pressed: on ? 'true' : 'false',
+        border: on ? '1.5px solid #4338CA' : '1px solid #E2E5EA',
+        bg: on ? '#EEF0FF' : '#FFFFFF',
+        fg: on ? '#3730A3' : '#3C424E',
+        pick: function () { self.setState({ status: x.k }); }
+      };
+    });
+
+    var marqueeItems = [];
+    for (var i = 0; i < 10; i++) marqueeItems.push({ t: 'LOGO ' + ((i % 5) + 1) });
+
+    return {
+      total: EFFECTS.length,
+      rules: [
+        { title: 'Chạy một lần', text: 'Khi phần đó vào khung nhìn. Phần đầu trang luôn hiện ngay.' },
+        { title: 'Chỉ transform, opacity', text: 'Không đổi kích thước hay vị trí bố cục. Vòng tròn dùng nét SVG.' },
+        { title: 'Tôn trọng giảm chuyển động', text: 'Thiết bị bật giảm chuyển động thì hiện ngay trạng thái cuối.' },
+        { title: 'Nội dung luôn đủ', text: 'JavaScript lỗi vẫn đọc và bấm được; số liệu thật có sẵn trong HTML.' },
+        { title: 'Lặp phải dừng được', text: 'Hiệu ứng lặp cần nút dừng và tự dừng sau 5 giây (WCAG 2.2.2).' }
+      ],
+      cats: cats,
+      statuses: statuses,
+      groups: groups,
+      empty: groups.length === 0,
+      marqueeItems: marqueeItems,
+      sim: s.sim,
+      toggleSim: function () { self.setState({ sim: !self.state.sim }); },
+      playAll: function () { replay(visibleIds); }
+    };
+  }
+}
+</script>
+</body>
+</html>

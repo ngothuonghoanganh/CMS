@@ -54,6 +54,14 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Tạo trang bằng AI từ brief, và trợ lý AI viết lại chữ trong editor. AI chạy qua một cổng có adapter; bản đầu nối AI local qua API tương thích OpenAI, có hạn mức lượt mỗi tháng (ADR-031).
 - Tương ứng màn 17–21 và mục Templates của Sidebar v2. Lát và trạng thái ở §5.
 
+**Chuyển động, đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-04, theo board 37–40 của artifact thiết kế). Cấu hình nằm trong bản nháp và đi theo release (ADR-032):
+
+- 6 phong cách chuyển động của trang, mức độ, điểm nhấn, giảm chuyển động trên điện thoại.
+- Ghi đè hiệu ứng xuất hiện từng section, thư viện so sánh phong cách, chạy thử trong editor.
+- Section Số liệu nổi bật cho điểm nhấn "Số liệu đếm lên".
+- AI tạo trang đề xuất phong cách; người dùng đổi được (ADR-031).
+- Tương ứng màn 37–39; màn 40 là danh mục tham chiếu, bản đầu giữ 10 hiệu ứng. Lát và trạng thái ở §5.
+
 **Ngoài phạm vi MVP B, Phase 1 và Phase 2:**
 
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
@@ -93,7 +101,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 6. **Preview:** link có chữ ký, có hạn, `noindex`, có banner "Bản xem trước".
 7. **SEO thuộc draft.** Đổi slug của trang đang live thì khi publish tạo redirect từ slug cũ. Sinh sitemap và robots.
 8. **Editor:**
-   - Không free styling: chỉ variant, color scheme đã qua kiểm tra tương phản AA, và spacing preset.
+   - Không free styling: chỉ variant, color scheme đã qua kiểm tra tương phản AA, spacing preset và preset chuyển động (ADR-032).
    - Có undo/redo và cảnh báo khi rời trang còn thay đổi chưa lưu.
    - Sắp xếp bằng kéo thả, nút lên/xuống và phím tắt (WCAG 2.5.7).
    - Nội dung giống nhau trên mọi thiết bị; chỉ ẩn/hiện và thứ tự trên mobile được tùy chỉnh.
@@ -488,6 +496,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Sửa 2026-11-02 (review giao diện):** variant đặt được tên riêng cho mục danh sách (`SectionVariant.listLabels`): "Quy trình 3 bước" gọi mục là "Bước" ở panel, kiểm tra hợp lệ, kiểm tra xuất bản và tóm tắt ("3 bước"). Danh sách bước giữ `role="list"` và một "Bước N:" ẩn cho trình đọc màn hình. Ảnh bắt buộc chưa chọn có nhắc "Cần chọn ảnh trước khi xuất bản." ngay trong panel; logo thiếu tên báo "chưa có tên đối tác". Variant bị chặn vì số mục có kiểu vô hiệu và lý do ở tooltip.
   - **Sửa 2026-11-02:** `hasMedia` nghĩa là ảnh nằm cạnh chữ và đổi chỗ trên điện thoại. Hero "Ảnh nền" có `hasMedia: false`, nên không còn tùy chọn thứ tự trên điện thoại vốn không có tác dụng. `renderSectionContent` trả `ReactElement | null`, nên thiếu một loại section là lỗi biên dịch.
   - **Sửa 2026-11-02 (review giao diện vòng 2):** thông báo thêm section nói cả loại section và thẻ đã chọn: "Đã thêm Cảm nhận khách hàng “Trích dẫn nổi bật” ở vị trí 3.". Thẻ trùng tên với loại thì chỉ nói một lần.
+
+- **Amended 2026-11-04 (ADR-032, chuyển động):**
+  - `Composition` có thêm `motion` (phong cách chuyển động của trang, default "Không hiệu ứng"), và `SectionInstance` có thêm `motion?` (ghi đè của section). Thêm field có default nên `version` vẫn là 1 và release cũ render như trước.
+  - `parseComposition` giữ hai field này, bỏ ghi đè rỗng. `SectionVariant` có thêm năng lực chuyển động (`motion: { grid?, accents? }`).
+  - Section thứ 12 là Số liệu nổi bật (`stats`, variant `row`): tiêu đề không bắt buộc, 2–4 ô { con số, nhãn }. Con số do doanh nghiệp nhập; AI không viết nó (ADR-031).
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -2206,6 +2219,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Commit không rõ kết quả:** ảnh vừa chép chỉ bị xóa khi transaction lỗi trước commit.
     - Lỗi mang nhãn `UnknownTransactionCommitResult` (driver thôi thử lại commit) có thể đã ghi trang, bản nháp, asset hay phiên bản trỏ tới các ảnh đó, nên ảnh được giữ (`commitMayHaveApplied`, `shared/persistence/transaction.ts`).
     - Commit đó không ghi thì ảnh là file công khai không ai trỏ tới, như ảnh tải lên bị từ chối (ADR-027).
+- **Amended 2026-11-04 (ADR-032, chuyển động):**
+  - Mỗi mẫu hệ thống có một phong cách chuyển động theo ngành, ghi vào `composition.motion` của trang tạo từ mẫu; nội dung đổi nên `version` của mẫu tăng.
+  - Template của workspace mang `motion` trong composition của phiên bản. Áp mẫu vào bản nháp thay cả `motion`, cùng một bước hoàn tác.
+  - Editor nhắc phong cách mẫu đã chọn sẵn ("Template đã dùng chọn sẵn phong cách …") cho trang tạo từ mẫu hệ thống, với nút tắt toàn bộ và dùng lại.
 
 ### ADR-031 — AI: cổng adapter, tạo trang từ brief, trợ lý trong editor
 
@@ -2386,6 +2403,94 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Client đi trước đó, kể cả lúc API đang đọc mức dùng cho kết quả, thì lượt được trả, một lần, và log ghi "AI suggestion not delivered".
     - Lỗi khi dựng kết quả cũng trả lượt.
   - **`AI_CONCURRENCY`** (1 đến 8, mặc định 3): số section job tạo trang và trợ lý viết cùng lúc, và số section một vòng của ngân sách chạy. Ollama local trả lời từng yêu cầu một nếu không đặt `OLLAMA_NUM_PARALLEL`, nên đặt `AI_CONCURRENCY=1` ở đó.
+- **Amended 2026-11-04 (ADR-032, chuyển động):**
+  - **Bước cấu trúc** có thêm khối "Chuyển động": mặc định "AI chọn", kèm phong cách dự kiến từ bảng ngành (ngành đoán theo từ khóa của brief) hoặc giọng văn (Chuyên nghiệp → Tinh tế, Năng động → Năng động, Thân thiện → Mượt mà; không có gì → Mượt mà). Người dùng chọn được một trong 6 phong cách. Bước này vẫn không gọi AI và không tốn lượt.
+  - **Job:** khi người dùng để "AI chọn", runner gọi AI thêm một lần sau khi viết các section, trước khi tạo bản nháp. Kết quả là phong cách cùng tối đa 3 ghi đè section, theo JSON Schema có `enum`.
+    - Kết quả được làm sạch bằng `resolveSectionMotion`: bỏ section bị khóa, điểm nhấn section không có, "Theo hàng" ở section không phải lưới.
+    - Lỗi, quá hạn hay kết quả sai thì dùng phong cách dự kiến; job không thất bại vì bước này, không thử lại, không tốn thêm lượt.
+    - Người dùng đã chọn phong cách thì không gọi AI cho chuyển động và không có ghi đè section.
+    - Dữ liệu gửi đi là brief và danh sách loại, variant của section, không thêm gì.
+  - "Thử lại N section" không chọn lại chuyển động. Trợ lý trong editor không đổi chuyển động.
+
+### ADR-032 — Chuyển động: phong cách trang, hiệu ứng xuất hiện của section
+
+- **Date:** 2026-11-04 · **Status:** Accepted
+- **Context:**
+  - Board 37–40 và ghi chú `motion`, `motionDecisions` của artifact thiết kế (nhập từ phiên bản `1793733435-70e7`).
+  - Chủ sản phẩm quyết định ngày 2026-11-04:
+    - bản đầu chỉ có 10 hiệu ứng "đã có" của màn 40: 6 cách xuất hiện và 4 điểm nhấn. 24 hiệu ứng còn lại để sau;
+    - làm màn 37, 38 và 39;
+    - thêm section Số liệu nổi bật để điểm nhấn "Số liệu đếm lên" có chỗ chạy;
+    - AI tạo trang đề xuất phong cách, người dùng đổi được (ADR-031).
+- **Decision:**
+  - **Ba lớp, đều là preset** (không free styling, §2 quy tắc 8):
+    1. Phong cách của cả trang: Không hiệu ứng (mặc định trang mới), Tinh tế, Mượt mà, Năng động, Sang trọng, Vui tươi. Mỗi phong cách quy định cách xuất hiện, thứ tự và điểm nhấn mặc định.
+    2. Tùy chỉnh thêm: mức độ Nhẹ / Vừa / Rõ, bật tắt từng điểm nhấn, và "Giảm chuyển động trên điện thoại".
+    3. Ghi đè từng section: cách xuất hiện, thứ tự, điểm nhấn. Không ghi đè là "theo cài đặt trang".
+  - **Hiệu ứng:**
+
+    | Nhóm           | Id                                            | Tên                                                                                     |
+    | -------------- | --------------------------------------------- | --------------------------------------------------------------------------------------- |
+    | Cách xuất hiện | `fade`, `up`, `side`, `zoom`, `pop`, `reveal` | Hiện dần, Trượt lên, Trượt từ bên (chữ từ trái, ảnh từ phải), Phóng nhẹ, Bật lên, Hé lộ |
+    | Thứ tự         | `together`, `stagger`, `rows`                 | Cùng lúc, Lần lượt, Theo hàng (chỉ section dạng lưới)                                   |
+    | Điểm nhấn      | `lines`, `image`, `count`, `steps`            | Tiêu đề từng dòng, Ảnh hé lộ, Số liệu đếm lên, Các bước nối nhau                        |
+
+    | Phong cách | Xuất hiện | Thứ tự   | Điểm nhấn           | Thời lượng | Bước   |
+    | ---------- | --------- | -------- | ------------------- | ---------- | ------ |
+    | Tinh tế    | `fade`    | together | —                   | 320 ms     | 0      |
+    | Mượt mà    | `up`      | stagger  | lines, count, steps | 360 ms     | 70 ms  |
+    | Năng động  | `side`    | stagger  | count, steps        | 280 ms     | 55 ms  |
+    | Sang trọng | `reveal`  | stagger  | lines, image        | 480 ms     | 110 ms |
+    | Vui tươi   | `pop`     | rows     | count, steps        | 380 ms     | 70 ms  |
+    - Mức độ: khoảng trượt 8 / 12 / 16 px, thu nhỏ ban đầu .98 / .96 / .94 (Bật lên .94 / .9 / .86), thời lượng × .85 / 1 / 1.15.
+    - Thời lượng theo khung 250–400 ms của ghi chú thiết kế, không theo mockup (380–750 ms cho dễ xem). Sang trọng 480 ms để giữ "hé lộ chậm". Các con số nằm ở một bảng (`MOTION_STYLES`) và cần thử lại trên thiết bị thật.
+
+  - **Dữ liệu nằm trong composition** (ADR-007), nên đi theo bản nháp, release, JSON công khai và template:
+
+    ```ts
+    Composition     = { version: 1, motion: PageMotion, sections: SectionInstance[] }
+    PageMotion      = { style, level: 'low'|'mid'|'high', accents: Partial<Record<Accent, boolean>>,
+                        reduceOnMobile: boolean }
+    SectionInstance = { …, motion?: { enter?, order?, accents?: Partial<Record<Accent, boolean>> } }
+    ```
+
+    - `motion` của trang có default `{ style: 'none', level: 'mid', accents: {}, reduceOnMobile: false }`, nên composition và release cũ đọc ra "Không hiệu ứng". `version` vẫn là 1, không cần `upgrade()`.
+    - `accents` của trang chỉ chứa điểm nhấn người dùng đã chỉnh khác phong cách ("đã chỉnh" / "theo phong cách"). Đổi phong cách xóa các chỉnh này, như board 37.
+    - `motion` của section vắng nghĩa là theo trang. `parseComposition` bỏ ghi đè rỗng, nên một thay đổi không có tác dụng không thành chip.
+    - Mỗi variant khai báo năng lực chuyển động (`SectionVariant.motion`): dạng lưới hay không, và các điểm nhấn có nội dung tương ứng. `resolveSectionMotion` (`@plp/sections/schema`, thuần) gộp phong cách, ghi đè, năng lực và khóa; renderer, canvas, panel, chip xuất bản và AI dùng chung hàm này.
+
+  - **Quy tắc:**
+    - Thanh điều hướng và section đầu tiên sau nó luôn hiện ngay; panel ghi "Luôn hiện ngay" và lý do.
+    - Mỗi section chạy một lần khi vào vùng nhìn. Section đã nằm trong vùng nhìn lúc tải hiện ngay, không chạy, nên trang không nháy.
+    - Chỉ `transform` và `opacity`, không đổi bố cục. Hiệu ứng lặp, gắn với cuộn hay parallax không có.
+    - Nội dung luôn đủ khi JavaScript lỗi: chỉ runtime mới ẩn phần chưa chạy. Số liệu có giá trị thật trong HTML.
+    - Thiết bị bật giảm chuyển động (`prefers-reduced-motion`) thấy nội dung ngay, số liệu ở giá trị thật. "Giảm chuyển động trên điện thoại": dưới 768 px chỉ còn hiện dần, cùng lúc; số liệu vẫn đếm.
+    - Editor đứng yên. Hiệu ứng chạy khi bấm "Chạy thử" (cả trang, một section, ¼ tốc độ, như thiết bị bật giảm chuyển động) và ở link xem trước.
+    - Hover nút, mở câu hỏi, gửi form là phản hồi của hệ thống, giống nhau ở mọi phong cách; chuyển động không đổi chúng.
+  - **Hiển thị** (`@plp/sections/react`):
+    - `SectionFrame` gắn cách xuất hiện, thứ tự, điểm nhấn và thời lượng đã phân giải thành thuộc tính `data-motion-*` và biến CSS. Section đánh dấu các phần chuyển động (chữ hay ảnh). CSS Module chứa keyframes.
+    - `MotionRuntime` là client component nhỏ, chỉ có ở trang có phong cách khác "Không hiệu ứng". Nó dùng `IntersectionObserver`, chỉ ghi thuộc tính trạng thái và biến CSS mà React không render, sau hydration. Không có `IntersectionObserver` hay thiết bị giảm chuyển động thì nó không làm gì.
+    - In trang luôn hiện hết. Không đổi header hay CSP của renderer.
+  - **Chip thay đổi:** đổi `motion` của trang là chip "Chuyển động: <phong cách>" (kind `motion`); đổi `motion` của section là "Sửa: <section>".
+  - **Template:** mẫu hệ thống có phong cách theo ngành. Template của workspace mang `motion` trong composition của nó. Áp mẫu vào bản nháp thay cả `motion`, hoàn tác được.
+  - **Ngành và phong cách** (nhãn "Hợp ngành", gợi ý của AI):
+
+    | Ngành           | Hợp ngành           |
+    | --------------- | ------------------- |
+    | Nha khoa & y tế | Tinh tế, Mượt mà    |
+    | Spa & làm đẹp   | Sang trọng, Tinh tế |
+    | Giáo dục        | Năng động, Mượt mà  |
+    | Bất động sản    | Sang trọng, Mượt mà |
+    | Nhà hàng & F&B  | Vui tươi, Năng động |
+    | Thể hình        | Năng động, Vui tươi |
+
+    Nhãn chỉ hiện khi biết ngành: trang tạo từ mẫu hệ thống.
+- **Reason:** Chuyển động làm trang sinh động hơn mà không mở free styling. Preset cùng một hàm phân giải giữ admin, renderer và AI khớp nhau, và quy tắc giảm chuyển động, không JavaScript giữ trang đọc được với mọi khách.
+- **Consequences:**
+  - Trang có hiệu ứng tải thêm một client component nhỏ; trang "Không hiệu ứng" không đổi.
+  - Thêm hiệu ứng (24 hiệu ứng còn lại của màn 40) là thêm id vào contracts và keyframes, cần bổ sung ADR này.
+  - Release cũ không có `motion` vẫn render như trước.
+- **Lát:** M0 tài liệu; M1 mô hình và hiển thị; M2 section Số liệu nổi bật; M3 editor (màn 37–39); M4 AI chọn chuyển động (§5).
 
 ---
 
@@ -2485,6 +2590,23 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 3. Áp một mẫu vào bản nháp trong editor → hoàn tác → trang live không đổi.
 4. Tạo trang bằng AI (adapter giả) → bản nháp có cảnh báo `ai_review` → trợ lý viết lại Hero → áp dụng → hoàn tác.
 5. Số lượt AI còn lại giảm đúng số lượt đã dùng.
+
+**Chuyển động** (chủ sản phẩm yêu cầu ngày 2026-11-04, ADR-032):
+
+| Lát | Nội dung                                                                                                          | Màn            | Trạng thái |
+| --- | ----------------------------------------------------------------------------------------------------------------- | -------------- | ---------- |
+| M0  | Nhập board 37–40, ADR-032, bổ sung ADR-007, 030, 031                                                              | —              | Xong       |
+| M1  | `motion` trong composition, hàm phân giải, CSS và runtime của renderer, chip thay đổi, mẫu hệ thống có phong cách | 09, 05         | Chưa làm   |
+| M2  | Section Số liệu nổi bật, điểm nhấn đếm lên, AI không viết con số                                                  | 04, 09         | Chưa làm   |
+| M3  | Editor: phong cách của trang, hiệu ứng của section, thư viện phong cách, chạy thử                                 | 37, 38, 39, 03 | Chưa làm   |
+| M4  | AI tạo trang: khối Chuyển động ở bước cấu trúc, AI chọn phong cách và ghi đè section, dự phòng theo bảng ngành    | 20             | Chưa làm   |
+
+**Hoàn thành Chuyển động** khi một E2E chạy xanh toàn bộ chuỗi:
+
+1. Tạo trang bằng AI (adapter giả) để "AI chọn" → bản nháp có phong cách AI chọn.
+2. Trong editor đổi phong cách, ghi đè một section, chạy thử → publish.
+3. Trang live: section dưới màn hình chạy hiệu ứng khi cuộn tới; thiết bị giảm chuyển động thấy nội dung ngay.
+4. Rollback về bản trước → trang live trở lại phong cách cũ.
 
 ## 6. Trước khi phát hành
 

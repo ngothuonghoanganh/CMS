@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thư viện phong cách chuyển động</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.mx-i1{--mx-d:8px;--mx-s:.98;--mx-p:.94}
+.mx-i2{--mx-d:12px;--mx-s:.96;--mx-p:.9}
+.mx-i3{--mx-d:16px;--mx-s:.94;--mx-p:.86}
+@keyframes mxFade{from{opacity:0}to{opacity:1}}
+@keyframes mxUp{from{opacity:0;transform:translateY(var(--mx-d,12px))}to{opacity:1;transform:none}}
+@keyframes mxLeft{from{opacity:0;transform:translateX(calc(var(--mx-d,12px) * -2))}to{opacity:1;transform:none}}
+@keyframes mxRight{from{opacity:0;transform:translateX(calc(var(--mx-d,12px) * 2))}to{opacity:1;transform:none}}
+@keyframes mxZoom{from{opacity:0;transform:scale(var(--mx-s,.96))}to{opacity:1;transform:none}}
+@keyframes mxPop{0%{opacity:0;transform:scale(var(--mx-p,.9))}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes mxReveal{from{opacity:0;transform:translateY(calc(var(--mx-d,12px) * 2))}to{opacity:1;transform:none}}
+@keyframes mxLine{from{transform:translateY(105%)}to{transform:none}}
+@keyframes mxImg{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:none}}
+.mx-a{animation-fill-mode:both;animation-timing-function:cubic-bezier(.2,.7,.3,1)}
+.mx-fade{animation-name:mxFade}
+.mx-up{animation-name:mxUp}
+.mx-left{animation-name:mxLeft}
+.mx-right{animation-name:mxRight}
+.mx-zoom{animation-name:mxZoom}
+.mx-pop{animation-name:mxPop;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}
+.mx-reveal{animation-name:mxReveal;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-line{animation-name:mxLine;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-img{animation-name:mxImg;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+@media (prefers-reduced-motion: reduce){.mx-a{animation:none!important}}
+</style>
+</helmet>
+<div class="{{ levelCls }}" style="min-height: 1360px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 10px 16px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+      <a href="MotionPage.dc.html" aria-label="Quay lại cài đặt trang" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 10px; color: #3C424E; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; min-width: 0">
+        <span style="font-size: 15px; font-weight: 600">Phong cách chuyển động</span>
+        <span style="font-size: 12px; color: #5E6573">Cài đặt trang · Ưu đãi niềng răng tháng 11</span>
+      </div>
+    </div>
+    <a href="MotionPage.dc.html" aria-label="Đóng" style="width: 40px; height: 40px; border-radius: 8px; color: #3C424E; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+  </header>
+
+  <main style="flex: 1; box-sizing: border-box; width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 24px 32px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 6px; max-width: 680px">
+        <h1 style="margin: 0; font-size: 26px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Chọn cách trang chuyển động</h1>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Mỗi phong cách quy định cách section xuất hiện, thứ tự các phần và điểm nhấn. Bấm Xem thử để so sánh. Thời lượng và độ trễ do hệ thống chọn; phần đầu trang luôn hiện ngay.</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <span id="lib-level" style="font-size: 13px; font-weight: 600">Mức độ</span>
+        <div role="group" aria-labelledby="lib-level" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 3px; background: #E9EBEF; border-radius: 10px; width: 210px">
+          <sc-for list="{{ levels }}" as="lv" hint-placeholder-count="3">
+            <button type="button" aria-pressed="{{ lv.pressed }}" onClick="{{ lv.pick }}" style="min-height: 34px; border: 0; border-radius: 8px; background: {{ lv.bg }}; box-shadow: {{ lv.shadow }}; font: inherit; font-size: 13px; font-weight: {{ lv.weight }}; color: {{ lv.fg }}; cursor: pointer">{{ lv.name }}</button>
+          </sc-for>
+        </div>
+        <button type="button" onClick="{{ playAll }}" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1.5px solid #4338CA; border-radius: 10px; background: #FFFFFF; color: #3730A3; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+          Xem thử tất cả
+        </button>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px">
+      <sc-for list="{{ cards }}" as="cd" hint-placeholder-count="6">
+        <div style="display: flex; flex-direction: column; gap: 14px; padding: 14px; border-radius: 16px; background: #FFFFFF; border: {{ cd.border }}; box-shadow: {{ cd.shadow }}">
+          <!-- Mini preview: the part below the hero -->
+          <div aria-hidden="true" style="height: 250px; box-sizing: border-box; padding: 14px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA; display: flex; flex-direction: column; gap: 10px; overflow: hidden; color: #0B2E2A">
+            <div class="{{ cd.h.cls }}" style="font-size: 15px; line-height: 1.3; font-weight: 700; animation-delay: {{ cd.h.delay }}; animation-duration: {{ cd.h.dur }}">
+              <span style="display: block; overflow: hidden; padding-bottom: 1px"><span class="{{ cd.l1.cls }}" style="display: block; animation-delay: {{ cd.l1.delay }}; animation-duration: {{ cd.l1.dur }}">Vì sao chọn niềng trong suốt</span></span>
+              <span style="display: block; overflow: hidden; padding-bottom: 1px"><span class="{{ cd.l2.cls }}" style="display: block; animation-delay: {{ cd.l2.delay }}; animation-duration: {{ cd.l2.dur }}">tại Smile Care</span></span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+              <sc-for list="{{ cd.minis }}" as="mc" hint-placeholder-count="4">
+                <span class="{{ mc.cls }}" style="height: 32px; box-sizing: border-box; padding: 6px 8px; border-radius: 8px; background: #F4FAF8; display: flex; align-items: center; gap: 6px; animation-delay: {{ mc.delay }}; animation-duration: {{ mc.dur }}"><span style="width: 14px; height: 14px; flex: none; border-radius: 999px; background: #0F5E55"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="height: 4px; background: #9CCFC5; border-radius: 2px"></span><span style="height: 4px; width: 60%; background: #D6EAE5; border-radius: 2px"></span></span></span>
+              </sc-for>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span class="{{ cd.box.cls }}" style="width: 84px; height: 56px; flex: none; border-radius: 8px; overflow: hidden; animation-delay: {{ cd.box.delay }}; animation-duration: {{ cd.box.dur }}"><span class="{{ cd.img.cls }}" style="display: block; width: 100%; height: 100%; background: #CFE9E3; animation-delay: {{ cd.img.delay }}; animation-duration: {{ cd.img.dur }}"></span></span>
+              <span class="{{ cd.txt.cls }}" style="flex: 1; display: flex; flex-direction: column; gap: 6px; animation-delay: {{ cd.txt.delay }}; animation-duration: {{ cd.txt.dur }}"><span style="height: 5px; width: 80%; background: #0F5E55; border-radius: 2px"></span><span style="height: 4px; background: #D6EAE5; border-radius: 2px"></span><span style="height: 4px; width: 70%; background: #D6EAE5; border-radius: 2px"></span></span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding-top: 8px; border-top: 1px solid #E4EFEC">
+              <sc-for list="{{ cd.stats }}" as="ms" hint-placeholder-count="3">
+                <span class="{{ ms.a.cls }}" style="display: flex; flex-direction: column; gap: 1px; animation-delay: {{ ms.a.delay }}; animation-duration: {{ ms.a.dur }}"><span style="font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums">{{ ms.value }}</span><span style="font-size: 11px; color: #2D4A46">{{ ms.label }}</span></span>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; flex: 1">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px">
+              <h2 style="margin: 0; font-size: 16px; font-weight: 600">{{ cd.name }}</h2>
+              <sc-if value="{{ cd.isCurrent }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; color: #26208A; background: #E0E2FF; border-radius: 999px; padding: 2px 8px">Đang dùng</span></sc-if>
+              <sc-if value="{{ cd.isDefault }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; color: #474E5C; background: #ECEEF2; border-radius: 999px; padding: 2px 8px">Mặc định cho trang mới</span></sc-if>
+              <sc-if value="{{ cd.recommended }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; color: #0B6B45; background: #E3F5EC; border-radius: 999px; padding: 2px 8px">Hợp ngành nha khoa</span></sc-if>
+            </div>
+            <dl style="margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 13px; line-height: 1.45">
+              <dt style="color: #5E6573">Xuất hiện</dt><dd style="margin: 0">{{ cd.enterName }}</dd>
+              <dt style="color: #5E6573">Thứ tự</dt><dd style="margin: 0">{{ cd.orderName }}</dd>
+              <dt style="color: #5E6573">Điểm nhấn</dt><dd style="margin: 0">{{ cd.accentNames }}</dd>
+            </dl>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Hợp với: {{ cd.fits }}</span>
+            <div style="margin-top: auto; display: flex; gap: 8px">
+              <button type="button" onClick="{{ cd.play }}" disabled="{{ cd.noPlay }}" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: {{ cd.playFg }}; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">
+                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+                {{ cd.playLabel }}
+              </button>
+              <button type="button" aria-pressed="{{ cd.pickPressed }}" onClick="{{ cd.pick }}" style="flex: 1; min-height: 40px; border: 0; border-radius: 10px; background: {{ cd.pickBg }}; color: {{ cd.pickFg }}; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">{{ cd.pickLabel }}</button>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 14px 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+      <span style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 14px; font-weight: 600">{{ footerTitle }}</span>
+        <span style="font-size: 12px; color: #5E6573">Chỉ đổi bản nháp, hoàn tác được. Phản hồi khi thao tác (hover nút, mở câu hỏi, gửi form) giống nhau ở mọi phong cách.</span>
+      </span>
+      <span style="display: flex; gap: 8px">
+        <a href="MotionPage.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; text-decoration: none; font-size: 14px; font-weight: 600">Hủy</a>
+        <sc-if value="{{ canApply }}" hint-placeholder-val="{{ false }}">
+          <a href="MotionPage.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">Áp dụng {{ pickedName }}</a>
+        </sc-if>
+        <sc-if value="{{ cannotApply }}" hint-placeholder-val="{{ true }}">
+          <span aria-disabled="true" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #E2E5EA; color: #5E6573; font-size: 14px; font-weight: 600">Đang dùng {{ pickedName }}</span>
+        </sc-if>
+      </span>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1360}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { level: 'mid', current: 'smooth', picked: 'smooth', play: null, el: 0 };
+    this.timer = null;
+    this.iv = null;
+  }
+  componentWillUnmount() {
+    clearTimeout(this.timer);
+    clearInterval(this.iv);
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var STY = {
+      none: { name: 'Không hiệu ứng', enter: 'none', order: 'together', accents: [], dur: 0, step: 0, fits: 'mọi trang; trang cần tải nhanh, ít gây chú ý' },
+      subtle: { name: 'Tinh tế', enter: 'fade', order: 'together', accents: [], dur: 450, step: 0, fits: 'y tế, tài chính, dịch vụ chuyên nghiệp' },
+      smooth: { name: 'Mượt mà', enter: 'up', order: 'stagger', accents: ['lines', 'count', 'steps'], dur: 500, step: 90, fits: 'hầu hết landing page' },
+      lively: { name: 'Năng động', enter: 'side', order: 'stagger', accents: ['count', 'steps'], dur: 380, step: 70, fits: 'sự kiện, khóa học, thể thao' },
+      luxe: { name: 'Sang trọng', enter: 'reveal', order: 'stagger', accents: ['lines', 'image'], dur: 750, step: 140, fits: 'bất động sản, spa, thời trang' },
+      playful: { name: 'Vui tươi', enter: 'pop', order: 'rows', accents: ['count', 'steps'], dur: 520, step: 90, fits: 'ăn uống, khuyến mãi, đồ cho trẻ em' }
+    };
+    var KEYS = ['none', 'subtle', 'smooth', 'lively', 'luxe', 'playful'];
+    var RECOMMENDED = { subtle: true, smooth: true };
+    var ENTER_NAMES = { none: 'Hiện ngay', fade: 'Hiện dần', up: 'Trượt lên', side: 'Trượt từ bên theo bố cục', zoom: 'Phóng nhẹ', pop: 'Bật lên, có độ nảy', reveal: 'Hé lộ chậm' };
+    var ORDER_NAMES = { together: 'Cùng lúc', stagger: 'Lần lượt từng phần', rows: 'Theo từng hàng' };
+    var ACC_NAMES = { lines: 'tiêu đề từng dòng', image: 'ảnh hé lộ', count: 'số liệu đếm lên', steps: 'các bước nối nhau' };
+    var LEVELS = { low: { name: 'Nhẹ', f: 0.85, cls: 'mx-i1' }, mid: { name: 'Vừa', f: 1, cls: 'mx-i2' }, high: { name: 'Rõ', f: 1.15, cls: 'mx-i3' } };
+    var NONE = { cls: '', delay: '0ms', dur: '0ms' };
+
+    function enterCls(kind, dir) {
+      if (kind === 'none') return '';
+      if (kind === 'side') return 'mx-a ' + (dir === 'r' ? 'mx-right' : 'mx-left');
+      return 'mx-a mx-' + kind;
+    }
+
+    var cards = KEYS.map(function (k) {
+      var x = STY[k];
+      var act = s.play === k || s.play === 'all';
+      var dur = Math.round(x.dur * LEVELS[s.level].f);
+      var step = x.order === 'together' ? 0 : x.step;
+      function A(cls, delay, du) {
+        if (!cls || !act) return NONE;
+        return { cls: cls, delay: delay + 'ms', dur: (du || dur) + 'ms' };
+      }
+      function at(i, cols, b) {
+        if (x.order === 'together') return b;
+        if (x.order === 'rows') return b + Math.floor(i / cols) * step * 2;
+        return b + i * step;
+      }
+      var has = function (a) { return x.accents.indexOf(a) >= 0; };
+      var lines = has('lines');
+      var imgAcc = has('image');
+      var cardsBase = 300;
+      var rowBase = cardsBase + (x.order === 'stagger' ? 4 * step : (x.order === 'rows' ? 2 * step * 2 : 0)) + 200;
+      var statsBase = rowBase + 300;
+      var p = 1;
+      if (act && has('count')) {
+        p = Math.min(1, Math.max(0, (s.el - statsBase) / 900));
+        p = 1 - Math.pow(1 - p, 3);
+      }
+      var on = k === s.picked;
+      var accentNames = x.accents.map(function (a) { return ACC_NAMES[a]; }).join(', ');
+      return {
+        name: x.name,
+        enterName: ENTER_NAMES[x.enter],
+        orderName: x.enter === 'none' ? '—' : ORDER_NAMES[x.order],
+        accentNames: accentNames ? accentNames.charAt(0).toUpperCase() + accentNames.slice(1) : 'Không có',
+        fits: x.fits,
+        isCurrent: k === s.current,
+        isDefault: k === 'none',
+        recommended: !!RECOMMENDED[k],
+        border: on ? '2px solid #4338CA' : '1px solid #E2E5EA',
+        shadow: on ? '0 4px 16px rgba(67,56,202,0.12)' : 'none',
+        h: lines ? NONE : A(enterCls(x.enter, 'l'), 120),
+        l1: lines ? A('mx-a mx-line', 120, 550) : NONE,
+        l2: lines ? A('mx-a mx-line', 230, 550) : NONE,
+        minis: [0, 1, 2, 3].map(function (i) { return A(enterCls(x.enter, 'l'), at(i, 2, cardsBase)); }),
+        box: imgAcc ? NONE : A(enterCls(x.enter, 'l'), rowBase),
+        img: imgAcc ? A('mx-a mx-img', rowBase, 800) : NONE,
+        txt: A(enterCls(x.enter, 'r'), rowBase + (step ? 120 : 0)),
+        stats: [
+          { value: String(Math.round(15 * p)), label: 'năm' },
+          { value: Math.round(8000 * p).toLocaleString('vi-VN') + '+', label: 'khách' },
+          { value: (4.9 * p).toFixed(1).replace('.', ','), label: 'điểm' }
+        ].map(function (st, i) { return Object.assign({}, st, { a: A(enterCls(x.enter, 'l'), at(i, 3, statsBase)) }); }),
+        noPlay: k === 'none',
+        playLabel: k === 'none' ? 'Không chuyển động' : 'Xem thử',
+        playFg: k === 'none' ? '#5E6573' : '#15171C',
+        play: function () { start(k); },
+        pickPressed: on ? 'true' : 'false',
+        pickBg: on ? '#4338CA' : '#EEF0FF',
+        pickFg: on ? '#FFFFFF' : '#3730A3',
+        pickLabel: on ? 'Đã chọn' : 'Chọn',
+        pick: function () { self.setState({ picked: k }); start(k); }
+      };
+    });
+
+    function start(target) {
+      clearTimeout(self.timer);
+      clearInterval(self.iv);
+      self.setState({ play: null, el: 0 });
+      if (target === 'none') return;
+      self.timer = setTimeout(function () {
+        var t0 = Date.now();
+        self.setState({ play: target, el: 0 });
+        self.iv = setInterval(function () {
+          var el = Date.now() - t0;
+          self.setState({ el: el });
+          if (el > 3200) clearInterval(self.iv);
+        }, 50);
+      }, 40);
+    }
+
+    var levels = ['low', 'mid', 'high'].map(function (k) {
+      var on = k === s.level;
+      return {
+        name: LEVELS[k].name,
+        pressed: on ? 'true' : 'false',
+        bg: on ? '#FFFFFF' : 'transparent',
+        shadow: on ? '0 1px 2px rgba(21,23,28,0.08)' : 'none',
+        weight: on ? '600' : '500',
+        fg: on ? '#15171C' : '#3C424E',
+        pick: function () { self.setState({ level: k }); }
+      };
+    });
+
+    var changed = s.picked !== s.current;
+    return {
+      levelCls: LEVELS[s.level].cls,
+      levels: levels,
+      cards: cards,
+      playAll: function () { start('all'); },
+      footerTitle: changed ? 'Đổi từ ' + STY[s.current].name + ' sang ' + STY[s.picked].name : 'Đang dùng ' + STY[s.current].name,
+      pickedName: STY[s.picked].name,
+      canApply: changed,
+      cannotApply: !changed
+    };
+  }
+}
+</script>
+</body>
+</html>

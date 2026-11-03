@@ -32,7 +32,11 @@
     "TemplateDetail.dc.html": {"x": 1520, "y": 7240, "w": 1440, "h": 1080, "title": "18 · Chi tiết & preview template", "expand": "fill", "is_interactive": true},
     "WorkspaceTemplates.dc.html": {"x": 3040, "y": 7240, "w": 1440, "h": 1000, "title": "19 · Template của workspace", "expand": "fill", "is_interactive": true},
     "AiCreate.dc.html": {"x": 4560, "y": 7240, "w": 1440, "h": 1080, "title": "20 · Tạo landing page bằng AI", "expand": "fill", "is_interactive": true},
-    "AiAssistant.dc.html": {"x": 6080, "y": 7240, "w": 1440, "h": 1080, "title": "21 · Trợ lý AI trong editor", "expand": "fill", "is_interactive": true}
+    "AiAssistant.dc.html": {"x": 6080, "y": 7240, "w": 1440, "h": 1080, "title": "21 · Trợ lý AI trong editor", "expand": "fill", "is_interactive": true},
+    "MotionPage.dc.html": {"x": 0, "y": 13960, "w": 1440, "h": 1560, "title": "37 · Cài đặt trang → Phong cách chuyển động", "expand": "fill", "is_interactive": true},
+    "MotionSection.dc.html": {"x": 1520, "y": 13960, "w": 1440, "h": 1200, "title": "38 · Thuộc tính section → Hiệu ứng xuất hiện", "expand": "fill", "is_interactive": true},
+    "StyleLibrary.dc.html": {"x": 3040, "y": 13960, "w": 1440, "h": 1360, "title": "39 · Thư viện phong cách chuyển động", "expand": "fill", "is_interactive": true},
+    "EffectCatalog.dc.html": {"x": 4560, "y": 13960, "w": 1440, "h": 3040, "title": "40 · Bộ hiệu ứng mở rộng (34 hiệu ứng, chọn cái giữ lại)", "expand": "fill", "is_interactive": true}
   },
   "order": [
     "Main.dc.html",
@@ -62,7 +66,11 @@
     "TemplateDetail.dc.html",
     "WorkspaceTemplates.dc.html",
     "AiCreate.dc.html",
-    "AiAssistant.dc.html"
+    "AiAssistant.dc.html",
+    "MotionPage.dc.html",
+    "MotionSection.dc.html",
+    "StyleLibrary.dc.html",
+    "EffectCatalog.dc.html"
   ],
   "notes": {
     "rowCreate": {"x": 0, "y": -320, "text": "CREATE — Tạo & biên tập trang", "kind": "title1", "maxW": 6000},
@@ -74,7 +82,9 @@
     "d2": {"x": 0, "y": 12020, "text": "TÁCH DATABASE · ĐỊA CHỈ WORKSPACE (D2, ADR-025) — Mỗi workspace một địa chỉ admin", "kind": "title1", "maxW": 4480},
     "d2Decisions": {"x": -888, "y": 12340, "w": 440, "fill": "orange", "text": "D2 · Giả định đang vẽ — cần chốt\n\n• Mỗi workspace có địa chỉ admin {slug}.app.<tên miền>, tạo từ tên workspace lúc đăng ký; chưa đổi được\n• Tên miền minh họa app.payload.vn, chốt cùng BASE_DOMAIN (§6); admin và trang công khai dùng hai tên miền khác nhau\n• Một lần đăng nhập dùng cho mọi địa chỉ workspace của người đó\n• Địa chỉ chung: thuộc một workspace thì mở thẳng; nhiều thì chọn (màn 35); không thuộc workspace nào thì hiện trạng thái trống\n• Người ngoài, hoặc địa chỉ không tồn tại: cùng màn 36, không lộ tên workspace\n• Đổi workspace ở Sidebar v2 (bật switcherOpen) mở địa chỉ của workspace kia\n• Email (lời mời, lead, duyệt xuất bản, tên miền) dẫn tới địa chỉ của workspace"},
     "phase2": {"x": 0, "y": 6920, "text": "PHASE 2 · TẠO TRANG NHANH — Template và AI, đều chỉ ghi vào bản nháp", "kind": "title1", "maxW": 7520},
-    "phase2Decisions": {"x": -888, "y": 7240, "w": 440, "fill": "orange", "text": "Phase 2 · Giả định đang vẽ — cần chốt\n\n• Template = các section + theme + chữ mẫu. Không mang theo lead, tên miền, nơi nhận lead hay nội dung đồng ý\n• Tạo từ mẫu tạo bản nháp độc lập, ghi lại phiên bản template đã dùng; sửa template không đổi trang đã tạo\n• Mẫu có form mà site chưa cài nơi nhận lead / đồng ý: vẫn tạo được, checklist xuất bản chặn như hiện tại\n• Áp mẫu vào trang đang sửa chỉ đổi bản nháp, hoàn tác được, trang live không đổi\n• AI bản đầu: tạo trang từ brief + viết lại chữ trong section; chưa tạo ảnh\n• Dữ liệu gửi AI: brief và chữ của bản nháp; không gửi lead hay dữ liệu cá nhân\n• Hạn mức AI tính theo lượt mỗi tháng theo gói — con số chưa có\n• AI không bao giờ xuất bản; mỗi lần áp dụng là một bước hoàn tác"}
+    "phase2Decisions": {"x": -888, "y": 7240, "w": 440, "fill": "orange", "text": "Phase 2 · Giả định đang vẽ — cần chốt\n\n• Template = các section + theme + chữ mẫu. Không mang theo lead, tên miền, nơi nhận lead hay nội dung đồng ý\n• Tạo từ mẫu tạo bản nháp độc lập, ghi lại phiên bản template đã dùng; sửa template không đổi trang đã tạo\n• Mẫu có form mà site chưa cài nơi nhận lead / đồng ý: vẫn tạo được, checklist xuất bản chặn như hiện tại\n• Áp mẫu vào trang đang sửa chỉ đổi bản nháp, hoàn tác được, trang live không đổi\n• AI bản đầu: tạo trang từ brief + viết lại chữ trong section; chưa tạo ảnh\n• Dữ liệu gửi AI: brief và chữ của bản nháp; không gửi lead hay dữ liệu cá nhân\n• Hạn mức AI tính theo lượt mỗi tháng theo gói — con số chưa có\n• AI không bao giờ xuất bản; mỗi lần áp dụng là một bước hoàn tác"},
+    "motion": {"x": 0, "y": 13640, "text": "CHUYỂN ĐỘNG — Phong cách toàn trang, điểm nhấn theo nội dung, hiệu ứng riêng từng section, bộ hiệu ứng mở rộng", "kind": "title1", "maxW": 6000},
+    "motionDecisions": {"x": -888, "y": 13960, "w": 440, "fill": "orange", "text": "Chuyển động · Giả định đang vẽ — cần chốt\n\n• Ba lớp: phong cách cả trang → tùy chỉnh thêm (mức độ, điểm nhấn) → chỉnh riêng từng section (cách xuất hiện, thứ tự, điểm nhấn). Lớp dưới mặc định “theo cài đặt trang”\n• 6 phong cách: Không hiệu ứng (mặc định trang mới), Tinh tế, Mượt mà, Năng động, Sang trọng, Vui tươi. Template có thể chọn sẵn; luôn tắt được toàn bộ (màn 37, tweak “Tạo từ template”)\n• Nhãn “Hợp ngành” cần bảng ngành → phong cách (nha khoa → Tinh tế, Mượt mà là giả định)\n• 6 cách xuất hiện: Hiện dần, Trượt lên, Trượt từ bên (chữ trái, ảnh phải), Phóng nhẹ, Bật lên, Hé lộ. Thứ tự: cùng lúc, lần lượt, theo hàng (chỉ section dạng lưới)\n• 4 điểm nhấn, chỉ chạy ở section có nội dung tương ứng: tiêu đề từng dòng, ảnh hé lộ, số liệu đếm lên, các bước nối nhau. Số liệu luôn có giá trị thật trong HTML\n• Mức độ Nhẹ / Vừa / Rõ: trượt 8 / 12 / 16 px. Mockup dùng 380–750 ms cho dễ xem, dài hơn khung 250–400 ms đề xuất; chốt sau khi thử trên thiết bị thật\n• Thanh điều hướng và section đầu trang luôn hiện ngay. Mỗi section chạy một lần khi vào vùng nhìn; editor đứng yên, chỉ chạy khi bấm Chạy thử (cả trang, một section, xem chậm ¼) hoặc mở xem trước\n• Thiết bị bật giảm chuyển động: tắt hết, số liệu hiện ngay. “Giảm chuyển động trên điện thoại”: chỉ hiện dần, cùng lúc\n• Chỉ transform và opacity; JavaScript lỗi thì nội dung vẫn hiện đủ. Cấu hình thuộc bản nháp; xuất bản và rollback đi cùng phiên bản\n• Hover nút, mở câu hỏi, gửi form: hệ thống quy định, giống nhau ở mọi phong cách. Để sau: parallax, chữ chạy, nhấp nháy, animation lặp, timeline\n• Màn 40: 34 hiệu ứng — 10 đã có, 19 đề xuất thêm, 3 để sau (chữ đổi luân phiên, ảnh trôi khi cuộn, logo chạy ngang), 2 không khuyên dùng (gõ chữ, nút nhấp nháy). Cần chọn cái nào vào bản đầu rồi mới nối vào phong cách và bảng section"}
   },
   "designSystems": []
 }

@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Section — Hiệu ứng xuất hiện</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.mx-i2{--mx-d:12px;--mx-s:.96;--mx-p:.9}
+@keyframes mxFade{from{opacity:0}to{opacity:1}}
+@keyframes mxUp{from{opacity:0;transform:translateY(var(--mx-d,12px))}to{opacity:1;transform:none}}
+@keyframes mxLeft{from{opacity:0;transform:translateX(calc(var(--mx-d,12px) * -2))}to{opacity:1;transform:none}}
+@keyframes mxRight{from{opacity:0;transform:translateX(calc(var(--mx-d,12px) * 2))}to{opacity:1;transform:none}}
+@keyframes mxZoom{from{opacity:0;transform:scale(var(--mx-s,.96))}to{opacity:1;transform:none}}
+@keyframes mxPop{0%{opacity:0;transform:scale(var(--mx-p,.9))}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes mxReveal{from{opacity:0;transform:translateY(calc(var(--mx-d,12px) * 2))}to{opacity:1;transform:none}}
+@keyframes mxLine{from{transform:translateY(105%)}to{transform:none}}
+@keyframes mxImg{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:none}}
+@keyframes mxDraw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.mx-a{animation-fill-mode:both;animation-timing-function:cubic-bezier(.2,.7,.3,1)}
+.mx-fade{animation-name:mxFade}
+.mx-up{animation-name:mxUp}
+.mx-left{animation-name:mxLeft}
+.mx-right{animation-name:mxRight}
+.mx-zoom{animation-name:mxZoom}
+.mx-pop{animation-name:mxPop;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}
+.mx-reveal{animation-name:mxReveal;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-line{animation-name:mxLine;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-img{animation-name:mxImg;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+.mx-draw{animation-name:mxDraw;transform-origin:left center;animation-timing-function:linear}
+@media (prefers-reduced-motion: reduce){.mx-a{animation:none!important}}
+</style>
+</helmet>
+<div class="mx-i2" style="min-height: 1200px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+
+  <!-- Top bar -->
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 8px 16px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 360px">
+      <a href="Main.dc.html" aria-label="Quay lại danh sách trang" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 10px; color: #3C424E; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; min-width: 0">
+        <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Ưu đãi niềng răng tháng 11</span>
+        <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #5E6573">
+          <span style="display: inline-flex; align-items: center; gap: 4px; color: #0B6B45"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Đã lưu bản nháp · vừa xong</span>
+          <span aria-hidden="true">·</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; background: #FFF1D6; color: #8A5300; font-weight: 600"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: #E39A12"></span>Live v12 · 5 thay đổi chưa xuất bản</span>
+        </span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px">
+      <div role="group" aria-label="Xem theo thiết bị" style="display: flex; gap: 2px; padding: 3px; background: #F0F2F5; border-radius: 10px">
+        <button type="button" aria-label="Máy tính" aria-pressed="{{ dev.desktop.pressed }}" onClick="{{ setDesktop }}" style="width: 38px; height: 34px; border: 0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: {{ dev.desktop.bg }}; color: {{ dev.desktop.fg }}; box-shadow: {{ dev.desktop.shadow }}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"></rect><path d="M8 20h8M12 16v4"></path></svg>
+        </button>
+        <button type="button" aria-label="Máy tính bảng" aria-pressed="{{ dev.tablet.pressed }}" onClick="{{ setTablet }}" style="width: 38px; height: 34px; border: 0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: {{ dev.tablet.bg }}; color: {{ dev.tablet.fg }}; box-shadow: {{ dev.tablet.shadow }}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>
+        </button>
+        <button type="button" aria-label="Điện thoại" aria-pressed="{{ dev.mobile.pressed }}" onClick="{{ setMobile }}" style="width: 38px; height: 34px; border: 0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: {{ dev.mobile.bg }}; color: {{ dev.mobile.fg }}; box-shadow: {{ dev.mobile.shadow }}">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>
+        </button>
+      </div>
+      <span aria-hidden="true" style="width: 1px; height: 24px; background: #E2E5EA"></span>
+      <button type="button" aria-label="Hoàn tác" title="Hoàn tác (Ctrl+Z)" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L4 11l5 5"></path><path d="M4 11h11a5 5 0 0 1 0 10h-3"></path></svg>
+      </button>
+      <button type="button" aria-label="Làm lại" title="Làm lại (Ctrl+Shift+Z)" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #A8AEB9; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l5 5-5 5"></path><path d="M20 11H9a5 5 0 0 0 0 10h3"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; flex: 1 1 360px">
+      <a href="Publish.dc.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: 8px; background: #FDEBE9; color: #B42318; text-decoration: none; font-size: 13px; font-weight: 600">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.2v.1"></path></svg>
+        1 lỗi · 2 cảnh báo
+      </a>
+      <a href="History.dc.html" aria-label="Lịch sử phiên bản" title="Lịch sử phiên bản" style="width: 40px; height: 40px; border-radius: 8px; color: #3C424E; display: inline-flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5"></path><path d="M4 4v4.5h4.5M12 8v4l3 2"></path></svg>
+      </a>
+      <a href="MotionPage.dc.html" aria-label="Cài đặt trang" title="Cài đặt trang" style="width: 40px; height: 40px; border-radius: 8px; color: #3C424E; display: inline-flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+      </a>
+      <a href="PublicPage.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; text-decoration: none; font-size: 14px; font-weight: 600">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"></path><circle cx="12" cy="12" r="2.8"></circle></svg>
+        Xem trước
+      </a>
+      <a href="Publish.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">
+        Xuất bản thay đổi
+        <span style="min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 999px; background: rgba(255,255,255,0.22); font-size: 12px; display: inline-flex; align-items: center; justify-content: center">5</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Draft notice -->
+  <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; padding: 8px 20px; background: #FFFBF2; border-bottom: 1px solid #F3E2BD; font-size: 13px; color: #5C3D00">
+    <span style="display: flex; align-items: center; gap: 8px">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.8v.1"></path></svg>
+      <span>Bạn đang sửa <strong>bản nháp</strong>. Trang live <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">go.smilecare.vn/uu-dai-thang-11</span> giữ nguyên đến khi bạn xuất bản.</span>
+    </span>
+    <button type="button" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #5C3D00; font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer">Hủy thay đổi, quay về bản live</button>
+  </div>
+
+  <!-- Workspace -->
+  <div style="flex: 1; display: flex; flex-wrap: wrap; align-items: stretch">
+
+    <!-- Outline -->
+    <nav aria-labelledby="outline-title" style="flex: 1 1 272px; max-width: 100%; box-sizing: border-box; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px">
+        <h2 id="outline-title" style="margin: 0; font-size: 13px; font-weight: 600; color: #3C424E; letter-spacing: 0.04em">CẤU TRÚC TRANG</h2>
+        <span style="font-size: 12px; color: #5E6573">9 section</span>
+      </div>
+      <ol style="list-style: none; margin: 0; padding: 4px 8px; display: flex; flex-direction: column; gap: 2px">
+        <sc-for list="{{ outline }}" as="s" hint-placeholder-count="9">
+          <li style="display: flex; align-items: center; gap: 4px; padding: 0 4px 0 2px; border-radius: 8px; background: {{ s.bg }}; box-shadow: {{ s.ring }}">
+            <span aria-hidden="true" title="Kéo để sắp xếp" style="width: 18px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; color: #A8AEB9; cursor: grab">
+              <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor"><circle cx="3" cy="3" r="1.3"></circle><circle cx="9" cy="3" r="1.3"></circle><circle cx="3" cy="8" r="1.3"></circle><circle cx="9" cy="8" r="1.3"></circle><circle cx="3" cy="13" r="1.3"></circle><circle cx="9" cy="13" r="1.3"></circle></svg>
+            </span>
+            <button type="button" aria-current="{{ s.cur }}" onClick="{{ s.pick }}" style="flex: 1; min-width: 0; min-height: 44px; padding: 4px 4px; border: 0; background: transparent; text-align: left; font: inherit; color: inherit; cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 1px">
+              <span style="font-size: 13px; font-weight: 600; color: {{ s.fg }}">{{ s.kind }}</span>
+              <span style="font-size: 12px; color: #5E6573; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ s.label }}</span>
+              <sc-if value="{{ s.hasPill }}" hint-placeholder-val="{{ false }}">
+                <span style="align-self: flex-start; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: {{ s.pillFg }}; background: {{ s.pillBg }}; border-radius: 999px; padding: 1px 7px">
+                  <sc-if value="{{ s.locked }}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></sc-if>
+                  {{ s.pillText }}
+                </span>
+              </sc-if>
+            </button>
+          </li>
+        </sc-for>
+      </ol>
+      <div style="padding: 8px 12px 12px">
+        <a href="AddSection.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1.5px dashed #CDD2DA; border-radius: 10px; color: #3730A3; text-decoration: none; font-size: 14px; font-weight: 600">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+          Thêm section
+        </a>
+      </div>
+      <div style="margin-top: auto; padding: 12px; border-top: 1px solid #E2E5EA; display: flex; flex-direction: column; gap: 6px">
+        <button type="button" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px; background: #F5F6F8; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer; text-align: left">
+          <span aria-hidden="true" style="display: flex">
+            <span style="width: 14px; height: 14px; border-radius: 999px; background: #0F5E55; border: 2px solid #FFFFFF"></span>
+            <span style="width: 14px; height: 14px; border-radius: 999px; background: #EAF6F3; border: 2px solid #FFFFFF; margin-left: -6px"></span>
+            <span style="width: 14px; height: 14px; border-radius: 999px; background: #F2A33A; border: 2px solid #FFFFFF; margin-left: -6px"></span>
+          </span>
+          <span style="flex: 1">Giao diện site · màu &amp; chữ</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+        <a href="MotionPage.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border-radius: 8px; background: #F5F6F8; font-size: 13px; font-weight: 600; color: #15171C; text-decoration: none">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3C424E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="1.5"></rect><path d="M7 7h10M10 3.5h4"></path></svg>
+          <span style="flex: 1">Chuyển động · Mượt mà</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </a>
+      </div>
+    </nav>
+
+    <!-- Canvas -->
+    <section aria-label="Khung xem trước bản nháp" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 28px; background: #E6E8EC; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: #5E6573">
+        <span>{{ deviceLabel }} · Section đứng yên khi chỉnh sửa</span>
+        <span style="display: flex; align-items: center; gap: 10px">
+          <button type="button" onClick="{{ runPage }}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; color: #15171C; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+            Chạy thử hiệu ứng
+          </button>
+          <span>100%</span>
+        </span>
+      </div>
+
+      <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="width: 100%; max-width: {{ frameW }}; margin: 0 auto; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 8px 8px 14px; border-radius: 10px; background: #15171C; color: #FFFFFF; font-size: 13px">
+          <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="#C7CBFF"><path d="M7 4.5v15l12-7.5z"></path></svg>
+            <strong style="font-weight: 600">{{ bannerTitle }}</strong>
+            <span style="color: #C9CDD4">{{ bannerDetail }}</span>
+          </span>
+          <span style="display: flex; gap: 6px">
+            <button type="button" onClick="{{ rerun }}" style="min-height: 32px; padding: 0 10px; border: 1px solid #5E6573; border-radius: 8px; background: transparent; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Chạy lại</button>
+            <button type="button" onClick="{{ stop }}" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: #FFFFFF; color: #15171C; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Quay lại chỉnh sửa</button>
+          </span>
+        </div>
+      </sc-if>
+
+      <div style="width: 100%; max-width: {{ frameW }}; margin: 0 auto; height: 1000px; overflow-y: auto; background: #FFFFFF; border-radius: 10px; box-shadow: 0 1px 2px rgba(21,23,28,0.06), 0 8px 24px rgba(21,23,28,0.08); font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #0B2E2A">
+
+        <div style="position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-bottom: 1px solid #E4EFEC; box-shadow: {{ c.nav.ring }}">
+          <sc-if value="{{ c.nav.selected }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 0; left: 0; padding: 3px 9px; border-radius: 0 0 6px 0; background: #4338CA; color: #FFFFFF; font-size: 11px; font-weight: 600">Thanh điều hướng</span>
+          </sc-if>
+          <span style="font-size: 17px; font-weight: 700; color: #0F5E55; letter-spacing: -0.01em">Smile Care</span>
+          <span style="display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 13px; font-weight: 600">Đặt lịch</span>
+        </div>
+
+        <div style="position: relative; background: #EAF6F3; padding: {{ heroPad }}; display: flex; flex-wrap: wrap; gap: 36px; align-items: center; box-shadow: {{ c.hero.ring }}">
+          <sc-if value="{{ c.hero.selected }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 0; left: 0; padding: 3px 9px; border-radius: 0 0 6px 0; background: #4338CA; color: #FFFFFF; font-size: 11px; font-weight: 600">Hero</span>
+          </sc-if>
+          <sc-if value="{{ c.hero.chipShow }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13h6l-1 8 8-10h-6z"></path></svg>
+              Đầu trang · hiện ngay
+            </span>
+          </sc-if>
+          <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+            <span style="align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: #FFFFFF; color: #0F5E55; font-size: 13px; font-weight: 600">Ưu đãi tháng 11</span>
+            <h1 style="margin: 0; font-size: {{ h1Size }}; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em">Niềng răng trong suốt, tư vấn miễn phí cùng bác sĩ</h1>
+            <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #2D4A46; max-width: 460px">Bác sĩ đánh giá khớp cắn và lên kế hoạch niềng phù hợp với bạn. Buổi tư vấn đầu tiên không mất phí.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; padding-top: 4px">
+              <span style="display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; font-size: 15px; font-weight: 600">Đặt lịch tư vấn</span>
+              <span style="display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 999px; border: 1.5px solid #0F5E55; color: #0F5E55; font-size: 15px; font-weight: 600">Xem bảng giá</span>
+            </div>
+          </div>
+          <div style="flex: 1 1 260px; min-width: 0; height: 300px; border-radius: 16px; background: #CFE9E3; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #2D6E64">
+            <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg>
+            <span style="font-size: 13px; font-weight: 500">Ảnh bác sĩ tư vấn</span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div style="position: relative; padding: {{ statPad }}; background: #0F5E55; color: #FFFFFF; box-shadow: {{ c.stats.ring }}">
+          <sc-if value="{{ c.stats.selected }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 0; left: 0; padding: 3px 9px; border-radius: 0 0 6px 0; background: #FFFFFF; color: #3730A3; font-size: 11px; font-weight: 600">Số liệu nổi bật</span>
+          </sc-if>
+          <sc-if value="{{ c.stats.chipShow }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 8px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #FFFFFF; color: #15171C; font-size: 11px; font-weight: 600">{{ c.stats.chip }}</span>
+          </sc-if>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+            <sc-for list="{{ stats }}" as="st" hint-placeholder-count="3">
+              <div class="{{ st.a.cls }}" style="display: flex; flex-direction: column; gap: 4px; animation-delay: {{ st.a.delay }}; animation-duration: {{ st.a.dur }}">
+                <span aria-label="{{ st.final }}" style="font-size: {{ statSize }}; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums">{{ st.value }}</span>
+                <span style="font-size: 13px; line-height: 1.4; color: #BFE6DE">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Benefits -->
+        <div style="position: relative; padding: {{ secPad }}; display: flex; flex-direction: column; gap: 28px; background: #FFFFFF; box-shadow: {{ c.benefits.ring }}">
+          <sc-if value="{{ c.benefits.selected }}" hint-placeholder-val="{{ true }}">
+            <span style="position: absolute; top: 0; left: 0; padding: 3px 9px; border-radius: 0 0 6px 0; background: #4338CA; color: #FFFFFF; font-size: 11px; font-weight: 600">Lợi ích</span>
+          </sc-if>
+          <sc-if value="{{ c.benefits.chipShow }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">{{ c.benefits.chip }}</span>
+          </sc-if>
+          <h2 class="{{ c.benefits.h.cls }}" style="margin: 0; text-align: center; font-size: 26px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; animation-delay: {{ c.benefits.h.delay }}; animation-duration: {{ c.benefits.h.dur }}">
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ c.benefits.l1.cls }}" style="display: block; animation-delay: {{ c.benefits.l1.delay }}; animation-duration: {{ c.benefits.l1.dur }}">Vì sao chọn niềng trong suốt</span></span>
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ c.benefits.l2.cls }}" style="display: block; animation-delay: {{ c.benefits.l2.delay }}; animation-duration: {{ c.benefits.l2.dur }}">tại Smile Care</span></span>
+          </h2>
+          <div style="display: grid; grid-template-columns: {{ benefitCols }}; gap: 16px">
+            <sc-for list="{{ c.benefits.cards }}" as="cd" hint-placeholder-count="6">
+              <div class="{{ cd.a.cls }}" style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 14px; background: #F4FAF8; animation-delay: {{ cd.a.delay }}; animation-duration: {{ cd.a.dur }}">
+                <span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+                <span style="font-size: 15px; font-weight: 600">{{ cd.title }}</span>
+                <span style="font-size: 13px; line-height: 1.55; color: #2D4A46">{{ cd.desc }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Doctor -->
+        <div style="position: relative; padding: {{ secPad }}; background: #F4FAF8; display: flex; flex-wrap: wrap; gap: 36px; align-items: center; box-shadow: {{ c.doctor.ring }}">
+          <sc-if value="{{ c.doctor.selected }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 0; left: 0; padding: 3px 9px; border-radius: 0 0 6px 0; background: #4338CA; color: #FFFFFF; font-size: 11px; font-weight: 600">Bác sĩ phụ trách</span>
+          </sc-if>
+          <sc-if value="{{ c.doctor.chipShow }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">{{ c.doctor.chip }}</span>
+          </sc-if>
+          <div class="{{ c.doctor.box.cls }}" style="flex: 1 1 260px; min-width: 0; height: 240px; border-radius: 16px; overflow: hidden; animation-delay: {{ c.doctor.box.delay }}; animation-duration: {{ c.doctor.box.dur }}">
+            <div class="{{ c.doctor.img.cls }}" style="width: 100%; height: 100%; background: #CFE9E3; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #2D6E64; animation-delay: {{ c.doctor.img.delay }}; animation-duration: {{ c.doctor.img.dur }}">
+              <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg>
+              <span style="font-size: 13px; font-weight: 500">Ảnh đội ngũ bác sĩ</span>
+            </div>
+          </div>
+          <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+            <span class="{{ c.doctor.eyebrow.cls }}" style="font-size: 13px; font-weight: 600; color: #0F5E55; letter-spacing: 0.04em; animation-delay: {{ c.doctor.eyebrow.delay }}; animation-duration: {{ c.doctor.eyebrow.dur }}">BÁC SĨ PHỤ TRÁCH</span>
+            <h2 class="{{ c.doctor.h.cls }}" style="margin: 0; font-size: 26px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; animation-delay: {{ c.doctor.h.delay }}; animation-duration: {{ c.doctor.h.dur }}">
+              <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ c.doctor.l1.cls }}" style="display: block; animation-delay: {{ c.doctor.l1.delay }}; animation-duration: {{ c.doctor.l1.dur }}">Một bác sĩ theo bạn</span></span>
+              <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ c.doctor.l2.cls }}" style="display: block; animation-delay: {{ c.doctor.l2.delay }}; animation-duration: {{ c.doctor.l2.dur }}">từ đầu đến khi tháo khay</span></span>
+            </h2>
+            <p class="{{ c.doctor.p.cls }}" style="margin: 0; font-size: 15px; line-height: 1.6; color: #2D4A46; animation-delay: {{ c.doctor.p.delay }}; animation-duration: {{ c.doctor.p.dur }}">Bác sĩ khám, lên kế hoạch và tái khám cho bạn trong suốt liệu trình, nên mọi điều chỉnh đều dựa trên tiến độ thật của bạn.</p>
+          </div>
+        </div>
+
+        <!-- Steps -->
+        <div style="position: relative; padding: {{ secPad }}; display: flex; flex-direction: column; gap: 28px; background: #FFFFFF; box-shadow: {{ c.steps.ring }}">
+          <sc-if value="{{ c.steps.selected }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 0; left: 0; padding: 3px 9px; border-radius: 0 0 6px 0; background: #4338CA; color: #FFFFFF; font-size: 11px; font-weight: 600">Quy trình 4 bước</span>
+          </sc-if>
+          <sc-if value="{{ c.steps.chipShow }}" hint-placeholder-val="{{ false }}">
+            <span style="position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: #15171C; color: #FFFFFF; font-size: 11px; font-weight: 600">{{ c.steps.chip }}</span>
+          </sc-if>
+          <h2 class="{{ c.steps.h.cls }}" style="margin: 0; text-align: center; font-size: 26px; line-height: 1.3; font-weight: 700; letter-spacing: -0.01em; animation-delay: {{ c.steps.h.delay }}; animation-duration: {{ c.steps.h.dur }}">
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ c.steps.l1.cls }}" style="display: block; animation-delay: {{ c.steps.l1.delay }}; animation-duration: {{ c.steps.l1.dur }}">Niềng răng tại Smile Care</span></span>
+            <span style="display: block; overflow: hidden; padding-bottom: 2px"><span class="{{ c.steps.l2.cls }}" style="display: block; animation-delay: {{ c.steps.l2.delay }}; animation-duration: {{ c.steps.l2.dur }}">chỉ với 4 bước</span></span>
+          </h2>
+          <div style="position: relative; display: grid; grid-template-columns: {{ stepCols }}; gap: 24px 16px">
+            <sc-if value="{{ showConnector }}" hint-placeholder-val="{{ true }}">
+              <span aria-hidden="true" class="{{ c.steps.line.cls }}" style="position: absolute; top: 19px; left: 12.5%; right: 12.5%; height: 2px; background: #9CCFC5; animation-delay: {{ c.steps.line.delay }}; animation-duration: {{ c.steps.line.dur }}"></span>
+            </sc-if>
+            <sc-for list="{{ c.steps.items }}" as="stp" hint-placeholder-count="4">
+              <div class="{{ stp.a.cls }}" style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; animation-delay: {{ stp.a.delay }}; animation-duration: {{ stp.a.dur }}">
+                <span style="width: 40px; height: 40px; border-radius: 999px; background: #0F5E55; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; box-shadow: 0 0 0 4px #FFFFFF">{{ stp.n }}</span>
+                <span style="font-size: 15px; font-weight: 600">{{ stp.title }}</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #2D4A46">{{ stp.desc }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Property panel -->
+    <aside aria-labelledby="panel-title" style="flex: 1 1 320px; max-width: 100%; box-sizing: border-box; background: #FFFFFF; border-left: 1px solid #E2E5EA; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 18px; border-bottom: 1px solid #E2E5EA">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <h2 id="panel-title" style="margin: 0; font-size: 16px; font-weight: 600">{{ selKind }}</h2>
+          <span style="font-size: 12px; color: #5E6573">Section {{ selIdx }} / 9</span>
+        </div>
+        <button type="button" aria-label="Đóng bảng thuộc tính" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+      </div>
+
+      <div style="flex: 1; padding: 8px 18px 24px; display: flex; flex-direction: column">
+        <button type="button" aria-expanded="false" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0; border: 0; border-bottom: 1px solid #EEF0F3; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em; cursor: pointer">
+          NỘI DUNG
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+        <button type="button" aria-expanded="false" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0; border: 0; border-bottom: 1px solid #EEF0F3; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em; cursor: pointer">
+          BỐ CỤC
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+
+        <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0 20px; border-bottom: 1px solid #EEF0F3">
+          <button type="button" aria-expanded="true" style="display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #15171C; letter-spacing: 0.06em; cursor: pointer">
+            HIỆU ỨNG XUẤT HIỆN
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+
+          <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; gap: 10px; padding: 12px; border-radius: 10px; background: #F5F6F8; border: 1px solid #E2E5EA">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3C424E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+              <span style="display: flex; flex-direction: column; gap: 3px">
+                <span style="font-size: 13px; font-weight: 600">Luôn hiện ngay</span>
+                <span style="font-size: 12px; line-height: 1.5; color: #5E6573">{{ lockReason }}</span>
+              </span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+            <!-- Entrance -->
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+                <span style="font-size: 13px; font-weight: 600">Cách xuất hiện</span>
+                <span style="font-size: 12px; color: {{ enterStatusFg }}">{{ enterStatus }}</span>
+              </span>
+              <div role="group" aria-label="Cách xuất hiện của section" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+                <sc-for list="{{ enterTiles }}" as="t" hint-placeholder-count="7">
+                  <button type="button" aria-pressed="{{ t.pressed }}" onClick="{{ t.pick }}" style="display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 8px; border: {{ t.border }}; border-radius: 10px; background: {{ t.bg }}; font: inherit; text-align: left; cursor: pointer; color: #15171C">
+                    <span aria-hidden="true" style="width: 40px; height: 32px; flex: none; border-radius: 6px; background: #F0F2F5; display: flex; align-items: center; justify-content: center; overflow: hidden">
+                      <span class="{{ t.thumb.cls }}" style="width: 18px; height: 20px; box-sizing: border-box; padding: 4px 3px; border-radius: 3px; background: #FFFFFF; border: 1px solid {{ t.cardBorder }}; box-shadow: {{ t.trail }}; display: flex; flex-direction: column; gap: 2px; animation-delay: {{ t.thumb.delay }}; animation-duration: {{ t.thumb.dur }}"><span style="height: 2px; background: {{ t.bar }}; border-radius: 2px"></span><span style="height: 2px; width: 60%; background: #CDD2DA; border-radius: 2px"></span></span>
+                    </span>
+                    <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+                      <span style="font-size: 12px; font-weight: 600; color: {{ t.fg }}">{{ t.name }}</span>
+                      <sc-if value="{{ t.follow }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; color: #5E6573">theo trang</span></sc-if>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+              <span style="font-size: 12px; line-height: 1.5; color: #3C424E">{{ enterDesc }}</span>
+              <sc-if value="{{ enterOverridden }}" hint-placeholder-val="{{ true }}">
+                <button type="button" onClick="{{ resetEnter }}" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #3730A3; cursor: pointer">
+                  <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5"></path><path d="M4 4v4.5h4.5"></path></svg>
+                  Dùng lại cài đặt trang ({{ pageEnterName }})
+                </button>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ moving }}" hint-placeholder-val="{{ true }}">
+              <!-- Order -->
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+                  <span style="font-size: 13px; font-weight: 600">Thứ tự trong section</span>
+                  <span style="font-size: 12px; color: {{ orderStatusFg }}">{{ orderStatus }}</span>
+                </span>
+                <div role="group" aria-label="Thứ tự xuất hiện trong section" style="display: grid; grid-template-columns: {{ orderCols }}; gap: 6px">
+                  <sc-for list="{{ orderTiles }}" as="o" hint-placeholder-count="3">
+                    <button type="button" aria-pressed="{{ o.pressed }}" onClick="{{ o.pick }}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px; border: {{ o.border }}; border-radius: 10px; background: {{ o.bg }}; font: inherit; cursor: pointer; color: {{ o.fg }}">
+                      <span aria-hidden="true" style="display: grid; grid-template-columns: {{ o.gridCols }}; gap: 3px">
+                        <sc-for list="{{ o.boxes }}" as="bx" hint-placeholder-count="3">
+                          <span style="width: 16px; height: 14px; border-radius: 3px; background: {{ o.boxBg }}; color: {{ o.boxFg }}; font-size: 9px; font-weight: 700; line-height: 14px; text-align: center">{{ bx.n }}</span>
+                        </sc-for>
+                      </span>
+                      <span style="font-size: 12px; font-weight: 600">{{ o.name }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ orderOverridden }}" hint-placeholder-val="{{ true }}">
+                  <button type="button" onClick="{{ resetOrder }}" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #3730A3; cursor: pointer">
+                    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5"></path><path d="M4 4v4.5h4.5"></path></svg>
+                    Dùng lại cài đặt trang ({{ pageOrderName }})
+                  </button>
+                </sc-if>
+              </div>
+
+              <!-- Accents -->
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <span style="font-size: 13px; font-weight: 600">Điểm nhấn</span>
+                <sc-if value="{{ noAccents }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Section này không có nội dung cho điểm nhấn (tiêu đề nhiều dòng, ảnh, số liệu hay các bước).</span>
+                </sc-if>
+                <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+                  <sc-for list="{{ accents }}" as="ac" hint-placeholder-count="1">
+                    <li style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #F0F2F5">
+                      <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                        <span id="{{ ac.id }}" style="font-size: 13px; font-weight: 500">{{ ac.name }}</span>
+                        <span style="font-size: 12px; color: {{ ac.statusFg }}">{{ ac.status }}</span>
+                      </span>
+                      <button type="button" role="switch" aria-checked="{{ ac.checked }}" aria-labelledby="{{ ac.id }}" onClick="{{ ac.toggle }}" style="position: relative; width: 40px; height: 24px; flex: none; padding: 0; border: 0; border-radius: 999px; background: {{ ac.bg }}; cursor: pointer"><span aria-hidden="true" style="position: absolute; top: 3px; left: {{ ac.knob }}; width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.2)"></span></button>
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showMobileNote }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; gap: 8px; font-size: 12px; line-height: 1.5; color: #3C424E">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><rect x="7" y="3" width="10" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>
+                <span>Trên điện thoại: chỉ hiện dần, cùng lúc, theo <a href="MotionPage.dc.html">Cài đặt trang</a>.</span>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: #F5F6F8">
+            <span style="font-size: 12px; line-height: 1.5; color: #3C424E">Section đứng yên khi bạn chỉnh sửa. Chạy thử để xem như khách thấy.</span>
+            <button type="button" onClick="{{ runSection }}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1.5px solid #4338CA; border-radius: 10px; background: #FFFFFF; color: #3730A3; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"></path></svg>
+              Chạy thử section này
+            </button>
+            <button type="button" onClick="{{ runPage }}" style="min-height: 32px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #3730A3; cursor: pointer">Chạy thử cả trang</button>
+          </div>
+        </div>
+
+        <button type="button" aria-expanded="false" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0; border: 0; border-bottom: 1px solid #EEF0F3; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em; cursor: pointer">
+          HIỂN THỊ
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    function page() { return { enter: 'page', order: 'page', acc: {} }; }
+    this.state = {
+      device: 'desktop',
+      sel: 'benefits',
+      fx: {
+        stats: page(),
+        benefits: { enter: 'pop', order: 'rows', acc: {} },
+        doctor: { enter: 'side', order: 'page', acc: {} },
+        steps: page(),
+        faq: page(),
+        form: { enter: 'none', order: 'page', acc: {} },
+        footer: page()
+      },
+      run: 'idle', scope: 'page', el: 0, tilePlay: null
+    };
+    this.timer = null;
+    this.iv = null;
+    this.total = 2000;
+  }
+  componentWillUnmount() {
+    clearTimeout(this.timer);
+    clearInterval(this.iv);
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var d = s.device;
+    var isMobile = d === 'mobile';
+
+    // Page settings this board assumes (board 37): style "Mượt mà", level "Vừa", reduce motion on phones.
+    var PAGE = { name: 'Mượt mà', enter: 'up', order: 'stagger', accents: { lines: true, image: false, count: true, steps: true }, dur: 500, step: 90 };
+    var REDUCE_MOBILE = true;
+    var ENTERS = ['none', 'fade', 'up', 'side', 'zoom', 'pop', 'reveal'];
+    var ENTER = {
+      none: { name: 'Không hiệu ứng', desc: 'Section hiện ngay, không chuyển động.', trail: 'none' },
+      fade: { name: 'Hiện dần', desc: 'Rõ dần khi khách cuộn tới.', trail: '0 0 0 3px rgba(138,145,160,0.2)' },
+      up: { name: 'Trượt lên', desc: 'Rõ dần và trượt lên một chút.', trail: '0 5px 0 -1px rgba(138,145,160,0.35)' },
+      side: { name: 'Trượt từ bên', desc: 'Theo bố cục: chữ vào từ bên trái, ảnh vào từ bên phải.', trail: '-6px 0 0 -1px rgba(138,145,160,0.35)' },
+      zoom: { name: 'Phóng nhẹ', desc: 'Rõ dần và lớn lên rất nhẹ.', trail: 'inset 0 0 0 3px rgba(138,145,160,0.25)' },
+      pop: { name: 'Bật lên', desc: 'Bật lên với độ nảy nhẹ, hợp với thẻ và biểu tượng.', trail: '0 0 0 4px rgba(242,163,58,0.35)' },
+      reveal: { name: 'Hé lộ', desc: 'Hé lộ chậm rãi từ dưới lên.', trail: '0 9px 0 -2px rgba(138,145,160,0.25)' }
+    };
+    var ORDERS = { together: 'Cùng lúc', stagger: 'Lần lượt', rows: 'Theo hàng' };
+    var ACC = { lines: 'Tiêu đề hiện từng dòng', image: 'Ảnh hé lộ', count: 'Số liệu đếm lên', steps: 'Các bước nối nhau' };
+    var META = {
+      nav: { kind: 'Thanh điều hướng', label: 'Logo · nút Đặt lịch', locked: true },
+      hero: { kind: 'Hero', label: '“Niềng răng trong suốt, tư vấn…”', locked: true },
+      stats: { kind: 'Số liệu nổi bật', label: '3 con số', acc: ['count'], grid: true },
+      benefits: { kind: 'Lợi ích', label: '“Vì sao chọn niềng trong suốt…”', acc: ['lines'], grid: true },
+      doctor: { kind: 'Bác sĩ phụ trách', label: 'Ảnh · giới thiệu', acc: ['lines', 'image'] },
+      steps: { kind: 'Quy trình 4 bước', label: 'Tư vấn → Tái khám', acc: ['lines', 'steps'], grid: true },
+      faq: { kind: 'Câu hỏi thường gặp', label: '6 câu hỏi', acc: ['lines'] },
+      form: { kind: 'Form đăng ký tư vấn', label: 'Họ và tên · Số điện thoại', acc: [] },
+      footer: { kind: 'Chân trang', label: 'Địa chỉ · chính sách', acc: [] }
+    };
+    var KEYS = ['nav', 'hero', 'stats', 'benefits', 'doctor', 'steps', 'faq', 'form', 'footer'];
+    var LOCK_REASONS = {
+      nav: 'Thanh điều hướng không có hiệu ứng để khách bấm được ngay.',
+      hero: 'Section đầu trang không có hiệu ứng để khách thấy ngay tiêu đề chính và nút “Đặt lịch tư vấn”.'
+    };
+
+    function enterCls(kind, dir) {
+      if (kind === 'none') return '';
+      if (kind === 'side') return 'mx-a ' + (dir === 'r' ? 'mx-right' : 'mx-left');
+      return 'mx-a mx-' + kind;
+    }
+    function setFx(k, patch) {
+      var next = Object.assign({}, self.state.fx);
+      next[k] = Object.assign({}, next[k], patch);
+      self.setState({ fx: next });
+    }
+    function resolve(k) {
+      var m = META[k];
+      var x = s.fx[k];
+      if (m.locked) return { enter: 'none', order: 'together', acc: function () { return false; } };
+      var enter = x.enter === 'page' ? PAGE.enter : x.enter;
+      var order = x.order === 'page' ? PAGE.order : x.order;
+      if (order === 'rows' && !m.grid) order = 'stagger';
+      var mob = isMobile && REDUCE_MOBILE && enter !== 'none';
+      if (mob) { enter = 'fade'; order = 'together'; }
+      return {
+        enter: enter,
+        order: order,
+        acc: function (a) {
+          if (enter === 'none' || m.acc.indexOf(a) < 0) return false;
+          if (mob && a !== 'count') return false;
+          var v = x.acc[a];
+          return v === undefined ? PAGE.accents[a] : v;
+        }
+      };
+    }
+
+    var running = s.run !== 'idle';
+    var NONE = { cls: '', delay: '0ms', dur: '0ms' };
+    var end = 0;
+    var PAGE_BASES = { stats: 150, benefits: 450, doctor: 850, steps: 1250 };
+    function build(k) {
+      var r = resolve(k);
+      var act = running && (s.scope === 'page' || s.scope === k);
+      var base = s.scope === 'page' ? (PAGE_BASES[k] || 0) : 100;
+      var step = r.order === 'together' ? 0 : PAGE.step;
+      function A(cls, delay, du) {
+        du = du || PAGE.dur;
+        if (!cls || !act) return NONE;
+        end = Math.max(end, delay + du);
+        return { cls: cls, delay: delay + 'ms', dur: du + 'ms' };
+      }
+      function at(i, cols, b) {
+        if (r.order === 'together') return b;
+        if (r.order === 'rows') return b + Math.floor(i / cols) * step * 2;
+        return b + i * step;
+      }
+      function heading(b, dir) {
+        if (r.acc('lines')) return { h: NONE, l1: A('mx-a mx-line', b, 550), l2: A('mx-a mx-line', b + 110, 550) };
+        return { h: A(enterCls(r.enter, dir), b), l1: NONE, l2: NONE };
+      }
+      var extras = [];
+      ['lines', 'image', 'count', 'steps'].forEach(function (a) { if (r.acc(a)) extras.push(ACC[a].toLowerCase()); });
+      var chip = r.enter === 'none' ? 'Hiện ngay' : ENTER[r.enter].name + (extras.length ? ' + ' + extras.join(', ') : '') + (r.order !== 'together' ? ' · ' + ORDERS[r.order].toLowerCase() : '');
+      return { r: r, act: act, base: base, step: step, A: A, at: at, heading: heading, E: function (dir) { return enterCls(r.enter, dir); }, chip: chip, ring: s.sel === k ? 'inset 0 0 0 2px #4338CA' : 'none', selected: s.sel === k };
+    }
+
+    // Stats
+    var gs = build('stats');
+    var countOn = gs.act && gs.r.acc('count');
+    var p = 1;
+    if (countOn) {
+      end = Math.max(end, gs.base + 1100);
+      p = Math.min(1, Math.max(0, (s.el - gs.base) / 1100));
+      p = 1 - Math.pow(1 - p, 3);
+    }
+    var stats = [
+      { label: 'năm kinh nghiệm chỉnh nha', value: String(Math.round(15 * p)), final: '15' },
+      { label: 'khách hàng đã niềng', value: Math.round(8000 * p).toLocaleString('vi-VN') + '+', final: '8.000+' },
+      { label: 'điểm đánh giá trung bình', value: (4.9 * p).toFixed(1).replace('.', ',') + '/5', final: '4,9/5' }
+    ].map(function (x, i) { return Object.assign({}, x, { a: gs.A(gs.E('l'), gs.at(i, 3, gs.base)) }); });
+
+    // Benefits: 6 cards so "theo hàng" is visible.
+    var gb = build('benefits');
+    var bCols = isMobile ? 1 : 3;
+    var bh = gb.heading(gb.base, 'l');
+    var cardBase = gb.base + (gb.step ? 160 : 0);
+    var cardDefs = [
+      { title: 'Gần như vô hình', desc: 'Khay trong suốt, tự tin khi giao tiếp.' },
+      { title: 'Tháo lắp khi ăn uống', desc: 'Không kiêng khem nhiều.' },
+      { title: 'Bác sĩ theo dõi sát', desc: 'Tái khám định kỳ theo tiến độ.' },
+      { title: 'Ít đau, ít vướng', desc: 'Không có mắc cài cọ vào má.' },
+      { title: 'Xem trước kết quả', desc: 'Mô phỏng 3D trước khi bắt đầu.' },
+      { title: 'Tư vấn miễn phí', desc: 'Buổi đầu tiên không mất phí.' }
+    ];
+    var benefits = {
+      h: bh.h, l1: bh.l1, l2: bh.l2,
+      cards: cardDefs.map(function (x, i) { return Object.assign({}, x, { a: gb.A(gb.E('l'), gb.at(i, bCols, cardBase)) }); })
+    };
+
+    // Doctor: image left, text right.
+    var gd = build('doctor');
+    var imgAcc = gd.r.acc('image');
+    var dh = gd.heading(gd.base + 100, 'r');
+    var doctor = {
+      box: imgAcc ? NONE : gd.A(gd.E('l'), gd.base),
+      img: imgAcc ? gd.A('mx-a mx-img', gd.base, 800) : NONE,
+      eyebrow: gd.A(gd.E('r'), gd.base + (gd.step ? 40 : 0)),
+      h: dh.h, l1: dh.l1, l2: dh.l2,
+      p: gd.A(gd.E('r'), gd.base + 100 + (gd.step ? 180 : 0))
+    };
+
+    // Steps with optional connector.
+    var gp = build('steps');
+    var sCols = isMobile ? 2 : 4;
+    var stepAcc = gp.r.acc('steps') && !isMobile;
+    var sh = gp.heading(gp.base, 'l');
+    var stepBase = gp.base + 200;
+    var stepsSec = {
+      h: sh.h, l1: sh.l1, l2: sh.l2,
+      line: stepAcc ? gp.A('mx-a mx-draw', stepBase, 3 * 240 + 120) : NONE,
+      items: [
+        { n: '1', title: 'Tư vấn & chụp phim', desc: 'Bác sĩ khám và chụp phim miễn phí.' },
+        { n: '2', title: 'Lên kế hoạch 3D', desc: 'Xem trước kết quả trước khi niềng.' },
+        { n: '3', title: 'Nhận khay niềng', desc: 'Hướng dẫn đeo và vệ sinh khay.' },
+        { n: '4', title: 'Tái khám định kỳ', desc: 'Điều chỉnh theo tiến độ mỗi 6 tuần.' }
+      ].map(function (x, i) {
+        var delay = stepAcc ? stepBase + i * 240 : gp.at(i, sCols, stepBase);
+        return Object.assign({}, x, { a: gp.A(gp.E('l'), delay) });
+      })
+    };
+    this.total = end + 300;
+
+    function canvasMeta(g) { return { ring: g.ring, selected: g.selected, chipShow: g.act, chip: g.chip }; }
+    var heroAct = running && s.scope === 'page';
+
+    // Outline
+    var selIdx = 1;
+    var outline = KEYS.map(function (k, i) {
+      var m = META[k];
+      var x = s.fx[k];
+      var on = s.sel === k;
+      if (on) selIdx = i + 1;
+      var pill = null;
+      if (m.locked) pill = { text: 'Luôn hiện ngay', bg: '#ECEEF2', fg: '#474E5C' };
+      else if (x.enter === 'none') pill = { text: 'Không hiệu ứng', bg: '#ECEEF2', fg: '#474E5C' };
+      else if (x.enter !== 'page') pill = { text: 'Riêng · ' + ENTER[x.enter].name, bg: '#E0E2FF', fg: '#26208A' };
+      else if (x.order !== 'page') pill = { text: 'Riêng · ' + ORDERS[x.order].toLowerCase(), bg: '#E0E2FF', fg: '#26208A' };
+      else if (Object.keys(x.acc).length) pill = { text: 'Riêng · điểm nhấn', bg: '#E0E2FF', fg: '#26208A' };
+      return {
+        kind: m.kind,
+        label: m.label,
+        cur: on ? 'true' : null,
+        bg: on ? '#EEF0FF' : 'transparent',
+        ring: on ? 'inset 0 0 0 1.5px #4338CA' : 'none',
+        fg: on ? '#3730A3' : '#15171C',
+        hasPill: !!pill,
+        locked: !!m.locked,
+        pillText: pill ? pill.text : '',
+        pillBg: pill ? pill.bg : 'transparent',
+        pillFg: pill ? pill.fg : '#15171C',
+        pick: function () { self.setState({ sel: k, run: 'idle' }); }
+      };
+    });
+
+    // Panel
+    var sel = s.sel;
+    var m = META[sel];
+    var x = s.fx[sel];
+    var locked = !!m.locked;
+    var effEnter = locked ? 'none' : (x.enter === 'page' ? PAGE.enter : x.enter);
+    var effOrder = locked ? 'together' : (x.order === 'page' ? PAGE.order : x.order);
+    if (effOrder === 'rows' && !m.grid) effOrder = 'stagger';
+    var enterTiles = ENTERS.map(function (k) {
+      var on = k === effEnter;
+      var play = s.tilePlay === k && k !== 'none';
+      return {
+        name: ENTER[k].name,
+        follow: on && x && x.enter === 'page',
+        pressed: on ? 'true' : 'false',
+        border: on ? '1.5px solid #4338CA' : '1px solid #E2E5EA',
+        bg: on ? '#F5F5FF' : '#FFFFFF',
+        fg: on ? '#3730A3' : '#15171C',
+        cardBorder: on ? '#A5ABF5' : '#CDD2DA',
+        bar: on ? '#4338CA' : '#8A91A0',
+        trail: ENTER[k].trail,
+        thumb: play ? { cls: enterCls(k, 'l'), delay: '60ms', dur: PAGE.dur + 'ms' } : NONE,
+        pick: function () {
+          clearTimeout(self.timer);
+          setFx(self.state.sel, { enter: k });
+          self.setState({ tilePlay: null });
+          self.timer = setTimeout(function () { self.setState({ tilePlay: k }); }, 30);
+        }
+      };
+    });
+    var orderKeys = m.grid ? ['together', 'stagger', 'rows'] : ['together', 'stagger'];
+    var orderTiles = orderKeys.map(function (k) {
+      var on = k === effOrder;
+      var boxes = k === 'rows' ? [1, 1, 2, 2] : (k === 'stagger' ? [1, 2, 3] : [1, 1, 1]);
+      return {
+        name: ORDERS[k],
+        pressed: on ? 'true' : 'false',
+        border: on ? '1.5px solid #4338CA' : '1px solid #E2E5EA',
+        bg: on ? '#F5F5FF' : '#FFFFFF',
+        fg: on ? '#3730A3' : '#15171C',
+        boxBg: on ? '#C7CBFF' : '#E2E5EA',
+        boxFg: on ? '#26208A' : '#474E5C',
+        gridCols: k === 'rows' ? 'repeat(2, 16px)' : 'repeat(3, 16px)',
+        boxes: boxes.map(function (n) { return { n: n }; }),
+        pick: function () { setFx(self.state.sel, { order: k }); }
+      };
+    });
+    var accents = locked ? [] : m.acc.map(function (a) {
+      var touched = x.acc[a] !== undefined;
+      var on = touched ? x.acc[a] : PAGE.accents[a];
+      return {
+        id: 'mx-sacc-' + a,
+        name: ACC[a],
+        checked: on ? 'true' : 'false',
+        bg: on ? '#4338CA' : '#CDD2DA',
+        knob: on ? '19px' : '3px',
+        status: touched ? 'Riêng cho section này' : 'Theo cài đặt trang',
+        statusFg: touched ? '#3730A3' : '#5E6573',
+        toggle: function () {
+          var nextAcc = Object.assign({}, self.state.fx[self.state.sel].acc);
+          nextAcc[a] = !on;
+          setFx(self.state.sel, { acc: nextAcc });
+        }
+      };
+    });
+
+    function startRun(scope) {
+      clearTimeout(self.timer);
+      clearInterval(self.iv);
+      self.setState({ run: 'idle', el: 0 });
+      self.timer = setTimeout(function () {
+        var start = Date.now();
+        self.setState({ run: 'running', scope: scope, el: 0 });
+        self.iv = setInterval(function () {
+          var el = Date.now() - start;
+          if (el >= self.total) {
+            clearInterval(self.iv);
+            self.setState({ run: 'done', el: el });
+          } else {
+            self.setState({ el: el });
+          }
+        }, 50);
+      }, 40);
+    }
+
+    var frames = { desktop: '100%', tablet: '768px', mobile: '390px' };
+    var labels = { desktop: 'Bản nháp · Máy tính', tablet: 'Bản nháp · Máy tính bảng (768 px)', mobile: 'Bản nháp · Điện thoại (390 px)' };
+    function btn(k) {
+      var on = k === d;
+      return { pressed: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', fg: on ? '#15171C' : '#5E6573', shadow: on ? '0 1px 2px rgba(21,23,28,0.12)' : 'none' };
+    }
+    var scopeLabel = s.scope === 'page' ? 'Cả trang' : 'Section ' + META[s.scope].kind;
+
+    return {
+      dev: { desktop: btn('desktop'), tablet: btn('tablet'), mobile: btn('mobile') },
+      setDesktop: function () { self.setState({ device: 'desktop', run: 'idle' }); },
+      setTablet: function () { self.setState({ device: 'tablet', run: 'idle' }); },
+      setMobile: function () { self.setState({ device: 'mobile', run: 'idle' }); },
+      frameW: frames[d],
+      deviceLabel: labels[d],
+      heroPad: isMobile ? '40px 20px' : (d === 'tablet' ? '48px 32px' : '56px 44px'),
+      h1Size: isMobile ? '28px' : (d === 'tablet' ? '34px' : '40px'),
+      secPad: isMobile ? '40px 20px' : '52px 40px 48px',
+      statPad: isMobile ? '28px 20px' : '32px 40px',
+      statSize: isMobile ? '24px' : '34px',
+      benefitCols: 'repeat(' + bCols + ', minmax(0, 1fr))',
+      stepCols: 'repeat(' + sCols + ', minmax(0, 1fr))',
+      showConnector: !isMobile,
+
+      outline: outline,
+      selKind: m.kind,
+      selIdx: selIdx,
+      locked: locked,
+      editable: !locked,
+      lockReason: LOCK_REASONS[sel] || '',
+      enterTiles: enterTiles,
+      enterDesc: ENTER[effEnter].desc,
+      enterStatus: locked ? '' : (x.enter === 'page' ? 'Theo cài đặt trang' : 'Riêng cho section này'),
+      enterStatusFg: !locked && x.enter !== 'page' ? '#3730A3' : '#5E6573',
+      enterOverridden: !locked && x.enter !== 'page',
+      pageEnterName: ENTER[PAGE.enter].name,
+      resetEnter: function () { setFx(self.state.sel, { enter: 'page' }); },
+      moving: !locked && effEnter !== 'none',
+      orderTiles: orderTiles,
+      orderCols: 'repeat(' + orderKeys.length + ', minmax(0, 1fr))',
+      orderStatus: locked ? '' : (x.order === 'page' ? 'Theo cài đặt trang' : 'Riêng cho section này'),
+      orderStatusFg: !locked && x.order !== 'page' ? '#3730A3' : '#5E6573',
+      orderOverridden: !locked && x.order !== 'page',
+      pageOrderName: ORDERS[PAGE.order],
+      resetOrder: function () { setFx(self.state.sel, { order: 'page' }); },
+      accents: accents,
+      noAccents: accents.length === 0,
+      showMobileNote: REDUCE_MOBILE && !locked && effEnter !== 'none' && (effEnter !== 'fade' || effOrder !== 'together'),
+
+      stats: stats,
+      c: {
+        nav: { ring: s.sel === 'nav' ? 'inset 0 0 0 2px #4338CA' : 'none', selected: s.sel === 'nav' },
+        hero: { ring: s.sel === 'hero' ? 'inset 0 0 0 2px #4338CA' : 'none', selected: s.sel === 'hero', chipShow: heroAct },
+        stats: canvasMeta(gs),
+        benefits: Object.assign(canvasMeta(gb), benefits),
+        doctor: Object.assign(canvasMeta(gd), doctor),
+        steps: Object.assign(canvasMeta(gp), stepsSec)
+      },
+      showBanner: running,
+      bannerTitle: s.run === 'running' ? 'Đang chạy thử' : 'Đã chạy thử xong',
+      bannerDetail: scopeLabel + ' · phong cách trang ' + PAGE.name + (isMobile && REDUCE_MOBILE ? ' · điện thoại chỉ hiện dần' : ''),
+      runPage: function () { startRun('page'); },
+      runSection: function () { startRun(self.state.sel); },
+      rerun: function () { startRun(self.state.scope); },
+      stop: function () {
+        clearTimeout(self.timer);
+        clearInterval(self.iv);
+        self.setState({ run: 'idle', el: 0 });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>
