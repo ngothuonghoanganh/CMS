@@ -1,0 +1,154 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.groupTitle:focus {
+  outline: none;
+}
+
+.styles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.style {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.style:hover {
+  border-color: var(--color-border-strong);
+}
+
+.style[aria-pressed='true'] {
+  padding: 7.5px;
+  border: 1.5px solid var(--color-primary);
+  background: var(--color-primary-tint);
+  color: var(--color-primary-ink);
+}
+
+.styleName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+}
+
+.trait {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+
+.summary {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+.fits {
+  color: var(--color-muted);
+}
+
+.disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--target-min);
+  margin: -8px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chevron {
+  transition: transform var(--duration-fast);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+  transition: transform var(--duration-fast);
+}
+
+.advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.advanced[hidden] {
+  display: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rowLabel {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.help,
+.note {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.note strong {
+  color: var(--color-ink-2);
+}
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-divider);
+}

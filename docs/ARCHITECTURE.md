@@ -2495,6 +2495,21 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     | Thể hình        | Năng động, Vui tươi |
 
     Nhãn chỉ hiện khi biết ngành: trang tạo từ mẫu hệ thống.
+- **Editor (lát M3, màn 37–39):**
+  - Không chọn section nào thì cột phải là "Cài đặt trang · Áp dụng cho cả trang", có hai tab: **Chuyển động** (màn 37) và **SEO & chia sẻ** (dẫn sang màn SEO như trước). Panel cấu trúc trang có thêm nút "Chuyển động · <phong cách>" mở tab này.
+  - Store có các command, mỗi lần đổi là một bước hoàn tác và đi qua `validateComposition`:
+    - `setMotionStyle`, `setMotionLevel`, `setMotionAccent`, `setMotionReduceOnMobile` cho trang;
+    - `setSectionEnter`, `setSectionOrder`, `setSectionAccent` cho section, với `null` là theo trang. Bị từ chối ở section bị khóa, "Theo hàng" ở section không phải lưới, và điểm nhấn section không có.
+  - Bật một điểm nhấn về đúng giá trị của phong cách (ở trang) hay của trang (ở section) thì nó thôi là thay đổi riêng ("theo phong cách", "Theo cài đặt trang").
+  - Trang để "Không hiệu ứng" thì nhóm "Hiệu ứng xuất hiện" của section chỉ nói vì sao không có gì chuyển động và mở Cài đặt trang.
+  - Thư viện phong cách (màn 39) đổi phong cách bằng cùng command với màn 37. Mức độ trong thư viện chỉ đổi các mẫu xem thử; mức độ của trang chỉ có một editor chính thức là màn 37.
+  - **Chạy thử** là trạng thái của editor, không phải của bản nháp: không có bước hoàn tác, không lưu.
+    - Chạy cả trang thì canvas cuộn lên đầu rồi tự cuộn xuống (1,4 giây mỗi màn hình), mọi section có chuyển động chạy khi vào khung, kể cả section đang hiện. Chạy một section thì cuộn tới nó rồi chạy.
+    - "Xem chậm" nhân thời gian với 4 (`--plp-m-speed`). "Như thiết bị bật giảm chuyển động" hiện mọi thứ ngay.
+    - Trong lúc chạy, chữ trên canvas không sửa được và mỗi section có nhãn hiệu ứng của nó. "Quay lại chỉnh sửa", hay bất kỳ thay đổi nào của bản nháp, dừng chạy thử và trả section về như cũ.
+    - Canvas dùng chính runtime và keyframes của trang công khai (`playMotion`); thẻ phong cách và thư viện dùng `MotionSample` với cùng keyframes.
+  - **Template:** `GET` chi tiết trang trả thêm `createdFrom` (template và phiên bản trang được tạo từ đó, `null` nếu không có). Editor dùng nó cho nhãn "Hợp ngành" và dòng "Template đã dùng chọn sẵn phong cách …", chỉ với mẫu hệ thống.
+  - Không làm phần demo "Phản hồi khi thao tác" của màn 37 (di chuột lên nút, mở câu hỏi, gửi form); panel chỉ giữ dòng giải thích.
 - **Reason:** Chuyển động làm trang sinh động hơn mà không mở free styling. Preset cùng một hàm phân giải giữ admin, renderer và AI khớp nhau, và quy tắc giảm chuyển động, không JavaScript giữ trang đọc được với mọi khách.
 - **Consequences:**
   - Trang có hiệu ứng tải thêm một client component nhỏ; trang "Không hiệu ứng" không đổi.

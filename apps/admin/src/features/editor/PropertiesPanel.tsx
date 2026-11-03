@@ -27,7 +27,9 @@ import {
   SettingsIcon,
   Switch,
 } from '@plp/ui';
-import { useId } from 'react';
+import { type KeyboardEvent, useId, useState } from 'react';
+import { PageMotionPanel } from '../motion/PageMotionPanel';
+import { SectionMotionGroup } from '../motion/SectionMotionGroup';
 import { isFieldHidden, listItemsOf } from './content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { FieldControl } from './fields/FieldControl';
@@ -229,35 +231,105 @@ function VisibilityGroup({ section }: { section: SectionInstance }) {
   );
 }
 
+type PageTab = 'motion' | 'seo';
+
+const pageTabs: readonly { id: PageTab; label: string }[] = [
+  { id: 'motion', label: 'Chuyển động' },
+  { id: 'seo', label: 'SEO & chia sẻ' },
+];
+
+/**
+ * With no section selected: "Cài đặt trang", what applies to the whole page (board 37). Motion is
+ * edited here; SEO and sharing keep their own screen. Arrow keys move between the tabs.
+ */
+function PageSettings() {
+  const { siteId, pageId } = useEditorServices();
+  const [tab, setTab] = useState<PageTab>('motion');
+  const baseId = useId();
+  const tabId = (id: PageTab) => `${baseId}-tab-${id}`;
+  const panelId = (id: PageTab) => `${baseId}-panel-${id}`;
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return;
+    }
+    event.preventDefault();
+    const next = tab === 'motion' ? 'seo' : 'motion';
+    setTab(next);
+    document.getElementById(tabId(next))?.focus();
+  }
+
+  return (
+    <aside id={PROPERTIES_PANEL_ID} aria-labelledby="panel-title" className={styles.panel}>
+      <div className={styles.header}>
+        <div className={styles.heading}>
+          <h2 id="panel-title" className={styles.title} tabIndex={-1}>
+            Cài đặt trang
+          </h2>
+          <span className={styles.position}>Áp dụng cho cả trang</span>
+        </div>
+      </div>
+      <div role="tablist" aria-label="Cài đặt trang" className={styles.tabs} onKeyDown={onKeyDown}>
+        {pageTabs.map((item) => (
+          <button
+            key={item.id}
+            id={tabId(item.id)}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            aria-controls={panelId(item.id)}
+            tabIndex={tab === item.id ? 0 : -1}
+            className={styles.tab}
+            onClick={() => {
+              setTab(item.id);
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div
+        id={panelId('motion')}
+        role="tabpanel"
+        aria-labelledby={tabId('motion')}
+        hidden={tab !== 'motion'}
+        className={styles.body}
+      >
+        <PageMotionPanel />
+      </div>
+      <div
+        id={panelId('seo')}
+        role="tabpanel"
+        aria-labelledby={tabId('seo')}
+        hidden={tab !== 'seo'}
+        className={styles.body}
+      >
+        <p className={styles.emptyText}>
+          Tiêu đề, mô tả, ảnh khi chia sẻ và đường dẫn của trang nằm ở màn SEO &amp; chia sẻ.
+        </p>
+        <GuardedLink href={`/sites/${siteId}/pages/${pageId}/seo`} className={styles.shortcut}>
+          <SettingsIcon size={18} />
+          Cài đặt trang &amp; SEO
+        </GuardedLink>
+      </div>
+      <p className={styles.footnote}>
+        Chọn một section trên trang hoặc trong cấu trúc trang để sửa nội dung, bố cục và cách hiển
+        thị.
+      </p>
+    </aside>
+  );
+}
+
 /** The right column: fields of the selected section, generated from its definition. */
 export function PropertiesPanel() {
   const store = useEditorStoreApi();
-  const { siteId, pageId } = useEditorServices();
   const sections = useEditor((state) => state.draft.composition.sections);
   const selectedId = useEditor((state) => state.selection.sectionId);
   const index = sections.findIndex((section) => section.id === selectedId);
   const section = sections[index];
 
   if (!section) {
-    return (
-      <aside id={PROPERTIES_PANEL_ID} aria-labelledby="panel-title" className={styles.panel}>
-        <div className={styles.header}>
-          <h2 id="panel-title" className={styles.title}>
-            Thuộc tính
-          </h2>
-        </div>
-        <div className={styles.empty}>
-          <p className={styles.emptyText}>
-            Chọn một section trên trang hoặc trong cấu trúc trang để sửa nội dung, bố cục và cách
-            hiển thị.
-          </p>
-          <GuardedLink href={`/sites/${siteId}/pages/${pageId}/seo`} className={styles.shortcut}>
-            <SettingsIcon size={18} />
-            Cài đặt trang &amp; SEO
-          </GuardedLink>
-        </div>
-      </aside>
-    );
+    return <PageSettings />;
   }
 
   const definition = getSectionDefinition(section.type);
@@ -286,6 +358,8 @@ export function PropertiesPanel() {
         <ContentGroup section={section} />
         <div className={styles.divider} />
         <LayoutGroup section={section} />
+        <div className={styles.divider} />
+        <SectionMotionGroup section={section} index={index} />
         <div className={styles.divider} />
         <VisibilityGroup section={section} />
       </div>

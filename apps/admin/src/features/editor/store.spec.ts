@@ -710,3 +710,117 @@ describe('editor store: applying a template (ADR-030)', () => {
     expect(store.getState().history.past).toHaveLength(0);
   });
 });
+
+describe('editor store: motion (ADR-032)', () => {
+  it('sets the page style as one undo step, and stores nothing for "Không hiệu ứng"', () => {
+    const store = makeStore();
+    expect(store.getState().draft.composition.motion).toBeUndefined();
+    expect(store.getState().setMotionStyle('smooth')).toBe(true);
+    expect(store.getState().draft.composition.motion).toEqual({
+      style: 'smooth',
+      level: 'mid',
+      accents: {},
+      reduceOnMobile: false,
+    });
+    expect(store.getState().history.past).toHaveLength(1);
+    expect(store.getState().saveState).toBe('dirty');
+    // The same style again changes nothing and records nothing.
+    expect(store.getState().setMotionStyle('smooth')).toBe(true);
+    expect(store.getState().history.past).toHaveLength(1);
+    store.getState().setMotionStyle('none');
+    expect(store.getState().draft.composition.motion).toBeUndefined();
+    store.getState().undo();
+    expect(store.getState().draft.composition.motion?.style).toBe('smooth');
+  });
+
+  it('keeps an accent switched away from the style until the style changes', () => {
+    const store = makeStore();
+    store.getState().setMotionStyle('smooth');
+    store.getState().setMotionAccent('lines', false);
+    store.getState().setMotionAccent('image', true);
+    expect(store.getState().draft.composition.motion?.accents).toEqual({
+      lines: false,
+      image: true,
+    });
+    // Back to what the style says: no longer a change of the user's.
+    store.getState().setMotionAccent('lines', true);
+    expect(store.getState().draft.composition.motion?.accents).toEqual({ image: true });
+    store.getState().setMotionLevel('high');
+    store.getState().setMotionReduceOnMobile(true);
+    store.getState().setMotionStyle('luxe');
+    expect(store.getState().draft.composition.motion).toEqual({
+      style: 'luxe',
+      level: 'high',
+      accents: {},
+      reduceOnMobile: true,
+    });
+  });
+
+  it('changes how a section enters, and follows the page again with null', () => {
+    const store = makeStore();
+    store.getState().setMotionStyle('playful');
+    expect(store.getState().setSectionEnter(FAQ, 'pop')).toBe(true);
+    expect(store.getState().setSectionOrder(FAQ, 'together')).toBe(true);
+    expect(store.getState().setSectionAccent(FAQ, 'lines', false)).toBe(true);
+    expect(sectionById(store, FAQ).motion).toEqual({
+      enter: 'pop',
+      order: 'together',
+      accents: { lines: false },
+    });
+    store.getState().setSectionEnter(FAQ, null);
+    store.getState().setSectionOrder(FAQ, null);
+    store.getState().setSectionAccent(FAQ, 'lines', null);
+    expect(sectionById(store, FAQ).motion).toBeUndefined();
+    expect(store.getState().history.past).toHaveLength(7);
+  });
+
+  it('refuses what a section cannot do on its own', () => {
+    const store = makeStore();
+    store.getState().setMotionStyle('smooth');
+    // The navigation bar and the first section always show at once.
+    expect(store.getState().setSectionEnter(NAVBAR, 'pop')).toBe(false);
+    expect(store.getState().setSectionEnter(HERO, 'pop')).toBe(false);
+    // The questions sit in one column: no rows, no image to reveal.
+    expect(store.getState().setSectionOrder(FAQ, 'rows')).toBe(false);
+    expect(store.getState().setSectionAccent(FAQ, 'image', true)).toBe(false);
+    expect(store.getState().setSectionOrder(BENEFITS, 'rows')).toBe(true);
+    expect(store.getState().history.past).toHaveLength(2);
+  });
+
+  it('applies a template with its motion style', () => {
+    const store = makeStore();
+    store.getState().setMotionStyle('lively');
+    const template = {
+      ...sampleComposition(),
+      motion: { style: 'luxe' as const, level: 'mid' as const, accents: {}, reduceOnMobile: false },
+    };
+    expect(store.getState().applyTemplate(template)).toBe(true);
+    expect(store.getState().draft.composition.motion?.style).toBe('luxe');
+    expect(store.getState().applyTemplate(sampleComposition())).toBe(true);
+    expect(store.getState().draft.composition.motion).toBeUndefined();
+  });
+
+  it('plays the page or a section, and a change to the draft stops it', () => {
+    const store = makeStore();
+    store.getState().setMotionStyle('smooth');
+    store.getState().playMotion({ kind: 'page' });
+    expect(store.getState().motionPlay).toMatchObject({
+      scope: { kind: 'page' },
+      run: 1,
+      done: false,
+    });
+    store.getState().finishMotionPlay();
+    expect(store.getState().motionPlay.done).toBe(true);
+    store.getState().playMotion({ kind: 'page' });
+    expect(store.getState().motionPlay).toMatchObject({ run: 2, done: false });
+    store.getState().setMotionSlow(true);
+    store.getState().setMotionReduced(true);
+    // Playing is no edit: nothing to undo, nothing to save.
+    expect(store.getState().history.past).toHaveLength(1);
+    store.getState().setMotionLevel('low');
+    expect(store.getState().motionPlay).toMatchObject({ scope: null, slow: true, reduced: true });
+    store.getState().playMotion({ kind: 'section', sectionId: FAQ });
+    store.getState().undo();
+    expect(store.getState().motionPlay.scope).toBeNull();
+  });
+});

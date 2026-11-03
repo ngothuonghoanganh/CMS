@@ -160,6 +160,14 @@ describe('template library', () => {
     expect(sections.find((section) => section.type === 'hero')?.content.primaryCta).toMatchObject({
       link: { kind: 'section', sectionId: form?.id },
     });
+    // The template's motion style comes with it, and the editor learns what it was made from
+    // (ADR-032).
+    expect(created.draft.composition.motion?.style).toBe('smooth');
+    expect(created.createdFrom).toEqual({
+      source: 'system',
+      templateId: TEMPLATE_ID,
+      version: TEMPLATE_VERSION,
+    });
     // Sample text is marked: publishing warns about it; the form blocks until the site is ready.
     expect(created.checks.warnings.map((item) => item.code)).toContain('sample_content');
     expect(created.checks.blocking.map((item) => item.code)).toEqual(
@@ -211,6 +219,8 @@ describe('template library', () => {
       .collection('pages')
       .findOne({ _id: new Types.ObjectId(blank.page.id) });
     expect(stored?.createdFrom).toBeNull();
+    expect(blank.createdFrom).toBeNull();
+    expect(blank.draft.composition).not.toHaveProperty('motion');
   });
 
   it('refuses another version with the current one, and an unknown template, creating nothing', async () => {

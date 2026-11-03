@@ -231,27 +231,45 @@ export function resolveSectionMotion(
   ) {
     return null;
   }
-  const style = MOTION_STYLES[page.style];
   const own: SectionMotion = section.motion ?? {};
-  const enter = own.enter ?? style.enter;
-  if (enter === 'none') {
+  const capability = motionCapabilityOf(section);
+  const order = own.order ?? MOTION_STYLES[page.style].order;
+  return timedMotion(page.style, page.level, {
+    enter: own.enter ?? MOTION_STYLES[page.style].enter,
+    order: order === 'rows' && !capability.grid ? 'stagger' : order,
+    accents: motionAccentIds.filter(
+      (accent) =>
+        capability.accents.includes(accent) &&
+        (own.accents?.[accent] ?? pageAccentOn(page, accent)),
+    ),
+  });
+}
+
+/**
+ * How parts enter with `enter`, `order` and `accents`, timed by the style and the level: what
+ * `resolveSectionMotion` gives a section, and what the editor's samples of a style play. Null when
+ * nothing moves.
+ */
+export function timedMotion(
+  style: MotionStyle,
+  level: MotionLevel,
+  how: { enter: MotionEnter; order: MotionOrder; accents: readonly MotionAccent[] },
+): ResolvedSectionMotion | null {
+  const { enter, accents } = how;
+  if (style === 'none' || enter === 'none') {
     return null;
   }
-  const capability = motionCapabilityOf(section);
-  const accents = motionAccentIds.filter(
-    (accent) =>
-      capability.accents.includes(accent) && (own.accents?.[accent] ?? pageAccentOn(page, accent)),
-  );
-  let order = own.order ?? style.order;
-  if (order === 'rows' && !capability.grid) {
-    order = 'stagger';
-  }
-  const level = MOTION_LEVELS[page.level];
-  const durationMs = Math.round(style.durationMs * level.durationFactor);
-  let stepMs = order === 'together' ? 0 : style.stepMs;
+  const definition = MOTION_STYLES[style];
+  const durationMs = Math.round(definition.durationMs * MOTION_LEVELS[level].durationFactor);
   if (accents.includes('steps')) {
-    order = 'stagger';
-    stepMs = Math.max(style.stepMs * 3, STEPS_MIN_GAP_MS);
+    return {
+      enter,
+      order: 'stagger',
+      accents,
+      durationMs,
+      stepMs: Math.max(definition.stepMs * 3, STEPS_MIN_GAP_MS),
+    };
   }
-  return { enter, order, accents, durationMs, stepMs };
+  const stepMs = how.order === 'together' ? 0 : definition.stepMs;
+  return { enter, order: how.order, accents, durationMs, stepMs };
 }

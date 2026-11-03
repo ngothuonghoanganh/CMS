@@ -19,7 +19,12 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type CheckItem, MAX_SECTIONS, type SectionInstance } from '@plp/contracts';
-import { canMoveSection, getSectionDefinition } from '@plp/sections/schema';
+import {
+  canMoveSection,
+  getSectionDefinition,
+  MOTION_STYLES,
+  pageMotionOf,
+} from '@plp/sections/schema';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -31,6 +36,7 @@ import {
   Tooltip,
 } from '@plp/ui';
 import { type ReactNode, useId, useLayoutEffect, useMemo, useRef } from 'react';
+import { motionPillOf } from '../motion/motion-view';
 import { ThemeDots } from '../theme';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { groupLabels } from './presentation';
@@ -93,6 +99,8 @@ interface RowProps {
   selected: boolean;
   /** Title of the first blocking check of this section, e.g. "Nút chính chưa có đích". */
   error: string | null;
+  /** How the section moves when that is not simply the page's style (board 38). */
+  motionPill: { text: string; own: boolean } | null;
   canUp: boolean;
   canDown: boolean;
   onMove: (section: SectionInstance, toIndex: number, control: FocusControl) => void;
@@ -104,6 +112,7 @@ function StructureRow({
   index,
   selected,
   error,
+  motionPill,
   canUp,
   canDown,
   onMove,
@@ -173,6 +182,11 @@ function StructureRow({
           <span className={styles.badge}>Ẩn trên điện thoại</span>
         )}
         {section.visibility.desktop ? null : <span className={styles.badge}>Ẩn trên máy tính</span>}
+        {motionPill === null ? null : (
+          <span className={motionPill.own ? styles.motionPillOwn : styles.badge}>
+            {motionPill.text}
+          </span>
+        )}
       </button>
       {selected ? (
         <>
@@ -224,8 +238,9 @@ const BADGE_LABELS: Partial<Record<CheckItem['code'], string>> = {
 /** "CẤU TRÚC TRANG": the ordered sections, sortable by drag, buttons and keyboard. */
 export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
   const store = useEditorStoreApi();
-  const { openAddSection, announce } = useEditorServices();
-  const sections = useEditor((state) => state.draft.composition.sections);
+  const { openAddSection, announce, openPageMotion } = useEditorServices();
+  const composition = useEditor((state) => state.draft.composition);
+  const sections = composition.sections;
   const selectedId = useEditor((state) => state.selection.sectionId);
   const blocking = useEditor((state) => state.checks.blocking);
   const device = useEditor((state) => state.device);
@@ -355,6 +370,7 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
                 index={index}
                 selected={section.id === selectedId}
                 error={errors.get(section.id) ?? null}
+                motionPill={motionPillOf(composition, index)}
                 canUp={canMoveSection(sections, index, index - 1)}
                 canDown={canMoveSection(sections, index, index + 1)}
                 onMove={move}
@@ -387,6 +403,12 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
         <button type="button" className={styles.theme} onClick={onOpenTheme}>
           <ThemeDots themePresetId={theme} />
           <span className={styles.themeLabel}>Giao diện site · màu &amp; chữ</span>
+          <ChevronRightIcon size={18} />
+        </button>
+        <button type="button" className={styles.theme} onClick={openPageMotion}>
+          <span className={styles.themeLabel}>
+            Chuyển động · {MOTION_STYLES[pageMotionOf(composition).style].label}
+          </span>
           <ChevronRightIcon size={18} />
         </button>
       </div>
