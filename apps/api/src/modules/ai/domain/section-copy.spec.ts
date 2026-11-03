@@ -69,6 +69,8 @@ describe('what the AI may write in a section (ADR-031)', () => {
       'zalo.label',
     ]);
     expect(keysOf(copyPlanOf(section('logos')))).toEqual(['heading']);
+    // A figure is a fact: the AI says what it counts, never the figure (ADR-032).
+    expect(keysOf(copyPlanOf(section('stats')))).toEqual(['heading', 'items.*.label']);
   });
 
   it('writes list items within the variant’s counts', () => {
@@ -243,6 +245,24 @@ describe('putting the answer in the section', () => {
     );
     expect(getAtPath(shrunk.content, 'items')).toHaveLength(1);
     expect(shrunk.reviewPaths).toEqual(['items.0.answer']);
+  });
+
+  it('writes what each figure counts and keeps the figures the business entered', () => {
+    const stats = setAtPath(section('stats'), 'content.items.0.value', '8.000+');
+    const plan = copyPlanOf(stats);
+    const written = applySectionCopy(
+      stats,
+      plan,
+      parsed(plan, {
+        heading: 'Con số nói thay chúng tôi',
+        items: [{ label: 'khách hàng đã tin chọn' }, { label: 'năm kinh nghiệm' }],
+        review: [],
+      }),
+    );
+    expect(getAtPath(written.content, 'items')).toEqual([
+      { value: '8.000+', label: 'khách hàng đã tin chọn' },
+      { value: '', label: 'năm kinh nghiệm' },
+    ]);
   });
 
   it('keeps the sample marks of what the AI never writes', () => {

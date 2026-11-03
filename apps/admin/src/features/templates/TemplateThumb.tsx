@@ -121,6 +121,17 @@ function bandContent({ type, variant }: TemplateSection): ReactNode {
           </span>
         </span>
       );
+    case 'stats':
+      return (
+        <span className={styles.stack}>
+          <Lines widths={['44%']} center />
+          <span className={styles.row}>
+            {Array.from({ length: 3 }, (_value, index) => (
+              <Lines key={index} widths={['50%', '80%']} center />
+            ))}
+          </span>
+        </span>
+      );
     case 'faq':
       return (
         <span className={styles.stack}>

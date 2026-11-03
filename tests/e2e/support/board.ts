@@ -686,7 +686,7 @@ export async function createSchemePageViaApi(
 
 /**
  * The variants a "Thu lead" page does not use, made from its own sections, and the sections it
- * has none of (steps, partner logos, before and after, quick contact), filled in by hand.
+ * has none of (steps, partner logos, before and after, quick contact, stats), filled in by hand.
  */
 function variantsOf(
   composition: Composition,
@@ -760,6 +760,21 @@ function variantsOf(
         text: 'Gọi điện hoặc nhắn Zalo, chúng tôi trả lời trong giờ làm việc.',
         call: { label: 'Gọi ngay', link: { kind: 'phone', phone: '0901 234 567' } },
         zalo: { label: 'Nhắn Zalo', link: { kind: 'zalo', phone: '0901 234 567' } },
+      },
+      samplePaths: [],
+    },
+    {
+      ...benefits,
+      id: sectionId(),
+      type: 'stats',
+      variant: 'row',
+      content: {
+        heading: 'Những con số nói thay chúng tôi',
+        items: [
+          { value: '12', label: 'năm kinh nghiệm chỉnh nha' },
+          { value: '8.000+', label: 'khách hàng đã tin chọn' },
+          { value: '4,9/5', label: 'điểm đánh giá trung bình' },
+        ],
       },
       samplePaths: [],
     },

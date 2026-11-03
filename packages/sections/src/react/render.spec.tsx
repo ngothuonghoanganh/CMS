@@ -270,10 +270,15 @@ describe('section components', () => {
   it('escapes text that looks like markup', () => {
     const payload = '<script>alert(1)</script>';
     for (const { type, variant } of variants) {
+      // A figure holds 12 characters: it gets the part that fits, still an opening tag.
       const target = mapLeaves(section(type, variant), (field, _path, value) =>
-        field.kind === 'text' ? payload : value,
+        field.kind === 'text' ? payload.slice(0, field.maxLength) : value,
       );
-      expect(collectLeaves(target).some((leaf) => leaf.value === payload)).toBe(true);
+      expect(
+        collectLeaves(target).some(
+          (leaf) => typeof leaf.value === 'string' && leaf.value.startsWith('<script>'),
+        ),
+      ).toBe(true);
       for (const ctx of [liveCtx(), liveCtx({ mode: 'edit' })]) {
         const markup = render(target, ctx);
         expect(markup).not.toContain('<script');
@@ -1052,5 +1057,35 @@ describe('motion', () => {
     const text = (html: string) => html.replace(/<[^>]*>/g, '');
     expect(text(markup)).toBe(text(still));
     expect(markup).not.toContain('data-motion="');
+  });
+});
+
+describe('stats', () => {
+  function figures(values: string[]): SectionInstance {
+    const target = section('stats');
+    return withContent(
+      target,
+      'items',
+      values.map((value, index) => ({ value, label: `nhãn ${index + 1}` })),
+    );
+  }
+
+  it('draws each figure once to see and once for screen readers, the real value both times', () => {
+    const markup = render(figures(['8.000+', '4,9/5']), liveCtx());
+    expect(markup).toContain('<span aria-hidden="true" data-m-count="">8.000+</span>');
+    expect(count(markup, '8.000+')).toBe(2);
+    expect(count(markup, '4,9/5')).toBe(2);
+    expect(markup).toContain('nhãn 2');
+  });
+
+  it('starts with empty figures that only the business fills in, which block publishing', () => {
+    const fresh = section('stats');
+    const items = fresh.content['items'];
+    expect(
+      Array.isArray(items) && items.every((item) => (item as { value: string }).value === ''),
+    ).toBe(true);
+    expect(render(fresh, liveCtx())).not.toContain('data-m-count');
+    // On the canvas, an empty figure shows the field name to fill in.
+    expect(render(fresh, editCtx())).toContain('data-placeholder="Con số"');
   });
 });

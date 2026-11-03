@@ -11,6 +11,7 @@ import { leadFormContentSchema } from '../schema/sections/lead-form.js';
 import { logosContentSchema } from '../schema/sections/logos.js';
 import { navbarContentSchema } from '../schema/sections/navbar.js';
 import { quickContactContentSchema } from '../schema/sections/quick-contact.js';
+import { statsContentSchema } from '../schema/sections/stats.js';
 import { testimonialsContentSchema } from '../schema/sections/testimonials.js';
 import type { RenderContext } from './context.js';
 import frame from './frame.module.css';
@@ -24,6 +25,7 @@ import { LeadFormSection } from './sections/LeadForm.js';
 import { LogosSection } from './sections/Logos.js';
 import { NavbarSection } from './sections/Navbar.js';
 import { QuickContactSection } from './sections/QuickContact.js';
+import { StatsSection } from './sections/Stats.js';
 import { TestimonialsSection } from './sections/Testimonials.js';
 import type { SectionProps } from './types.js';
 
@@ -69,6 +71,8 @@ export function renderSectionContent(
       return renderWith(logosContentSchema, LogosSection, section, ctx, leading);
     case 'before_after':
       return renderWith(beforeAfterContentSchema, BeforeAfterSection, section, ctx, leading);
+    case 'stats':
+      return renderWith(statsContentSchema, StatsSection, section, ctx, leading);
     case 'faq':
       return renderWith(faqContentSchema, FaqSection, section, ctx, leading);
     case 'lead_form':
