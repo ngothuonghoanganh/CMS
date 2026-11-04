@@ -21,13 +21,24 @@ function fieldBox(path: string): HTMLElement {
 }
 
 describe('PropertiesPanel', () => {
-  it('shows a hint and the SEO shortcut while nothing is selected', () => {
+  it('shows the page settings while nothing is selected: motion, and the SEO shortcut', async () => {
+    const user = userEvent.setup();
     renderEditor(<PropertiesPanel />, { store: makeStore() });
+    expect(screen.getByRole('heading', { name: 'Cài đặt trang', level: 2 })).toBeInTheDocument();
     expect(screen.getByText(/Chọn một section trên trang/)).toBeInTheDocument();
+    const motionTab = screen.getByRole('tab', { name: 'Chuyển động' });
+    expect(motionTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('group', { name: 'Phong cách chuyển động' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'SEO & chia sẻ' }));
     expect(screen.getByRole('link', { name: 'Cài đặt trang & SEO' })).toHaveAttribute(
       'href',
       '/sites/64b000000000000000000001/pages/64b000000000000000000002/seo',
     );
+    // Arrow keys move between the tabs.
+    await user.keyboard('{ArrowLeft}');
+    expect(motionTab).toHaveFocus();
+    expect(motionTab).toHaveAttribute('aria-selected', 'true');
   });
 
   it('renders the hero fields with counters, and typing is one undo step', async () => {

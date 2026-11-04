@@ -3,7 +3,7 @@ import { checkCountsSchema, checksResultSchema } from './checks.js';
 import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { briefSchema, pageGoalSchema, pageStyleSchema } from './goals.js';
-import { systemTemplateIdSchema, templateVersionSchema } from './templates.js';
+import { systemTemplateIdSchema, templateRefSchema, templateVersionSchema } from './templates.js';
 
 /**
  * Paths the renderer answers itself, so a page published there could never be served at its URL:
@@ -201,6 +201,11 @@ export const pageDetailResponseSchema = z.object({
   page: pageSummarySchema,
   draft: draftSchema,
   checks: checksResultSchema,
+  /**
+   * The template the page was made from (ADR-030), null for a blank or goal page. The editor
+   * names its motion style and the styles that suit its industry (ADR-032).
+   */
+  createdFrom: templateRefSchema.nullable().optional(),
 });
 export type PageDetailResponse = z.infer<typeof pageDetailResponseSchema>;
 

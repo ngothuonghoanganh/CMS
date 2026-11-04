@@ -376,7 +376,18 @@ export class PagesService {
     page: PageRecord,
   ): Promise<PageDetailResponse> {
     const evaluated = await this.evaluator.evaluate(scope, site, page);
-    return { page: evaluated.summary, draft: evaluated.draft, checks: evaluated.checks };
+    const from = page.createdFrom ?? null;
+    return {
+      page: evaluated.summary,
+      draft: evaluated.draft,
+      checks: evaluated.checks,
+      createdFrom:
+        from === null
+          ? null
+          : from.source === 'system'
+            ? { source: 'system', templateId: from.templateId, version: from.version }
+            : { source: 'workspace', templateId: from.templateId, version: from.version },
+    };
   }
 
   private async initialPage(

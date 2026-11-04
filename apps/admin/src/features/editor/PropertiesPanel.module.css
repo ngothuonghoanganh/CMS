@@ -201,13 +201,6 @@
   color: var(--color-muted);
 }
 
-.empty {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-}
-
 .emptyText {
   margin: 0;
   font-size: var(--text-body);
@@ -232,4 +225,44 @@
 
 .shortcut:hover {
   background: var(--color-hover);
+}
+
+/* "Cài đặt trang": motion here, SEO on its own screen (board 37). */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tab {
+  min-height: var(--target-min);
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary-ink);
+}
+
+.body[hidden] {
+  display: none;
+}
+
+.footnote {
+  margin: 0;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
 }

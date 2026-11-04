@@ -26,7 +26,7 @@ export function fontStyle(theme: ThemePreset): CSSProperties {
 }
 
 /** How far and from what scale parts move at the page's level (ADR-032). */
-export function motionLevelStyle(motion: PageMotion): CSSProperties {
+export function motionLevelStyle(motion: Pick<PageMotion, 'level'>): CSSProperties {
   const level = MOTION_LEVELS[motion.level];
   return {
     '--plp-m-distance': `${level.distancePx}px`,

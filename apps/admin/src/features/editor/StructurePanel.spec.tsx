@@ -166,4 +166,20 @@ describe('StructurePanel', () => {
     await user.click(screen.getByRole('button', { name: 'Giao diện site · màu & chữ' }));
     expect(onOpenTheme).toHaveBeenCalledTimes(1);
   });
+
+  it('marks how each section moves and opens the page’s motion (ADR-032)', async () => {
+    const user = userEvent.setup();
+    const openPageMotion = vi.fn();
+    const store = makeStore();
+    store.getState().setMotionStyle('smooth');
+    store.getState().setSectionEnter(BENEFITS, 'pop');
+    renderEditor(<StructurePanel onOpenTheme={vi.fn()} />, { store, services: { openPageMotion } });
+    const [navbar, hero, benefits, faq] = rows();
+    expect(navbar).toHaveTextContent('Luôn hiện ngay');
+    expect(hero).toHaveTextContent('Luôn hiện ngay');
+    expect(benefits).toHaveTextContent('Riêng · Bật lên');
+    expect(faq).not.toHaveTextContent('Riêng');
+    await user.click(screen.getByRole('button', { name: 'Chuyển động · Mượt mà' }));
+    expect(openPageMotion).toHaveBeenCalledTimes(1);
+  });
 });

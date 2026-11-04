@@ -48,6 +48,10 @@ export interface EditorServices {
   focusTarget: (target: CheckTarget) => void;
   /** In-app navigation that asks first when changes are not saved yet. */
   navigate: (href: string) => void;
+  /** Shows "Cài đặt trang → Chuyển động" (board 37) and focuses it. */
+  openPageMotion: () => void;
+  /** Opens "Thư viện phong cách chuyển động" (board 39). */
+  openMotionLibrary: () => void;
 }
 
 const ServicesContext = createContext<EditorServices | null>(null);

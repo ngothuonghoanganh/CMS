@@ -20,6 +20,8 @@ import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { leadRecipientsHref, privacyHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { MotionStyleLibraryDialog } from '../motion/MotionStyleLibraryDialog';
+import { PAGE_MOTION_HEADING_ID } from '../motion/PageMotionPanel';
 import { SaveTemplateDialog } from '../templates/SaveTemplateDialog';
 import { ThemePickerDialog } from '../theme';
 import { AddSectionDialog } from './AddSectionDialog';
@@ -136,6 +138,8 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
 
   const [addSection, setAddSection] = useState({ open: false, index: 0, key: 0 });
   const [theme, setTheme] = useState({ open: false, key: 0 });
+  // A new library for every opening: its choice and samples start from the page's style.
+  const [motionLibrary, setMotionLibrary] = useState({ open: false, key: 0 });
   // "Lưu thành template" and "Áp dụng mẫu…" (ADR-030); a new form for every opening.
   const [template, setTemplate] = useState<{
     kind: 'save' | 'apply';
@@ -177,6 +181,17 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
         });
       },
       navigate,
+      openPageMotion: () => {
+        setSideTab('properties');
+        store.getState().select(null);
+        // The page settings replace the section's panel on the next render.
+        requestAnimationFrame(() => {
+          document.getElementById(PAGE_MOTION_HEADING_ID)?.focus();
+        });
+      },
+      openMotionLibrary: () => {
+        setMotionLibrary((current) => ({ open: true, key: current.key + 1 }));
+      },
     }),
     [siteId, pageId, pagesQuery.data, announce, store, navigate, seoHref, privacy, recipients],
   );
@@ -296,6 +311,13 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
         requestedIndex={addSection.index}
         onOpenChange={(open) => {
           setAddSection((current) => ({ ...current, open }));
+        }}
+      />
+      <MotionStyleLibraryDialog
+        key={`motion-library-${motionLibrary.key}`}
+        open={motionLibrary.open}
+        onOpenChange={(open) => {
+          setMotionLibrary((current) => ({ ...current, open }));
         }}
       />
       <ThemePickerDialog

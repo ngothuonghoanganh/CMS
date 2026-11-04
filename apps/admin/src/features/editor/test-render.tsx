@@ -39,6 +39,8 @@ function Providers({
       announce,
       focusTarget: vi.fn(),
       navigate: vi.fn(),
+      openPageMotion: vi.fn(),
+      openMotionLibrary: vi.fn(),
       ...services,
     }),
     [announce, sitePages, services],

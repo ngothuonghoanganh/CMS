@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { motionChipOf } from '../motion/motion-view';
 import { useAiReading } from './assistant/ai-assistant-context';
 import styles from './Canvas.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
@@ -78,8 +79,11 @@ export interface SectionChromeProps {
 export function SectionChrome({ section, index, rendered }: SectionChromeProps) {
   const store = useEditorStoreApi();
   const { openAddSection, announce, focusTarget } = useEditorServices();
-  const sections = useEditor((state) => state.draft.composition.sections);
+  const composition = useEditor((state) => state.draft.composition);
+  const sections = composition.sections;
   const selected = useEditor((state) => state.selection.sectionId === section.id);
+  const play = useEditor((state) => state.motionPlay.scope);
+  const played = play !== null && (play.kind === 'page' || play.sectionId === section.id);
   const device = useEditor((state) => state.device);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -207,6 +211,9 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
           />
         </div>
       ) : null}
+      {played && !hidden ? (
+        <span className={styles.motionChip}>{motionChipOf(composition, index)}</span>
+      ) : null}
       {hidden ? (
         <div className={styles.hidden}>
           <span>
@@ -243,7 +250,7 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
           {missingAlt.length > 1 ? `Thiếu mô tả ảnh (${missingAlt.length})` : 'Thiếu mô tả ảnh'}
         </button>
       ) : null}
-      {canInsertAfter ? (
+      {canInsertAfter && !played ? (
         <div className={styles.insert}>
           <button
             type="button"

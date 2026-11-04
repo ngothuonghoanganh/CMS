@@ -8,11 +8,24 @@ import {
   MAX_SECTIONS,
   type MobileOrder,
   mobileOrderSchema,
+  type MotionAccent,
+  motionAccentIds,
+  type MotionAccentOverrides,
+  type MotionEnter,
+  motionEnterIds,
+  type MotionLevel,
+  motionLevelIds,
+  type MotionOrder,
+  motionOrderIds,
+  type MotionStyle,
+  motionStyleIds,
+  type PageMotion,
   type PageDetailResponse,
   type PageSummary,
   type PublicLeadCapture,
   type SaveDraftResponse,
   type SectionInstance,
+  type SectionMotion,
   type SectionType,
   type Seo,
   seoSchema,
@@ -20,6 +33,7 @@ import {
   slugSchema,
   type SpacingPreset,
   spacingPresets,
+  type TemplateRef,
   type Access,
 } from '@plp/contracts';
 import {
@@ -30,10 +44,16 @@ import {
   getSectionDefinition,
   getVariant,
   insertionIndex,
+  isMotionLocked,
   isPathWithin,
   listMaximum,
   listMinimum,
+  MOTION_STYLES,
+  motionCapabilityOf,
+  pageMotionOf,
   setAtPath,
+  storedPageMotion,
+  storedSectionMotion,
   validateComposition,
   withFreshSectionIds,
 } from '@plp/sections/schema';
@@ -111,6 +131,22 @@ export interface AiDraftChange {
   review: boolean;
 }
 
+/** What "Chạy thử" plays on the canvas (ADR-032); the canvas is otherwise still. */
+export type MotionPlayScope = { kind: 'page' } | { kind: 'section'; sectionId: string };
+
+export interface MotionPlay {
+  /** Null while editing: the canvas stays still and its text is editable. */
+  scope: MotionPlayScope | null;
+  /** Played to the end: "Đã chạy thử xong", with "Chạy lại". */
+  done: boolean;
+  /** Goes up with every run, so "Chạy lại" plays the same scope again. */
+  run: number;
+  /** "Xem chậm (¼ tốc độ)". */
+  slow: boolean;
+  /** "Như thiết bị bật giảm chuyển động": everything shows at once. */
+  reduced: boolean;
+}
+
 export interface EditorState {
   draft: DraftSnapshot;
   /** Server revision the draft is based on; sent with every save. */
@@ -123,6 +159,8 @@ export interface EditorState {
   saveError: SaveFailure | null;
   page: PageSummary;
   checks: ChecksResult;
+  /** The template the page was made from: the motion style it chose and its industry. */
+  createdFrom: TemplateRef | null;
   site: Site;
   assetsById: Readonly<Record<string, Asset>>;
   role: Access;
@@ -138,6 +176,7 @@ export interface EditorState {
   leavingWithoutSaving: number | null;
   /** Field whose typing currently merges into the last undo step. */
   mergeKey: string | null;
+  motionPlay: MotionPlay;
 
   /* Draft commands: each validates against the registry, records one undo step and returns
      false (changing nothing) when the result would be invalid. */
@@ -172,6 +211,22 @@ export interface EditorState {
    * through the SEO command's own rule. Returns how many were written, 0 when none could be.
    */
   applyAiChanges: (changes: readonly AiDraftChange[]) => number;
+  /*
+   * The page's motion (board 37, ADR-032). A new style drops the accents switched away from the
+   * old one; an accent switched back to what the style says is no longer stored as a change.
+   */
+  setMotionStyle: (style: MotionStyle) => boolean;
+  setMotionLevel: (level: MotionLevel) => boolean;
+  setMotionAccent: (accent: MotionAccent, on: boolean) => boolean;
+  setMotionReduceOnMobile: (on: boolean) => boolean;
+  /*
+   * A section's own motion (board 38): null follows the page again. Refused for the navigation
+   * bar and the first section, which always show at once, for rows in a section without rows, and
+   * for an accent the section has no content for.
+   */
+  setSectionEnter: (sectionId: string, enter: MotionEnter | null) => boolean;
+  setSectionOrder: (sectionId: string, order: MotionOrder | null) => boolean;
+  setSectionAccent: (sectionId: string, accent: MotionAccent, on: boolean | null) => boolean;
   undo: () => boolean;
   redo: () => boolean;
   /** Ends the merged undo step started by an update with `{ merge: true }`. */
@@ -180,6 +235,14 @@ export interface EditorState {
   /* View state */
   select: (sectionId: string | null, fieldPath?: string | null) => boolean;
   setDevice: (device: Device) => void;
+  /** "Chạy thử": plays the scope from the start; a draft change stops it. */
+  playMotion: (scope: MotionPlayScope) => void;
+  /** Called when every section played has entered. */
+  finishMotionPlay: () => void;
+  /** "Quay lại chỉnh sửa". */
+  stopMotionPlay: () => void;
+  setMotionSlow: (slow: boolean) => void;
+  setMotionReduced: (reduced: boolean) => void;
 
   /* Server state */
   /**
@@ -272,6 +335,33 @@ function seoRecipe(
   };
 }
 
+const STILL: MotionPlay = { scope: null, done: false, run: 0, slow: false, reduced: false };
+
+/** A change to the draft stops "Chạy thử": the canvas shows the draft again, editable. */
+function stillAfterChange(play: MotionPlay): MotionPlay {
+  return play.scope === null ? play : { ...play, scope: null, done: false };
+}
+
+/** `accents` with `accent` set to `on`, or left out (following the style or the page) for null. */
+function withAccent(
+  accents: MotionAccentOverrides,
+  accent: MotionAccent,
+  on: boolean | null,
+): MotionAccentOverrides {
+  const next: MotionAccentOverrides = {};
+  for (const id of motionAccentIds) {
+    const value = id === accent ? on : accents[id];
+    if (value !== null && value !== undefined) {
+      next[id] = value;
+    }
+  }
+  return next;
+}
+
+function sameMotion<T>(a: T | undefined, b: T | undefined): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** One section's part of an `applyAiChanges`: its new content and the fields written. */
 interface AiSectionWrite {
   content: SectionInstance['content'];
@@ -296,6 +386,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
         draftVersion: state.draftVersion + 1,
         saveState: dirtyStateAfter(state.saveState),
         selection: selection ?? validSelection(state.selection, next.composition),
+        motionPlay: stillAfterChange(state.motionPlay),
       });
       return true;
     }
@@ -377,8 +468,52 @@ export function createEditorStore(init: EditorInit): EditorStore {
         draftVersion: state.draftVersion + 1,
         saveState: dirtyStateAfter(state.saveState),
         selection: validSelection(state.selection, target.composition),
+        motionPlay: stillAfterChange(state.motionPlay),
       });
       return true;
+    }
+
+    /** Writes the page's motion as it is stored; an unchanged one records no undo step. */
+    function editPageMotion(change: (motion: PageMotion) => PageMotion): boolean {
+      const composition = get().draft.composition;
+      const next = storedPageMotion(change(pageMotionOf(composition)));
+      if (sameMotion(next, composition.motion)) {
+        return true;
+      }
+      return edit((draft) => {
+        if (next === undefined) {
+          delete draft.composition.motion;
+        } else {
+          draft.composition.motion = next;
+        }
+        return true;
+      });
+    }
+
+    /** Writes a section's own motion, refused where the section cannot move on its own. */
+    function editSectionMotion(
+      sectionId: string,
+      allowed: (section: SectionInstance) => boolean,
+      change: (motion: SectionMotion) => SectionMotion,
+    ): boolean {
+      const sections = get().draft.composition.sections;
+      const index = sections.findIndex((section) => section.id === sectionId);
+      const section = sections[index];
+      if (!section || isMotionLocked(sections, index) || !allowed(section)) {
+        return false;
+      }
+      const next = storedSectionMotion(change(section.motion ?? {}));
+      if (sameMotion(next, section.motion)) {
+        return true;
+      }
+      return editSection(sectionId, (draft) => {
+        if (next === undefined) {
+          delete draft.motion;
+        } else {
+          draft.motion = next;
+        }
+        return true;
+      });
     }
 
     return {
@@ -392,6 +527,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
       saveError: null,
       page: init.detail.page,
       checks: init.detail.checks,
+      createdFrom: init.detail.createdFrom ?? null,
       site: init.site,
       assetsById: indexAssets(init.assets),
       role: init.role,
@@ -400,6 +536,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
       savedVersion: 0,
       leavingWithoutSaving: null,
       mergeKey: null,
+      motionPlay: STILL,
 
       addSection(type, variant, requestedIndex) {
         const definition = getSectionDefinition(type);
@@ -704,6 +841,12 @@ export function createEditorStore(init: EditorInit): EditorStore {
         return edit(
           (draft) => {
             draft.composition.sections = fresh.sections;
+            // The template's motion style comes with it (ADR-030, ADR-032).
+            if (fresh.motion === undefined) {
+              delete draft.composition.motion;
+            } else {
+              draft.composition.motion = fresh.motion;
+            }
             return true;
           },
           { selection: { sectionId: null, fieldPath: null } },
@@ -763,6 +906,81 @@ export function createEditorStore(init: EditorInit): EditorStore {
         return done ? count : 0;
       },
 
+      setMotionStyle(style) {
+        if (!motionStyleIds.includes(style)) {
+          return false;
+        }
+        return editPageMotion((motion) => ({ ...motion, style, accents: {} }));
+      },
+
+      setMotionLevel(level) {
+        if (!motionLevelIds.includes(level)) {
+          return false;
+        }
+        return editPageMotion((motion) => ({ ...motion, level }));
+      },
+
+      setMotionAccent(accent, on) {
+        return editPageMotion((motion) => ({
+          ...motion,
+          accents: withAccent(
+            motion.accents,
+            accent,
+            MOTION_STYLES[motion.style].accents.includes(accent) === on ? null : on,
+          ),
+        }));
+      },
+
+      setMotionReduceOnMobile(on) {
+        return editPageMotion((motion) => ({ ...motion, reduceOnMobile: on }));
+      },
+
+      setSectionEnter(sectionId, enter) {
+        if (enter !== null && !motionEnterIds.includes(enter)) {
+          return false;
+        }
+        return editSectionMotion(
+          sectionId,
+          () => true,
+          (motion) => {
+            const next = { ...motion };
+            if (enter === null) {
+              delete next.enter;
+            } else {
+              next.enter = enter;
+            }
+            return next;
+          },
+        );
+      },
+
+      setSectionOrder(sectionId, order) {
+        if (order !== null && !motionOrderIds.includes(order)) {
+          return false;
+        }
+        return editSectionMotion(
+          sectionId,
+          (section) => order !== 'rows' || motionCapabilityOf(section).grid,
+          (motion) => {
+            const next = { ...motion };
+            if (order === null) {
+              delete next.order;
+            } else {
+              next.order = order;
+            }
+            return next;
+          },
+        );
+      },
+
+      setSectionAccent(sectionId, accent, on) {
+        return editSectionMotion(
+          sectionId,
+          (section) => motionCapabilityOf(section).accents.includes(accent),
+          (motion) => ({ ...motion, accents: withAccent(motion.accents ?? {}, accent, on) }),
+        );
+      },
+
       undo: () => step('undo'),
       redo: () => step('redo'),
 
@@ -790,6 +1008,30 @@ export function createEditorStore(init: EditorInit): EditorStore {
         set({ device });
       },
 
+      playMotion(scope) {
+        const play = get().motionPlay;
+        set({ motionPlay: { ...play, scope, done: false, run: play.run + 1 } });
+      },
+
+      finishMotionPlay() {
+        const play = get().motionPlay;
+        if (play.scope !== null) {
+          set({ motionPlay: { ...play, done: true } });
+        }
+      },
+
+      stopMotionPlay() {
+        set({ motionPlay: stillAfterChange(get().motionPlay) });
+      },
+
+      setMotionSlow(slow) {
+        set({ motionPlay: { ...get().motionPlay, slow } });
+      },
+
+      setMotionReduced(reduced) {
+        set({ motionPlay: { ...get().motionPlay, reduced } });
+      },
+
       replaceDraftFromServer(detail, assets) {
         const state = get();
         const draft = snapshotOf(detail);
@@ -811,6 +1053,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
           draftVersion: version,
           savedVersion: version,
           selection: validSelection(state.selection, draft.composition),
+          motionPlay: stillAfterChange(state.motionPlay),
         });
       },
 

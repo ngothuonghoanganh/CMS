@@ -42,12 +42,14 @@ function place(element: Element | null | undefined, top: number, height = 400) {
 
 class FakeObserver {
   static last: FakeObserver | null = null;
+  static all: FakeObserver[] = [];
   readonly observed = new Set<Element>();
   constructor(
     readonly callback: IntersectionObserverCallback,
     readonly options: IntersectionObserverInit,
   ) {
     FakeObserver.last = this;
+    FakeObserver.all.push(this);
   }
   observe(target: Element) {
     this.observed.add(target);
@@ -101,6 +103,7 @@ function sectionEl(target: SectionInstance): HTMLElement {
 beforeEach(() => {
   boxes.clear();
   FakeObserver.last = null;
+  FakeObserver.all = [];
   vi.useFakeTimers();
   vi.stubGlobal('IntersectionObserver', FakeObserver);
   vi.stubGlobal('innerHeight', VIEWPORT_HEIGHT);
@@ -144,6 +147,25 @@ describe('startMotion', () => {
 
     vi.runAllTimers();
     expect(sectionEl(faq).hasAttribute('data-motion')).toBe(false);
+  });
+
+  it('starts a section once its top passes the line, or once all of it shows', () => {
+    const faq = section('faq');
+    const cta = section('cta_band');
+    const root = mount({ style: 'smooth' }, [section('navbar'), section('hero'), faq, cta]);
+    place(sectionEl(faq), 2000);
+    place(sectionEl(cta), 3000, 60);
+    startMotion(root);
+    const [passed, shown] = FakeObserver.all;
+    expect(passed?.options.rootMargin).toBe('0px 0px -15% 0px');
+    expect(shown?.options.threshold).toBe(0.95);
+    // A short last section never gets its top past the line: it starts once it all shows.
+    shown?.enter(sectionEl(cta));
+    expect(sectionEl(cta).getAttribute('data-motion')).toBe('run');
+    expect(passed?.observed.has(sectionEl(cta))).toBe(false);
+    passed?.enter(sectionEl(faq));
+    expect(sectionEl(faq).getAttribute('data-motion')).toBe('run');
+    expect(shown?.observed.has(sectionEl(faq))).toBe(false);
   });
 
   it('does nothing on a device that asks for less motion, or without IntersectionObserver', () => {
