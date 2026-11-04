@@ -17,6 +17,7 @@ describe('the draft an AI job starts from (ADR-031)', () => {
       structure,
       goal: 'lead',
       siteName: 'Nha khoa Smile Care',
+      motion: 'none',
       newId: ids(),
     });
     if (!result.ok) {
@@ -53,6 +54,20 @@ describe('the draft an AI job starts from (ADR-031)', () => {
     expect(sections.every((section) => section.reviewPaths.length === 0)).toBe(true);
   });
 
+  it('moves with the style it is given, and stores nothing for "Không hiệu ứng" (ADR-032)', () => {
+    const structure = goalOutline('lead').map(({ type, variant }) => ({ type, variant }));
+    const base = { structure, goal: 'lead' as const, siteName: 'Smile Care', newId: ids() };
+    const moving = compositionFromStructure({ ...base, motion: 'luxe' });
+    expect(moving.ok && moving.composition.motion).toEqual({
+      style: 'luxe',
+      level: 'mid',
+      accents: {},
+      reduceOnMobile: false,
+    });
+    const still = compositionFromStructure({ ...base, motion: 'none' });
+    expect(still.ok && still.composition).not.toHaveProperty('motion');
+  });
+
   it('leads a call-to-action band to the form, wherever the user placed it', () => {
     const result = compositionFromStructure({
       structure: [
@@ -64,6 +79,7 @@ describe('the draft an AI job starts from (ADR-031)', () => {
       ],
       goal: 'lead',
       siteName: 'Smile Care',
+      motion: 'none',
       newId: ids(),
     });
     if (!result.ok) {
@@ -82,6 +98,7 @@ describe('the draft an AI job starts from (ADR-031)', () => {
       ],
       goal: 'about',
       siteName: 'Smile Care',
+      motion: 'none',
       newId: ids(),
     });
     expect(result.ok && result.composition.sections[1]?.content['heading']).toBe(
@@ -97,6 +114,7 @@ describe('the draft an AI job starts from (ADR-031)', () => {
       structure: [{ type: 'hero', variant: 'nope' }],
       goal: 'lead',
       siteName: 'Smile Care',
+      motion: 'none',
       newId: ids(),
     });
     expect(unknown).toEqual({
@@ -118,6 +136,7 @@ describe('the draft an AI job starts from (ADR-031)', () => {
       ],
       goal: 'lead',
       siteName: 'Smile Care',
+      motion: 'none',
       newId: ids(),
     });
     expect(misplaced.ok ? [] : misplaced.issues.map(({ path, code }) => ({ path, code }))).toEqual([

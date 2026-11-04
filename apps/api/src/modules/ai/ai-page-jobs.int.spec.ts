@@ -33,7 +33,11 @@ import { getPage, uniqueSlug } from '../../../test/pages.js';
 import { CONSENT_TEXTS, configurePrivacy, PRIVACY_SETTINGS } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addMember, createSite } from '../../../test/resources.js';
-import type { FakeAiTextModel } from './adapters/fake-ai-text-model.js';
+import {
+  FAKE_MOTION_ENTER,
+  FAKE_MOTION_STYLE,
+  type FakeAiTextModel,
+} from './adapters/fake-ai-text-model.js';
 import { AiClock } from './ai-quota.service.js';
 import { AiError } from './ai-text-model.js';
 
@@ -183,7 +187,8 @@ describe('creating a page with AI (ADR-031)', () => {
     const existingContent = 'Bảng giá niềng răng trọn gói, có trả góp.';
     await runAiJob(client, site.id, aiJobBody({ brief: { ...AI_BRIEF, existingContent } }));
 
-    expect(fake.requests).toHaveLength(6);
+    // Six sections, then "AI chọn" of the motion.
+    expect(fake.requests).toHaveLength(7);
     const sent = fake.requests.map((request) => `${request.system}\n${request.prompt}`).join('\n');
     for (const expected of [AI_BRIEF.product, AI_BRIEF.audience, site.name, existingContent]) {
       expect(sent).toContain(expected);
@@ -204,6 +209,98 @@ describe('creating a page with AI (ADR-031)', () => {
     ]) {
       expect(sent).not.toContain(personal);
     }
+  });
+
+  it('“AI chọn”: the AI picks the motion after the sections, for no more uses (ADR-032)', async () => {
+    const { client, site } = await owner();
+    const { job: ended } = await runAiJob(client, site.id, aiJobBody());
+    expect(ended).toMatchObject({ status: 'done', failure: null });
+    if (ended.pageId === null) {
+      throw new Error('The job created no draft');
+    }
+    const motionRequests = fake.requests.filter((request) => request.schema.name === 'page_motion');
+    expect(motionRequests).toHaveLength(1);
+    expect(fake.requests.at(-1)?.schema.name).toBe('page_motion');
+    // The brief and the sections' types and variants, nothing else.
+    const [asked] = motionRequests;
+    expect(asked?.prompt).toContain(AI_BRIEF.product);
+    expect(asked?.prompt).toContain('3. Lợi ích (benefits, grid)');
+    expect(asked?.prompt).not.toContain(site.name);
+
+    const { composition } = (await getPage(client, site.id, ended.pageId)).draft;
+    expect(composition.motion).toEqual({
+      style: FAKE_MOTION_STYLE,
+      level: 'mid',
+      accents: {},
+      reduceOnMobile: false,
+    });
+    // The first section the AI may change, after the navigation bar and the Hero.
+    expect(composition.sections.map((section) => section.motion)).toEqual([
+      undefined,
+      undefined,
+      { enter: FAKE_MOTION_ENTER },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect((await usage(client, site.id)).used).toBe(1);
+  });
+
+  it('keeps the style it expected when the AI’s motion fails or is no choice', async () => {
+    const { client, site } = await owner();
+    // A dental clinic: "Tinh tế" suits its industry first (ADR-032).
+    const expected = 'subtle';
+    const answers: Array<() => never | { text: string }> = [
+      () => {
+        throw new AiError('timeout', 'The AI service did not answer within 60000 ms');
+      },
+      () => ({ text: '{"style": "none", "sections": []}' }),
+      () => ({ text: 'Mượt mà' }),
+    ];
+    for (const answer of answers) {
+      fake.respondWith((request) =>
+        request.schema.name === 'page_motion'
+          ? { ...answer(), usage: { inputTokens: 1, outputTokens: 1 }, truncated: false }
+          : undefined,
+      );
+      const { job: ended } = await runAiJob(client, site.id, aiJobBody());
+      // The motion never fails the job.
+      expect(ended).toMatchObject({ status: 'done', failure: null });
+      if (ended.pageId === null) {
+        throw new Error('The job created no draft');
+      }
+      const { composition } = (await getPage(client, site.id, ended.pageId)).draft;
+      expect(composition.motion?.style).toBe(expected);
+      expect(composition.sections.every((section) => section.motion === undefined)).toBe(true);
+    }
+    // Not asked again: the motion has no retry.
+    expect(fake.requests.filter((request) => request.schema.name === 'page_motion')).toHaveLength(
+      3,
+    );
+    expect((await usage(client, site.id)).used).toBe(3);
+  });
+
+  it('asks no motion of the AI when the user picked a style', async () => {
+    const { client, site } = await owner();
+    for (const motion of ['luxe', 'none'] as const) {
+      const { job: ended } = await runAiJob(client, site.id, aiJobBody({ motion }));
+      if (ended.pageId === null) {
+        throw new Error('The job created no draft');
+      }
+      const { composition } = (await getPage(client, site.id, ended.pageId)).draft;
+      expect(composition.motion?.style).toBe(motion === 'none' ? undefined : motion);
+      expect(composition.sections.every((section) => section.motion === undefined)).toBe(true);
+    }
+    expect(fake.requests.some((request) => request.schema.name === 'page_motion')).toBe(false);
+    // A motion the contract does not know.
+    const refused = await client
+      .post(`/sites/${site.id}/ai/page-jobs`, { ...aiJobBody(), motion: 'bouncy' })
+      .expect(422);
+    expect(problemSchema.parse(refused.body)).toMatchObject({
+      code: 'validation_failed',
+      issues: [expect.objectContaining({ path: ['motion'] })],
+    });
   });
 
   it('retries an answer the schema refuses once, telling the AI what was wrong', async () => {
@@ -276,6 +373,11 @@ describe('creating a page with AI (ADR-031)', () => {
       { question: 'Có thể đổi lịch hẹn không?' },
     ]);
     expect(rewritten?.samplePaths).toEqual([]);
+    // The motion was chosen once, by the first run; "Thử lại" keeps it.
+    expect(detail.draft.composition.motion?.style).toBe(FAKE_MOTION_STYLE);
+    expect(fake.requests.filter((request) => request.schema.name === 'page_motion')).toHaveLength(
+      1,
+    );
     // Retries use nothing of the month.
     expect((await usage(client, site.id)).used).toBe(1);
 
@@ -323,6 +425,8 @@ describe('creating a page with AI (ADR-031)', () => {
     );
     expect(pages.items.map((page) => page.slug)).not.toContain(body.slug);
     expect((await usage(client, site.id)).used).toBe(0);
+    // No draft comes of it: its motion was not asked for.
+    expect(fake.requests.some((request) => request.schema.name === 'page_motion')).toBe(false);
   });
 
   it('takes no more uses than the month has, whatever arrives at once', async () => {
@@ -371,9 +475,10 @@ describe('creating a page with AI (ADR-031)', () => {
       site.id,
       aiJobBody({ structure: [{ type: 'hero', variant: 'split' }] }),
     ).then((response) => response);
-    // The first job asked once; the second has reserved its use once it asks.
+    // The first job asked for its section and its motion; the second has reserved its use once
+    // it asks.
     await vi.waitFor(() => {
-      expect(fake.requests).toHaveLength(2);
+      expect(fake.requests).toHaveLength(3);
     });
     clock.at = new Date('2026-11-30T17:00:00.000Z');
     expect(await usage(client, site.id)).toMatchObject({

@@ -1,10 +1,12 @@
-import type {
-  AiStructureItem,
-  Composition,
-  PageGoal,
-  ProblemIssue,
-  SectionInstance,
-  SectionType,
+import {
+  type AiStructureItem,
+  type Composition,
+  DEFAULT_PAGE_MOTION,
+  type MotionStyle,
+  type PageGoal,
+  type ProblemIssue,
+  type SectionInstance,
+  type SectionType,
 } from '@plp/contracts';
 import {
   buildCompositionFromGoal,
@@ -25,6 +27,8 @@ export interface StructureInput {
   structure: readonly AiStructureItem[];
   goal: PageGoal;
   siteName: string;
+  /** The page's motion style (ADR-032): the user's, or the one expected until the AI chooses. */
+  motion: MotionStyle;
   /** A fresh section id for each section. */
   newId: () => string;
 }
@@ -67,7 +71,8 @@ const formLedCtaPaths: Partial<Record<SectionType, string>> = {
  * paths into the request ("structure.3.type"). A section the goal's blueprint also has takes its
  * goal-specific sample copy ("Vì sao chọn {site}"), so a section the AI cannot write still reads
  * well; others take the section's own sample. Colors follow the "calm" rhythm of goal pages, and
- * the Hero's main button leads to the form when the page has one, as on goal pages (ADR-016).
+ * the Hero's main button leads to the form when the page has one, as on goal pages (ADR-016). The
+ * page moves with `motion`, its default level and accents.
  */
 export function compositionFromStructure(input: StructureInput): StructureResult {
   const invalid = variantIssues(input.structure);
@@ -125,7 +130,11 @@ export function compositionFromStructure(input: StructureInput): StructureResult
         }
       : section;
   });
-  const parsed = parseComposition({ version: 1, sections });
+  const parsed = parseComposition({
+    version: 1,
+    motion: { ...DEFAULT_PAGE_MOTION, style: input.motion },
+    sections,
+  });
   if (!parsed.success) {
     return {
       ok: false,

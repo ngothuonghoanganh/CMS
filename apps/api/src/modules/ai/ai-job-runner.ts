@@ -30,7 +30,9 @@ import {
   type RunStopReason,
   summarizeFailures,
 } from './domain/job-rules.js';
+import { type MotionChoice, withMotionChoice } from './domain/motion-choice.js';
 import type { PromptContext } from './domain/prompts.js';
+import { MotionChooser } from './motion-chooser.service.js';
 import {
   SectionWriter,
   type SectionWriteResult,
@@ -43,9 +45,17 @@ export interface RunSpec {
   site: SiteRecord;
   /** The job, running, with this run's id and deadline. */
   job: AiJobRecord;
-  /** The draft the sections are written into: built from the structure, or the job's draft. */
+  /**
+   * The draft the sections are written into: built from the structure, with the motion style the
+   * user chose or the one expected, or the job's draft.
+   */
   base: Composition;
   context: PromptContext;
+  /**
+   * "AI chọn" of a first run (ADR-032): once sections are written, one more request picks the
+   * page's motion; when it fails, `base` keeps the style expected.
+   */
+  chooseMotion: boolean;
 }
 
 /** A run as the request that started it follows it. */
@@ -122,6 +132,7 @@ export class AiJobRunner implements OnModuleDestroy {
   constructor(
     @InjectEnv() private readonly env: Env,
     private readonly writer: SectionWriter,
+    private readonly motion: MotionChooser,
     private readonly jobs: AiJobsRepository,
     private readonly ledger: AiJobLedger,
     private readonly pagesService: PagesService,
@@ -229,6 +240,11 @@ export class AiJobRunner implements OnModuleDestroy {
     const failure = summarizeFailures(
       sections.flatMap((section) => (section.failure === null ? [] : [section.failure])),
     );
+    // No draft comes of a run that wrote nothing: its motion is not worth a request.
+    const motion =
+      spec.chooseMotion && written.size > 0 && job.pageId === null
+        ? await this.chooseMotion(spec, runId, run, tokens)
+        : null;
     if (written.size === 0) {
       await this.ledger.endWithoutWriting(scope, job, runId, {
         status: 'failed',
@@ -236,7 +252,7 @@ export class AiJobRunner implements OnModuleDestroy {
         failure,
       });
     } else if (job.pageId === null) {
-      await this.createDraft(spec, runId, written, sections, failure);
+      await this.createDraft(spec, runId, written, sections, failure, motion);
     } else {
       await this.updateDraft(spec, job.pageId, runId, written, sections, failure);
     }
@@ -252,6 +268,7 @@ export class AiJobRunner implements OnModuleDestroy {
         status: ended.status,
         written: written.size,
         failed: sections.filter((section) => section.status === 'failed').length,
+        motionChosen: motion !== null,
         inputTokens: tokens.input,
         outputTokens: tokens.output,
         ms: Date.now() - startedAt,
@@ -392,6 +409,47 @@ export class AiJobRunner implements OnModuleDestroy {
     }
   }
 
+  /**
+   * "AI chọn": the motion the AI picks for the page, or null to keep the style expected. Nothing
+   * here fails the job (ADR-032): a failed request, an unusable answer and a defect of the chooser
+   * all keep that style, and only the kind of failure is logged. As before a retry, no request is
+   * sent once the job was ended elsewhere.
+   */
+  private async chooseMotion(
+    spec: RunSpec,
+    runId: string,
+    run: ActiveRun,
+    tokens: TokenCount,
+  ): Promise<MotionChoice | null> {
+    if (!run.controller.signal.aborted) {
+      await this.stopUnlessCurrent(spec, runId, run);
+    }
+    if (run.controller.signal.aborted) {
+      return null;
+    }
+    const jobId = spec.job._id.toHexString();
+    try {
+      const result = await this.motion.choose(
+        spec.job.brief,
+        spec.base.sections,
+        run.controller.signal,
+      );
+      tokens.input += result.tokens.input;
+      tokens.output += result.tokens.output;
+      if (result.status === 'chosen') {
+        return result.choice;
+      }
+      if (result.status === 'error') {
+        this.logger.warn({ err: result.error, jobId }, 'AI motion not chosen');
+      } else {
+        this.logger.warn({ jobId }, 'AI motion answer not usable');
+      }
+    } catch (error) {
+      this.logger.error({ err: error, jobId }, 'AI motion chooser failed');
+    }
+    return null;
+  }
+
   /** The draft of a first run and the job's end, in one transaction (ADR-031). */
   private async createDraft(
     spec: RunSpec,
@@ -399,9 +457,10 @@ export class AiJobRunner implements OnModuleDestroy {
     written: ReadonlyMap<string, SectionInstance>,
     sections: AiJobSectionRecord[],
     failure: AiFailure | null,
+    motion: MotionChoice | null,
   ): Promise<void> {
     const { scope, site, job } = spec;
-    const composition = this.withWritten(spec.base, written);
+    const composition = this.withWritten(spec.base, written, motion);
     try {
       await this.transactions.run(async (tx) => {
         const page = await this.pagesService.insertPage(
@@ -518,15 +577,22 @@ export class AiJobRunner implements OnModuleDestroy {
     }
   }
 
-  /** `base` with the written sections in place, as the registry parses it. */
+  /**
+   * `base` with the written sections in place and the motion the AI chose, if any, as the registry
+   * parses it. The rest of `base` stays: a "Thử lại" keeps the draft's motion.
+   */
   private withWritten(
     base: Composition,
     written: ReadonlyMap<string, SectionInstance>,
+    motion: MotionChoice | null = null,
   ): Composition {
-    const parsed = parseComposition({
-      version: 1,
+    const composed: Composition = {
+      ...base,
       sections: base.sections.map((section) => written.get(section.id) ?? section),
-    });
+    };
+    const parsed = parseComposition(
+      motion === null ? composed : withMotionChoice(composed, motion),
+    );
     if (!parsed.success) {
       throw new Error(
         `The AI job's draft is not a valid composition: ${JSON.stringify(parsed.issues.map(({ path, code }) => ({ path, code })))}`,

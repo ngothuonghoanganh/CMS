@@ -15,11 +15,18 @@ export const RUN_GRACE_MS = 60_000;
 
 /**
  * How long a run may take: every section in rounds of `concurrency` (`AI_CONCURRENCY`), each with
- * its one retry, each request up to `timeoutMs`. A run that has not ended by then is stopped.
+ * its one retry, then `followUps` single requests without a retry ("AI chọn" asks for the motion
+ * after the sections, ADR-032), each request up to `timeoutMs`. A run that has not ended by then is
+ * stopped.
  */
-export function runBudgetMs(sectionCount: number, timeoutMs: number, concurrency: number): number {
+export function runBudgetMs(
+  sectionCount: number,
+  timeoutMs: number,
+  concurrency: number,
+  followUps = 0,
+): number {
   const rounds = Math.max(1, Math.ceil(sectionCount / concurrency));
-  return rounds * 2 * timeoutMs;
+  return (rounds * 2 + followUps) * timeoutMs;
 }
 
 /**

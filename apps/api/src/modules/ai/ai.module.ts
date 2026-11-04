@@ -20,6 +20,7 @@ import { AiUsageRepository } from './ai-usage.repository.js';
 import { AiController } from './ai.controller.js';
 import { AiSuggestionsController } from './ai-suggestions.controller.js';
 import { AiSuggestionsService } from './ai-suggestions.service.js';
+import { MotionChooser } from './motion-chooser.service.js';
 import { SectionWriter } from './section-writer.service.js';
 
 /**
@@ -46,6 +47,7 @@ import { SectionWriter } from './section-writer.service.js';
     AiJobsRepository,
     AiJobLedger,
     SectionWriter,
+    MotionChooser,
     AiJobRunner,
     AiPageJobsService,
     AiSuggestionsService,
