@@ -254,6 +254,16 @@ describe('InvitationPage', () => {
     expect(loadPageMock).toHaveBeenCalledWith('/login?next=%2Finvite');
   });
 
+  it('lets someone with an account sign in to join from the sign-up form too', async () => {
+    const user = userEvent.setup();
+    serve(invitation, null);
+    renderWithProviders(<InvitationPage addresses={null} />);
+    expect(await screen.findByRole('textbox', { name: 'Email' })).toHaveAttribute('readonly');
+    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    expect(window.sessionStorage.getItem(PENDING_INVITATION_KEY)).toBe('bi-mat-cua-link');
+    expect(loadPageMock).toHaveBeenCalledWith('/login?next=%2Finvite');
+  });
+
   it('says when the invitation expired or was used', async () => {
     serve({ ...invitation, state: 'expired', inviterEmail: 'ngocanh@mayxanh.vn' }, null);
     const { unmount } = renderWithProviders(<InvitationPage addresses={null} />);

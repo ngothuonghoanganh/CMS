@@ -5,7 +5,8 @@
   box-sizing: border-box;
   padding: 3px;
   border-radius: var(--radius-md);
-  background: var(--color-hover);
+  /* The boards' track (#eceef2), a step darker than the hover grey so the chip reads on it. */
+  background: var(--color-neutral-badge-bg);
 }
 
 .fullWidth {
@@ -21,7 +22,7 @@
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  min-height: 38px;
+  min-height: 36px;
   margin: 0;
   padding: 0 12px;
   border: 0;
@@ -47,12 +48,11 @@
   outline-offset: 0;
 }
 
-/* The white pill alone is 1.1:1 on the group: its edge marks the selected item at 3:1. */
+/* A white chip without an edge on the grey track, as on boards 10, 11 and 18. The selected item
+   does not rest on the chip alone: its text turns ink and semibold, and `aria-pressed` names it. */
 .item[aria-pressed='true'] {
   background: var(--color-surface);
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 0 0 1px var(--color-border-control);
+  box-shadow: var(--shadow-sm);
   color: var(--color-ink);
   font-weight: 600;
 }

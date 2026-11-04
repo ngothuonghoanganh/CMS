@@ -1,10 +1,13 @@
-.card {
+/* Screen 36: 520px, 28px padding, a border and no shadow. The element in the selector outranks
+   the Card's own padding and radius, whatever order the stylesheets load in. */
+section.card {
   max-width: 520px;
   margin: 0 auto;
+  padding: 28px;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-2xl);
 }
 
 .icon {
@@ -26,14 +29,14 @@
 
 .title {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: 22px;
   font-weight: 700;
   line-height: 1.3;
 }
 
 .paragraph {
   margin: 0;
-  font-size: var(--text-body);
+  font-size: var(--text-md);
   line-height: 1.6;
   color: var(--color-ink-2);
 }

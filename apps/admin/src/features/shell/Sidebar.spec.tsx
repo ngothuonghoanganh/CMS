@@ -252,8 +252,8 @@ describe('Sidebar', () => {
       'Leads',
       'Hiệu quả',
       'Tên miền',
-      'Dữ liệu & đồng ý',
       'Cài đặt site',
+      'Dữ liệu & đồng ý',
     ]);
     expect(screen.getByRole('link', { name: 'Sites 2 site' })).toHaveAttribute(
       'aria-current',

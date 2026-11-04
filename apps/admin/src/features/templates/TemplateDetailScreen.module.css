@@ -153,6 +153,11 @@
   min-width: 0;
 }
 
+.nowrap {
+  white-space: nowrap;
+}
+
+/* The chevron of the back link: the right one, mirrored. */
 @media (max-width: 599px) {
   .preview {
     padding: 12px;

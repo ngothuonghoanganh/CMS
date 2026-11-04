@@ -155,6 +155,13 @@
   font-weight: 600;
 }
 
+/* The lock of "Luôn hiện ngay" (board 38), on the text's line; the pill still ends in an ellipsis. */
+.badge > svg {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
 /* Danger badge of board 03: the reason the section blocks publishing. */
 .errorBadge {
   align-self: flex-start;

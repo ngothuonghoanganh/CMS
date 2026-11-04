@@ -63,7 +63,6 @@ export function SitesScreen({ workspace, role, siteIds, sites }: SitesScreenProp
   return (
     <PageContainer>
       <PageHeader
-        context={workspace.name}
         title="Sites"
         description="Trang web của từng khách hàng. Mở một site để xem và làm việc với các trang của nó."
         actions={

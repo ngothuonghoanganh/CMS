@@ -39,17 +39,18 @@
 .kpi {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   padding: 16px 18px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--color-surface);
 }
 
 .kpi dt {
   font-size: var(--text-body-sm);
-  color: var(--color-ink-2);
+  font-weight: 500;
+  color: var(--color-muted);
 }
 
 .kpi dd {
@@ -86,8 +87,36 @@
 
 .cardTitle {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-md);
   font-weight: 600;
+}
+
+/* Board 11's paddings. The doubled class outweighs the Card's own padding presets. */
+.chartCard.chartCard {
+  gap: 14px;
+  padding-bottom: 16px;
+}
+
+.sideCard.sideCard {
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.deviceCard.deviceCard {
+  gap: 12px;
+}
+
+/* The sources table runs edge to edge, so its row dividers reach the card's border. */
+.sourceCard {
+  gap: 0;
+}
+
+.flushTitle {
+  padding: 16px 18px 6px;
+}
+
+.flushNote {
+  padding: 6px 18px 16px;
 }
 
 .cardTools {
@@ -185,14 +214,15 @@
 }
 
 /*
- * At most 24px wide, rounded at the data end only, 2px of surface between neighbours. Ninety days
- * on a phone leave under 3px a day: the gap shrinks there, so bars never thin to a hairline.
+ * 62% of the day's slot and at most 56px (board 11), rounded at the data end only. A slot too
+ * narrow for that (ninety days on a phone leave under 3px a day) keeps a bar of at least 4px, or
+ * the slot less a 2px gap: the gap shrinks there, so bars never thin to a hairline.
  */
 .bar {
   position: absolute;
   bottom: 0;
   left: 50%;
-  width: min(24px, calc(100% - min(2px, 25%)));
+  width: min(56px, max(62%, min(calc(100% - min(2px, 25%)), 4px)));
   border-radius: 4px 4px 0 0;
   background: var(--chart-bar);
   transform: translateX(-50%);
@@ -320,6 +350,20 @@
 
 .table tbody tr:last-child > * {
   border-bottom: 0;
+}
+
+.sourceTable {
+  font-size: var(--text-body);
+}
+
+.sourceTable th,
+.sourceTable td,
+.sourceTable thead th {
+  padding: 10px 18px;
+}
+
+.sourceTable .mono {
+  font-size: var(--text-body-sm);
 }
 
 .number {

@@ -76,14 +76,23 @@ export function RadioCardGroup<V extends string>({
           const titleId = `${baseId}-${index}-title`;
           const descriptionId = `${baseId}-${index}-description`;
           const hasDescription = hasContent(option.description);
+          const hasIcon = hasContent(option.icon);
+          const hasPreview = hasContent(option.preview);
           return (
             <label
               key={option.value}
-              className={cx(styles.card, checked && styles.checked, disabled && styles.disabled)}
+              className={cx(
+                styles.card,
+                // Without a tile or a preview the radio has nothing to share the top line with:
+                // it goes left of the title, as on boards 15 and 18.
+                !hasIcon && !hasPreview && styles.inline,
+                checked && styles.checked,
+                disabled && styles.disabled,
+              )}
               data-checked={checked}
             >
               <span className={styles.header}>
-                {hasContent(option.icon) ? (
+                {hasIcon ? (
                   <span className={styles.tile} aria-hidden="true">
                     {option.icon}
                   </span>
@@ -107,9 +116,7 @@ export function RadioCardGroup<V extends string>({
                   }}
                 />
               </span>
-              {hasContent(option.preview) ? (
-                <span className={styles.preview}>{option.preview}</span>
-              ) : null}
+              {hasPreview ? <span className={styles.preview}>{option.preview}</span> : null}
               <span id={titleId} className={styles.title}>
                 {option.label}
               </span>

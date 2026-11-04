@@ -43,11 +43,13 @@ import { analyticsQueryKeys } from '../analytics/queries';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { adoptServerRender } from '../shell/server-render';
+import { useNow } from '../shell/use-now';
 import { ConsentEvidenceDialog } from './ConsentEvidenceDialog';
 import { EditLeadContactDialog } from './EditLeadContactDialog';
 import {
   cappedCountLabel,
   consentMoment,
+  deliveryTimeLabel,
   leadDetailMeta,
   leadSourceLine,
   leadStatusTones,
@@ -98,6 +100,7 @@ export function LeadDetailPanel({
 }: LeadDetailPanelProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const now = useNow(loadedAt);
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const deliveryHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -294,6 +297,7 @@ export function LeadDetailPanel({
         {canHandle ? (
           <Field label="Trạng thái lead" hideLabel className={styles.statusField}>
             <Select
+              className={styles.statusSelect}
               value={pendingStatus ?? lead.status}
               // Never disabled while saving: that would drop keyboard focus. A choice made before
               // the save answers is ignored; the select shows the status being saved.
@@ -441,8 +445,12 @@ export function LeadDetailPanel({
                 ) : null}
                 <span className={styles.deliveryText}>{delivery.text}</span>
                 {delivery.kind === 'sent' && delivery.at !== '' ? (
-                  <time dateTime={delivery.at} className={styles.muted}>
-                    {formatDateTime(delivery.at)}
+                  <time
+                    dateTime={delivery.at}
+                    title={formatDateTime(delivery.at)}
+                    className={styles.deliveryTime}
+                  >
+                    {deliveryTimeLabel(delivery.at, now)}
                   </time>
                 ) : null}
               </span>

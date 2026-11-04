@@ -10,6 +10,11 @@
   border: 0;
 }
 
+.lead {
+  display: block;
+  max-width: 620px;
+}
+
 .siteChoice {
   display: flex;
   flex-wrap: wrap;
@@ -79,18 +84,24 @@
   color: var(--color-ink-2);
 }
 
+/* Board 17's filter rows: 36px apart by 2px, 14px labels, the counts in a right-aligned column.
+   The label's text block takes the rest of the row so the count can sit at its end. */
 .option {
   min-height: 36px;
-  align-items: center;
+}
+
+.option label {
+  min-height: 36px;
 }
 
 .optionLabel {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px 10px;
+  gap: 10px;
   width: 100%;
+  font-size: var(--text-body);
+  color: var(--color-ink);
 }
 
 .optionCount {

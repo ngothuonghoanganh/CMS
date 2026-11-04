@@ -10,18 +10,18 @@ import {
   type Site,
 } from '@plp/contracts';
 import {
-  ArrowLeftIcon,
-  Badge,
   Button,
   ButtonLink,
   Callout,
   Card,
   CheckIcon,
+  ChevronLeftIcon,
   CopyIcon,
   Field,
   IconButton,
   Input,
   RadioCardGroup,
+  RefreshIcon,
   useToast,
 } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,13 +35,7 @@ import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ScrollRegion } from '../shell/ScrollRegion';
 import { useNow } from '../shell/use-now';
-import {
-  connectHeading,
-  connectStep,
-  recordStateLabels,
-  recordStateTones,
-  statusBox,
-} from './domain-presentation';
+import { connectHeading, connectStep, recordStateLabels, statusBox } from './domain-presentation';
 import { connectHref } from './DomainsScreen';
 import { domainQueryKeys } from './queries';
 import { type DomainAvailabilityState, useDomainAvailability } from './use-domain-availability';
@@ -86,8 +80,9 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     <IconButton
       aria-label={label}
       size="sm"
-      variant="ghost"
-      icon={<CopyIcon size={16} />}
+      variant="secondary"
+      className={styles.copy}
+      icon={<CopyIcon size={14} />}
       onClick={() => {
         navigator.clipboard.writeText(value).then(
           () => {
@@ -311,7 +306,7 @@ export function DomainConnectScreen({
           href={`${siteHref(site.id)}/domain`}
           variant="ghost"
           size="sm"
-          leadingIcon={<ArrowLeftIcon size={16} />}
+          leadingIcon={<ChevronLeftIcon size={16} />}
         >
           Tên miền
         </ButtonLink>
@@ -345,33 +340,33 @@ export function DomainConnectScreen({
           ) : (
             <>
               {box === null ? null : (
-                <Callout
-                  tone={box.tone}
-                  role="status"
-                  title={box.title}
-                  action={
-                    domain.status === 'active' ? undefined : (
+                <div className={styles.statusBox} data-tone={box.tone}>
+                  <div role="status" className={styles.statusText}>
+                    <p className={styles.statusTitle}>{box.title}</p>
+                    <p className={styles.statusBody}>{box.body}</p>
+                  </div>
+                  {/* Beside the status, not in it: the time changes every minute, which is not news. */}
+                  {domain.checkedAt === null ? null : (
+                    <p className={styles.checked}>
+                      Kiểm tra lần cuối {formatRelativeTime(domain.checkedAt, now)}
+                    </p>
+                  )}
+                  {domain.status === 'active' ? null : (
+                    <div className={styles.statusAction}>
                       <Button
                         variant="secondary"
                         size="sm"
                         loading={check.isPending}
+                        leadingIcon={<RefreshIcon size={14} />}
                         onClick={() => {
                           check.mutate(domain.id);
                         }}
                       >
                         Kiểm tra ngay
                       </Button>
-                    )
-                  }
-                >
-                  {box.body}
-                </Callout>
-              )}
-              {/* Outside the status above: the time changes every minute, which is not news. */}
-              {box === null || domain.checkedAt === null ? null : (
-                <p className={styles.checked}>
-                  Kiểm tra lần cuối {formatRelativeTime(domain.checkedAt, now)}
-                </p>
+                    </div>
+                  )}
+                </div>
               )}
               {check.isError ? (
                 <Callout tone="danger" role="alert">
@@ -410,8 +405,8 @@ export function DomainConnectScreen({
                 <>
                   <ol className={styles.instructions}>
                     <li>
-                      Mở trang quản lý DNS của tên miền tại nhà cung cấp (Mắt Bão, PA Vietnam, Nhân
-                      Hòa, Cloudflare…).
+                      Mở trang quản lý DNS của <strong>{apexOf(domain.hostname)}</strong> tại nhà
+                      cung cấp (Mắt Bão, PA Vietnam, Nhân Hòa, Cloudflare…).
                     </li>
                     <li>
                       Thêm đúng {domain.records.length} bản ghi dưới đây. Bấm biểu tượng sao chép để
@@ -419,48 +414,51 @@ export function DomainConnectScreen({
                     </li>
                     <li>Lưu lại, rồi quay về đây bấm “Kiểm tra ngay”.</li>
                   </ol>
-                  <ScrollRegion label="Các bản ghi DNS cần thêm">
-                    <table className={styles.records}>
-                      <thead>
-                        <tr>
-                          <th scope="col">LOẠI</th>
-                          <th scope="col">TÊN / HOST</th>
-                          <th scope="col">GIÁ TRỊ</th>
-                          <th scope="col">TÌNH TRẠNG</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {domain.records.map((record) => {
-                          const name = relativeRecordName(record.name, domain.hostname);
-                          return (
-                            <tr key={`${record.type}-${record.value}`}>
-                              <th scope="row">{record.type}</th>
-                              <td>
-                                <span className={styles.recordValue}>
-                                  <span className={styles.mono}>{name}</span>
-                                  <CopyButton value={name} label={`Sao chép tên host ${name}`} />
-                                </span>
-                              </td>
-                              <td>
-                                <span className={styles.recordValue}>
-                                  <span className={styles.mono}>{record.value}</span>
-                                  <CopyButton
-                                    value={record.value}
-                                    label={`Sao chép giá trị ${record.type}`}
-                                  />
-                                </span>
-                              </td>
-                              <td>
-                                <Badge tone={recordStateTones[record.state]} dot>
-                                  {recordStateLabels[record.state]}
-                                </Badge>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </ScrollRegion>
+                  <div className={styles.recordsBox}>
+                    <ScrollRegion label="Các bản ghi DNS cần thêm">
+                      <table className={styles.records}>
+                        <thead>
+                          <tr>
+                            <th scope="col">LOẠI</th>
+                            <th scope="col">TÊN / HOST</th>
+                            <th scope="col">GIÁ TRỊ</th>
+                            <th scope="col">TÌNH TRẠNG</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {domain.records.map((record) => {
+                            const name = relativeRecordName(record.name, domain.hostname);
+                            return (
+                              <tr key={`${record.type}-${record.value}`}>
+                                <th scope="row">{record.type}</th>
+                                <td>
+                                  <span className={styles.recordValue}>
+                                    <span className={styles.mono}>{name}</span>
+                                    <CopyButton value={name} label={`Sao chép tên host ${name}`} />
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={styles.recordValue}>
+                                    <span className={styles.mono}>{record.value}</span>
+                                    <CopyButton
+                                      value={record.value}
+                                      label={`Sao chép giá trị ${record.type}`}
+                                    />
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={styles.recordState} data-state={record.state}>
+                                    <span className={styles.recordDot} aria-hidden="true" />
+                                    {recordStateLabels[record.state]}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </ScrollRegion>
+                  </div>
                   {routing !== undefined && routing.state === 'wrong' ? (
                     <dl className={styles.compare}>
                       <div>

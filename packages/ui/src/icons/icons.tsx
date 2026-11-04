@@ -105,6 +105,18 @@ export const MenuIcon = createIcon('menu', <path d="M4 6h16M4 12h16M4 18h16" />)
 /* Direction */
 export const ChevronDownIcon = createIcon('chevron-down', <path d="M6 9l6 6 6-6" />);
 export const ChevronRightIcon = createIcon('chevron-right', <path d="M9 6l6 6-6 6" />);
+/** Back links of boards 14, 18 and 19 ("‹ Tên miền", "‹ Templates"). */
+export const ChevronLeftIcon = createIcon('chevron-left', <path d="M15 6l-6 6 6 6" />);
+/** "Kiểm tra ngay" and "Dùng lại cài đặt trang": check again, or go back to what was. */
+export const RefreshIcon = createIcon(
+  'refresh',
+  <>
+    <path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5" />
+    <path d="M4 4v4.5h4.5" />
+  </>,
+);
+/** "▸ Xem thử": play a motion sample. */
+export const PlayIcon = createIcon('play', <path d="M7 4.5v15l12-7.5z" />, { filled: true });
 /** Up/down chevrons: switchers and sortable columns. */
 export const ChevronUpDownIcon = createIcon(
   'chevron-up-down',

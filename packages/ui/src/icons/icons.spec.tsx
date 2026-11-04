@@ -9,6 +9,9 @@ describe('icons', () => {
   it('exports at least the icon set the admin screens need', () => {
     const required = [
       'CloseIcon',
+      'ChevronLeftIcon',
+      'RefreshIcon',
+      'PlayIcon',
       'PlusIcon',
       'ChevronDownIcon',
       'ChevronUpDownIcon',

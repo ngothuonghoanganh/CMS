@@ -17,6 +17,18 @@
   gap: 8px;
 }
 
+/* Board 15's toolbar controls are 40px and 13px, one step under a form field. */
+.filters .filterControl {
+  min-height: 40px;
+  font-size: var(--text-body-sm);
+}
+
+/* Quản trị is the solid dark chip; Chủ sở hữu the indigo tint (board 15). */
+.table .adminChip {
+  background: var(--color-ink);
+  color: var(--color-on-primary);
+}
+
 .card {
   box-sizing: border-box;
   min-width: 0;

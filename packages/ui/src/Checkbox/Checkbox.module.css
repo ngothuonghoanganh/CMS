@@ -1,23 +1,83 @@
+/*
+ * The box sits on the first line of the label in a row of any height: the box and the label share
+ * a baseline, and the row centers that line when it is taller than the text. `align-content`
+ * needs a wrapping flex line; `.text` grows from zero, so nothing ever wraps.
+ */
 .row {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-content: center;
+  align-items: baseline;
+  column-gap: 10px;
   min-height: var(--target-min);
   box-sizing: border-box;
 }
 
-.box {
+/*
+ * One text line of the label's size, so its baseline is the label's; the box is centered on it.
+ * Above the label's row-wide click area, so a click on the box reaches the input itself.
+ */
+.control {
+  position: relative;
+  z-index: 1;
+  display: block;
   flex: none;
+  align-self: baseline;
+  width: 18px;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+}
+
+.control::before {
+  content: '\200b';
+}
+
+.box {
+  position: absolute;
+  top: 50%;
+  left: 0;
   width: 18px;
   height: 18px;
-  /* Centers the 18px box on the first 44px-tall label line. */
-  margin: 13px 0 0;
-  accent-color: var(--color-primary);
+  box-sizing: border-box;
+  margin: -9px 0 0;
+  border: 1.5px solid var(--color-border-control);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface) center / 14px 14px no-repeat;
+  appearance: none;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+}
+
+.row:hover .box:not(:disabled) {
+  border-color: var(--color-ink-2);
+}
+
+.box:checked,
+.box:indeterminate,
+.row:hover .box:is(:checked, :indeterminate):not(:disabled) {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+}
+
+.box:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+}
+
+.box:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
 }
 
 .box:disabled {
+  border-color: var(--color-disabled);
+  background-color: var(--color-surface-subtle);
   cursor: not-allowed;
+}
+
+.box:is(:checked, :indeterminate):disabled {
+  background-color: var(--color-disabled);
 }
 
 .box:focus-visible {
@@ -25,31 +85,45 @@
   outline-offset: var(--focus-offset);
 }
 
+/* High contrast themes draw the native box, which follows the system colors. */
+@media (forced-colors: active) {
+  .box {
+    appearance: auto;
+  }
+}
+
 .text {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
+  align-self: baseline;
   min-width: 0;
 }
 
-/* The label fills the 44px target height next to the box. */
 .label {
-  display: flex;
-  align-items: center;
-  min-height: var(--target-min);
+  display: block;
   font-size: var(--text-body-sm);
   line-height: 1.5;
   color: var(--color-ink-2);
   cursor: pointer;
 }
 
-.box:disabled + .text .label {
+/* The whole row is the click target: 44px tall, unless a consumer asks for a shorter row. */
+.label::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.row:has(.box:disabled) .label {
   color: var(--color-muted);
   cursor: not-allowed;
 }
 
+/* Above the label's click area, as it was outside the label: a link in it stays a link. */
 .description {
-  margin-top: -8px;
-  padding-bottom: 8px;
+  position: relative;
+  margin-top: 2px;
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--color-muted);

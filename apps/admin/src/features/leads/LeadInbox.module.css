@@ -244,6 +244,30 @@
   min-width: 170px;
 }
 
+/* Board 10 tints the status of the open lead with the brand color. The doubled class outweighs
+   the shared control frame; the frame's focus ring still wins on focus. */
+.statusSelect.statusSelect {
+  min-height: 36px;
+  border-color: color-mix(in srgb, var(--color-primary) 22%, var(--color-primary-soft));
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-ink);
+}
+
+.statusSelect.statusSelect:focus-within {
+  border-color: var(--color-primary);
+}
+
+.statusSelect select {
+  padding: 0 36px 0 10px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+}
+
+.statusSelect > span {
+  color: var(--color-primary-ink);
+}
+
 .detailBody {
   display: flex;
   flex-direction: column;
@@ -476,6 +500,13 @@
 
 .deliveryText {
   flex: 1 1 auto;
+}
+
+/* Only "16:42" (or a date): short enough to stay on the row of its channel. */
+.deliveryTime {
+  flex: none;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .deliveryTitle:focus-visible {

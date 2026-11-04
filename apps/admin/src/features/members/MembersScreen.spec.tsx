@@ -167,6 +167,11 @@ describe('MembersScreen', () => {
     }
     expect(within(own).getByRole('rowheader')).toHaveTextContent('Ngọc Anh (bạn)');
     expect(within(own).getByRole('button', { name: 'Chuyển quyền sở hữu' })).toBeInTheDocument();
+    // Chủ sở hữu is the indigo tint; Quản trị the solid dark chip (board 15).
+    expect(within(own).getByText('Chủ sở hữu')).toHaveAttribute('data-tone', 'info');
+    expect(
+      within(screen.getByRole('row', { name: /Quốc Bảo/ })).getByText('Quản trị'),
+    ).not.toHaveAttribute('data-tone', 'info');
     expect(screen.getByRole('row', { name: /Minh Khoa/ })).toHaveTextContent(
       'Nha khoa Smile Care, Bếp Nhà Mây',
     );

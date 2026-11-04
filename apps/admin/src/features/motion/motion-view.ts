@@ -74,6 +74,8 @@ export interface MotionPill {
   text: string;
   /** The section changes the page's motion. */
   own: boolean;
+  /** The section always shows at once (navigation bar, first section): the pill has a lock. */
+  locked: boolean;
 }
 
 /** The pill of a section in the page structure (board 38); null on a page that does not move. */
@@ -83,20 +85,24 @@ export function motionPillOf(composition: Composition, index: number): MotionPil
     return null;
   }
   if (isMotionLocked(composition.sections, index)) {
-    return { text: 'Luôn hiện ngay', own: false };
+    return { text: 'Luôn hiện ngay', own: false, locked: true };
   }
   const own = section.motion;
   if (own?.enter === 'none') {
-    return { text: 'Không hiệu ứng', own: false };
+    return { text: 'Không hiệu ứng', own: false, locked: false };
   }
   if (own?.enter !== undefined) {
-    return { text: `Riêng · ${MOTION_ENTER_LABELS[own.enter]}`, own: true };
+    return { text: `Riêng · ${MOTION_ENTER_LABELS[own.enter]}`, own: true, locked: false };
   }
   if (own?.order !== undefined) {
-    return { text: `Riêng · ${MOTION_ORDER_LABELS[own.order].toLowerCase()}`, own: true };
+    return {
+      text: `Riêng · ${MOTION_ORDER_LABELS[own.order].toLowerCase()}`,
+      own: true,
+      locked: false,
+    };
   }
   if (own?.accents !== undefined) {
-    return { text: 'Riêng · điểm nhấn', own: true };
+    return { text: 'Riêng · điểm nhấn', own: true, locked: false };
   }
   return null;
 }

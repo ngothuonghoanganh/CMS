@@ -4,7 +4,7 @@
   align-self: flex-start;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
+  min-height: 24px;
   font-size: var(--text-body-sm);
   font-weight: 600;
   color: var(--color-primary-ink);
