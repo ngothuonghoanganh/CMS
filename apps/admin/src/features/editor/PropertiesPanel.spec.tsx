@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { getAtPath } from '@plp/sections/schema';
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PropertiesPanel } from './PropertiesPanel';
 import { ASSET_ID, makeStore, OTHER_PAGE_ID, pageSummary, sectionById } from './test-fixtures';
 import { renderEditor } from './test-render';
@@ -39,6 +39,62 @@ describe('PropertiesPanel', () => {
     await user.keyboard('{ArrowLeft}');
     expect(motionTab).toHaveFocus();
     expect(motionTab).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('folds a group away, keeps it folded on the next section, and opens it for a field', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().select(HERO);
+    renderEditor(<PropertiesPanel />, { store });
+
+    const layout = screen.getByRole('button', { name: 'BỐ CỤC' });
+    expect(layout).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('group', { name: 'Kiểu bố cục' })).toBeInTheDocument();
+    await user.click(layout);
+    expect(layout).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('group', { name: 'Kiểu bố cục' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'NỘI DUNG' }));
+    expect(screen.queryByLabelText(/^Tiêu đề/)).not.toBeInTheDocument();
+
+    act(() => {
+      store.getState().select(BENEFITS);
+    });
+    expect(screen.getByRole('button', { name: 'BỐ CỤC' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'HIỂN THỊ' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    // A publish check's "Sửa ngay" selects a field: its group opens again.
+    act(() => {
+      store.getState().select(HERO, 'heading');
+    });
+    expect(screen.getByRole('button', { name: 'NỘI DUNG' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByLabelText(/^Tiêu đề/)).toBeInTheDocument();
+  });
+
+  it('opens only the section motion from "Chỉnh riêng cho từng section" (boards 37 and 38)', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().setMotionStyle('smooth');
+    renderEditor(<PropertiesPanel />, { store });
+
+    await user.click(screen.getByRole('button', { name: 'Chỉnh riêng cho từng section' }));
+    expect(store.getState().selection.sectionId).toBe(BENEFITS);
+    const motion = screen.getByRole('button', { name: 'HIỆU ỨNG XUẤT HIỆN' });
+    expect(motion).toHaveAttribute('aria-expanded', 'true');
+    for (const label of ['NỘI DUNG', 'BỐ CỤC', 'HIỂN THỊ']) {
+      expect(screen.getByRole('button', { name: label })).toHaveAttribute('aria-expanded', 'false');
+    }
+    await vi.waitFor(() => {
+      expect(motion).toHaveFocus();
+    });
   });
 
   it('renders the hero fields with counters, and typing is one undo step', async () => {

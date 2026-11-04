@@ -1,7 +1,7 @@
 import { cx } from '../internal/cx';
 import styles from './Button.module.css';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'ink' | 'outline';
 export type ButtonSize = 'md' | 'sm';
 
 export interface ButtonStyleOptions {

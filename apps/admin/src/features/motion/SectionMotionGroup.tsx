@@ -15,7 +15,7 @@ import {
   pageAccentOn,
   pageMotionOf,
 } from '@plp/sections/schema';
-import { Button, LockIcon, RefreshIcon, Switch } from '@plp/ui';
+import { Button, LockIcon, MobileIcon, PlayIcon, RefreshIcon, Switch } from '@plp/ui';
 import { useState } from 'react';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor/editor-context';
 import { ENTER_DESCRIPTIONS, lockReasonOf, styleSample } from './motion-view';
@@ -28,7 +28,7 @@ const ORDER_BOXES: Readonly<Record<MotionOrder, readonly number[]>> = {
   rows: [1, 1, 2, 2],
 };
 
-/** Id of the group's heading, focused by "Chỉnh riêng cho từng section" of board 37. */
+/** Id of the group's toggle, focused by "Chỉnh riêng cho từng section" of board 37. */
 export function sectionMotionHeadingId(sectionId: string): string {
   return `section-motion-${sectionId}`;
 }
@@ -52,18 +52,11 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
     run: 0,
   });
   const motion = pageMotionOf(composition);
-  const headingId = sectionMotionHeadingId(section.id);
   const lockReason = lockReasonOf(composition.sections, index);
-  const heading = (
-    <h3 id={headingId} className={styles.groupTitle} tabIndex={-1}>
-      HIỆU ỨNG XUẤT HIỆN
-    </h3>
-  );
 
   if (motion.style === 'none') {
     return (
-      <section className={styles.group} aria-labelledby={headingId}>
-        {heading}
+      <div className={styles.group}>
         <p className={styles.help}>
           Trang đang để Không hiệu ứng, nên mọi section hiện ngay. Chọn một phong cách ở Cài đặt
           trang để section chuyển động.
@@ -71,20 +64,19 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
         <Button size="sm" variant="secondary" onClick={openPageMotion}>
           Mở Cài đặt trang
         </Button>
-      </section>
+      </div>
     );
   }
 
   if (lockReason !== null) {
     return (
-      <section className={styles.group} aria-labelledby={headingId}>
-        {heading}
+      <div className={styles.group}>
         <p className={styles.locked}>
           <LockIcon size={16} />
           Luôn hiện ngay
         </p>
         <p className={styles.help}>{lockReason}</p>
-      </section>
+      </div>
     );
   }
 
@@ -104,9 +96,7 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
     overridden ? 'Riêng cho section này' : 'Theo cài đặt trang';
 
   return (
-    <section className={styles.group} aria-labelledby={headingId}>
-      {heading}
-
+    <div className={styles.group}>
       <div className={styles.row}>
         <span className={styles.rowHeader}>
           <span className={styles.rowLabel}>Cách xuất hiện</span>
@@ -244,20 +234,28 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
           </div>
 
           {motion.reduceOnMobile && (enter !== 'fade' || order !== 'together') ? (
-            <p className={styles.help}>
-              Trên điện thoại: chỉ hiện dần, cùng lúc, theo Cài đặt trang.
+            <p className={styles.mobileNote}>
+              <MobileIcon size={16} />
+              <span>
+                Trên điện thoại: chỉ hiện dần, cùng lúc, theo{' '}
+                <button type="button" className={styles.inlineLink} onClick={openPageMotion}>
+                  Cài đặt trang
+                </button>
+                .
+              </span>
             </p>
           ) : null}
         </>
       )}
 
-      <p className={styles.help}>
-        Section đứng yên khi bạn chỉnh sửa. Chạy thử để xem như khách thấy.
-      </p>
-      <div className={styles.actions}>
+      <div className={styles.run}>
+        <p className={styles.runText}>
+          Section đứng yên khi bạn chỉnh sửa. Chạy thử để xem như khách thấy.
+        </p>
         <Button
-          size="sm"
-          variant="secondary"
+          variant="outline"
+          fullWidth
+          leadingIcon={<PlayIcon size={14} />}
           onClick={() => {
             store.getState().playMotion({ kind: 'section', sectionId: section.id });
           }}
@@ -274,6 +272,6 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
           Chạy thử cả trang
         </Button>
       </div>
-    </section>
+    </div>
   );
 }

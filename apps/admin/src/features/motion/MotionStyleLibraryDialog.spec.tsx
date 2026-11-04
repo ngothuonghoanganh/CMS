@@ -5,8 +5,9 @@ import { makeStore } from '../editor/test-fixtures';
 import { renderEditor } from '../editor/test-render';
 import { MotionStyleLibraryDialog } from './MotionStyleLibraryDialog';
 
+// The dialog's title is the h2 and "Chọn cách trang chuyển động" the h3: each card is an h4.
 function card(name: string): HTMLElement {
-  const heading = screen.getByRole('heading', { name, level: 3 });
+  const heading = screen.getByRole('heading', { name, level: 4 });
   const item = heading.closest('li');
   if (!item) {
     throw new Error(`No card for ${name}`);
@@ -23,6 +24,9 @@ describe('MotionStyleLibraryDialog (board 39, ADR-032)', () => {
     renderEditor(<MotionStyleLibraryDialog open onOpenChange={onOpenChange} />, { store });
     const dialog = screen.getByRole('dialog', { name: 'Phong cách chuyển động' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(6);
+    expect(
+      within(dialog).getByRole('heading', { name: 'Chọn cách trang chuyển động', level: 3 }),
+    ).toBeVisible();
     expect(card('Mượt mà')).toHaveTextContent('Đang dùng');
     expect(card('Không hiệu ứng')).toHaveTextContent('Mặc định cho trang mới');
     expect(card('Sang trọng')).toHaveTextContent('Hé lộ chậm');

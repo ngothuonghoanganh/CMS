@@ -32,6 +32,9 @@ const textPairs: ReadonlyArray<readonly [string, string]> = [
   ['color-muted', 'color-canvas'],
   ['color-primary-ink', 'color-primary-soft'],
   ['color-on-primary', 'color-primary'],
+  // The ink button, at rest and hovered.
+  ['color-on-primary', 'color-ink'],
+  ['color-on-primary', 'color-ink-2'],
   ['color-success-ink', 'color-success-soft'],
   ['color-warning-ink', 'color-warning-soft'],
   ['color-danger', 'color-danger-soft'],

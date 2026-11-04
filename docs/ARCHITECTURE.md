@@ -2533,6 +2533,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Bật một điểm nhấn về đúng giá trị của phong cách (ở trang) hay của trang (ở section) thì nó thôi là thay đổi riêng ("theo phong cách", "Theo cài đặt trang").
   - Trang để "Không hiệu ứng" thì nhóm "Hiệu ứng xuất hiện" của section chỉ nói vì sao không có gì chuyển động và mở Cài đặt trang.
   - Thư viện phong cách (màn 39) đổi phong cách bằng cùng command với màn 37. Mức độ trong thư viện chỉ đổi các mẫu xem thử; mức độ của trang chỉ có một editor chính thức là màn 37.
+    - Thư viện phủ cả cửa sổ như một trang riêng (dialog cỡ `full` của `@plp/ui`), nên bản nháp và lịch sử hoàn tác vẫn giữ nguyên khi đóng. Mẫu xem thử dùng màu scheme Sáng của theme site và tiêu đề section đầu tiên có chuyển động.
+  - Panel thuộc tính của section chia bốn nhóm thu gọn được (Nội dung, Bố cục, Hiệu ứng xuất hiện, Hiển thị). Mặc định mở cả bốn như màn 03; nhóm đã thu gọn giữ nguyên khi chọn section khác. Chọn một field (như "Sửa ngay" của bảng kiểm tra) luôn mở nhóm Nội dung. "Chỉnh riêng cho từng section" ở màn 37 chỉ mở nhóm Hiệu ứng xuất hiện, như màn 38.
   - Quy trình có "Các bước nối nhau" đang bật luôn hiện từng bước theo đường nối, nên nhóm của nó không cho chọn thứ tự mà chỉ nói lý do.
   - Section Số liệu nổi bật có đúng 3 con số thì trên điện thoại cũng xếp một hàng, chữ số 24 px, như board.
   - Banner "Chạy thử" được ghim ở đầu canvas, vì canvas tự cuộn tới cuối trang khi chạy; trong lúc chạy không có nút "Thêm section ở đây".

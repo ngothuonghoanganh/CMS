@@ -90,6 +90,26 @@ describe('Dialog', () => {
     expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
   });
 
+  it('covers the window with a back arrow that closes it too (board 39)', async () => {
+    const user = userEvent.setup();
+    render(
+      <Dialog
+        title="Phong cách chuyển động"
+        size="full"
+        backLabel="Quay lại cài đặt trang"
+        trigger={<button type="button">So sánh</button>}
+      >
+        <p>Sáu phong cách</p>
+      </Dialog>,
+    );
+    const trigger = screen.getByRole('button', { name: 'So sánh' });
+    await user.click(trigger);
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Quay lại cài đặt trang' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it('returns focus to the element that opened it, not to its trigger', async () => {
     const user = userEvent.setup();
     function TwoOpeners() {

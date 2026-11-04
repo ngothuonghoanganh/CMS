@@ -27,14 +27,15 @@ import {
   SettingsIcon,
   Switch,
 } from '@plp/ui';
-import { type KeyboardEvent, useId, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
 import { PageMotionPanel } from '../motion/PageMotionPanel';
-import { SectionMotionGroup } from '../motion/SectionMotionGroup';
+import { SectionMotionGroup, sectionMotionHeadingId } from '../motion/SectionMotionGroup';
 import { isFieldHidden, listItemsOf } from './content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { FieldControl } from './fields/FieldControl';
 import { focusOutlineRow, PROPERTIES_PANEL_ID } from './focus-target';
 import { GuardedLink } from './GuardedLink';
+import { PanelGroup, type PanelGroupId } from './PanelGroup';
 import { lowerFirst } from './presentation';
 import styles from './PropertiesPanel.module.css';
 import { SectionThumbnail } from './SectionThumbnail';
@@ -43,12 +44,11 @@ function ContentGroup({ section }: { section: SectionInstance }) {
   const definition = getSectionDefinition(section.type);
   const fields = definition.fields.filter((field) => !isFieldHidden(section, field.key));
   return (
-    <div className={styles.group}>
-      <h3 className={styles.groupTitle}>NỘI DUNG</h3>
+    <>
       {fields.map((field) => (
         <FieldControl key={field.key} section={section} field={field} path={field.key} />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -87,8 +87,7 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
     variant.id === section.variant ? null : variantBlocker(section, definition, variant),
   );
   return (
-    <div className={styles.group}>
-      <h3 className={styles.groupTitle}>BỐ CỤC</h3>
+    <>
       {definition.variants.length > 1 ? (
         <>
           <div role="group" aria-label="Kiểu bố cục" className={styles.variants}>
@@ -181,7 +180,7 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
           }}
         />
       </div>
-    </div>
+    </>
   );
 }
 
@@ -189,8 +188,7 @@ function VisibilityGroup({ section }: { section: SectionInstance }) {
   const store = useEditorStoreApi();
   const variant = getVariant(getSectionDefinition(section.type), section.variant);
   return (
-    <div className={styles.group}>
-      <h3 className={styles.groupTitle}>HIỂN THỊ</h3>
+    <>
       <Switch
         label="Hiện trên máy tính"
         checked={section.visibility.desktop}
@@ -227,7 +225,7 @@ function VisibilityGroup({ section }: { section: SectionInstance }) {
       <p className={styles.help}>
         Nội dung luôn giống nhau trên mọi thiết bị; chỉ thứ tự và ẩn/hiện được tùy chỉnh.
       </p>
-    </div>
+    </>
   );
 }
 
@@ -242,7 +240,11 @@ const pageTabs: readonly { id: PageTab; label: string }[] = [
  * With no section selected: "Cài đặt trang", what applies to the whole page (board 37). Motion is
  * edited here; SEO and sharing keep their own screen. Arrow keys move between the tabs.
  */
-function PageSettings() {
+function PageSettings({
+  onEditSectionMotion,
+}: {
+  onEditSectionMotion: (sectionId: string) => void;
+}) {
   const { siteId, pageId } = useEditorServices();
   const [tab, setTab] = useState<PageTab>('motion');
   const baseId = useId();
@@ -295,7 +297,7 @@ function PageSettings() {
         hidden={tab !== 'motion'}
         className={styles.body}
       >
-        <PageMotionPanel />
+        <PageMotionPanel onEditSection={onEditSectionMotion} />
         {/* Board 37 has no sticky footer here: the hint scrolls with the settings, at their end. */}
         <p className={styles.pageHint}>
           Chọn một section trên trang hoặc trong cấu trúc trang để sửa nội dung, bố cục và cách hiển
@@ -321,17 +323,69 @@ function PageSettings() {
   );
 }
 
-/** The right column: fields of the selected section, generated from its definition. */
+const ALL_OPEN: Readonly<Record<PanelGroupId, boolean>> = {
+  content: true,
+  layout: true,
+  motion: true,
+  visibility: true,
+};
+
+const GROUP_TITLES: Readonly<Record<PanelGroupId, string>> = {
+  content: 'NỘI DUNG',
+  layout: 'BỐ CỤC',
+  motion: 'HIỆU ỨNG XUẤT HIỆN',
+  visibility: 'HIỂN THỊ',
+};
+
+/**
+ * The right column: fields of the selected section, generated from its definition, in groups that
+ * fold away (board 38). Folded groups stay folded from one section to the next.
+ */
 export function PropertiesPanel() {
   const store = useEditorStoreApi();
   const sections = useEditor((state) => state.draft.composition.sections);
   const selectedId = useEditor((state) => state.selection.sectionId);
+  const fieldPath = useEditor((state) => state.selection.fieldPath);
+  const [open, setOpen] = useState<Readonly<Record<PanelGroupId, boolean>>>(ALL_OPEN);
+  const [shownPath, setShownPath] = useState(fieldPath);
   const index = sections.findIndex((section) => section.id === selectedId);
   const section = sections[index];
 
-  if (!section) {
-    return <PageSettings />;
+  // A selected field (a publish check's "Sửa ngay", a click on the canvas) is always shown.
+  if (fieldPath !== shownPath) {
+    setShownPath(fieldPath);
+    if (fieldPath !== null && !open.content) {
+      setOpen({ ...open, content: true });
+    }
   }
+
+  if (!section) {
+    return (
+      <PageSettings
+        onEditSectionMotion={(sectionId) => {
+          // Board 38: only the section's motion is open, ready to change.
+          setOpen({ content: false, layout: false, motion: true, visibility: false });
+          store.getState().select(sectionId);
+          requestAnimationFrame(() => {
+            document.getElementById(sectionMotionHeadingId(sectionId))?.focus();
+          });
+        }}
+      />
+    );
+  }
+
+  const group = (id: PanelGroupId, toggleId: string, children: ReactNode) => (
+    <PanelGroup
+      toggleId={toggleId}
+      title={GROUP_TITLES[id]}
+      open={open[id]}
+      onToggle={() => {
+        setOpen((current) => ({ ...current, [id]: !current[id] }));
+      }}
+    >
+      {children}
+    </PanelGroup>
+  );
 
   const definition = getSectionDefinition(section.type);
   return (
@@ -355,14 +409,19 @@ export function PropertiesPanel() {
           }}
         />
       </div>
-      <div className={styles.body} key={section.id}>
-        <ContentGroup section={section} />
-        <div className={styles.divider} />
-        <LayoutGroup section={section} />
-        <div className={styles.divider} />
-        <SectionMotionGroup section={section} index={index} />
-        <div className={styles.divider} />
-        <VisibilityGroup section={section} />
+      <div className={styles.groups} key={section.id}>
+        {group('content', `panel-content-${section.id}`, <ContentGroup section={section} />)}
+        {group('layout', `panel-layout-${section.id}`, <LayoutGroup section={section} />)}
+        {group(
+          'motion',
+          sectionMotionHeadingId(section.id),
+          <SectionMotionGroup section={section} index={index} />,
+        )}
+        {group(
+          'visibility',
+          `panel-visibility-${section.id}`,
+          <VisibilityGroup section={section} />,
+        )}
       </div>
     </aside>
   );
