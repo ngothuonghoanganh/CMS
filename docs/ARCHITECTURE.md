@@ -54,7 +54,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Tạo trang bằng AI từ brief, và trợ lý AI viết lại chữ trong editor. AI chạy qua một cổng có adapter; bản đầu nối AI local qua API tương thích OpenAI, có hạn mức lượt mỗi tháng (ADR-031).
 - Tương ứng màn 17–21 và mục Templates của Sidebar v2. Lát và trạng thái ở §5.
 
-**Chuyển động, đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-04, theo board 37–40 của artifact thiết kế). Cấu hình nằm trong bản nháp và đi theo release (ADR-032):
+**Chuyển động, đã xong** (chủ sản phẩm yêu cầu ngày 2026-11-04, theo board 37–40 của artifact thiết kế). Cấu hình nằm trong bản nháp và đi theo release (ADR-032):
 
 - 6 phong cách chuyển động của trang, mức độ, điểm nhấn, giảm chuyển động trên điện thoại.
 - Ghi đè hiệu ứng xuất hiện từng section, thư viện so sánh phong cách, chạy thử trong editor.
@@ -2413,7 +2413,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-04 (ADR-032, chuyển động):**
   - **Bước cấu trúc** có thêm khối "Chuyển động": mặc định "AI chọn", kèm phong cách dự kiến từ bảng ngành (ngành đoán theo từ khóa của brief) hoặc giọng văn (Chuyên nghiệp → Tinh tế, Năng động → Năng động, Thân thiện → Mượt mà; không có gì → Mượt mà). Người dùng chọn được một trong 6 phong cách. Bước này vẫn không gọi AI và không tốn lượt.
   - **Job:** khi người dùng để "AI chọn", runner gọi AI thêm một lần sau khi viết các section, trước khi tạo bản nháp. Kết quả là phong cách cùng tối đa 3 ghi đè section, theo JSON Schema có `enum`.
-    - Kết quả được làm sạch bằng `resolveSectionMotion`: bỏ section bị khóa, điểm nhấn section không có, "Theo hàng" ở section không phải lưới.
+    - Kết quả được làm sạch theo cùng quy tắc với `resolveSectionMotion` và các command của editor: bỏ section bị khóa và điểm nhấn section không có; "Theo hàng" ở section không phải lưới thành "Lần lượt" (chi tiết ở lát M4 của ADR-032).
     - Lỗi, quá hạn hay kết quả sai thì dùng phong cách dự kiến; job không thất bại vì bước này, không thử lại, không tốn thêm lượt.
     - Người dùng đã chọn phong cách thì không gọi AI cho chuyển động và không có ghi đè section.
     - Dữ liệu gửi đi là brief và danh sách loại, variant của section, không thêm gì.
@@ -2517,6 +2517,37 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Canvas dùng chính runtime và keyframes của trang công khai (`playMotion`); thẻ phong cách và thư viện dùng `MotionSample` với cùng keyframes.
   - **Template:** `GET` chi tiết trang trả thêm `createdFrom` (template và phiên bản trang được tạo từ đó, `null` nếu không có). Editor dùng nó cho nhãn "Hợp ngành" và dòng "Template đã dùng chọn sẵn phong cách …", chỉ với mẫu hệ thống.
   - Không làm phần demo "Phản hồi khi thao tác" của màn 37 (di chuột lên nút, mở câu hỏi, gửi form); panel chỉ giữ dòng giải thích.
+- **AI tạo trang (lát M4, màn 20):**
+  - **Bước cấu trúc:** khối "Chuyển động" nằm sau "Thêm section", có 7 lựa chọn: "AI chọn" (mặc định) và 6 phong cách.
+    - Với "AI chọn", dòng dưới ghi "Dự kiến: <phong cách> · hợp ngành <ngành>", hoặc "· hợp giọng văn <giọng văn>" khi không đoán được ngành. Với một phong cách, dòng dưới là tóm tắt của nó và "Đổi được trong editor".
+    - Request mang `motion`: `auto` (mặc định) hoặc id phong cách.
+  - **Phong cách dự kiến** (`suggestMotionStyle`, `@plp/sections/schema`, thuần):
+    - Ngành được đoán theo từ khóa tiếng Việt và tiếng Anh trong sản phẩm, khách hàng mục tiêu và điểm khác biệt. "Nội dung bạn đã có" không được đọc.
+    - So cả từ và bỏ dấu, vì nhiều người gõ không dấu. Vì vậy mỗi từ khóa phải không nhập nhằng khi bỏ dấu: "niềng răng", không phải "răng" (cũng là "rạng rỡ").
+    - Ngành có nhiều từ khóa nhất thắng. Hòa thì lấy ngành đứng trước trong bộ lọc, nên "nha khoa thẩm mỹ" là nha khoa. Không đoán được ngành thì theo giọng văn.
+    - Bản nháp ban đầu của job có phong cách này. AI không chọn được thì trang giữ nó.
+  - **Lần gọi AI** (`MotionChooser`, `domain/motion-choice.ts`):
+    - Chỉ gọi khi có ít nhất một section viết được: không viết được gì thì không có bản nháp. Trước khi gửi, runner đọc lại job như trước một lần thử lại; job đã kết thúc ở nơi khác thì không gửi.
+    - Gửi: mục tiêu, sản phẩm, khách hàng, điểm khác biệt, giọng văn, và từng section dạng `số. tên (type, variant)` kèm năng lực (lưới hay không, các điểm nhấn có nội dung). Section bị khóa ghi "luôn hiện ngay". Không gửi tên site, "Nội dung bạn đã có" hay chữ của section.
+    - JSON Schema `page_motion`:
+      - `style` là một trong 5 phong cách có chuyển động: người dùng để "AI chọn" là muốn trang chuyển động.
+      - `sections` có tối đa 3 mục `{ section, enter, order, accent }`. `section` là số của một section không bị khóa; ba field kia là enum, trong đó `page` nghĩa là theo phong cách.
+      - `accent` là một điểm nhấn bật thêm. AI không tắt điểm nhấn và không chọn mức độ (luôn "Vừa").
+    - Tối đa 400 token, không thử lại. `JsonSchema` của cổng AI có thêm `enum` cho chuỗi.
+  - **Làm sạch** (cùng quy tắc với `resolveSectionMotion` và các command của editor):
+    - Câu trả lời không phải JSON (chấp nhận khung code), bị cắt, hay có `style` không phải phong cách có chuyển động: dùng phong cách dự kiến, không ghi đè section nào.
+    - Bỏ từng mục sai, mục của section bị khóa hay không có, và mục thứ hai của cùng một section.
+    - Bỏ phần không đổi gì: cách xuất hiện hay thứ tự giống phong cách, điểm nhấn section không có nội dung hay phong cách đã bật.
+    - "Theo hàng" ở section không phải lưới thành "Lần lượt". Quy trình có "Các bước nối nhau" không nhận thứ tự. Section "Không hiệu ứng" chỉ giữ cách xuất hiện.
+    - Giữ tối đa 3 mục, theo thứ tự trả lời.
+  - **Ngân sách chạy** thêm một `AI_TIMEOUT_MS` khi "AI chọn". Lỗi, quá hạn hay hủy giữa lúc chọn thì bản nháp vẫn được tạo với phong cách dự kiến. Log chỉ ghi loại lỗi.
+  - **"Thử lại N section"** giữ nguyên `motion` của bản nháp. Trước M4, bước ghép bản nháp của runner bỏ mất `motion`.
+  - **Bước viết:** khi mọi section đã xong và AI đang chọn, màn ghi "Đang chọn phong cách chuyển động…". Vùng status đọc câu đó sau câu của section cuối.
+  - **Adapter `fake`** chọn "Mượt mà" và cho section đầu tiên được đổi "Phóng nhẹ". Nhờ vậy E2E phân biệt được lựa chọn của AI với phong cách dự kiến (nha khoa → Tinh tế). Lần gọi lỗi chỉ được giả lập ở integration test (`respondWith`), E2E không giả lập.
+  - **Kiểm thử thật với Ollama `qwen3:4b-instruct`** (2026-11-04):
+    - Ba brief (nha khoa, gà rán, căn hộ): JSON hợp lệ ngay lần đầu, 4,5–10 giây, khoảng 670 token vào và 120 token ra. Phong cách trùng phong cách dự kiến cả ba lần.
+    - Model luôn dùng 2–3 ghi đè, hay bật "Tiêu đề hiện từng dòng" cho nhiều section, dù lời dặn nói phần lớn trang không cần.
+    - Lời dặn chặt hơn không giảm số ghi đè mà làm phong cách kém hợp hơn (căn hộ cao cấp ra Tinh tế), nên lời dặn được giữ như cũ. Ghi đè chỉ là preset hợp lệ: chúng hiện ở cấu trúc trang ("Riêng · …") và đặt lại được ở màn 38.
 - **Reason:** Chuyển động làm trang sinh động hơn mà không mở free styling. Preset cùng một hàm phân giải giữ admin, renderer và AI khớp nhau, và quy tắc giảm chuyển động, không JavaScript giữ trang đọc được với mọi khách.
 - **Consequences:**
   - Trang có hiệu ứng tải thêm một client component nhỏ; trang "Không hiệu ứng" không đổi.
@@ -2631,7 +2662,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | M1  | `motion` trong composition, hàm phân giải, CSS và runtime của renderer, chip thay đổi, mẫu hệ thống có phong cách | 09, 05         | Xong       |
 | M2  | Section Số liệu nổi bật, điểm nhấn đếm lên, AI không viết con số                                                  | 04, 09         | Xong       |
 | M3  | Editor: phong cách của trang, hiệu ứng của section, thư viện phong cách, chạy thử                                 | 37, 38, 39, 03 | Xong       |
-| M4  | AI tạo trang: khối Chuyển động ở bước cấu trúc, AI chọn phong cách và ghi đè section, dự phòng theo bảng ngành    | 20             | Chưa làm   |
+| M4  | AI tạo trang: khối Chuyển động ở bước cấu trúc, AI chọn phong cách và ghi đè section, dự phòng theo bảng ngành    | 20             | Xong       |
 
 **Hoàn thành Chuyển động** khi một E2E chạy xanh toàn bộ chuỗi:
 
