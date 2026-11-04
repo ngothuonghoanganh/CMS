@@ -3,7 +3,10 @@
  * Schema and never knows which service answers; each adapter maps its own errors to `AiError`.
  */
 
-/** The JSON Schema subset the AI's answers use: objects of strings and arrays of objects. */
+/**
+ * The JSON Schema subset the AI's answers use: objects, arrays, and strings, free within limits or
+ * one of a few values (`enum`).
+ */
 export type JsonSchema =
   | {
       type: 'object';
@@ -19,7 +22,13 @@ export type JsonSchema =
       maxItems?: number;
       description?: string;
     }
-  | { type: 'string'; minLength?: number; maxLength?: number; description?: string };
+  | {
+      type: 'string';
+      minLength?: number;
+      maxLength?: number;
+      enum?: readonly string[];
+      description?: string;
+    };
 
 export interface AiTextRequest {
   /** What the AI is and the rules it follows. */

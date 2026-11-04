@@ -9,6 +9,8 @@ describe('AI job rules (ADR-031)', () => {
     // One section at a time (a local Ollama): a round per section.
     expect(runBudgetMs(7, 60_000, 1)).toBe(840_000);
     expect(runBudgetMs(7, 60_000, 8)).toBe(120_000);
+    // "AI chọn": one more request for the motion, after the sections.
+    expect(runBudgetMs(7, 60_000, 3, 1)).toBe(420_000);
   });
 
   it('names what a failed request means for its section', () => {

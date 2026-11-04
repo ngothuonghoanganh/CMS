@@ -6,7 +6,7 @@ import {
   type AiUsage,
   MAX_PAGES_PER_SITE,
 } from '@plp/contracts';
-import { getSectionDefinition } from '@plp/sections/schema';
+import { getSectionDefinition, suggestMotionStyle } from '@plp/sections/schema';
 import type { z } from 'zod';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
@@ -98,10 +98,13 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
     this.quota.requireEnabled();
     await this.quota.throttle(scope.userId);
+    // "AI chọn" starts from the style the structure step showed, kept if the AI's choice fails.
+    const chooseMotion = input.motion === 'auto';
     const built = compositionFromStructure({
       structure: input.structure,
       goal: input.brief.goal,
       siteName: site.name,
+      motion: input.motion === 'auto' ? suggestMotionStyle(input.brief).style : input.motion,
       newId: newSectionId,
     });
     if (!built.ok) {
@@ -146,7 +149,10 @@ export class AiPageJobsService implements OnApplicationBootstrap {
           slug: input.slug,
           brief: input.brief,
           sections,
-          run: this.newRun(queued.map((section) => section.id)),
+          run: this.newRun(
+            queued.map((section) => section.id),
+            chooseMotion ? 1 : 0,
+          ),
           month,
           now,
           expiresAt: new Date(now.getTime() + AI_JOB_RETENTION_DAYS * DAY_MS),
@@ -160,6 +166,7 @@ export class AiPageJobsService implements OnApplicationBootstrap {
       job,
       base: built.composition,
       context: this.contextOf(site, job),
+      chooseMotion,
     });
   }
 
@@ -217,6 +224,8 @@ export class AiPageJobsService implements OnApplicationBootstrap {
       job: started,
       base: page.draft.composition,
       context: this.contextOf(site, started),
+      // The draft has its motion; "Thử lại" writes sections only (ADR-032).
+      chooseMotion: false,
     });
   }
 
@@ -311,9 +320,17 @@ export class AiPageJobsService implements OnApplicationBootstrap {
     }
   }
 
-  /** A run that writes these sections: its id, and its deadline past the budget and the grace. */
-  private newRun(sectionIds: string[]): AiJobRunRecord {
-    const budget = runBudgetMs(sectionIds.length, this.env.AI_TIMEOUT_MS, this.env.AI_CONCURRENCY);
+  /**
+   * A run that writes these sections, then sends `followUps` more requests: its id, and its
+   * deadline past the budget and the grace.
+   */
+  private newRun(sectionIds: string[], followUps = 0): AiJobRunRecord {
+    const budget = runBudgetMs(
+      sectionIds.length,
+      this.env.AI_TIMEOUT_MS,
+      this.env.AI_CONCURRENCY,
+      followUps,
+    );
     return { id: randomUUID(), deadline: new Date(Date.now() + budget + RUN_GRACE_MS), sectionIds };
   }
 

@@ -7,7 +7,8 @@ import { setUpSite, uniqueId } from '../support/setup.js';
 /*
  * G4 · creating a page with AI (ADR-031, board 20). The E2E API runs `AI_PROVIDER=fake`
  * (playwright.config.ts): fixed Vietnamese copy, written at once, the Hero headed with the product
- * and its figure marked for review.
+ * and its figure marked for review; for "AI chọn" it picks "Mượt mà" and zooms in the first section
+ * after the Hero (ADR-032).
  */
 
 test.describe('G4 · create a page with AI', () => {
@@ -37,6 +38,10 @@ test.describe('G4 · create a page with AI', () => {
     await page.getByRole('button', { name: 'Thêm section' }).click();
     await page.getByRole('menuitem', { name: 'Gọi / Zalo nhanh' }).click();
     await expect(structure.getByRole('listitem').nth(5)).toContainText('Gọi / Zalo nhanh');
+    // Motion (ADR-032): "AI chọn", expecting the style a dental clinic suits, still no use.
+    const motion = page.getByRole('group', { name: 'Chuyển động' });
+    await expect(motion.getByRole('radio', { name: 'AI chọn' })).toBeChecked();
+    await expect(motion).toContainText('Dự kiến: Tinh tế · hợp ngành Nha khoa & y tế');
     await expect(page.getByText('Còn 100/100 lượt tháng này')).toBeVisible();
 
     // Writing: the fake AI writes every section at once, and the editor opens on the draft.
@@ -46,6 +51,11 @@ test.describe('G4 · create a page with AI', () => {
     await expect(editor.heroCanvasHeading).toHaveText(AI_PRODUCT);
     await expect(editor.rows).toHaveCount(7);
     await expect(editor.topBar.getByText('Chưa xuất bản', { exact: true })).toBeVisible();
+    // The fake AI chose "Mượt mà", and has the first section after the Hero zoom in.
+    await expect(
+      editor.structure.getByRole('button', { name: 'Chuyển động · Mượt mà' }),
+    ).toBeVisible();
+    await expect(editor.rows.nth(2)).toContainText('Riêng · Phóng nhẹ');
 
     // The Hero's figure is a sentence to check: the panel says so, and so does the checklist.
     await editor.heroRow.click();
@@ -74,6 +84,25 @@ test.describe('G4 · create a page with AI', () => {
     // One use of the month went to the page.
     await page.goto(`/sites/${site.id}/pages/new/ai`);
     await expect(page.getByText('Còn 99/100 lượt tháng này')).toBeVisible();
+  });
+
+  test('a motion style picked at the structure step is the draft’s, the AI choosing none', async ({
+    page,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    await page.goto(`/sites/${site.id}/pages/new/ai`);
+    await fillAiBrief(page, `ai-chuyen-dong-${uniqueId()}`);
+    await page.getByRole('button', { name: 'Đề xuất cấu trúc trang' }).click();
+    const motion = page.getByRole('group', { name: 'Chuyển động' });
+    await motion.getByRole('radio', { name: 'Sang trọng' }).check();
+    await expect(motion).toContainText('Nội dung hé lộ chậm rãi');
+    await page.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }).click();
+    await expect(page).toHaveURL(/\/pages\/[a-f0-9]{24}\/edit$/);
+    const editor = new Editor(page);
+    await expect(
+      editor.structure.getByRole('button', { name: 'Chuyển động · Sang trọng' }),
+    ).toBeVisible();
+    await expect(editor.rows.filter({ hasText: 'Riêng ·' })).toHaveCount(0);
   });
 
   for (const viewport of SCAN_VIEWPORTS) {

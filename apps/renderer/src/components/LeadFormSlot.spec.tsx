@@ -91,11 +91,17 @@ describe('LeadFormSlot', () => {
     await act(async () => {
       script.arrive();
       await script.arrived;
-      await new Promise((resolve) => setTimeout(resolve, 20));
     });
+    // The script's module then loads in its own time, longer on a busy machine.
+    await vi.waitFor(
+      async () => {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        expect(input('name')).not.toBe(serverName);
+      },
+      { timeout: 5000, interval: 0 },
+    );
 
     // The script's own form replaced the server's, and holds the same input.
-    expect(input('name')).not.toBe(serverName);
     expect(input('name').value).toBe('Nguyễn Thu Hà');
     expect(input('phone').value).toBe('0901 234 567');
     expect(input('consent').checked).toBe(true);

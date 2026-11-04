@@ -234,6 +234,61 @@ describe('AiCreateScreen (board 20)', () => {
     expect(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' })).toBeEnabled();
   });
 
+  it('lets the AI choose the motion, saying what to expect, or takes the user’s style (ADR-032)', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderScreen();
+    await toStructure(user);
+    const motion = screen.getByRole('group', { name: 'Chuyển động' });
+    expect(
+      within(motion)
+        .getAllByRole('radio')
+        .map((radio) => radio.closest('label')?.textContent),
+    ).toEqual([
+      'AI chọn',
+      'Không hiệu ứng',
+      'Tinh tế',
+      'Mượt mà',
+      'Năng động',
+      'Sang trọng',
+      'Vui tươi',
+    ]);
+    expect(within(motion).getByRole('radio', { name: 'AI chọn' })).toBeChecked();
+    // A dental clinic: no AI is asked for this, nor any use.
+    expect(motion).toHaveAccessibleDescription(
+      'AI chọn phong cách khi viết nội dung, không tốn thêm lượt. Dự kiến: Tinh tế · hợp ngành Nha khoa & y tế.',
+    );
+    await user.click(within(motion).getByRole('radio', { name: 'Sang trọng' }));
+    expect(motion).toHaveAccessibleDescription(
+      'Nội dung hé lộ chậm rãi, ảnh thu nhẹ vào khung, tiêu đề hiện từng dòng. Đổi được trong editor, ở Cài đặt trang.',
+    );
+    expect(streamMock).not.toHaveBeenCalled();
+
+    holdStream(QUEUED);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    const [, , options] = streamMock.mock.calls[0] ?? [];
+    expect((options as { body: unknown }).body).toMatchObject({ motion: 'luxe' });
+  });
+
+  it('says it chooses the motion once every section is settled', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderScreen();
+    await toStructure(user);
+    const stream = holdStream(QUEUED);
+    await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
+    await screen.findByRole('list', { name: 'Tiến độ viết' });
+    for (let index = 0; index < 5; index += 1) {
+      stream.push({ type: 'section', sectionId: `section0000${index}`, status: 'done' });
+    }
+    expect(screen.queryByText('Đang chọn phong cách chuyển động…')).not.toBeInTheDocument();
+    stream.push({ type: 'section', sectionId: 'section00005', status: 'failed' });
+    expect(screen.getByText('Đang chọn phong cách chuyển động…')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Chưa viết được Form đăng ký tư vấn. Đang chọn phong cách chuyển động…',
+    );
+  });
+
   it('keeps focus on the moved row when it reaches the navigation bar', async () => {
     const user = userEvent.setup();
     serve();
@@ -321,6 +376,7 @@ describe('AiCreateScreen (board 20)', () => {
         { type: 'lead_form', variant: 'stacked' },
         { type: 'footer', variant: 'basic' },
       ],
+      motion: 'auto',
     });
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);

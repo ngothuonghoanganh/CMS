@@ -5,6 +5,7 @@ import {
   type AiTextResult,
   type JsonSchema,
 } from '../ai-text-model.js';
+import { MOTION_SCHEMA_NAME } from '../domain/motion-choice.js';
 
 /** A request the fake received, without its signal. */
 export type RecordedAiRequest = Omit<AiTextRequest, 'signal'>;
@@ -95,6 +96,39 @@ const ITEMS: Readonly<Record<string, readonly Readonly<Record<string, string>>[]
   ],
 };
 
+/** The style the fake picks for "AI chọn" (ADR-032), when the schema allows it. */
+export const FAKE_MOTION_STYLE = 'smooth';
+/** How the fake has the first section it may change enter. */
+export const FAKE_MOTION_ENTER = 'zoom';
+
+/** The enum of a string property at `path` of an object schema, or none. */
+function enumAt(schema: JsonSchema, path: readonly string[]): readonly string[] {
+  let current: JsonSchema | undefined = schema;
+  for (const key of path) {
+    if (current?.type === 'array') {
+      current = current.items;
+    }
+    current = current?.type === 'object' ? current.properties[key] : undefined;
+  }
+  return current?.type === 'string' ? (current.enum ?? []) : [];
+}
+
+/**
+ * The fixed motion choice: "Mượt mà", and the first section the AI may change zooming in, so a
+ * test tells the AI's choice from the style a brief suggests.
+ */
+function fakeMotion(schema: JsonSchema): Record<string, unknown> {
+  const styles = enumAt(schema, ['style']);
+  const [first] = enumAt(schema, ['sections', 'section']);
+  return {
+    style: styles.includes(FAKE_MOTION_STYLE) ? FAKE_MOTION_STYLE : styles[0],
+    sections:
+      first === undefined
+        ? []
+        : [{ section: first, enter: FAKE_MOTION_ENTER, order: 'page', accent: 'page' }],
+  };
+}
+
 function capped(text: string, schema: JsonSchema): string {
   return schema.type === 'string' && schema.maxLength !== undefined
     ? text.slice(0, schema.maxLength).trimEnd()
@@ -153,7 +187,7 @@ function fakeCopy(schema: JsonSchema, prompt: string): Record<string, unknown> {
 
 /**
  * The AI of tests and E2E (`AI_PROVIDER=fake`, refused in production): fixed, plausible
- * Vietnamese copy that matches the request's schema, at once. It records what it was asked, so a
+ * Vietnamese copy that matches the request's schema, and a fixed motion choice, at once. It records what it was asked, so a
  * test can check what a prompt holds, and a test can answer in its place (`respondWith`).
  */
 export class FakeAiTextModel extends AiTextModel {
@@ -183,7 +217,11 @@ export class FakeAiTextModel extends AiTextModel {
     if (answer !== undefined) {
       return answer;
     }
-    const text = JSON.stringify(fakeCopy(request.schema.schema, request.prompt));
+    const text = JSON.stringify(
+      request.schema.name === MOTION_SCHEMA_NAME
+        ? fakeMotion(request.schema.schema)
+        : fakeCopy(request.schema.schema, request.prompt),
+    );
     return {
       text,
       usage: { inputTokens: request.prompt.length, outputTokens: text.length },

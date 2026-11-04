@@ -2,6 +2,13 @@ import { sectionTypes } from '@plp/contracts';
 import { createSectionInstance, getSectionDefinition } from '@plp/sections/schema';
 import { describe, expect, it } from 'vitest';
 import { AiError } from '../ai-text-model.js';
+import {
+  buildMotionPrompt,
+  changeablePositions,
+  MOTION_SCHEMA_NAME,
+  motionJsonSchema,
+  readMotionChoice,
+} from '../domain/motion-choice.js';
 import { buildSectionPrompt } from '../domain/prompts.js';
 import {
   applySectionCopy,
@@ -10,7 +17,7 @@ import {
   isEmptyPlan,
   parseSectionCopy,
 } from '../domain/section-copy.js';
-import { FakeAiTextModel } from './fake-ai-text-model.js';
+import { FAKE_MOTION_ENTER, FAKE_MOTION_STYLE, FakeAiTextModel } from './fake-ai-text-model.js';
 
 const CONTEXT = {
   siteName: 'Nha khoa Smile Care',
@@ -69,6 +76,28 @@ describe('the fake AI of tests and E2E (ADR-031)', () => {
     const parsed = parseSectionCopy(plan, result.text);
     expect(parsed.ok && parsed.copy.texts.get('heading')).toBe('Niềng răng trong suốt');
     expect(parsed.ok && parsed.copy.flagged).toEqual(['subheading']);
+  });
+
+  it('chooses "Mượt mà" and has the first section it may change zoom in (ADR-032)', async () => {
+    const sections = [
+      createSectionInstance('navbar', undefined, 'abcdefgh0001'),
+      createSectionInstance('hero', 'split', 'abcdefgh0002'),
+      createSectionInstance('benefits', 'grid', 'abcdefgh0003'),
+      createSectionInstance('footer', undefined, 'abcdefgh0004'),
+    ];
+    const fake = new FakeAiTextModel();
+    const ask = (positions: readonly string[]) =>
+      fake.generate({
+        ...buildMotionPrompt(CONTEXT.brief, sections),
+        schema: { name: MOTION_SCHEMA_NAME, schema: motionJsonSchema(positions) },
+        maxOutputTokens: 400,
+        signal: new AbortController().signal,
+      });
+    const choice = readMotionChoice((await ask(changeablePositions(sections))).text, sections);
+    expect(choice?.motion.style).toBe(FAKE_MOTION_STYLE);
+    expect([...(choice?.sections ?? [])]).toEqual([['abcdefgh0003', { enter: FAKE_MOTION_ENTER }]]);
+    // Nothing the AI may change: the style alone.
+    expect(JSON.parse((await ask([])).text)).toEqual({ style: FAKE_MOTION_STYLE, sections: [] });
   });
 
   it('lets a test answer in its place, and refuses a cancelled request', async () => {

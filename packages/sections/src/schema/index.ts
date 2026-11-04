@@ -4,6 +4,7 @@ export * from './define.js';
 export * from './links.js';
 export * from './motion.js';
 export * from './motion-storage.js';
+export * from './motion-suggestion.js';
 export * from './paths.js';
 export * from './registry.js';
 export * from './seo.js';
