@@ -61,6 +61,12 @@ function keepToken(token: string): void {
   }
 }
 
+/** Signs in to join: the login leaves this page, so the link's secret is kept for the way back. */
+function signInToJoin(token: string): void {
+  keepToken(token);
+  loadPage(`/login?next=${encodeURIComponent(INVITATION_PATH)}`);
+}
+
 function forgetToken(): void {
   try {
     window.sessionStorage.removeItem(PENDING_INVITATION_KEY);
@@ -162,6 +168,7 @@ function SignupForm({
           autoComplete="username"
           value={invitation.email}
           readOnly
+          className={styles.readOnly}
         />
       </Field>
       <Field label="Họ và tên" id={fieldIds.name} error={form.errors.name}>
@@ -197,6 +204,18 @@ function SignupForm({
       <Button type="submit" fullWidth loading={signup.isPending}>
         Tạo tài khoản và tham gia
       </Button>
+      <p className={styles.signIn}>
+        Đã có tài khoản với email này?{' '}
+        <button
+          type="button"
+          className={styles.linkButton}
+          onClick={() => {
+            signInToJoin(token);
+          }}
+        >
+          Đăng nhập
+        </button>
+      </p>
     </form>
   );
 }
@@ -493,8 +512,7 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
         <Button
           fullWidth
           onClick={() => {
-            keepToken(token);
-            loadPage(`/login?next=${encodeURIComponent(INVITATION_PATH)}`);
+            signInToJoin(token);
           }}
         >
           Đăng nhập
