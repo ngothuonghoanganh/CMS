@@ -32,11 +32,12 @@ import {
   DragHandleIcon,
   EyeIcon,
   EyeOffIcon,
+  LockIcon,
   PlusIcon,
   Tooltip,
 } from '@plp/ui';
 import { type ReactNode, useId, useLayoutEffect, useMemo, useRef } from 'react';
-import { motionPillOf } from '../motion/motion-view';
+import { type MotionPill, motionPillOf } from '../motion/motion-view';
 import { ThemeDots } from '../theme';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { groupLabels } from './presentation';
@@ -100,7 +101,7 @@ interface RowProps {
   /** Title of the first blocking check of this section, e.g. "Nút chính chưa có đích". */
   error: string | null;
   /** How the section moves when that is not simply the page's style (board 38). */
-  motionPill: { text: string; own: boolean } | null;
+  motionPill: MotionPill | null;
   canUp: boolean;
   canDown: boolean;
   onMove: (section: SectionInstance, toIndex: number, control: FocusControl) => void;
@@ -184,6 +185,7 @@ function StructureRow({
         {section.visibility.desktop ? null : <span className={styles.badge}>Ẩn trên máy tính</span>}
         {motionPill === null ? null : (
           <span className={motionPill.own ? styles.motionPillOwn : styles.badge}>
+            {motionPill.locked ? <LockIcon size={10} strokeWidth={2.4} /> : null}
             {motionPill.text}
           </span>
         )}

@@ -55,12 +55,12 @@ describe('motionPillOf', () => {
     const composition = page({ style: 'smooth' });
     expect(composition.sections.map((_section, index) => motionPillOf(composition, index))).toEqual(
       [
-        { text: 'Luôn hiện ngay', own: false },
-        { text: 'Luôn hiện ngay', own: false },
-        { text: 'Riêng · Bật lên', own: true },
-        { text: 'Riêng · cùng lúc', own: true },
-        { text: 'Riêng · điểm nhấn', own: true },
-        { text: 'Không hiệu ứng', own: false },
+        { text: 'Luôn hiện ngay', own: false, locked: true },
+        { text: 'Luôn hiện ngay', own: false, locked: true },
+        { text: 'Riêng · Bật lên', own: true, locked: false },
+        { text: 'Riêng · cùng lúc', own: true, locked: false },
+        { text: 'Riêng · điểm nhấn', own: true, locked: false },
+        { text: 'Không hiệu ứng', own: false, locked: false },
         null,
       ],
     );

@@ -22,6 +22,27 @@ import { ENTER_DESCRIPTIONS, lockReasonOf, styleSample } from './motion-view';
 import styles from './SectionMotionGroup.module.css';
 import { StyleSample } from './StyleSample';
 
+/** "↻" of "Dùng lại cài đặt trang" (board 38): the circle of HistoryIcon, without its hands. */
+function ResetIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5" />
+      <path d="M4 4v4.5h4.5" />
+    </svg>
+  );
+}
+
 const ORDER_BOXES: Readonly<Record<MotionOrder, readonly number[]>> = {
   together: [1, 1, 1],
   stagger: [1, 2, 3],
@@ -128,15 +149,18 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
               }}
             >
               <StyleSample
-                layout="thumb"
+                layout="tile"
                 motion={styleSample(motion.style, motion.level, id)}
                 level={motion.level}
                 play={played.enter === id ? played.run : 0}
+                selected={id === enter}
               />
-              <span className={styles.tileName}>{MOTION_ENTER_LABELS[id]}</span>
-              {id === enter && own.enter === undefined ? (
-                <span className={styles.follow}>theo trang</span>
-              ) : null}
+              <span className={styles.tileText}>
+                <span className={styles.tileName}>{MOTION_ENTER_LABELS[id]}</span>
+                {id === enter && own.enter === undefined ? (
+                  <span className={styles.follow}>theo trang</span>
+                ) : null}
+              </span>
             </button>
           ))}
         </div>
@@ -145,6 +169,8 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
           <Button
             size="sm"
             variant="ghost"
+            className={styles.reset}
+            leadingIcon={<ResetIcon />}
             onClick={() => {
               store.getState().setSectionEnter(section.id, null);
             }}
@@ -198,6 +224,8 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
               <Button
                 size="sm"
                 variant="ghost"
+                className={styles.reset}
+                leadingIcon={<ResetIcon />}
                 onClick={() => {
                   store.getState().setSectionOrder(section.id, null);
                 }}
