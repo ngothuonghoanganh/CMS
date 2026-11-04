@@ -17,6 +17,7 @@ import {
   siteListResponseSchema,
   workspaceTemplateSchema,
 } from '@plp/contracts';
+import { findSystemTemplate } from '@plp/sections/schema';
 import { Types } from 'mongoose';
 import type { Response } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -54,6 +55,9 @@ import {
   uploadImage,
   uploadRequest,
 } from '../../../test/resources.js';
+
+/** The system template's current version: it goes up with its content (ADR-030). */
+const DENTAL_VERSION = findSystemTemplate('nha-khoa-uu-dai')?.version ?? 0;
 
 /** What one row of the matrix acts on: a site with live pages, a form, leads and a request. */
 interface Fixture {
@@ -400,7 +404,12 @@ const ROWS: Row[] = [
       client.post(`/sites/${site.id}/pages`, {
         title: 'Ưu đãi tẩy trắng răng',
         slug: uniqueSlug('mau'),
-        start: { kind: 'template', source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+        start: {
+          kind: 'template',
+          source: 'system',
+          templateId: 'nha-khoa-uu-dai',
+          version: DENTAL_VERSION,
+        },
       }),
   },
   {
@@ -423,7 +432,7 @@ const ROWS: Row[] = [
     call: async (client, { owner, site, draftPageId }) =>
       client.post(`/sites/${site.id}/pages/${draftPageId}/draft/template`, {
         baseRevision: (await getPage(owner, site.id, draftPageId)).draft.revision,
-        template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+        template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: DENTAL_VERSION },
       }),
   },
   {

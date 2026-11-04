@@ -191,4 +191,43 @@ test.describe('Design capture', () => {
     ).toBeEnabled();
     await capture(page, 'WorkspaceTemplates-saveDialog');
   });
+
+  // Last: it changes the promotion page's draft, which the screens above draw.
+  test('37 MotionPage, 38 MotionSection and 39 StyleLibrary', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1560 });
+    const editor = new Editor(page);
+    await editor.goto(board.site.id, board.pages.promo.id);
+    const settings = page.getByRole('complementary', { name: 'Cài đặt trang' });
+    await settings
+      .getByRole('group', { name: 'Phong cách chuyển động' })
+      .getByRole('button', { name: /^Mượt mà/ })
+      .click();
+    await editor.expectSaved();
+    await capture(page, 'MotionPage');
+
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await editor.rows
+      .filter({ hasText: 'Lợi ích' })
+      .first()
+      .getByRole('button', { name: /^Lợi ích/ })
+      .click();
+    const enter = page.getByRole('group', { name: 'Cách xuất hiện' });
+    await enter.getByRole('button', { name: /^Bật lên/ }).click();
+    await enter.scrollIntoViewIfNeeded();
+    await capture(page, 'MotionSection');
+
+    await editor.canvas.getByRole('button', { name: 'Chạy thử hiệu ứng' }).click();
+    await expect(page.getByText('Đã chạy thử xong', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    });
+    await capture(page, 'MotionSection-played');
+    await page.getByRole('button', { name: 'Quay lại chỉnh sửa' }).click();
+
+    await page.setViewportSize({ width: 1440, height: 1360 });
+    await editor.structure.getByRole('button', { name: 'Chuyển động · Mượt mà' }).click();
+    await settings.getByRole('button', { name: 'So sánh' }).click();
+    const library = page.getByRole('dialog', { name: 'Phong cách chuyển động' });
+    await library.getByRole('button', { name: 'Chọn Sang trọng' }).click();
+    await capture(page, 'StyleLibrary');
+  });
 });

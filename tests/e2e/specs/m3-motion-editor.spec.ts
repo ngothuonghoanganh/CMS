@@ -50,6 +50,8 @@ test.describe('M3 · motion in the editor', () => {
       'aria-pressed',
       'true',
     );
+    // Live from v1: what changes after it shows when publishing again.
+    await editor.publish(1, 'Bật chuyển động');
 
     // A section of its own: it pops in, and its row says so.
     const navbarRow = editor.rows.first();
@@ -64,11 +66,15 @@ test.describe('M3 · motion in the editor', () => {
     await expect(benefitsRow).toContainText('Riêng · Bật lên');
     await panel.getByRole('button', { name: 'Dùng lại cài đặt trang (Trượt lên)' }).click();
     await expect(benefitsRow).not.toContainText('Riêng');
-    await panel
+    // Cards sit in rows: they can enter row by row.
+    const reviewsRow = editor.rows.filter({ hasText: 'Cảm nhận khách hàng' }).first();
+    await reviewsRow.getByRole('button', { name: /^Cảm nhận khách hàng/ }).click();
+    await page
+      .getByRole('complementary', { name: 'Cảm nhận khách hàng' })
       .getByRole('group', { name: 'Thứ tự trong section' })
       .getByRole('button', { name: /Theo hàng/ })
       .click();
-    await expect(benefitsRow).toContainText('Riêng · theo hàng');
+    await expect(reviewsRow).toContainText('Riêng · theo hàng');
     await editor.expectSaved();
 
     // "Chạy thử": the canvas plays as visitors would see it, then goes back to editing.
@@ -96,7 +102,8 @@ test.describe('M3 · motion in the editor', () => {
     // Publishing names the change, and the live page moves.
     const dialog = await editor.openPublishDialog();
     await expect(dialog.getByText('Chuyển động: Sang trọng')).toBeVisible();
-    const done = await editor.publishFromDialog(dialog, 1, 'Thêm chuyển động');
+    await expect(dialog.getByText('Sửa: Cảm nhận khách hàng')).toBeVisible();
+    const done = await editor.publishFromDialog(dialog, 2, 'Phong cách sang trọng');
     await done.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click();
 
     const visitor = await browser.newPage();

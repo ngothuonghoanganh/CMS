@@ -32,6 +32,9 @@ import { SitesRepository } from '../sites/sites.repository.js';
 import { TEMPLATE_VERSION_COLLECTION } from './template.schema.js';
 import { TemplateVersionsRepository } from './template-versions.repository.js';
 
+/** The system template's current version: it goes up with its content (ADR-030). */
+const DENTAL_VERSION = findSystemTemplate('nha-khoa-uu-dai')?.version ?? 0;
+
 const HEADING = 'Niềng răng trong suốt cho người bận rộn';
 
 /**
@@ -768,7 +771,7 @@ describe('workspace templates', () => {
     const stale = await owner
       .post(`/sites/${kitchen.id}/pages/${pageId}/draft/template`, {
         baseRevision: before.draft.revision - 1,
-        template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+        template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: DENTAL_VERSION },
       })
       .expect(409);
     expect(problemSchema.parse(stale.body)).toMatchObject({
@@ -782,7 +785,7 @@ describe('workspace templates', () => {
         await owner
           .post(`/sites/${kitchen.id}/pages/${pageId}/draft/template`, {
             baseRevision: before.draft.revision,
-            template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+            template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: DENTAL_VERSION },
           })
           .expect(200)
       ).body,
@@ -806,7 +809,7 @@ describe('workspace templates', () => {
     expect(activity.items[0]).toMatchObject({
       type: 'page.template_applied',
       page: { id: pageId },
-      data: { template: 'Ưu đãi dịch vụ nha khoa', version: 1 },
+      data: { template: 'Ưu đãi dịch vụ nha khoa', version: DENTAL_VERSION },
     });
 
     // A workspace template's photo comes as a copy in this site.
@@ -854,7 +857,7 @@ describe('workspace templates', () => {
       .post(`/sites/${spa.id}/pages/${target.page.id}/template-composition`, {
         source: 'system',
         templateId: 'nha-khoa-uu-dai',
-        version: 2,
+        version: DENTAL_VERSION + 1,
       })
       .expect(409);
     expect(problemSchema.parse(old.body).code).toBe('template_changed');

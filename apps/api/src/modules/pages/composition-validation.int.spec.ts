@@ -259,7 +259,8 @@ describe('composition validation on the server', () => {
   describe('motion (ADR-032)', () => {
     it('stores, publishes and serves the motion presets, without keys no schema knows', async () => {
       const faq = sampleSection('faq', undefined, 'faqs00000009');
-      const cta = sampleSection('cta_band', undefined, 'ctab00000009');
+      // Sections that publish as they are: the sample call to action has a button leading nowhere.
+      const benefits = { ...withItems(sampleSection('benefits', 'grid'), 3), id: 'bene00000009' };
       const handMade = [
         heroSection({ id: 'hero00000009' }),
         {
@@ -267,7 +268,7 @@ describe('composition validation on the server', () => {
           motion: { enter: 'pop', order: 'together', accents: { lines: false }, x: STRAY },
         },
         // A section that follows the page in everything stores no motion at all.
-        { ...cta, motion: { accents: {} } },
+        { ...benefits, motion: { accents: {} } },
       ];
       const { pageId, response } = await put(handMade, {
         motion: {
