@@ -28,7 +28,7 @@ async function visit(browser: Browser, url: string, options: BrowserContextOptio
 }
 
 /** ARCHITECTURE §5: Chuyển động is done when this whole chain passes in one go. */
-test('Chuyển động: AI page with “AI chọn” → another style, a section of its own, play → publish → the live page moves; less motion shows it at once', async ({
+test('Chuyển động: AI page with “AI chọn” → publish → another style, a section of its own, play → publish → the live page moves, less motion shows it at once → roll back to the AI’s style', async ({
   page,
   browser,
 }) => {
@@ -50,8 +50,9 @@ test('Chuyển động: AI page with “AI chọn” → another style, a sectio
   await expect(chosen).toBeVisible();
   const benefitsRow = editor.rows.nth(2);
   await expect(benefitsRow).toContainText('Riêng · Phóng nhẹ');
+  await editor.publish(1, 'Phong cách AI chọn');
 
-  // 2. The editor: another style, a section of its own, then "Chạy thử".
+  // 2. The editor: another style, a section of its own, then "Chạy thử" and publish.
   await chosen.click();
   const settings = page.getByRole('complementary', { name: 'Cài đặt trang' });
   await settings
@@ -77,7 +78,11 @@ test('Chuyển động: AI page with “AI chọn” → another style, a sectio
     timeout: 20_000,
   });
   await page.getByRole('button', { name: 'Quay lại chỉnh sửa' }).click();
-  await editor.publish(1, 'Trang AI có chuyển động');
+  const dialog = await editor.openPublishDialog();
+  await expect(dialog.getByText('Chuyển động: Năng động')).toBeVisible();
+  await expect(dialog.getByText('Sửa: Câu hỏi thường gặp')).toBeVisible();
+  const done = await editor.publishFromDialog(dialog, 2, 'Năng động hơn');
+  await done.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click();
 
   // 3. The live page: a section below the window waits, then enters once the visitor gets there.
   const url = `${siteOrigin(site.subdomain)}/${slug}`;
@@ -104,4 +109,27 @@ test('Chuyển động: AI page with “AI chọn” → another style, a sectio
   await expect(stillFaq).not.toHaveAttribute('data-motion');
   expect(new Set(await opacities(stillFaq))).toEqual(new Set(['1']));
   await still.context.close();
+
+  // 4. Rolling back to v1 brings the AI's style back to the live page.
+  await editor.topBar.getByRole('link', { name: 'Lịch sử phiên bản' }).click();
+  const v1 = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: 'v1', exact: true }) });
+  await v1.getByRole('button', { name: 'Khôi phục bản này' }).click();
+  const restore = page.getByRole('region', { name: 'Khôi phục v1 thành bản live?' });
+  await restore.getByRole('textbox', { name: /^Lý do/ }).fill('Khách thích phong cách AI chọn');
+  await restore.getByRole('button', { name: 'Khôi phục v1' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'v1 đang live' })).toBeVisible();
+  const back = await visit(browser, url);
+  const backFaq = back.page.locator('[data-section-type="faq"]');
+  await expect(async () => {
+    await back.page.reload();
+    // "Mượt mà" slides up; the section the AI changed is its own again.
+    await expect(backFaq).toHaveAttribute('data-motion-enter', 'up', { timeout: 1000 });
+  }).toPass();
+  await expect(back.page.locator('[data-section-type="benefits"]')).toHaveAttribute(
+    'data-motion-enter',
+    'zoom',
+  );
+  await back.context.close();
 });
