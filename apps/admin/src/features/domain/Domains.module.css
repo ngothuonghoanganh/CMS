@@ -82,11 +82,15 @@
   align-items: flex-start;
 }
 
-/* The badges stay on the hostname's line (board 13): a long hostname breaks, they do not drop. */
+/*
+ * The badges follow the hostname on its line (board 13). When the row is too narrow for both, they
+ * drop under it, so the hostname keeps its width instead of breaking mid-name.
+ */
 .hostLine {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
 }
 
 .hostLine > :not(.host) {
@@ -315,6 +319,7 @@
 
 .records thead th {
   padding-block: 10px;
+  white-space: nowrap;
   border-bottom-color: var(--color-border);
   background: var(--color-surface-subtle);
   font-size: var(--text-sm);

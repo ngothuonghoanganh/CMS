@@ -311,19 +311,11 @@
 
 /*
  * Board 21 puts the field name about 20px under the card's top edge. A checkbox row is 44px tall
- * by default; here it is 24px (still the WCAG 2.5.8 minimum target), with the box centered on it.
- * The doubled class outweighs the Checkbox's own row and label heights.
+ * by default; here it is 24px (still the WCAG 2.5.8 minimum target); the Checkbox centers its box
+ * on the label's line. The doubled class outweighs the Checkbox's own label height.
  */
-.changeHead.changeHead {
-  align-items: center;
-}
-
 .changeHead.changeHead label {
   min-height: 24px;
-}
-
-.changeHead.changeHead input[type='checkbox'] {
-  margin-top: 0;
 }
 
 .changeLabel {

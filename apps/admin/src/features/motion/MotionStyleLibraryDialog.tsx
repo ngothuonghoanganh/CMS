@@ -190,7 +190,8 @@ export function MotionStyleLibraryDialog({ open, onOpenChange }: MotionStyleLibr
                 <Button
                   size="sm"
                   variant="secondary"
-                  leadingIcon={<PlayIcon size={12} />}
+                  // Nothing plays for "Không hiệu ứng": no play mark, and the label keeps its room.
+                  leadingIcon={id === 'none' ? undefined : <PlayIcon size={12} />}
                   disabled={id === 'none'}
                   onClick={() => {
                     playOf(id);
