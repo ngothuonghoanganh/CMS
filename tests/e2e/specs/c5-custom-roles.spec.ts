@@ -80,11 +80,11 @@ test.describe('C5 · custom roles', () => {
       .getByRole('group', { name: 'Xuất bản, cập nhật trang live' })
       .getByRole('button', { name: 'Yêu cầu' })
       .click();
-    await page.getByRole('switch', { name: 'Xem lead và nơi nhận lead' }).click();
+    await page.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' }).click();
     const summary = page.getByRole('region', { name: 'Tóm tắt trước khi lưu' });
     await expect(summary).toContainText('Bỏ: Xuất bản, cập nhật trang live');
     await expect(summary).toContainText('Thêm: Gửi yêu cầu xuất bản (phải được duyệt)');
-    await expect(summary).toContainText('Thêm: Xem lead và nơi nhận lead');
+    await expect(summary).toContainText('Thêm: Xem lead, khách hàng, pipeline');
     await page.getByRole('button', { name: 'Lưu vai trò' }).click();
     await expect(page.getByText(`Đã lưu vai trò ${ROLE_NAME}`, { exact: true })).toBeVisible();
     // The editor stays on the saved role, now changing it.
@@ -123,7 +123,7 @@ test.describe('C5 · custom roles', () => {
       await expect(editor.topBar.getByRole('button', { name: 'Gửi duyệt' })).toBeVisible();
 
       // Leads taken away on board 16: the member's next request is refused.
-      await page.getByRole('switch', { name: 'Xem lead và nơi nhận lead' }).click();
+      await page.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' }).click();
       const saved = page.waitForResponse(
         (response) =>
           response.url().includes(`/custom-roles/${role.id}`) &&
@@ -148,7 +148,7 @@ test.describe('C5 · custom roles', () => {
       const { site } = await setUpSite(page.request);
       await page.goto(`/workspaces/${site.workspaceId}/roles`);
       await page.getByRole('button', { name: 'Vai trò tùy chỉnh' }).click();
-      await page.getByRole('switch', { name: 'Xem lead và nơi nhận lead' }).click();
+      await page.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' }).click();
       await expect(page.getByRole('region', { name: 'Tóm tắt trước khi lưu' })).toContainText(
         'Thêm',
       );

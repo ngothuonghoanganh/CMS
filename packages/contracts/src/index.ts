@@ -17,6 +17,7 @@ export * from './goals.js';
 export * from './health.js';
 export * from './lead.js';
 export * from './lead-inbox.js';
+export * from './contacts.js';
 export * from './lead-recipients.js';
 export * from './members.js';
 export * from './motion.js';

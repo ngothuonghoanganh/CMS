@@ -6,7 +6,7 @@ import type {
   RetentionMonths,
   VnDay,
 } from '@plp/contracts';
-import type { QueryFilter, Model } from 'mongoose';
+import { type QueryFilter, type Model, Types } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import {
   afterCursor,
@@ -154,16 +154,25 @@ export class LeadsRepository {
   async insertPublic(
     site: { _id: ObjectId; workspaceId: ObjectId },
     lead: NewLead,
+    tx?: Tx,
   ): Promise<LeadRecord> {
     try {
-      const created = await this.leads(site).create({
-        ...lead,
-        workspaceId: site.workspaceId,
-        siteId: site._id,
-        status: 'new',
-        note: '',
-        search: leadSearchKeys(lead.fields),
-      });
+      const [created] = await this.leads(site).create(
+        [
+          {
+            ...lead,
+            workspaceId: site.workspaceId,
+            siteId: site._id,
+            status: 'new',
+            note: '',
+            search: leadSearchKeys(lead.fields),
+          },
+        ],
+        tx === undefined ? {} : { session: tx },
+      );
+      if (!created) {
+        throw new Error('Creating a lead returned no document');
+      }
       return created.toObject();
     } catch (error) {
       if (isDuplicateKeyError(error, LEADS_SUBMISSION_INDEX)) {
@@ -706,6 +715,118 @@ export class LeadsRepository {
       )
       .lean<LeadRecord>()
       .exec();
+  }
+
+  /**
+   * Joins a lead to its customer profile (ADR-033). False when it already joined one: a backfill on
+   * another instance got there first, and the caller's transaction must not count it twice.
+   */
+  async linkContact(
+    ref: WorkspaceRef,
+    leadId: ObjectId,
+    contactId: ObjectId,
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.leads(ref)
+      .updateOne(
+        { _id: leadId, workspaceId: ref.workspaceId, contactId: null },
+        { $set: { contactId } },
+      )
+      .session(tx)
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** "Gộp hai hồ sơ": the merged profile's leads go to the one kept, untouched otherwise. */
+  async moveToContact(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    from: ObjectId,
+    to: ObjectId,
+    tx: Tx,
+  ): Promise<void> {
+    await this.leads(scope)
+      .updateMany(
+        { workspaceId: scope.workspaceId, siteId, contactId: from },
+        { $set: { contactId: to } },
+      )
+      .session(tx)
+      .exec();
+  }
+
+  /**
+   * Leads without a profile, oldest first, after a position: the startup backfill (ADR-033).
+   * Suspected spam is passed over and never joins one, so the position moves past it.
+   */
+  listUnlinked(
+    ref: WorkspaceRef,
+    after: { createdAt: Date; id: ObjectId } | null,
+    until: Date,
+    limit: number,
+  ): Promise<LeadRecord[]> {
+    return this.leads(ref)
+      .find({
+        workspaceId: ref.workspaceId,
+        contactId: null,
+        createdAt: { $lte: until },
+        ...(after === null
+          ? {}
+          : {
+              $or: [
+                { createdAt: { $gt: after.createdAt } },
+                { createdAt: after.createdAt, _id: { $gt: after.id } },
+              ],
+            }),
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit)
+      .lean<LeadRecord[]>()
+      .exec();
+  }
+
+  /**
+   * Leads of these profiles on a page within a time window, for "cùng đăng ký trang … trong N
+   * ngày" (ADR-033), on the inbox's page index.
+   */
+  findOnPage(
+    ref: WorkspaceRef,
+    siteId: ObjectId,
+    pageId: ObjectId,
+    contactIds: readonly ObjectId[],
+    window: { from: Date; to: Date },
+    limit: number,
+  ): Promise<Pick<LeadRecord, 'contactId' | 'createdAt'>[]> {
+    return this.leads(ref)
+      .find({
+        workspaceId: ref.workspaceId,
+        siteId,
+        pageId,
+        'spam.suspected': false,
+        createdAt: { $gte: window.from, $lte: window.to },
+        contactId: { $in: contactIds },
+      })
+      .select({ contactId: 1, createdAt: 1 })
+      .limit(limit)
+      .lean<Pick<LeadRecord, 'contactId' | 'createdAt'>[]>()
+      .exec();
+  }
+
+  /** The profiles the person's leads joined, for deleting the person (ADR-017, ADR-033). */
+  async contactIdsOfPerson(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    tx: Tx,
+  ): Promise<ObjectId[]> {
+    const ids = await this.leads(scope)
+      .distinct('contactId', {
+        workspaceId: scope.workspaceId,
+        siteId,
+        ...personFilter(person),
+      })
+      .session(tx)
+      .exec();
+    return ids.filter((id): id is ObjectId => id instanceof Types.ObjectId);
   }
 
   /** Deletes every lead of the person in the site and returns how many there were. */

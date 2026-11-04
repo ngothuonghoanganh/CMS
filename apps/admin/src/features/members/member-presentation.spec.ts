@@ -69,7 +69,7 @@ describe('member presentation', () => {
 
   it('sums up what a role may do from the permission table', () => {
     const { allowed, denied } = permissionSummary('support');
-    expect(allowed).toContain('Xem lead và nơi nhận lead');
+    expect(allowed).toContain('Xem lead, khách hàng, pipeline');
     expect(denied).toContain('Xuất lead ra CSV / Excel');
     expect(denied).toContain('Sửa bản nháp, section, SEO, tải ảnh lên');
     // A Cộng tác viên publishes once Chủ sở hữu or Quản trị approves (ADR-023).

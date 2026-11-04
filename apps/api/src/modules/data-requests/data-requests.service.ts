@@ -19,6 +19,7 @@ import { phoneSearchKey } from '../leads/domain/lead-search.js';
 import { CAPPED_COUNT_LIMIT, toCappedCount } from '../leads/lead-dto.js';
 import { type LeadFile, LeadExportService } from '../leads/lead-export.service.js';
 import { LeadPersonService } from '../leads/lead-person.service.js';
+import { ContactsRepository } from '../contacts/contacts.repository.js';
 import { type LeadPerson, LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
@@ -63,6 +64,7 @@ export class DataRequestsService {
     private readonly siteRecords: SitesRepository,
     private readonly requests: DataRequestsRepository,
     private readonly leads: LeadsRepository,
+    private readonly contacts: ContactsRepository,
     private readonly pages: PagesRepository,
     private readonly users: UsersRepository,
     private readonly activity: ActivityRepository,
@@ -221,6 +223,7 @@ export class DataRequestsService {
         count = await this.people.deletePersonIn(scope, site._id, person, tx);
       } else if (person !== null && request.type === 'withdraw_marketing') {
         count = await this.leads.withdrawMarketing(scope, site._id, person, at, tx);
+        await this.contacts.withdrawMarketing(scope, site._id, person, tx);
       }
       const updated = await this.requests.complete(
         scope,

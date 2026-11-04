@@ -1,7 +1,8 @@
 import type { Permission } from '@plp/contracts';
 
 /** Site sections in the sidebar, in the order of the design. */
-export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'settings' | 'privacy';
+export type SiteNavKey =
+  'pages' | 'leads' | 'contacts' | 'analytics' | 'domain' | 'settings' | 'privacy';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
 export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles';
@@ -31,6 +32,12 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
   return [
     { key: 'pages', label: 'Trang', href: base, permissions: ['pages.view'] },
     { key: 'leads', label: 'Leads', href: leadsHref(siteId), permissions: ['leads.view'] },
+    {
+      key: 'contacts',
+      label: 'Khách hàng',
+      href: contactsHref(siteId),
+      permissions: ['leads.view'],
+    },
     {
       key: 'analytics',
       label: 'Hiệu quả',
@@ -152,6 +159,11 @@ export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
 /** The lead inbox (ADR-018), optionally with filters such as `?status=new&range=all`. */
 export function leadsHref(siteId: string, search = ''): string {
   return `${siteHref(siteId)}/leads${search}`;
+}
+
+/** "Khách hàng" (board 22, ADR-033). */
+export function contactsHref(siteId: string): string {
+  return `${siteHref(siteId)}/contacts`;
 }
 
 /** "Hiệu quả" (ADR-019), optionally with its range and page, such as `?range=30d`. */

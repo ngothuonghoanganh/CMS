@@ -2682,6 +2682,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Lead intake có thêm một upsert khách hàng và một upsert cơ hội trong cùng transaction.
   - Board 10 không đổi hình, nhưng ô trạng thái của nó giờ là giai đoạn.
 - **Lát:** K1 khách hàng (màn 22); K2 hồ sơ (màn 23); K3 pipeline (màn 24) (§5).
+- **Amended 2026-11-04 (K1, cách làm):**
+  - Khách hàng giữ thêm `lastLead { pageId, source, medium, at }` cho cột Nguồn của màn 22, và `search` như lead.
+  - Hạn lưu của khách hàng luôn là tương tác gần nhất cộng `retentionMonths`. Lead là một tương tác, nên mốc này không sớm hơn hạn của lead cuối cùng; đổi thời gian lưu thì tính lại cả lead và khách hàng.
+  - Một cặp "Có thể trùng" hết hạn cùng hồ sơ hết hạn trước. Cặp có hồ sơ đã mất (TTL) được xóa khi đọc, nên số đếm ở tab có thể cao hơn trong chốc lát. Gộp xóa mọi cặp của hồ sơ bị gộp.
+  - Thêm tay và gộp ghi `dataSeq` của site trong transaction, như mọi dữ liệu cá nhân (ADR-027).
+  - Danh sách là `GET …/contacts` (góc nhìn, người phụ trách, nhãn, con trỏ); tìm là `POST …/contacts/search`, như hộp thư (ADR-018).
+  - K1 chưa có cột "Cơ hội", nút "Xem pipeline" và "Tạo cơ hội" hàng loạt của màn 22; chúng đến cùng cơ hội ở K3. Tên khách hàng chưa mở hồ sơ cho tới K2.
+  - Sửa thông tin của một lead (ADR-017) chưa đổi hồ sơ khách hàng; K2 sửa thông tin ngay trên hồ sơ.
 
 ### ADR-034 — Automation: sự kiện, hành động, hàng đợi trong MongoDB
 
@@ -2895,7 +2903,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                                                        | Màn    | Trạng thái |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
 | P0  | Nhập board 22–27, ADR-033 và ADR-034, bổ sung ADR-017, 018, 020, 025                                                                            | —      | Xong       |
-| K1  | Khách hàng: mô hình, gom từ lead và chuyển dữ liệu cũ, danh sách (góc nhìn, lọc, tìm, thao tác hàng loạt), thêm tay, gộp trùng                  | 22     | Chưa làm   |
+| K1  | Khách hàng: mô hình, gom từ lead và chuyển dữ liệu cũ, danh sách (góc nhìn, lọc, tìm, thao tác hàng loạt), thêm tay, gộp trùng                  | 22     | Xong       |
 | K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Chưa làm   |
 | K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Chưa làm   |
 | A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Chưa làm   |

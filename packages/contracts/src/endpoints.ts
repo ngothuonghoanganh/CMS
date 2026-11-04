@@ -25,6 +25,19 @@ import {
   signupVerifyRequestSchema,
   updateMeRequestSchema,
 } from './auth.js';
+import {
+  contactBulkRequestSchema,
+  contactBulkResponseSchema,
+  contactListQuerySchema,
+  contactListResponseSchema,
+  contactOptionsResponseSchema,
+  contactSearchRequestSchema,
+  createContactRequestSchema,
+  createContactResponseSchema,
+  mergeContactsRequestSchema,
+  mergeContactsResponseSchema,
+  mergeSuggestionListResponseSchema,
+} from './contacts.js';
 import { meResponseSchema } from './membership.js';
 import {
   acceptInvitationResponseSchema,
@@ -709,6 +722,77 @@ export const endpoints = {
     request: null,
     query: null,
     response: leadDetailSchema,
+  }),
+
+  // Customers (board 22, ADR-033): `leads.view` reads, `leads.handle` adds, assigns, tags, merges
+  /** One page of a view, the most recent interaction first, with the count of every view. */
+  listContacts: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/contacts`,
+    request: null,
+    query: contactListQuerySchema,
+    response: contactListResponseSchema,
+  }),
+  /**
+   * `listContacts` narrowed by a search. A POST because the search is personal data that must stay
+   * out of URLs, access logs and the Referer header (rule 10).
+   */
+  searchContacts: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/contacts/search`,
+    request: contactSearchRequestSchema,
+    query: null,
+    response: contactListResponseSchema,
+  }),
+  /** The members a profile can be given to, and the site's tags. */
+  contactOptions: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/contacts/options`,
+    request: null,
+    query: null,
+    response: contactOptionsResponseSchema,
+  }),
+  /** "Thêm khách hàng"; a number already in the site answers with its profile instead. */
+  createContact: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/contacts`,
+    request: createContactRequestSchema,
+    query: null,
+    response: createContactResponseSchema,
+  }),
+  /** "Giao cho…" and "Gắn nhãn…" on at most `CONTACT_BULK_MAX` profiles. */
+  bulkUpdateContacts: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/contacts/bulk`,
+    request: contactBulkRequestSchema,
+    query: null,
+    response: contactBulkResponseSchema,
+  }),
+  /** "Có thể trùng": the open pairs, oldest first. */
+  listMergeSuggestions: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/contact-suggestions`,
+    request: null,
+    query: null,
+    response: mergeSuggestionListResponseSchema,
+  }),
+  /** "Gộp hai hồ sơ": the older profile is kept, with each field from the side picked. */
+  mergeContacts: endpoint({
+    method: 'POST',
+    path: (siteId: string, suggestionId: string) =>
+      `/sites/${e(siteId)}/contact-suggestions/${e(suggestionId)}/merge`,
+    request: mergeContactsRequestSchema,
+    query: null,
+    response: mergeContactsResponseSchema,
+  }),
+  /** "Không phải cùng người": the pair is not suggested again. */
+  dismissMergeSuggestion: endpoint({
+    method: 'POST',
+    path: (siteId: string, suggestionId: string) =>
+      `/sites/${e(siteId)}/contact-suggestions/${e(suggestionId)}/dismiss`,
+    request: null,
+    query: null,
+    response: null,
   }),
 
   // Analytics (ADR-019)

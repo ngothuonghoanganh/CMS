@@ -13,6 +13,7 @@ import { AiModule } from './modules/ai/ai.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { ContactsModule } from './modules/contacts/contacts.module.js';
 import { DataRequestsModule } from './modules/data-requests/data-requests.module.js';
 import { LeadsModule } from './modules/leads/leads.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
@@ -81,6 +82,7 @@ export class AppModule {
         TemplatesModule,
         PublishingModule,
         LeadsModule,
+        ContactsModule,
         DataRequestsModule,
         AnalyticsModule,
         NotificationsModule,

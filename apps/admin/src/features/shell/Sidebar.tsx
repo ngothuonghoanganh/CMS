@@ -15,6 +15,7 @@ import {
   ButtonLink,
   ChartBarIcon,
   ChevronUpDownIcon,
+  ContactCardIcon,
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -65,6 +66,7 @@ import styles from './Sidebar.module.css';
 const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   pages: FileIcon,
   leads: InboxIcon,
+  contacts: ContactCardIcon,
   analytics: ChartBarIcon,
   domain: GlobeIcon,
   privacy: ShieldCheckIcon,

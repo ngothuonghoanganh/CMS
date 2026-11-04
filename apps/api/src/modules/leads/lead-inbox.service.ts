@@ -14,7 +14,8 @@ import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { LeadNotifier } from '../notifications/lead-notifier.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
-import type { SiteRecord } from '../sites/site.schema.js';
+import { ContactLinker } from '../contacts/contact-linker.service.js';
+import { retentionOf, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { type LeadCriteria, leadCriteria } from './domain/lead-filters.js';
@@ -59,6 +60,7 @@ export class LeadInboxService {
     private readonly pages: PagesRepository,
     private readonly releases: ReleasesRepository,
     private readonly notifier: LeadNotifier,
+    private readonly linker: ContactLinker,
   ) {}
 
   /**
@@ -128,6 +130,15 @@ export class LeadInboxService {
     if (!updated) {
       // Deleted (by the owner or its retention period) since it was read.
       throw notFound(LEAD_NOT_FOUND);
+    }
+    if (!updated.spam.suspected && !updated.contactId) {
+      // "Không phải spam": the lead joins its profile now (ADR-033). Moved back into spam, the
+      // profile stays as it is.
+      const contact = await this.linker.link(scope, updated, retentionOf(sitePrivacyOf(site)));
+      if (contact !== null) {
+        await this.linker.suggestFor(scope, contact, updated, new Date());
+        return this.detail(scope, site, { ...updated, contactId: contact._id });
+      }
     }
     return this.detail(scope, site, updated);
   }

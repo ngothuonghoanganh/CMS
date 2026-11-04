@@ -1,4 +1,9 @@
-import { type RetentionMonths, type ThemePresetId, themePresetIds } from '@plp/contracts';
+import {
+  DEFAULT_RETENTION_MONTHS,
+  type RetentionMonths,
+  type ThemePresetId,
+  themePresetIds,
+} from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
@@ -98,6 +103,14 @@ const sitePrivacySchema = new Schema<SitePrivacyRecord>(
 
 export function sitePrivacyOf(site: Pick<SiteRecord, 'privacy'>): SitePrivacyRecord | null {
   return site.privacy ?? null;
+}
+
+/**
+ * Months a site keeps its leads and customers; null keeps them until deleted by hand. The default
+ * only applies without settings, which a form's release cannot have (it snapshotted them).
+ */
+export function retentionOf(privacy: SitePrivacyRecord | null): RetentionMonths {
+  return privacy === null ? DEFAULT_RETENTION_MONTHS : privacy.retentionMonths;
 }
 
 export function leadRecipientsOf(site: Pick<SiteRecord, 'leadRecipients'>): LeadRecipientRecord[] {

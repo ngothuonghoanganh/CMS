@@ -65,6 +65,11 @@ export interface LeadRecord {
   search: LeadSearchKeys;
   /** Leads stored before ADR-018's notifications have none. */
   notification?: LeadNotificationRecord;
+  /**
+   * The customer profile the lead joined (ADR-033). Null for suspected spam, and until the startup
+   * backfill reaches a lead stored before profiles existed (absent then).
+   */
+  contactId?: Types.ObjectId | null;
   createdAt: Date;
   /** Null when the site keeps leads until they are deleted by hand. */
   expiresAt: Date | null;
@@ -115,6 +120,7 @@ const leadSchema = new Schema<LeadRecord>(
       rejectedRecipients: { type: Number, default: null },
       updatedAt: { type: Date, required: true },
     },
+    contactId: { type: Schema.Types.ObjectId, default: null },
     createdAt: { type: Date, required: true },
     expiresAt: { type: Date, default: null },
   },
@@ -152,6 +158,8 @@ leadSchema.index(
   { 'notification.status': 1, 'notification.updatedAt': 1 },
   { name: 'leads_notification_sweep' },
 );
+// A profile's leads, and the startup backfill of leads without one (oldest first, ADR-033).
+leadSchema.index({ contactId: 1, createdAt: 1 }, { name: 'leads_contact' });
 // Leads without an expiry (null) are kept: the TTL monitor skips them.
 leadSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
+import { ContactsCoreModule } from '../contacts/contacts-core.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
@@ -13,6 +14,7 @@ import { PrivacyService } from './privacy.service.js';
   imports: [
     ActivityModule,
     AuthModule,
+    ContactsCoreModule,
     LeadsCoreModule,
     PrivacyCoreModule,
     SitesCoreModule,

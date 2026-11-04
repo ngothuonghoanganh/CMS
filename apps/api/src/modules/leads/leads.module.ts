@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RendererSignatureGuard } from '../../shared/renderer-channel/renderer-request.js';
 import { ActivityModule } from '../activity/activity.module.js';
+import { ContactsCoreModule } from '../contacts/contacts-core.module.js';
 import { DataRequestsCoreModule } from '../data-requests/data-requests-core.module.js';
 import { DomainsCoreModule } from '../domains/domains-core.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
@@ -21,6 +22,7 @@ import { PublicLeadsController } from './public-leads.controller.js';
 @Module({
   imports: [
     ActivityModule,
+    ContactsCoreModule,
     DataRequestsCoreModule,
     DomainsCoreModule,
     LeadsCoreModule,

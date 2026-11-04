@@ -29,6 +29,9 @@ const EXPIRING_IN_MASTER: Record<string, string> = {
 const EXPIRING_IN_WORKSPACE: Record<string, string> = {
   ai_jobs: 'expiresAt',
   leads: 'expiresAt',
+  // A customer and their pairs follow the site's retention (ADR-033).
+  contacts: 'expiresAt',
+  merge_suggestions: 'expiresAt',
   analytics_seen: 'expiresAt',
   analytics_daily: 'expiresAt',
   publish_approvals: 'purgeAt',
