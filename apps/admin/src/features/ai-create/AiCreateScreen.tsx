@@ -7,6 +7,7 @@ import {
   aiJobEventSchema,
   aiLanguageIds,
   aiLanguageLabels,
+  aiMotionChoiceIds,
   type AiSectionStatus,
   aiToneIds,
   aiToneLabels,
@@ -67,6 +68,9 @@ import {
   canShift,
   descriptionOf,
   initialAiCreateState,
+  isChoosingMotion,
+  motionChoiceLabel,
+  motionNoteOf,
 } from './ai-create-state';
 import styles from './AiCreateScreen.module.css';
 import { aiQueryKeys } from './queries';
@@ -409,7 +413,12 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
           const name = state.structure[index]?.name;
           seen.job = job;
           if (name !== undefined) {
-            setProgressNote(progressSentences[event.status](name));
+            const sentence = progressSentences[event.status](name);
+            setProgressNote(
+              isChoosingMotion(job, state.motion)
+                ? `${sentence} Đang chọn phong cách chuyển động…`
+                : sentence,
+            );
           }
           setRun((previous) => (previous.kind === 'running' ? { ...previous, job } : previous));
         } else if (event.type === 'finished') {
@@ -582,6 +591,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
       ? run.job
       : null;
   const writingTitle = run.kind === 'partial' ? 'Gần xong' : 'Đang viết nội dung';
+  const choosingMotion = run.kind === 'running' && isChoosingMotion(run.job, state.motion);
   const writingLead =
     run.kind === 'partial'
       ? 'Bản nháp đã được lưu. Chưa ai thấy cho tới khi bạn xuất bản.'
@@ -881,6 +891,32 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   })}
                 </DropdownMenu>
               </div>
+              <div className={styles.motion}>
+                <fieldset className={styles.fieldset} aria-describedby="ai-motion-note">
+                  <legend className={styles.legend}>Chuyển động</legend>
+                  <div className={styles.chips}>
+                    {aiMotionChoiceIds.map((motion) => (
+                      <label
+                        key={motion}
+                        className={cx(styles.chip, state.motion === motion && styles.chipSelected)}
+                      >
+                        <input
+                          type="radio"
+                          name="ai-motion"
+                          checked={state.motion === motion}
+                          onChange={() => {
+                            dispatch({ type: 'motion_selected', motion });
+                          }}
+                        />
+                        {motionChoiceLabel(motion)}
+                      </label>
+                    ))}
+                  </div>
+                  <p id="ai-motion-note" className={styles.motionNote}>
+                    {motionNoteOf(state)}
+                  </p>
+                </fieldset>
+              </div>
               {exhausted ? (
                 <Callout tone="warning" role="alert">
                   Workspace đã dùng hết {usage.limit} lượt AI tháng này. Lượt mới có vào{' '}
@@ -952,6 +988,9 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   })}
                 </ol>
               )}
+              {choosingMotion ? (
+                <p className={styles.motionNote}>Đang chọn phong cách chuyển động…</p>
+              ) : null}
               {/* One sentence per change, with the section's name; the list itself stays quiet. */}
               {run.kind === 'starting' || run.kind === 'running' ? (
                 <p role="status" className={styles.visuallyHidden}>

@@ -350,6 +350,18 @@
   border-top: 1px solid var(--color-divider);
 }
 
+.motion {
+  padding-top: 16px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.motionNote {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
 .structure {
   display: flex;
   flex-direction: column;

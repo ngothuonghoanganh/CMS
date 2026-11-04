@@ -1,18 +1,24 @@
 import {
+  type AiJob,
   type AiLanguage,
+  type AiMotionChoice,
   type AiPageJobRequest,
   aiPageJobRequestSchema,
   type AiTone,
+  aiToneLabels,
   MAX_SECTIONS,
   type PageGoal,
   type SectionType,
   slugify,
+  templateIndustryLabels,
 } from '@plp/contracts';
 import {
   canMoveSection,
   getSectionDefinition,
   goalOutline,
   insertionIndex,
+  MOTION_STYLES,
+  suggestMotionStyle,
 } from '@plp/sections/schema';
 import { finalizeSlug, normalizeSlugTyping, SLUG_MAX } from '../seo/seo-presentation';
 
@@ -57,6 +63,8 @@ export interface AiCreateState {
   structure: StructureEntry[];
   /** For keys of added sections. */
   nextKey: number;
+  /** "Chuyển động" of the structure step (ADR-032): "AI chọn" unless the user picks a style. */
+  motion: AiMotionChoice;
   errors: BriefErrors;
 }
 
@@ -76,6 +84,7 @@ export type AiCreateAction =
   | { type: 'section_moved'; key: string; offset: -1 | 1 }
   | { type: 'section_removed'; key: string }
   | { type: 'section_added'; sectionType: SectionType }
+  | { type: 'motion_selected'; motion: AiMotionChoice }
   | { type: 'step_changed'; step: AiStep }
   | { type: 'errors_shown'; errors: BriefErrors };
 
@@ -102,6 +111,7 @@ export function initialAiCreateState(goal: PageGoal = 'lead'): AiCreateState {
     slugEdited: false,
     structure: [],
     nextKey: 0,
+    motion: 'auto',
     errors: {},
   };
 }
@@ -221,6 +231,8 @@ export function aiCreateReducer(state: AiCreateState, action: AiCreateAction): A
       structure.splice(insertionIndex(structure, action.sectionType, structure.length), 0, entry);
       return { ...state, structure, nextKey: state.nextKey + 1 };
     }
+    case 'motion_selected':
+      return { ...state, motion: action.motion };
     case 'step_changed':
       return { ...state, step: action.step };
     case 'errors_shown':
@@ -288,10 +300,45 @@ export function buildAiJobRequest(
       state.structure.length > 0
         ? state.structure.map(({ type, variant }) => ({ type, variant }))
         : proposedStructure(state.goal).map(({ type, variant }) => ({ type, variant })),
+    motion: state.motion,
   };
   const parsed = aiPageJobRequestSchema.safeParse(request);
   if (parsed.success) {
     return { ok: true, request };
   }
   return { ok: false, errors: briefErrorsOf(parsed.error.issues) };
+}
+
+/** A choice of "Chuyển động": "AI chọn", or a style's name. */
+export function motionChoiceLabel(motion: AiMotionChoice): string {
+  return motion === 'auto' ? 'AI chọn' : MOTION_STYLES[motion].label;
+}
+
+/**
+ * The line under "Chuyển động": with "AI chọn", the style expected from the brief's industry or
+ * tone, which the page keeps if the AI's choice fails (ADR-032); with a style, what it does.
+ */
+export function motionNoteOf(state: AiCreateState): string {
+  if (state.motion !== 'auto') {
+    return `${MOTION_STYLES[state.motion].summary} Đổi được trong editor, ở Cài đặt trang.`;
+  }
+  const expected = suggestMotionStyle(state);
+  const reason =
+    expected.industry === null
+      ? `hợp giọng văn ${aiToneLabels[state.tone]}`
+      : `hợp ngành ${templateIndustryLabels[expected.industry]}`;
+  return `AI chọn phong cách khi viết nội dung, không tốn thêm lượt. Dự kiến: ${MOTION_STYLES[expected.style].label} · ${reason}.`;
+}
+
+/**
+ * Whether a first run with "AI chọn" is choosing the motion now: every section is settled, some
+ * written, and the job has not ended. A run that wrote nothing creates no draft, so it does not.
+ */
+export function isChoosingMotion(job: AiJob, motion: AiMotionChoice): boolean {
+  return (
+    motion === 'auto' &&
+    job.pageId === null &&
+    job.sections.some((section) => section.status === 'done') &&
+    job.sections.every((section) => section.status !== 'queued' && section.status !== 'writing')
+  );
 }
