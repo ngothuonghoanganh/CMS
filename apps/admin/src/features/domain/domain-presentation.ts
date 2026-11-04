@@ -63,12 +63,6 @@ export const recordStateLabels: Record<RecordState, string> = {
   wrong: 'Sai giá trị',
 };
 
-export const recordStateTones: Record<RecordState, BadgeTone> = {
-  missing: 'info',
-  ok: 'success',
-  wrong: 'warning',
-};
-
 /** The HTTPS line of a domain row (board 13). */
 export function httpsLine(domain: Pick<Domain, 'status' | 'httpsValidUntil'>): string {
   if (domain.httpsValidUntil !== null) {

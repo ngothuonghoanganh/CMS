@@ -220,7 +220,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                   <div className={styles.hostLine}>
                     <span className={styles.host}>{domain.hostname}</span>
                     {domain.primary ? (
-                      <Badge tone="primary" size="sm">
+                      <Badge tone="info" size="sm">
                         ĐỊA CHỈ CHÍNH
                       </Badge>
                     ) : null}
@@ -276,7 +276,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
                 <div className={styles.hostLine}>
                   <span className={styles.host}>{list.defaultHost}</span>
                   {primary === null ? (
-                    <Badge tone="primary" size="sm">
+                    <Badge tone="info" size="sm">
                       ĐỊA CHỈ CHÍNH
                     </Badge>
                   ) : null}
@@ -347,7 +347,7 @@ export function DomainsScreen({ site, initial, loadedAt }: DomainsScreenProps) {
               </div>
             ))}
           </dl>
-          <p className={styles.muted}>
+          <p className={styles.legendNote}>
             Chỉ Chủ sở hữu và Quản trị được kết nối, đổi địa chỉ chính hoặc ngắt tên miền.
           </p>
         </aside>

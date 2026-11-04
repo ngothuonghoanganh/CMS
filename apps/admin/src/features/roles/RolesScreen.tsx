@@ -139,6 +139,8 @@ export function RolesScreen({
             <Button
               variant="secondary"
               size="sm"
+              fullWidth
+              className={styles.customButton}
               leadingIcon={<PlusIcon size={16} />}
               aria-pressed={selection.kind === 'new'}
               aria-describedby="custom-role-note"
@@ -236,28 +238,27 @@ export function RolesScreen({
                           {row.label}
                         </th>
                         {roles.map((role) => (
-                          <td
-                            key={role}
-                            className={cx(styles.cell, focus === role && styles.focused)}
-                          >
-                            {can(role, row.permission) ? (
-                              <>
-                                <CheckIcon size={18} strokeWidth={2.4} className={styles.yes} />
-                                <VisuallyHidden>Được phép</VisuallyHidden>
-                              </>
-                            ) : row.request !== undefined && can(role, row.request) ? (
-                              <span className={styles.request}>
-                                Yêu cầu
-                                <VisuallyHidden> (phải được duyệt)</VisuallyHidden>
-                              </span>
-                            ) : (
-                              <>
-                                <span aria-hidden="true" className={styles.no}>
-                                  –
+                          <td key={role} className={styles.cell}>
+                            <span className={cx(styles.mark, focus === role && styles.focused)}>
+                              {can(role, row.permission) ? (
+                                <>
+                                  <CheckIcon size={18} strokeWidth={2.4} className={styles.yes} />
+                                  <VisuallyHidden>Được phép</VisuallyHidden>
+                                </>
+                              ) : row.request !== undefined && can(role, row.request) ? (
+                                <span className={styles.request}>
+                                  Yêu cầu
+                                  <VisuallyHidden> (phải được duyệt)</VisuallyHidden>
                                 </span>
-                                <VisuallyHidden>Không</VisuallyHidden>
-                              </>
-                            )}
+                              ) : (
+                                <>
+                                  <span aria-hidden="true" className={styles.no}>
+                                    –
+                                  </span>
+                                  <VisuallyHidden>Không</VisuallyHidden>
+                                </>
+                              )}
+                            </span>
                           </td>
                         ))}
                       </tr>

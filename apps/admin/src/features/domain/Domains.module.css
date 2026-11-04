@@ -82,17 +82,22 @@
   align-items: flex-start;
 }
 
+/* The badges stay on the hostname's line (board 13): a long hostname breaks, they do not drop. */
 .hostLine {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
+.hostLine > :not(.host) {
+  flex: none;
+}
+
 .host {
+  min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-body);
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -149,6 +154,15 @@
   margin: 0;
 }
 
+.legendNote {
+  margin: 4px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
 .legendItem dd {
   margin: 4px 0 0;
   font-size: var(--text-body-sm);
@@ -201,46 +215,175 @@
   color: var(--color-muted);
 }
 
+.flip {
+  transform: scaleX(-1);
+}
+
+/* Board 14's status box: the text, the time of the last check on the right, the button below. */
+.statusBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+
+.statusBox[data-tone='info'] {
+  border-color: var(--color-focus-ring);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-pressed);
+}
+
+.statusBox[data-tone='warning'] {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-strong-ink);
+}
+
+.statusBox[data-tone='danger'] {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-ink);
+}
+
+.statusBox[data-tone='success'] {
+  border-color: var(--color-success-border);
+  background: var(--color-success-soft);
+  color: var(--color-success-strong-ink);
+}
+
+.statusText {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+}
+
+.statusTitle,
+.statusBody {
+  margin: 0;
+}
+
+.statusTitle {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
 .checked {
   margin: 0;
   font-size: var(--text-sm);
-  color: var(--color-muted);
+}
+
+/* Always on a line of its own, under the text. */
+.statusAction {
+  flex: 1 0 100%;
 }
 
 .instructions {
   margin: 0;
   padding-left: 20px;
-  font-size: var(--text-body-sm);
-  line-height: 1.6;
+  font-size: var(--text-body);
+  line-height: 1.7;
   color: var(--color-ink-2);
+}
+
+.recordsBox {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .records {
   width: 100%;
-  min-width: 620px;
+  min-width: 600px;
   border-collapse: collapse;
-  font-size: var(--text-body-sm);
+  font-size: var(--text-body);
 }
 
 .records th,
 .records td {
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--color-divider);
   text-align: left;
   vertical-align: middle;
 }
 
+.records tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
 .records thead th {
-  font-size: var(--text-xs);
+  padding-block: 10px;
+  border-bottom-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.04em;
   color: var(--color-muted);
+}
+
+.records tbody th {
+  font-family: var(--font-mono);
+  font-weight: 500;
 }
 
 .recordValue {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+}
+
+/* Square bordered copy buttons, as on the board. */
+.recordValue .copy {
+  width: 32px;
+  height: 32px;
+  border-color: var(--color-border);
+  border-radius: var(--radius-xs);
+}
+
+.recordState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.recordDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.recordState[data-state='missing'] {
+  color: var(--color-primary-ink);
+}
+
+.recordState[data-state='missing'] .recordDot {
+  background: var(--color-primary);
+}
+
+.recordState[data-state='ok'] {
+  color: var(--color-success-ink);
+}
+
+.recordState[data-state='ok'] .recordDot {
+  background: var(--color-success);
+}
+
+.recordState[data-state='wrong'] {
+  color: var(--color-warning-ink);
+}
+
+.recordState[data-state='wrong'] .recordDot {
+  background: var(--color-warning);
 }
 
 .compare {

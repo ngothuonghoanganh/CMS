@@ -11,10 +11,20 @@
   }
 }
 
+/* The role list is a white card of its own, as on board 16. */
+.roleList {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
 .roleList ul {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -25,10 +35,10 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: var(--target-min);
+  min-height: 48px;
   box-sizing: border-box;
   margin: 0;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -74,46 +84,47 @@
 }
 
 .roleCount {
-  font-size: var(--text-body-sm);
-  font-weight: 500;
+  font-size: var(--text-sm);
   color: var(--color-muted);
 }
 
 .pane {
   box-sizing: border-box;
   min-width: 0;
-  padding: 20px;
+  overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--color-surface);
 }
 
 .paneHead {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .paneTitle {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .paneHint {
-  font-size: var(--text-body-sm);
+  font-size: var(--text-sm);
   color: var(--color-muted);
 }
 
-/* A wide matrix scrolls inside its box at phone width (ScrollRegion); the page itself does not. */
+/* A wide matrix scrolls inside its box (ScrollRegion); the page itself does not. The permission
+   column keeps 300px so most labels stay on one line, as on the board. */
 .matrix {
   width: 100%;
-  min-width: 640px;
+  min-width: 900px;
   border-collapse: collapse;
-  font-size: var(--text-body-sm);
+  font-size: var(--text-body);
 }
 
 .caption {
@@ -125,23 +136,31 @@
   white-space: nowrap;
 }
 
+/* The header band: role names as they are written, not capitals. */
 .permissionHead,
 .roleHead {
-  padding: 8px;
+  padding: 10px 4px;
   border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  background: var(--color-surface-subtle);
+  font-size: var(--text-sm);
+  font-weight: 500;
   color: var(--color-muted);
 }
 
 .permissionHead {
+  width: 32%;
+  min-width: 300px;
+  padding-left: 20px;
   text-align: left;
 }
 
 .roleHead {
-  width: 88px;
   text-align: center;
+}
+
+.roleHead:last-child,
+.cell:last-child {
+  padding-right: 20px;
 }
 
 .roleHead.focused {
@@ -149,16 +168,16 @@
 }
 
 .groupHead {
-  padding: 16px 8px 6px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--color-muted);
+  padding: 12px 20px 6px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-2);
   text-align: left;
 }
 
 .permission {
-  padding: 10px 8px;
+  padding: 9px 8px 9px 20px;
   border-bottom: 1px solid var(--color-divider);
   font-weight: 400;
   color: var(--color-ink);
@@ -166,13 +185,22 @@
 }
 
 .cell {
-  padding: 10px 8px;
+  padding: 9px 4px;
   border-bottom: 1px solid var(--color-divider);
   text-align: center;
   vertical-align: middle;
 }
 
-.focused {
+/* Each mark sits in its own rounded box, tinted in the column brought forward. */
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border-radius: var(--radius-xs);
+}
+
+.mark.focused {
   background: var(--color-primary-tint);
 }
 
@@ -217,10 +245,21 @@
 .customAction {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 6px;
-  margin-top: 12px;
-  padding: 0 4px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-divider);
+  text-align: center;
+}
+
+.customAction .customButton {
+  min-height: 40px;
+  border-style: dashed;
+}
+
+.customAction .roleKind {
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }
 
 .editor {

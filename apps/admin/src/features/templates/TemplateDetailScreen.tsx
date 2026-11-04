@@ -14,12 +14,12 @@ import {
 } from '@plp/contracts';
 import { themePresets } from '@plp/sections/schema';
 import {
-  ArrowLeftIcon,
   Badge,
   Button,
   Callout,
   Card,
   CheckIcon,
+  ChevronRightIcon,
   DesktopIcon,
   ImageIcon,
   InfoCircleIcon,
@@ -101,7 +101,7 @@ export function TemplateDetailScreen({
   return (
     <PageContainer>
       <Link href={libraryHref} className={styles.back}>
-        <ArrowLeftIcon size={16} />
+        <ChevronRightIcon size={16} className={styles.flip} />
         Templates
       </Link>
 
@@ -248,7 +248,10 @@ export function TemplateDetailScreen({
                 v{template.version} · cập nhật {formatDate(template.updatedAt)}
               </dd>
               <dt>Theme</dt>
-              <dd>{theme.label} · 4 color scheme đạt AA</dd>
+              {/* A narrow card breaks after the theme's name, never inside "đạt AA". */}
+              <dd>
+                {theme.label} · <span className={styles.nowrap}>4 color scheme đạt AA</span>
+              </dd>
               <dt>Đã dùng</dt>
               <dd>
                 {template.usedCount} trang{' '}

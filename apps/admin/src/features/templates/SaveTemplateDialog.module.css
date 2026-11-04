@@ -1,7 +1,10 @@
+/* 10px under the header with the dialog body's own 2px, as on board 19: the first label does not
+   touch the header's divider. */
 .form {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-top: 8px;
 }
 
 .columns {

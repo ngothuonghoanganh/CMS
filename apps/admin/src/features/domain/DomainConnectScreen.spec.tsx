@@ -178,6 +178,8 @@ describe('DomainConnectScreen', () => {
     // Said beside the status, not in it: the time changes every minute.
     expect(screen.getByRole('status')).not.toHaveTextContent('Kiểm tra lần cuối');
     expect(screen.getByText(/^Kiểm tra lần cuối/)).toBeInTheDocument();
+    // The provider's DNS page is the one of the registered domain, named in bold.
+    expect(screen.getByText('smilecare.vn', { selector: 'strong' })).toBeInTheDocument();
     const table = screen.getByRole('table');
     expect(
       within(table)

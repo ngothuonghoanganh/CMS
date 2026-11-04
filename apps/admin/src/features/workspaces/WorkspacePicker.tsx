@@ -3,7 +3,9 @@
 import { accessLabel, type Membership, type SessionUser, workspaceOrigin } from '@plp/contracts';
 import { ArrowRightIcon, Avatar, BoxIcon, ButtonLink } from '@plp/ui';
 import { Brand } from '../shell/Brand';
+import { cx } from '../shell/cx';
 import { SignOutButton } from './SignOutButton';
+import { workspaceTileTone } from './workspace-tile';
 import styles from './WorkspacePicker.module.css';
 
 export interface WorkspacePickerProps {
@@ -83,7 +85,12 @@ export function WorkspacePicker({
                 const origin = workspaceOrigin(template, workspace.slug);
                 return (
                   <li key={workspace.id} className={styles.item}>
-                    <Avatar name={workspace.name} shape="square" size={44} />
+                    <Avatar
+                      name={workspace.name}
+                      shape="square"
+                      size={44}
+                      className={cx(styles.tile, styles[`tile-${workspaceTileTone(workspace.id)}`])}
+                    />
                     <span className={styles.text}>
                       <span className={styles.name}>{workspace.name}</span>
                       <span className={styles.access}>{accessLine(membership)}</span>

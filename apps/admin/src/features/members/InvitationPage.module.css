@@ -75,6 +75,62 @@
   gap: 16px;
 }
 
+/* Board 15b's large size: 14px labels, 48px controls with 15px text (46px inside the frame). */
+.form label {
+  font-size: var(--text-body);
+}
+
+.form input {
+  min-height: 46px;
+  font-size: var(--text-md);
+}
+
+.form button[type='submit'] {
+  min-height: 48px;
+  font-size: var(--text-md);
+}
+
+/* The invited email cannot change: a grey, lightly bordered frame says so. */
+.form .readOnly {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-2);
+}
+
+.form .readOnly:focus-within {
+  border-color: var(--color-primary);
+}
+
+.signIn {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+/* Reads as a link; it is a button because it keeps the link's secret before leaving. */
+.linkButton {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  color: var(--color-primary-pressed);
+}
+
+.linkButton:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
 .footer {
   margin: 0;
   padding: 16px 8px 0;
