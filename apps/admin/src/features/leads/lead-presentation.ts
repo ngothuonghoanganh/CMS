@@ -56,6 +56,11 @@ export function leadTimeLabel(createdAt: DateInput, now: DateInput): string {
     : formatDate(createdAt);
 }
 
+/** When "Đã gửi tới" sent: "16:42" today, otherwise the date, so the row never wraps. */
+export function deliveryTimeLabel(sentAt: DateInput, now: DateInput): string {
+  return sameDay(sentAt, now) ? formatTime(sentAt) : formatDate(sentAt);
+}
+
 /** Under the name in the detail: "24/10/2026 · 16:42 · từ điện thoại". */
 export function leadDetailMeta(lead: Pick<LeadDetail, 'createdAt' | 'device'>): string {
   const device = lead.device === 'mobile' ? 'từ điện thoại' : 'từ máy tính';

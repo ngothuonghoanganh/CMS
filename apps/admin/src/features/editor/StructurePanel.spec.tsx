@@ -177,6 +177,9 @@ describe('StructurePanel', () => {
     const [navbar, hero, benefits, faq] = rows();
     expect(navbar).toHaveTextContent('Luôn hiện ngay');
     expect(hero).toHaveTextContent('Luôn hiện ngay');
+    // A section that always shows at once has a lock on its pill; one that may move has none.
+    expect(navbar?.querySelector('[data-icon="lock"]')).not.toBeNull();
+    expect(benefits?.querySelector('[data-icon="lock"]')).toBeNull();
     expect(benefits).toHaveTextContent('Riêng · Bật lên');
     expect(faq).not.toHaveTextContent('Riêng');
     await user.click(screen.getByRole('button', { name: 'Chuyển động · Mượt mà' }));

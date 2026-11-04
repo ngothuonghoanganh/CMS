@@ -710,7 +710,9 @@ describe('LeadInbox', () => {
     const { panel } = await openLead();
     const delivery = within(panel).getByRole('region', { name: 'Đã gửi tới' });
     expect(delivery).toHaveTextContent('Email thông báo · 2 người nhận');
-    expect(delivery).toHaveTextContent('24/10/2026 16:42');
+    // Sent today: the time alone, with the full date in its title.
+    const sentAt = within(delivery).getByText('16:42');
+    expect(sentAt).toHaveAttribute('title', '24/10/2026 16:42');
   });
 
   it('marks a lead whose email failed and sends it again from its detail', async () => {

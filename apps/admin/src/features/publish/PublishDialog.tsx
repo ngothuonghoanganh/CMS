@@ -145,6 +145,7 @@ function CheckRow({ item, role, ignored = false, onFix, onToggle }: CheckRowProp
           <Button
             variant={blocking ? 'secondary' : 'ghost'}
             size="sm"
+            className={blocking ? styles.fixBlocking : undefined}
             aria-describedby={titleId}
             onClick={onFix}
           >
@@ -155,6 +156,7 @@ function CheckRow({ item, role, ignored = false, onFix, onToggle }: CheckRowProp
           <Button
             variant="secondary"
             size="sm"
+            className={styles.ignoreToggle}
             aria-pressed={ignored}
             aria-describedby={titleId}
             onClick={onToggle}
@@ -878,6 +880,7 @@ function PublishSession({
           </Callout>
         )}
       </div>
+      <div className={styles.scrollCue} aria-hidden="true" />
     </Dialog>
   );
 }

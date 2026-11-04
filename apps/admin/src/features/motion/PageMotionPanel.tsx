@@ -112,6 +112,7 @@ export function PageMotionPanel() {
                   motion={styleSample(id, motion.level)}
                   level={motion.level}
                   play={played.style === id ? played.run : 0}
+                  selected={chosen}
                 />
                 <span className={styles.styleName}>
                   {definition.label}

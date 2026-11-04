@@ -212,6 +212,12 @@
   font-weight: 600;
 }
 
+/* Board 20 gives every field label the legends' size: 14px semibold. A Field's label is the only
+   label here tied to its control by \`for\`; the goal chips and tone options wrap their input. */
+.panel label[for] {
+  font-size: var(--text-body);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

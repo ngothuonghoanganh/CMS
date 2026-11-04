@@ -18,6 +18,7 @@ import {
 import { Button, LockIcon, Switch } from '@plp/ui';
 import { useState } from 'react';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor/editor-context';
+import { ResetIcon } from './icons';
 import { ENTER_DESCRIPTIONS, lockReasonOf, styleSample } from './motion-view';
 import styles from './SectionMotionGroup.module.css';
 import { StyleSample } from './StyleSample';
@@ -128,15 +129,18 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
               }}
             >
               <StyleSample
-                layout="thumb"
+                layout="tile"
                 motion={styleSample(motion.style, motion.level, id)}
                 level={motion.level}
                 play={played.enter === id ? played.run : 0}
+                selected={id === enter}
               />
-              <span className={styles.tileName}>{MOTION_ENTER_LABELS[id]}</span>
-              {id === enter && own.enter === undefined ? (
-                <span className={styles.follow}>theo trang</span>
-              ) : null}
+              <span className={styles.tileText}>
+                <span className={styles.tileName}>{MOTION_ENTER_LABELS[id]}</span>
+                {id === enter && own.enter === undefined ? (
+                  <span className={styles.follow}>theo trang</span>
+                ) : null}
+              </span>
             </button>
           ))}
         </div>
@@ -145,6 +149,8 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
           <Button
             size="sm"
             variant="ghost"
+            className={styles.reset}
+            leadingIcon={<ResetIcon />}
             onClick={() => {
               store.getState().setSectionEnter(section.id, null);
             }}
@@ -198,6 +204,8 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
               <Button
                 size="sm"
                 variant="ghost"
+                className={styles.reset}
+                leadingIcon={<ResetIcon />}
                 onClick={() => {
                   store.getState().setSectionOrder(section.id, null);
                 }}

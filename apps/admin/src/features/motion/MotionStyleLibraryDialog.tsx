@@ -17,6 +17,7 @@ import {
 import { Badge, Button, Dialog, SegmentedControl, VisuallyHidden } from '@plp/ui';
 import { useState } from 'react';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor/editor-context';
+import { PlayIcon } from './icons';
 import styles from './MotionStyleLibraryDialog.module.css';
 import { motionFitsOf, styleSample } from './motion-view';
 import { StyleSample } from './StyleSample';
@@ -75,6 +76,9 @@ export function MotionStyleLibraryDialog({ open, onOpenChange }: MotionStyleLibr
       description={`Cài đặt trang · ${pageTitle}`}
       headerActions={
         <div className={styles.actions}>
+          <span className={styles.levelLabel} aria-hidden="true">
+            Mức độ
+          </span>
           <SegmentedControl<MotionLevel>
             aria-label="Mức độ khi xem thử"
             value={level}
@@ -84,6 +88,8 @@ export function MotionStyleLibraryDialog({ open, onOpenChange }: MotionStyleLibr
           <Button
             size="sm"
             variant="secondary"
+            className={styles.playAll}
+            leadingIcon={<PlayIcon />}
             onClick={() => {
               playOf('all');
             }}
@@ -150,12 +156,24 @@ export function MotionStyleLibraryDialog({ open, onOpenChange }: MotionStyleLibr
                 level={level}
                 play={play.target === id || play.target === 'all' ? play.run : 0}
               />
-              <h3 className={styles.name}>{definition.label}</h3>
-              <span className={styles.badges}>
-                {id === motion.style ? <Badge tone="primary">Đang dùng</Badge> : null}
-                {id === 'none' ? <Badge tone="neutral">Mặc định cho trang mới</Badge> : null}
-                {fits.includes(id) ? <Badge tone="success">Hợp ngành</Badge> : null}
-              </span>
+              <div className={styles.nameRow}>
+                <h3 className={styles.name}>{definition.label}</h3>
+                {id === motion.style ? (
+                  <Badge size="sm" tone="info">
+                    Đang dùng
+                  </Badge>
+                ) : null}
+                {id === 'none' ? (
+                  <Badge size="sm" tone="neutral">
+                    Mặc định cho trang mới
+                  </Badge>
+                ) : null}
+                {fits.includes(id) ? (
+                  <Badge size="sm" tone="success">
+                    Hợp ngành
+                  </Badge>
+                ) : null}
+              </div>
               <dl className={styles.facts}>
                 <dt>Xuất hiện</dt>
                 <dd>{ENTER_NAMES[definition.enter]}</dd>
@@ -172,7 +190,8 @@ export function MotionStyleLibraryDialog({ open, onOpenChange }: MotionStyleLibr
               <span className={styles.cardActions}>
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="secondary"
+                  leadingIcon={<PlayIcon size={12} />}
                   disabled={id === 'none'}
                   onClick={() => {
                     playOf(id);
@@ -184,6 +203,7 @@ export function MotionStyleLibraryDialog({ open, onOpenChange }: MotionStyleLibr
                 <Button
                   size="sm"
                   variant={chosen ? 'primary' : 'secondary'}
+                  className={chosen ? undefined : styles.pick}
                   aria-pressed={chosen}
                   onClick={() => {
                     setPicked(id);

@@ -32,6 +32,13 @@ describe('MotionStyleLibraryDialog (board 39, ADR-032)', () => {
 
     await user.click(within(card('Sang trọng')).getByRole('button', { name: 'Chọn Sang trọng' }));
     expect(screen.getByText('Đổi từ Mượt mà sang Sang trọng')).toBeVisible();
+    // Each card has "Xem thử" and "Chọn"; the chosen card's button turns into "Đã chọn".
+    expect(
+      within(card('Sang trọng')).getByRole('button', { name: 'Đã chọn Sang trọng' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      within(card('Mượt mà')).getByRole('button', { name: 'Xem thử Mượt mà' }),
+    ).toBeInTheDocument();
     // Choosing is not applying: the draft only changes on "Áp dụng".
     expect(store.getState().draft.composition.motion?.style).toBe('smooth');
     await user.click(screen.getByRole('button', { name: 'Áp dụng Sang trọng' }));

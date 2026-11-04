@@ -2,6 +2,7 @@ import { type AnalyticsReport, analyticsSourceLabel, pageTitleLabel } from '@plp
 import { Card, VisuallyHidden } from '@plp/ui';
 import { useId } from 'react';
 import { conversionRate, formatCount } from './analytics-presentation';
+import { cx } from '../shell/cx';
 import styles from './Analytics.module.css';
 import { ScrollRegion } from '../shell/ScrollRegion';
 
@@ -9,15 +10,20 @@ import { ScrollRegion } from '../shell/ScrollRegion';
 export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }) {
   const headingId = useId();
   return (
-    <Card as="section" padding="lg" aria-labelledby={headingId} className={styles.card}>
-      <h2 id={headingId} className={styles.cardTitle}>
+    <Card
+      as="section"
+      padding="none"
+      aria-labelledby={headingId}
+      className={cx(styles.card, styles.sourceCard)}
+    >
+      <h2 id={headingId} className={cx(styles.cardTitle, styles.flushTitle)}>
         Theo nguồn truy cập
       </h2>
       {sources.length === 0 ? (
-        <p className={styles.note}>Chưa có khách nào trong khoảng này.</p>
+        <p className={cx(styles.note, styles.flushNote)}>Chưa có khách nào trong khoảng này.</p>
       ) : (
         <ScrollRegion label="Bảng nguồn truy cập">
-          <table className={styles.table}>
+          <table className={cx(styles.table, styles.sourceTable)}>
             <thead>
               <tr>
                 <th scope="col">NGUỒN / KÊNH</th>
@@ -55,7 +61,12 @@ export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }
 export function PageBreakdown({ pages }: { pages: AnalyticsReport['pages'] }) {
   const headingId = useId();
   return (
-    <Card as="section" padding="lg" aria-labelledby={headingId} className={styles.card}>
+    <Card
+      as="section"
+      padding="md"
+      aria-labelledby={headingId}
+      className={cx(styles.card, styles.sideCard)}
+    >
       <h2 id={headingId} className={styles.cardTitle}>
         Theo trang
       </h2>
@@ -96,7 +107,12 @@ export function DeviceSplit({ devices }: { devices: AnalyticsReport['devices'] }
     { key: 'desktop', label: 'Máy tính', percent: desktop, className: styles.desktop },
   ];
   return (
-    <Card as="section" padding="lg" aria-labelledby={headingId} className={styles.card}>
+    <Card
+      as="section"
+      padding="md"
+      aria-labelledby={headingId}
+      className={cx(styles.card, styles.sideCard, styles.deviceCard)}
+    >
       <h2 id={headingId} className={styles.cardTitle}>
         Thiết bị
       </h2>
