@@ -25,6 +25,7 @@ import { leadFormSection } from './sections/lead-form.js';
 import { logosSection } from './sections/logos.js';
 import { navbarSection } from './sections/navbar.js';
 import { quickContactSection } from './sections/quick-contact.js';
+import { statsSection } from './sections/stats.js';
 import { testimonialsSection } from './sections/testimonials.js';
 
 function widen<C extends Record<string, unknown>>(
@@ -41,6 +42,7 @@ const sectionDefinitions: { readonly [T in SectionType]: AnySectionDefinition } 
   testimonials: widen(testimonialsSection),
   logos: widen(logosSection),
   before_after: widen(beforeAfterSection),
+  stats: widen(statsSection),
   faq: widen(faqSection),
   lead_form: widen(leadFormSection),
   quick_contact: widen(quickContactSection),

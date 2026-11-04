@@ -500,7 +500,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-04 (ADR-032, chuyển động):**
   - `Composition` có thêm `motion` (phong cách chuyển động của trang, default "Không hiệu ứng"), và `SectionInstance` có thêm `motion?` (ghi đè của section). Thêm field có default nên `version` vẫn là 1 và release cũ render như trước.
   - `parseComposition` giữ hai field này, bỏ ghi đè rỗng. `SectionVariant` có thêm năng lực chuyển động (`motion: { grid?, accents? }`).
-  - Section thứ 12 là Số liệu nổi bật (`stats`, variant `row`): tiêu đề không bắt buộc, 2–4 ô { con số, nhãn }. Con số do doanh nghiệp nhập; AI không viết nó (ADR-031).
+  - Section thứ 12 là Số liệu nổi bật (`stats`, variant `row`, nhóm "Bằng chứng xã hội" của màn 04): tiêu đề không bắt buộc, 2–4 ô { con số tối đa 12 ký tự, ý nghĩa }.
+    - Con số là sự thật chỉ doanh nghiệp biết: nó bắt đầu trống và là field bắt buộc, nên xuất bản bị chặn tới khi nhập đủ ("Số liệu 1 … chưa có con số"). AI chỉ viết tiêu đề và ý nghĩa (`AI_NEVER_WRITES`, ADR-031).
+    - Ngoài canvas, mỗi con số được vẽ hai lần: một bản `aria-hidden` để nhìn (bản này đếm lên khi trang chuyển động, ADR-032) và một bản ẩn cho trình đọc màn hình, luôn là giá trị thật.
+    - Con số đếm lên được khi nó là một số, có thể chia nhóm nghìn, có phần thập phân và chữ trước, sau ("8.000+", "4,9/5", "Top 3", "24/7"); con số khác chỉ xuất hiện như mọi phần.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 

@@ -20,4 +20,5 @@ export { leadFormContentSchema, type LeadFormContent } from './sections/lead-for
 export type { LogosContent } from './sections/logos.js';
 export type { NavbarContent } from './sections/navbar.js';
 export type { QuickContactContent } from './sections/quick-contact.js';
+export type { StatsContent } from './sections/stats.js';
 export type { TestimonialsContent } from './sections/testimonials.js';

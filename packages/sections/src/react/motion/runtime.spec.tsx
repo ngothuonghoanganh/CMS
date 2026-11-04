@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSectionInstance } from '../../schema/registry.js';
 import type { RenderContext } from '../context.js';
 import { PageView } from '../PageView.js';
-import { orderIndexes, splitLines, startMotion } from './runtime.js';
+import { formatFigure, orderIndexes, parseFigure, splitLines, startMotion } from './runtime.js';
 
 const VIEWPORT_HEIGHT = 768;
 
@@ -270,5 +270,78 @@ describe('parts of a section', () => {
       expect(element.querySelectorAll('[data-m]').length, type).toBeGreaterThan(0);
       expect(element.querySelectorAll('[data-m] [data-m]').length, type).toBe(0);
     }
+  });
+});
+
+describe('figures that count up', () => {
+  it.each([
+    ['15', 15, '8'],
+    ['8.000+', 8000, '4.000+'],
+    ['1,000,000', 1_000_000, '500,000'],
+    ['4,9/5', 4.9, '2,5/5'],
+    ['4.9/5', 4.9, '2.5/5'],
+    ['Top 3', 3, 'Top 2'],
+    ['98%', 98, '49%'],
+    ['24/7', 24, '12/7'],
+  ])('reads "%s" as %d and writes values the same way', (text, value, half) => {
+    const figure = parseFigure(text);
+    expect(figure?.value).toBe(value);
+    if (!figure) {
+      throw new Error(`Cannot read ${text}`);
+    }
+    expect(formatFigure(figure, value)).toBe(text);
+    expect(formatFigure(figure, value / 2)).toBe(half);
+    expect(formatFigure(figure, 0)).toMatch(/0/);
+  });
+
+  it('leaves alone what is not one figure', () => {
+    for (const text of ['', 'Nhiều', '1 - 2', '10 năm 20 ngày']) {
+      expect(parseFigure(text), text).toBeNull();
+    }
+  });
+
+  it('counts up from zero once the section enters and ends on the exact text', () => {
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'performance',
+      ],
+    });
+    const stats = {
+      ...section('stats'),
+      content: {
+        heading: 'Những con số',
+        items: [
+          { value: '8.000+', label: 'khách hàng' },
+          { value: '4,9/5', label: 'điểm đánh giá' },
+        ],
+      },
+    };
+    const root = mount({ style: 'smooth' }, [section('navbar'), section('hero'), stats]);
+    place(sectionEl(stats), 2000);
+    const shown = () =>
+      [...sectionEl(stats).querySelectorAll('[data-m-count]')].map((figure) => figure.textContent);
+    const spoken = () =>
+      [...sectionEl(stats).querySelectorAll('[aria-hidden] + span')].map(
+        (figure) => figure.textContent,
+      );
+    startMotion(root);
+    expect(shown()).toEqual(['8.000+', '4,9/5']);
+
+    FakeObserver.last?.enter(sectionEl(stats));
+    expect(shown()).toEqual(['0+', '0,0/5']);
+    vi.advanceTimersByTime(700);
+    const midway = shown();
+    expect(midway).not.toEqual(['0+', '0,0/5']);
+    expect(midway).not.toEqual(['8.000+', '4,9/5']);
+    // Screen readers always read the real values.
+    expect(spoken()).toEqual(['8.000+', '4,9/5']);
+
+    vi.runAllTimers();
+    expect(shown()).toEqual(['8.000+', '4,9/5']);
+    expect(sectionEl(stats).hasAttribute('data-motion')).toBe(false);
   });
 });

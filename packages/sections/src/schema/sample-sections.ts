@@ -9,6 +9,7 @@ import type { LeadFormContent } from './sections/lead-form.js';
 import type { LogosContent } from './sections/logos.js';
 import type { NavbarContent } from './sections/navbar.js';
 import type { QuickContactContent } from './sections/quick-contact.js';
+import type { StatsContent } from './sections/stats.js';
 import type { TestimonialsContent } from './sections/testimonials.js';
 
 /*
@@ -24,6 +25,7 @@ interface ContentByType {
   testimonials: TestimonialsContent;
   logos: LogosContent;
   before_after: BeforeAfterContent;
+  stats: StatsContent;
   faq: FaqContent;
   lead_form: LeadFormContent;
   quick_contact: QuickContactContent;

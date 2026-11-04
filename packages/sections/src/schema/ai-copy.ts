@@ -13,12 +13,14 @@ import { getSectionDefinition, getVariant, listMaximum, listMinimum } from './re
 /**
  * Fields the AI never writes, by section type: facts only the business knows. The brand (empty
  * is the site name); real customers' words and names; captions of photos the AI never sees; the
- * business's own name, address, phone number, opening hours and links.
+ * business's own figures (`items.value`: one field of every list item); the business's own name,
+ * address, phone number, opening hours and links.
  */
 export const AI_NEVER_WRITES: Readonly<Partial<Record<SectionType, readonly string[]>>> = {
   navbar: ['brandText'],
   testimonials: ['items'],
   before_after: ['beforeCaption', 'afterCaption'],
+  stats: ['items.value'],
   footer: ['businessName', 'address', 'phone', 'hours', 'links', 'copyright'],
 };
 
@@ -57,9 +59,15 @@ function isHidden(variant: SectionVariant | undefined, key: string): boolean {
   return variant?.hiddenFields?.includes(key) ?? false;
 }
 
-function listItemSlots(field: ListField, variant: SectionVariant | undefined): CopySlot[] {
+function listItemSlots(
+  field: ListField,
+  variant: SectionVariant | undefined,
+  never: readonly string[],
+): CopySlot[] {
   return field.itemFields.flatMap((itemField): CopySlot[] =>
-    itemField.kind === 'text' && !isHidden(variant, `${field.key}.${itemField.key}`)
+    itemField.kind === 'text' &&
+    !isHidden(variant, `${field.key}.${itemField.key}`) &&
+    !never.includes(`${field.key}.${itemField.key}`)
       ? [
           {
             key: itemField.key,
@@ -121,7 +129,7 @@ export function copyPlanOf(
         break;
       }
       case 'list': {
-        const slots = listItemSlots(field, variant);
+        const slots = listItemSlots(field, variant, never);
         if (slots.length > 0) {
           lists.push({
             key: field.key,

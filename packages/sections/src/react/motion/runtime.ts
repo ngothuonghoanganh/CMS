@@ -1,15 +1,18 @@
 /*
  * Runs the motion presets of a page (ADR-032). It only writes what React never renders: the
- * `data-motion` state of a section, the `--plp-m-*` place of its parts, and the masks of a heading
- * whose lines rise, which it takes out again once the section has entered. Sections visible when it
- * starts stay as they are, so nothing on screen hides or flashes; the others wait until a visitor
- * scrolls to them, then run once.
+ * `data-motion` state of a section, the `--plp-m-*` place of its parts, the masks of a heading whose
+ * lines rise and the passing values of a figure that counts up, which it takes back once the
+ * section has entered. Sections visible when it starts stay as they are, so nothing on screen hides
+ * or flashes; the others wait until a visitor scrolls to them, then run once.
  */
 
 /** A section with motion: `SectionFrame` writes how it enters. */
 const SECTION_SELECTOR = '[data-motion-enter]';
 const PART_SELECTOR = '[data-m]';
 const LINES_SELECTOR = 'h1[data-m], h2[data-m]';
+/** A figure drawn for sighted visitors only; screen readers read its real value beside it. */
+const COUNT_SELECTOR = '[data-m-count]';
+const COUNT_MS = 1100;
 /** A section starts once its top passes this share of the viewport's height from the bottom. */
 const START_MARGIN = '0px 0px -15% 0px';
 /** Parts this close to the same top sit in one row. */
@@ -21,6 +24,47 @@ const LINE_STEP_MS = 110;
 export interface MotionOptions {
   /** The scrolling element sections enter; null is the viewport. */
   scrollRoot?: Element | null;
+}
+
+/** A figure as written: "8.000+" is 8000, with "." between thousands and "+" after it. */
+export interface Figure {
+  prefix: string;
+  value: number;
+  decimals: number;
+  groupMark: string | null;
+  decimalMark: string;
+  suffix: string;
+}
+
+/**
+ * Reads a figure that can count up: one number, in groups of three digits or not, maybe with
+ * decimals, between other text ("4,9/5", "Top 3", "100%", "24/7"). Null for anything else, which
+ * then only enters like any other part.
+ */
+export function parseFigure(text: string): Figure | null {
+  // What follows may name what the figure is out of ("/5", "/7"), but holds no other number.
+  const match = /^(\D*?)(\d{1,3}(?:([.,])\d{3})+|\d+)(?:([.,])(\d+))?((?:\D|\/\d+)*)$/.exec(text);
+  if (match === null) {
+    return null;
+  }
+  const [, prefix = '', whole = '', groupMark, decimalMark, decimals = '', suffix = ''] = match;
+  const digits = groupMark === undefined ? whole : whole.split(groupMark).join('');
+  return {
+    prefix,
+    value: Number(`${digits}.${decimals || '0'}`),
+    decimals: decimals.length,
+    groupMark: groupMark ?? null,
+    decimalMark: decimalMark ?? (groupMark === '.' ? ',' : '.'),
+    suffix,
+  };
+}
+
+/** `value` written the way the figure writes its own. */
+export function formatFigure(figure: Figure, value: number): string {
+  const [whole = '0', decimals = ''] = value.toFixed(figure.decimals).split('.');
+  const grouped =
+    figure.groupMark === null ? whole : whole.replace(/\B(?=(\d{3})+$)/g, figure.groupMark);
+  return `${figure.prefix}${grouped}${decimals ? `${figure.decimalMark}${decimals}` : ''}${figure.suffix}`;
 }
 
 function msOf(element: HTMLElement, property: string): number {
@@ -115,8 +159,37 @@ export function startMotion(root: HTMLElement, options: MotionOptions = {}): () 
   ) {
     return () => undefined;
   }
+  const clock = view;
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  const frames = new Set<number>();
   const restores = new Map<HTMLElement, (() => void)[]>();
+
+  /**
+   * Counts a figure up from 0 once its part starts, writing into the text node React rendered so
+   * React keeps owning it, and ends on the exact text it started with.
+   */
+  function countUp(element: HTMLElement, delayMs: number, speed: number): (() => void) | null {
+    const node = element.firstChild;
+    const original = node?.nodeValue ?? null;
+    const figure = original === null ? null : parseFigure(original);
+    if (node === null || original === null || figure === null) {
+      return null;
+    }
+    node.nodeValue = formatFigure(figure, 0);
+    const start = clock.performance.now() + delayMs * speed;
+    const tick = (now: number) => {
+      const progress = Math.min(1, Math.max(0, (now - start) / (COUNT_MS * speed)));
+      node.nodeValue =
+        progress >= 1 ? original : formatFigure(figure, figure.value * (1 - (1 - progress) ** 3));
+      if (progress < 1) {
+        frames.add(clock.requestAnimationFrame(tick));
+      }
+    };
+    frames.add(clock.requestAnimationFrame(tick));
+    return () => {
+      node.nodeValue = original;
+    };
+  }
 
   function finish(section: HTMLElement) {
     for (const restore of restores.get(section) ?? []) {
@@ -135,23 +208,38 @@ export function startMotion(root: HTMLElement, options: MotionOptions = {}): () 
     const accents = (section.dataset['motionAccents'] ?? '').split(' ');
     const phoneReduced =
       root.hasAttribute('data-motion-reduce-mobile') && root.clientWidth < PHONE_WIDTH_PX;
-    let lines = 0;
-    if (accents.includes('lines') && !phoneReduced) {
-      const split = [...section.querySelectorAll<HTMLElement>(LINES_SELECTOR)].map(splitLines);
-      restores.set(
-        section,
-        split.map((heading) => heading.restore),
-      );
-      lines = Math.max(0, ...split.map((heading) => heading.lines));
-    }
-    section.setAttribute('data-motion', 'run');
     const speed = Number.parseFloat(root.style.getPropertyValue('--plp-m-speed')) || 1;
     const duration = msOf(section, '--plp-m-dur');
     const step = msOf(section, '--plp-m-step');
+    const undo: (() => void)[] = [];
+    let lines = 0;
+    if (accents.includes('lines') && !phoneReduced) {
+      const split = [...section.querySelectorAll<HTMLElement>(LINES_SELECTOR)].map(splitLines);
+      undo.push(...split.map((heading) => heading.restore));
+      lines = Math.max(0, ...split.map((heading) => heading.lines));
+    }
+    let counting = 0;
+    if (accents.includes('count')) {
+      // Phones that reduce motion still count: the figure only changes in place.
+      for (const element of section.querySelectorAll<HTMLElement>(COUNT_SELECTOR)) {
+        const part = element.closest<HTMLElement>(PART_SELECTOR);
+        const delay = (indexes[part === null ? -1 : parts.indexOf(part)] ?? 0) * step;
+        const restore = countUp(element, delay, speed);
+        if (restore !== null) {
+          undo.push(restore);
+          counting = Math.max(counting, delay + COUNT_MS);
+        }
+      }
+    }
+    restores.set(section, undo);
+    section.setAttribute('data-motion', 'run');
     // The last part's delay, the longest of its animations (an image settles for 1.6 times the
-    // duration, a line rises for 1.5), and the last line's own delay.
+    // duration, a line rises for 1.5), the last line's own delay, and the last figure counting.
     const total =
-      (Math.max(0, ...indexes) * step + duration * 2 + lines * LINE_STEP_MS + step) * speed;
+      Math.max(
+        Math.max(0, ...indexes) * step + duration * 2 + lines * LINE_STEP_MS + step,
+        counting,
+      ) * speed;
     const timer = setTimeout(() => {
       timers.delete(timer);
       finish(section);
@@ -190,6 +278,10 @@ export function startMotion(root: HTMLElement, options: MotionOptions = {}): () 
       clearTimeout(timer);
     }
     timers.clear();
+    for (const frame of frames) {
+      clock.cancelAnimationFrame(frame);
+    }
+    frames.clear();
     for (const section of root.querySelectorAll<HTMLElement>('[data-motion]')) {
       finish(section);
     }

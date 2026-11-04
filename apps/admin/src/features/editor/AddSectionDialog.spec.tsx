@@ -133,15 +133,21 @@ describe('AddSectionDialog', () => {
     expect(store.getState().draft.composition.sections[0]?.type).toBe('navbar');
   });
 
-  it('offers the cards of the board: steps, partner logos, before and after, quick contact', async () => {
+  it('offers the cards of the board: steps, partner logos, before and after, quick contact, stats', async () => {
     const user = userEvent.setup();
     renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
       store: makeStore(),
     });
     const cards = [
       ['Lợi ích & tính năng', 3, 'Quy trình 3 bước', 'Khách biết điều gì xảy ra sau khi đăng ký.'],
-      ['Bằng chứng xã hội', 4, 'Logo đối tác', 'Hàng logo đơn sắc, tự xuống dòng trên điện thoại.'],
-      ['Bằng chứng xã hội', 4, 'Trước & sau', 'Hai ảnh so sánh, có chú thích và mô tả ảnh.'],
+      ['Bằng chứng xã hội', 5, 'Logo đối tác', 'Hàng logo đơn sắc, tự xuống dòng trên điện thoại.'],
+      ['Bằng chứng xã hội', 5, 'Trước & sau', 'Hai ảnh so sánh, có chú thích và mô tả ảnh.'],
+      [
+        'Bằng chứng xã hội',
+        5,
+        'Số liệu nổi bật',
+        'Các con số lớn xếp thành hàng, hai cột trên điện thoại.',
+      ],
       ['Form & liên hệ', 2, 'Gọi / Zalo nhanh', 'Hai nút liên hệ trực tiếp, không cần form.'],
     ] as const;
     for (const [category, count, name, description] of cards) {
@@ -161,6 +167,7 @@ describe('AddSectionDialog', () => {
     ['logo', 'Logo đối tác'],
     ['truoc', 'Trước & sau'],
     ['quy trinh', 'Quy trình 3 bước'],
+    ['so lieu', 'Số liệu nổi bật'],
   ])('finds “%s” by search', async (query, name) => {
     const user = userEvent.setup();
     renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {

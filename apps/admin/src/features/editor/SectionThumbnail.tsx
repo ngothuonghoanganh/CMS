@@ -61,6 +61,17 @@ const layouts = {
     blk('15%', 16),
   ],
   beforeAfter: [blk('45%', 64, 'light', 6), blk('45%', 64, 'dark', 6)],
+  stats: [
+    blk('50%', 7, 'dark'),
+    blk('100%', 0),
+    blk('26%', 18, 'dark'),
+    blk('26%', 18, 'dark'),
+    blk('26%', 18, 'dark'),
+    blk('100%', 0),
+    blk('26%', 5),
+    blk('26%', 5),
+    blk('26%', 5),
+  ],
   faq: [
     blk('40%', 7, 'dark'),
     blk('100%', 0),
@@ -104,6 +115,8 @@ function layoutOf(type: SectionType, variant: string): Block[] {
       return layouts.logos;
     case 'before_after':
       return layouts.beforeAfter;
+    case 'stats':
+      return layouts.stats;
     case 'faq':
       return layouts.faq;
     case 'lead_form':

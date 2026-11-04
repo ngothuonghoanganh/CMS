@@ -42,6 +42,7 @@ const COPY: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     heading: 'Kết quả sau liệu trình',
     note: 'Kết quả có thể khác nhau tùy từng người.',
   },
+  stats: { heading: 'Những con số nói thay chúng tôi' },
   faq: { heading: 'Câu hỏi thường gặp' },
   lead_form: {
     heading: 'Đăng ký nhận tư vấn',
@@ -72,6 +73,11 @@ const ITEMS: Readonly<Record<string, readonly Readonly<Record<string, string>>[]
     { title: 'Chi phí minh bạch', description: 'Báo giá rõ ràng trước khi bắt đầu.' },
     { title: 'Lịch hẹn linh hoạt', description: 'Chọn thời gian phù hợp với bạn.' },
     { title: 'Không gian thoải mái', description: 'Nơi bạn thấy yên tâm khi đến.' },
+  ],
+  stats: [
+    { label: 'năm kinh nghiệm' },
+    { label: 'khách hàng đã tin chọn' },
+    { label: 'điểm đánh giá trung bình' },
   ],
   faq: [
     {

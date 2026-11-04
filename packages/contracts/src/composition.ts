@@ -9,6 +9,7 @@ export const sectionTypes = [
   'testimonials',
   'logos',
   'before_after',
+  'stats',
   'faq',
   'lead_form',
   'quick_contact',

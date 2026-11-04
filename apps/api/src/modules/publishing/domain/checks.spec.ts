@@ -194,6 +194,26 @@ describe('evaluateChecks: blocking', () => {
     });
   });
 
+  it('blocks a figure the business has not entered yet, item by item', () => {
+    const stats = sampleSection('stats', undefined, 'stat00000001');
+    const missing = run([stats]).blocking.filter((item) => item.code === 'required_field_empty');
+    expect(missing.map((item) => item.target)).toEqual(
+      [0, 1, 2].map((index) => ({
+        kind: 'section',
+        sectionId: stats.id,
+        fieldPath: `items.${index}.value`,
+      })),
+    );
+    const filled = setAtPath(
+      stats,
+      'content.items',
+      ['15', '8.000+', '4,9/5'].map((value) => ({ value, label: 'nhãn' })),
+    );
+    expect(run([filled]).blocking.filter((item) => item.code === 'required_field_empty')).toEqual(
+      [],
+    );
+  });
+
   it('requires the label and the link of a required button', () => {
     const noLabel = heroSection({ id: 'hero00000001', ctaLabel: '' });
     const labelItem = run([noLabel]).blocking.find(

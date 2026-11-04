@@ -43,6 +43,23 @@ describe('the text the AI may write in a section (ADR-031)', () => {
     expect(aiWritablePaths(section('footer'))).toEqual([]);
   });
 
+  it('writes what a figure means but never the figure itself, which only the business knows', () => {
+    expect(aiWritablePaths(section('stats'))).toEqual([
+      'heading',
+      'items.0.label',
+      'items.1.label',
+      'items.2.label',
+    ]);
+    expect(copyPlanOf(section('stats')).lists).toEqual([
+      expect.objectContaining({
+        key: 'items',
+        min: 2,
+        max: 4,
+        fields: [expect.objectContaining({ key: 'label' })],
+      }),
+    ]);
+  });
+
   it('writes the headings, the buttons, or everything, as the action asks', () => {
     const hero = setAtPath(section('hero', 'split'), 'content.secondaryCta.label', 'Xem bảng giá');
     expect(aiActionPaths(hero, 'suggest_heading')).toEqual(['heading']);
