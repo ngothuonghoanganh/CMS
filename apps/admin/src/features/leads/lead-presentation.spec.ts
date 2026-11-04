@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cappedCountLabel,
   consentMoment,
+  deliveryTimeLabel,
   leadDetailMeta,
   leadSourceLine,
   leadTimeLabel,
@@ -23,6 +24,11 @@ describe('lead presentation', () => {
     expect(leadTimeLabel('2026-10-23T17:30:00.000Z', NOW)).toBe('00:30');
     expect(leadTimeLabel('2026-10-22T03:00:00.000Z', NOW)).toBe('22/10');
     expect(leadTimeLabel('2025-12-31T03:00:00.000Z', NOW)).toBe('31/12/2025');
+  });
+
+  it('writes when a notification went out: the time today, the date before', () => {
+    expect(deliveryTimeLabel('2026-10-24T02:10:00.000Z', NOW)).toBe('09:10');
+    expect(deliveryTimeLabel('2026-10-23T16:30:00.000Z', NOW)).toBe('23/10/2026');
   });
 
   it('describes when and from what device a lead came', () => {
