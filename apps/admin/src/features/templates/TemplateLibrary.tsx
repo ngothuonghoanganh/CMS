@@ -207,7 +207,13 @@ export function TemplateLibrary({
       <PageHeader
         context={workspace.name}
         title="Templates"
-        description="Chọn mẫu để tạo trang mới. Trang tạo từ mẫu là bản nháp riêng: sửa mẫu sau này không làm đổi trang đã tạo."
+        description={
+          // Kept to the board's 620px, so "Tạo trang cho" stays beside the title on a wide screen.
+          <span className={styles.lead}>
+            Chọn mẫu để tạo trang mới. Trang tạo từ mẫu là bản nháp riêng: sửa mẫu sau này không làm
+            đổi trang đã tạo.
+          </span>
+        }
         actions={
           targets.length > 0 && siteId !== null ? (
             <div className={styles.siteChoice}>
