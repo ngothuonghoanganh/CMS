@@ -38,6 +38,8 @@ export default defineConfig({
         MONGODB_URI: 'mongodb://localhost:27117/plp_visual?replicaSet=rs0',
         AUTH_RATE_LIMIT_PER_MINUTE: '1000',
         LEAD_LIMIT_PER_CLIENT: '100',
+        // Boards 20 and 21 (ADR-031): the fake AI's fixed copy, never a real service.
+        AI_PROVIDER: 'fake',
       },
       url: `${urls.api}/health`,
       reuseExistingServer: false,

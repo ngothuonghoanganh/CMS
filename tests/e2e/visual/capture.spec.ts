@@ -1,8 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { type Cookie, expect, type Page, test } from '@playwright/test';
+import { fillAiBrief, openAiAssistant } from '../support/ai.js';
 import { animationsSettled } from '../support/axe.js';
 import { type Board, seedBoard } from '../support/board.js';
 import { Editor } from '../support/editor.js';
+import { accountLink, waitForEmail } from '../support/mailpit.js';
+import { uniqueId } from '../support/setup.js';
 import { siteOrigin } from '../urls.js';
 
 /*
@@ -190,6 +193,69 @@ test.describe('Design capture', () => {
         .getByRole('combobox', { name: 'Lấy từ' }),
     ).toBeEnabled();
     await capture(page, 'WorkspaceTemplates-saveDialog');
+  });
+
+  test('13 Domains and 14 DomainConnect', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(sitePath('/domain'));
+    await page.getByRole('link', { name: 'Kết nối tên miền riêng' }).first().click();
+    await page
+      .getByRole('textbox', { name: 'Tên miền' })
+      .fill(`go.smilecare-${uniqueId()}.e2e.test`);
+    await page.getByRole('button', { name: 'Tiếp tục' }).click();
+    await expect(page.getByRole('row', { name: /^TXT/ })).toBeVisible();
+    await capture(page, 'DomainConnect');
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(sitePath('/domain'));
+    await expect(page.getByRole('heading', { level: 1, name: 'Tên miền' })).toBeVisible();
+    await capture(page, 'Domains');
+  });
+
+  test('15 Members, 15b InviteAccept and 16 Roles', async ({ page, browser, request }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`/workspaces/${board.site.workspaceId}/members`);
+    const invited = `thu.ha-${uniqueId()}@example.com`;
+    await page.getByRole('button', { name: 'Mời thành viên' }).click();
+    const invite = page.getByRole('dialog', { name: 'Mời thành viên' });
+    await invite.getByLabel('Email').fill(invited);
+    await invite.getByRole('radio', { name: /Chăm sóc khách hàng/ }).check();
+    await invite.getByRole('radio', { name: /Chỉ các site được chọn/ }).check();
+    await invite.getByRole('checkbox', { name: board.site.name }).check();
+    await invite.getByRole('button', { name: 'Gửi 1 lời mời' }).click();
+    await expect(page.getByText('Đã gửi 1 lời mời', { exact: true })).toBeVisible();
+    await capture(page, 'Members');
+
+    const email = await waitForEmail(request, invited, 'mời bạn vào Mây Xanh Agency');
+    const guest = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const phone = await guest.newPage();
+    await phone.goto(accountLink(email, '/invite'));
+    await expect(phone.getByLabel('Email')).toHaveValue(invited);
+    await capture(phone, 'InviteAccept');
+    await guest.close();
+
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(`/workspaces/${board.site.workspaceId}/roles`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await capture(page, 'Roles');
+  });
+
+  test('20 AiCreate and 21 AiAssistant', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(sitePath('/pages/new/ai'));
+    await fillAiBrief(page, `nieng-rang-ai-${uniqueId()}`);
+    await capture(page, 'AiCreate');
+    await page.getByRole('button', { name: 'Đề xuất cấu trúc trang' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Cấu trúc đề xuất' })).toBeVisible();
+    await capture(page, 'AiCreate-structure');
+
+    const editor = new Editor(page);
+    await editor.goto(board.site.id, board.pages.home.id);
+    await editor.heroRow.click();
+    const panel = await openAiAssistant(page);
+    await panel.getByRole('button', { name: 'Viết lại' }).click();
+    await expect(panel.getByRole('region', { name: 'Gợi ý cho Hero' })).toBeVisible();
+    await capture(page, 'AiAssistant');
   });
 
   // Last: it changes the promotion page's draft, which the screens above draw.
