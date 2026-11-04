@@ -69,6 +69,13 @@ describe('RadioCardGroup', () => {
     expect(onChange).toHaveBeenCalledWith('promo');
   });
 
+  it('puts the radio beside the title on cards without a tile or a preview', () => {
+    render(<GoalPicker onChange={vi.fn()} />);
+    const card = (name: string) => screen.getByRole('radio', { name }).closest('label');
+    expect(card('Sự kiện / webinar')?.className).toMatch(/inline/);
+    expect(card('Thu lead tư vấn')?.className).not.toMatch(/inline/);
+  });
+
   it('can start with nothing selected', () => {
     render(<RadioCardGroup legend="Giao diện" options={goals} value={null} onChange={vi.fn()} />);
     for (const radio of screen.getAllByRole('radio')) {
