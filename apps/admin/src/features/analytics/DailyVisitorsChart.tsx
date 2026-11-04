@@ -125,7 +125,12 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
   }
 
   return (
-    <Card as="section" padding="lg" aria-labelledby={headingId} className={styles.card}>
+    <Card
+      as="section"
+      padding="md"
+      aria-labelledby={headingId}
+      className={cx(styles.card, styles.chartCard)}
+    >
       <div className={styles.cardHeader}>
         <h2 id={headingId} className={styles.cardTitle}>
           Khách duy nhất mỗi ngày
