@@ -963,6 +963,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Integration test** chạy với `TRUST_PROXY_HOPS=1`, địa chỉ do renderer ký và giới hạn mặc định.
     - Kiểm: 5 lead và 60 lượt xem cho mỗi địa chỉ; hai địa chỉ cùng trình duyệt là hai khách; IPv6 và IPv4-mapped.
     - Route relay không đọc `X-Forwarded-For`, kể cả khi header có phần tử giả ở đầu.
+- **Sửa 2026-11-04 (test giao diện của Chuyển động):** chữ khách gõ vào form vẽ sẵn trên server trước khi script của form tới không còn bị mất.
+  - Nguyên nhân: khi script tới, React thay form của server bằng form của nó, form mới bắt đầu trống. Trên điện thoại mạng chậm, script tới sau vài giây, nên khách gõ trước đó sẽ mất hết. E2E phát hiện lỗi này khi gói script của trang lớn thêm.
+  - Cách sửa: `LeadFormSlot` theo dõi form của server từ lúc hydrate, giữ những gì khách gõ, tick, cùng ô và vị trí con trỏ (`typed-form.ts`). Form của client ghi lại các giá trị đó trước khi trình duyệt vẽ nó. Trường ẩn của trang (release, mã gửi) không bị chép.
+  - Thời gian điền form vẫn tính từ lúc mở trang, không phải lúc script tới, nên khách vẫn không bị coi là bot.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -2475,7 +2479,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `SectionFrame` gắn cách xuất hiện, thứ tự, điểm nhấn và thời lượng đã phân giải thành thuộc tính `data-motion-enter|order|accents` và biến CSS `--plp-m-dur`, `--plp-m-step`. Gốc của trang có `data-motion-root` và khoảng trượt, tỉ lệ của mức độ.
     - Section đánh dấu các phần chuyển động bằng `data-m="text"` hay `data-m="media"` (`Text`, `CtaButton` nhận `part`); một phần không chứa phần khác. CSS Module `motion.module.css` chứa keyframes, và chỉ ẩn phần của section đang `data-motion="wait"`.
     - `MotionRuntime` là client component nhỏ, chỉ có ở trang có phong cách khác "Không hiệu ứng", trên trang live và xem trước. Sau hydration nó:
-      - để nguyên section đang nằm trong vùng nhìn; đặt `wait` cho section khác và chạy chúng (`run`) khi đỉnh của chúng qua 85% chiều cao vùng nhìn;
+      - để nguyên section đang nằm trong vùng nhìn; đặt `wait` cho section khác và chạy chúng (`run`) khi đỉnh của chúng qua 85% chiều cao vùng nhìn, hoặc khi 95% của section đã hiện. Điều kiện sau cho section ngắn ở cuối trang (chân trang thấp hơn 15% màn hình), vốn không bao giờ có đỉnh qua mốc đó;
       - ghi thứ tự của từng phần (`--plp-m-i`): thứ tự trong trang, hay hàng theo vị trí;
       - với "Tiêu đề từng dòng", tách từng từ của tiêu đề (`h1`, `h2`) vào khung che và đánh số dòng theo vị trí, đặt `aria-label` là cả tiêu đề, rồi trả lại đúng các text node cũ khi chạy xong;
       - chạy xong thì bỏ `data-motion`, nên section trở về như chưa từng có hiệu ứng.
@@ -2503,6 +2507,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Bật một điểm nhấn về đúng giá trị của phong cách (ở trang) hay của trang (ở section) thì nó thôi là thay đổi riêng ("theo phong cách", "Theo cài đặt trang").
   - Trang để "Không hiệu ứng" thì nhóm "Hiệu ứng xuất hiện" của section chỉ nói vì sao không có gì chuyển động và mở Cài đặt trang.
   - Thư viện phong cách (màn 39) đổi phong cách bằng cùng command với màn 37. Mức độ trong thư viện chỉ đổi các mẫu xem thử; mức độ của trang chỉ có một editor chính thức là màn 37.
+  - Quy trình có "Các bước nối nhau" đang bật luôn hiện từng bước theo đường nối, nên nhóm của nó không cho chọn thứ tự mà chỉ nói lý do.
+  - Section Số liệu nổi bật có đúng 3 con số thì trên điện thoại cũng xếp một hàng, chữ số 24 px, như board.
+  - Banner "Chạy thử" được ghim ở đầu canvas, vì canvas tự cuộn tới cuối trang khi chạy; trong lúc chạy không có nút "Thêm section ở đây".
   - **Chạy thử** là trạng thái của editor, không phải của bản nháp: không có bước hoàn tác, không lưu.
     - Chạy cả trang thì canvas cuộn lên đầu rồi tự cuộn xuống (1,4 giây mỗi màn hình), mọi section có chuyển động chạy khi vào khung, kể cả section đang hiện. Chạy một section thì cuộn tới nó rồi chạy.
     - "Xem chậm" nhân thời gian với 4 (`--plp-m-speed`). "Như thiết bị bật giảm chuyển động" hiện mọi thứ ngay.
