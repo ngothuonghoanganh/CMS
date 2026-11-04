@@ -196,6 +196,42 @@
   gap: 6px;
 }
 
+/* The board's outlines: danger for the blocking fix, amber for skipping a warning. The doubled
+   class outweighs the Button's own variant colors. */
+.fixBlocking.fixBlocking {
+  border-color: color-mix(in srgb, var(--color-danger-border) 85%, var(--color-danger));
+  color: var(--color-danger);
+}
+
+.fixBlocking.fixBlocking:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-ink);
+}
+
+.warning .ignoreToggle.ignoreToggle {
+  border-color: color-mix(in srgb, var(--color-warning-border) 85%, var(--color-warning-icon));
+  color: var(--color-warning-strong-ink);
+  font-weight: 500;
+}
+
+.warning .ignoreToggle.ignoreToggle:hover {
+  background: var(--color-warning-soft);
+}
+
+/*
+ * A long check list scrolls the dialog body. This strip sits in the body's bottom padding and
+ * sticks to the bottom edge while more content is below, so the cut-off rows fade out; at the end
+ * of the scroll it rests over the empty padding and is invisible.
+ */
+.scrollCue {
+  position: sticky;
+  bottom: 0;
+  height: 20px;
+  margin-bottom: -20px;
+  background: linear-gradient(to bottom, transparent, var(--color-surface));
+  pointer-events: none;
+}
+
 .passed {
   padding: 0 14px;
   border: 1px solid var(--color-border);
