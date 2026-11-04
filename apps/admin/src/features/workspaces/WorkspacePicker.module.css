@@ -101,6 +101,37 @@
   background: var(--color-surface);
 }
 
+/* The initials tile: one tone per workspace (workspace-tile.ts), 14px initials as on the board.
+   Scoped under the row so it outranks the Avatar's own square colours. */
+.item .tile {
+  font-size: var(--text-body);
+}
+
+.item .tile-ink {
+  background: var(--color-ink);
+  color: var(--color-on-primary);
+}
+
+.item .tile-mint {
+  background: var(--color-success-soft);
+  color: var(--color-success-strong-ink);
+}
+
+.item .tile-peach {
+  background: var(--color-warning-badge-bg);
+  color: var(--color-warning-ink);
+}
+
+.item .tile-indigo {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-ink);
+}
+
+.item .tile-slate {
+  background: var(--color-neutral-badge-bg);
+  color: var(--color-neutral-badge-ink);
+}
+
 .text {
   display: flex;
   flex-direction: column;
