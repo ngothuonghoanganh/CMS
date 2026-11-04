@@ -3,6 +3,7 @@ import { vnDaySchema, vnMonthSchema } from './calendar.js';
 import { idSchema } from './common.js';
 import { MAX_SECTIONS, sectionIdSchema, sectionTypeSchema } from './composition.js';
 import { pageGoalSchema } from './goals.js';
+import { motionStyleIds } from './motion.js';
 import { pageTitleSchema, slugSchema } from './page.js';
 
 /**
@@ -75,6 +76,14 @@ export const aiStructureItemSchema = z.object({
 });
 export type AiStructureItem = z.infer<typeof aiStructureItemSchema>;
 
+/**
+ * The page's motion of the structure step (ADR-032): "AI chọn" lets the job's AI pick the style and
+ * a few sections of their own, a style is the user's and the AI is not asked.
+ */
+export const aiMotionChoiceIds = ['auto', ...motionStyleIds] as const;
+export const aiMotionChoiceSchema = z.enum(aiMotionChoiceIds);
+export type AiMotionChoice = z.infer<typeof aiMotionChoiceSchema>;
+
 export const aiPageJobRequestSchema = z.object({
   title: pageTitleSchema,
   slug: slugSchema,
@@ -83,6 +92,7 @@ export const aiPageJobRequestSchema = z.object({
     .array(aiStructureItemSchema)
     .min(1, 'Trang cần ít nhất một section')
     .max(MAX_SECTIONS, `Một trang có tối đa ${MAX_SECTIONS} section`),
+  motion: aiMotionChoiceSchema.default('auto'),
 });
 export type AiPageJobRequest = z.input<typeof aiPageJobRequestSchema>;
 

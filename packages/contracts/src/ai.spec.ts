@@ -52,6 +52,19 @@ describe('the AI brief (ADR-031)', () => {
     expect(long.error?.issues[0]?.message).toBe('Tối đa 4000 ký tự');
   });
 
+  it('lets the AI choose the motion unless the user picks a style (ADR-032)', () => {
+    const request = {
+      title: 'Trang',
+      slug: 'trang',
+      brief: BRIEF,
+      structure: [{ type: 'hero', variant: 'split' }],
+    };
+    expect(aiPageJobRequestSchema.parse(request).motion).toBe('auto');
+    expect(aiPageJobRequestSchema.parse({ ...request, motion: 'none' }).motion).toBe('none');
+    expect(aiPageJobRequestSchema.parse({ ...request, motion: 'luxe' }).motion).toBe('luxe');
+    expect(aiPageJobRequestSchema.safeParse({ ...request, motion: 'bounce' }).success).toBe(false);
+  });
+
   it('reads one line of the progress stream', () => {
     expect(
       aiJobEventSchema.parse({ type: 'section', sectionId: 'abcdefgh1234', status: 'writing' }),
