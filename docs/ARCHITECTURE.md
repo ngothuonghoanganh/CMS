@@ -67,7 +67,6 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
 - Form có trường tùy ý, captcha của bên thứ ba, banner cookie, tạo trang chính sách từ mẫu.
 - CRM và automation (Phase 3), gói, thanh toán và marketplace (Phase 4): chưa có quyết định phạm vi. Mọi phần của màn 17–21 nói tới Marketplace hay gói thuộc Phase 4.
-- Vai trò tùy chỉnh, luồng "yêu cầu xuất bản" của Cộng tác viên (ADR-020).
 - Free styling, điểm lưu bản nháp, rich text, màu thương hiệu tự nhập.
 
 **Nguyên tắc:**
