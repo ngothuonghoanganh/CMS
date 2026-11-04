@@ -255,6 +255,7 @@ export function MembersScreen({
           <div className={styles.filters}>
             <Field label="Lọc theo vai trò" hideLabel id="members-role">
               <Select
+                className={styles.filterControl}
                 value={roleFilter}
                 onChange={(event) => {
                   setRoleFilter(event.target.value);
@@ -275,6 +276,7 @@ export function MembersScreen({
             </Field>
             <Field label="Lọc theo site" hideLabel id="members-site">
               <Select
+                className={styles.filterControl}
                 value={siteFilter}
                 onChange={(event) => {
                   setSiteFilter(event.target.value);
@@ -290,6 +292,7 @@ export function MembersScreen({
             </Field>
             <Field label="Tìm thành viên" hideLabel id="members-search">
               <Input
+                className={styles.filterControl}
                 type="search"
                 leadingIcon={<SearchIcon size={16} />}
                 placeholder="Tên hoặc email"
@@ -342,7 +345,10 @@ export function MembersScreen({
                           </span>
                         </th>
                         <td>
-                          <Badge tone={member.role === 'owner' ? 'primary' : 'neutral'}>
+                          <Badge
+                            tone={member.role === 'owner' ? 'info' : 'neutral'}
+                            className={member.role === 'admin' ? styles.adminChip : undefined}
+                          >
                             {accessLabel(member.role)}
                           </Badge>
                         </td>
