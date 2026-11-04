@@ -40,7 +40,8 @@ built anew, not taken from it.
   the activity log.
 - The renderer serves releases only. No release means 404, never a draft.
 - Preview links are signed, expiring and `noindex`.
-- The editor has no free styling: variants, AA-checked color schemes and spacing presets only.
+- The editor has no free styling: variants, AA-checked color schemes, spacing presets and motion
+  presets (ADR-032) only.
 
 ## Architecture rules
 

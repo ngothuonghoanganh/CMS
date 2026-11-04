@@ -5,7 +5,7 @@ Thư mục này là bản sao chỉ đọc của thiết kế sản phẩm. Dùn
 ## Nguồn
 
 - **Artifact:** "Payload Landing Page — Product Design", https://claude.ai/artifact/1zhYYRkfqj7xNUVf1WSn4k
-- **Phiên bản đã nhập:** `1792838787-b170`, ngày 2026-10-24 (màn 01–12, Sidebar). Các board Phase 1 (màn 13–16, 15b, Sidebar v2) và hai ghi chú `phase1`, `phase1Decisions` của `canvas.json` nhập từ `1793503258-d63e`, ngày 2026-11-01. Các board D2 (màn 34–36), Sidebar v2 có trạng thái mở danh sách workspace, và hai ghi chú `d2`, `d2Decisions` nhập từ `1793546061-78b0`, ngày 2026-11-01. Các board Phase 2 (màn 17–21, ảnh thu nhỏ template) và hai ghi chú `phase2`, `phase2Decisions` nhập từ cùng phiên bản, ngày 2026-11-02.
+- **Phiên bản đã nhập:** `1792838787-b170`, ngày 2026-10-24 (màn 01–12, Sidebar). Các board Phase 1 (màn 13–16, 15b, Sidebar v2) và hai ghi chú `phase1`, `phase1Decisions` của `canvas.json` nhập từ `1793503258-d63e`, ngày 2026-11-01. Các board D2 (màn 34–36), Sidebar v2 có trạng thái mở danh sách workspace, và hai ghi chú `d2`, `d2Decisions` nhập từ `1793546061-78b0`, ngày 2026-11-01. Các board Phase 2 (màn 17–21, ảnh thu nhỏ template) và hai ghi chú `phase2`, `phase2Decisions` nhập từ cùng phiên bản, ngày 2026-11-02. Các board Chuyển động (màn 37–40) và hai ghi chú `motion`, `motionDecisions` nhập từ `1793733435-70e7`, ngày 2026-11-04.
 - **Nội dung:** `screens/*.dc.html` (một file một board) và `screens/canvas.json` (tên board, bố cục canvas, giả định thiết kế).
 - **Không tìm thấy khi nhập:** `README` gốc (danh sách quy tắc UX cốt lõi), `proposal/` và `research/`. Artifact "Design System" cũng chưa có token.
   - Token admin vì vậy được trích từ inline style của các màn 01–08.
@@ -61,6 +61,15 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 | 20  | Tạo landing page bằng AI    | `AiCreate.dc.html`           | G4     |
 | 21  | Trợ lý AI trong editor      | `AiAssistant.dc.html`        | G5     |
 | —   | Ảnh thu nhỏ template        | `TemplateThumb.dc.html`      | G1     |
+
+**Chuyển động** (ARCHITECTURE §5, ADR-032):
+
+| #   | Board                                   | File                    | Lát                                                   |
+| --- | --------------------------------------- | ----------------------- | ----------------------------------------------------- |
+| 37  | Cài đặt trang → Phong cách chuyển động  | `MotionPage.dc.html`    | M1 (hiển thị), M3                                     |
+| 38  | Thuộc tính section → Hiệu ứng xuất hiện | `MotionSection.dc.html` | M3                                                    |
+| 39  | Thư viện phong cách chuyển động         | `StyleLibrary.dc.html`  | M3                                                    |
+| 40  | Bộ hiệu ứng mở rộng (34 hiệu ứng)       | `EffectCatalog.dc.html` | Tham chiếu; bản đầu giữ 10 hiệu ứng "đã có" (ADR-032) |
 
 ## Giả định thiết kế (từ `canvas.json`)
 
