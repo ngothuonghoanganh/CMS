@@ -64,7 +64,8 @@ describe('SitesScreen', () => {
     renderScreen('owner', [smile, kitchen]);
 
     expect(screen.getByRole('heading', { level: 1, name: 'Sites' })).toBeInTheDocument();
-    expect(screen.getByText('Mây Xanh Agency')).toBeInTheDocument();
+    // No workspace-name line above the title: the sidebar names the workspace (board Sites).
+    expect(screen.queryByText('Mây Xanh Agency')).not.toBeInTheDocument();
     expect(
       within(screen.getByRole('table'))
         .getAllByRole('columnheader')

@@ -26,7 +26,6 @@ const columnLabels: Record<Role, string> = { ...roleLabels, support: 'CSKH' };
 
 export interface RolesScreenProps {
   workspaceId: string;
-  workspaceName: string;
   /** Members of the workspace per role. */
   counts: Record<Role, number>;
   /** The workspace's custom roles with who holds them (ADR-024). */
@@ -44,7 +43,6 @@ type Selection = { kind: 'system'; role: Role } | { kind: 'custom'; id: string }
  */
 export function RolesScreen({
   workspaceId,
-  workspaceName,
   counts,
   initialCustomRoles,
   loadedAt,
@@ -72,7 +70,6 @@ export function RolesScreen({
   return (
     <PageContainer>
       <PageHeader
-        context={workspaceName}
         title="Vai trò & quyền"
         description="Vai trò quyết định một người được làm gì. Chủ sở hữu và Quản trị làm việc trên mọi site của workspace; các vai trò khác có thể chỉ được vào một số site."
         actions={

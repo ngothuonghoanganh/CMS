@@ -31,7 +31,6 @@ function renderRoles(customRoles: CustomRole[] = []) {
   return renderWithProviders(
     <RolesScreen
       workspaceId={WORKSPACE_ID}
-      workspaceName="Mây Xanh Agency"
       counts={counts}
       initialCustomRoles={customRoles}
       loadedAt={Date.now()}

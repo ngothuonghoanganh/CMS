@@ -17,7 +17,10 @@ export interface CheckboxProps extends Omit<
   className?: string | undefined;
 }
 
-/** Native checkbox whose label is part of the click target, e.g. "Ảnh chỉ để trang trí". */
+/**
+ * Native checkbox drawn as the design system's rounded box. The whole row is the click target,
+ * e.g. "Ảnh chỉ để trang trí".
+ */
 export function Checkbox({
   label,
   description,
@@ -32,13 +35,15 @@ export function Checkbox({
   const hasDescription = hasContent(description);
   return (
     <div className={cx(styles.row, className)}>
-      <input
-        {...rest}
-        id={inputId}
-        type="checkbox"
-        aria-describedby={joinIds(hasDescription && descriptionId, describedBy)}
-        className={styles.box}
-      />
+      <span className={styles.control}>
+        <input
+          {...rest}
+          id={inputId}
+          type="checkbox"
+          aria-describedby={joinIds(hasDescription && descriptionId, describedBy)}
+          className={styles.box}
+        />
+      </span>
       <div className={styles.text}>
         <label htmlFor={inputId} className={styles.label}>
           {label}

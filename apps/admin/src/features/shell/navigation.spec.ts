@@ -14,7 +14,7 @@ import {
 } from './navigation';
 
 const siteId = '64b000000000000000000001';
-const [pages, leads, analytics, domain, privacy, settings] = siteNavItems(siteId);
+const [pages, leads, analytics, domain, settings, privacy] = siteNavItems(siteId);
 
 describe('siteNavItems', () => {
   it('lists the sections of a site in the order of the design', () => {
@@ -39,16 +39,16 @@ describe('siteNavItems', () => {
         permissions: ['domains.manage'],
       },
       {
-        key: 'privacy',
-        label: 'Dữ liệu & đồng ý',
-        href: `/sites/${siteId}/privacy`,
-        permissions: ['privacy.manage', 'personalData.manage'],
-      },
-      {
         key: 'settings',
         label: 'Cài đặt site',
         href: `/sites/${siteId}/settings`,
         permissions: ['pages.edit'],
+      },
+      {
+        key: 'privacy',
+        label: 'Dữ liệu & đồng ý',
+        href: `/sites/${siteId}/privacy`,
+        permissions: ['privacy.manage', 'personalData.manage'],
       },
     ]);
   });
