@@ -47,7 +47,6 @@ export default async function RolesPage({ params }: RolesPageProps) {
   return (
     <RolesScreen
       workspaceId={workspaceId}
-      workspaceName={membership.workspace.name}
       counts={counts}
       initialCustomRoles={customRoles}
       loadedAt={loadedAt}

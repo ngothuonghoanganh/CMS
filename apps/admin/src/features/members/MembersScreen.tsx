@@ -217,7 +217,6 @@ export function MembersScreen({
   return (
     <PageContainer width="wide">
       <PageHeader
-        context={workspace.name}
         title="Thành viên"
         description={
           <>

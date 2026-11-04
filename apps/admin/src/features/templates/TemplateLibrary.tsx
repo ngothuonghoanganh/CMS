@@ -205,7 +205,6 @@ export function TemplateLibrary({
   return (
     <PageContainer>
       <PageHeader
-        context={workspace.name}
         title="Templates"
         description="Chọn mẫu để tạo trang mới. Trang tạo từ mẫu là bản nháp riêng: sửa mẫu sau này không làm đổi trang đã tạo."
         actions={
