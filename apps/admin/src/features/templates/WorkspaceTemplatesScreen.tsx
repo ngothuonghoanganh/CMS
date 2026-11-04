@@ -11,7 +11,6 @@ import {
   type WorkspaceTemplate,
 } from '@plp/contracts';
 import {
-  ArrowLeftIcon,
   Button,
   Callout,
   DropdownMenu,
@@ -179,12 +178,13 @@ export function WorkspaceTemplatesScreen({
 
   return (
     <PageContainer>
-      <Link href={templatesHref(workspace.id)} className={styles.back}>
-        <ArrowLeftIcon size={16} />
-        Templates
-      </Link>
       <PageHeader
-        context={workspace.name}
+        // Board 19: a single small link back to the library above the title, no other eyebrow.
+        context={
+          <Link href={templatesHref(workspace.id)} className={styles.back}>
+            Templates
+          </Link>
+        }
         title="Template của workspace"
         description={`Mẫu nội bộ của ${workspace.name}, lưu từ những trang chạy tốt để dùng lại cho khách hàng khác.`}
         actions={saveButton}
