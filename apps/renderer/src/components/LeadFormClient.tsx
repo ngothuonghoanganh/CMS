@@ -8,7 +8,14 @@ import {
   LeadFormView,
   type LeadFormViewProps,
 } from '@plp/sections/react';
-import { type SubmitEvent, useEffect, useRef, useState } from 'react';
+import {
+  type RefObject,
+  type SubmitEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   checkLeadRequest,
   LEAD_FIELD_ORDER,
@@ -16,6 +23,7 @@ import {
   leadRequestCandidate,
   leadSourceFrom,
 } from '../lib/lead-request';
+import { formOf, type TypedForm, writeTypedForm } from './typed-form';
 
 const MESSAGES = {
   rateLimited: 'Bạn đã gửi nhiều lần, hãy thử lại sau ít phút.',
@@ -54,10 +62,24 @@ function issuesOf(body: unknown) {
  * checks fields as the API will, sends JSON to `/_lead`, and shows the confirmation in the section.
  * One submission id per form, kept across retries, so a retry is never a second lead.
  */
-export function LeadFormClient(props: LeadFormViewProps) {
+export interface LeadFormClientProps extends LeadFormViewProps {
+  /** What the visitor typed into the server's form, read as it left the page (`LeadFormSlot`). */
+  typedRef?: RefObject<TypedForm | null>;
+}
+
+export function LeadFormClient({ typedRef, ...props }: LeadFormClientProps) {
   const [state, setState] = useState<FormState>(IDLE);
   const submissionId = useRef<string | null>(null);
   const sentHeading = useRef<HTMLHeadingElement>(null);
+
+  // Before the browser paints this form, it holds what the visitor typed into the server's.
+  useLayoutEffect(() => {
+    const carried = typedRef?.current ?? null;
+    if (typedRef !== undefined && carried !== null) {
+      writeTypedForm(formOf(props.sectionId), carried);
+      typedRef.current = null;
+    }
+  }, [typedRef, props.sectionId]);
 
   useEffect(() => {
     if (state.sent) {

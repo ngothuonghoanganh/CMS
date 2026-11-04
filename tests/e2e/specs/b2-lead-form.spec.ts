@@ -6,9 +6,12 @@ import {
   confirmRecipientViaApi,
   createPageViaApi,
   PRIVACY,
+  setUpLeadCaptureViaApi,
   setUpSite,
   uniqueId,
 } from '../support/setup.js';
+import { publishViaApi } from '../support/board.js';
+import { VISITOR_UA } from '../support/visitor.js';
 import { siteOrigin } from '../urls.js';
 
 const FILLED_CONSENT = `Tôi đồng ý để ${PRIVACY.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`;
@@ -158,5 +161,78 @@ test.describe('B2 · lead form', () => {
     await expect(editor.rows.filter({ hasText: 'Form đăng ký' })).toHaveCount(1);
     await expect(editor.canvas.getByText('Đăng ký tư vấn miễn phí')).toBeVisible();
     await editor.expectSaved();
+  });
+
+  // ADR-016: on a slow phone the form's script arrives seconds after the form drawn on the server,
+  // which React then replaces with its own. What the visitor already typed must survive that.
+  test('keeps what a visitor typed while the form’s script was still on its way', async ({
+    page,
+    browser,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    await setUpLeadCaptureViaApi(page.request, site.id);
+    const slug = `cham-${uniqueId()}`;
+    const created = await createPageViaApi(page.request, site.id, {
+      title: 'Tư vấn qua mạng chậm',
+      slug,
+      start: {
+        kind: 'goal',
+        goal: 'lead',
+        brief: { offer: 'Niềng răng trong suốt', audience: '', phone: '0901 234 567' },
+        style: 'calm',
+      },
+    });
+    await publishViaApi(page.request, created.page);
+
+    const context = await browser.newContext({ userAgent: VISITOR_UA });
+    const visitor = await context.newPage();
+    // Hold back only the form's own script: it is the one that knows "Bạn đã gửi nhiều lần".
+    const gate: { release: () => void } = {
+      release: () => {
+        throw new Error('The script is not held yet');
+      },
+    };
+    const held = new Promise<void>((resolve) => {
+      gate.release = resolve;
+    });
+    let heldBack = false;
+    await visitor.route('**/_next/static/chunks/**', async (route) => {
+      const response = await route.fetch();
+      const body = await response.text();
+      if (body.includes('Bạn đã gửi nhiều lần')) {
+        heldBack = true;
+        await held;
+      }
+      await route.fulfill({ response, body });
+    });
+    await visitor.goto(`${siteOrigin(site.subdomain)}/${slug}`);
+    const form = liveForm(visitor);
+    await form.getByRole('textbox', { name: 'Họ và tên' }).fill('Nguyễn Thu Hà');
+    await form.getByRole('textbox', { name: 'Số điện thoại' }).fill('0901 234 567');
+    await form.getByRole('checkbox', { name: FILLED_CONSENT }).check();
+    await form.getByRole('textbox', { name: 'Họ và tên' }).focus();
+    expect(heldBack).toBe(true);
+
+    // The script arrives: React takes the form over, replacing the server's or hydrating it.
+    gate.release();
+    await expect
+      .poll(() =>
+        form.evaluate((element) =>
+          Object.keys(element).some((key) => key.startsWith('__reactProps')),
+        ),
+      )
+      .toBe(true);
+    await expect(form.getByRole('textbox', { name: 'Họ và tên' })).toHaveValue('Nguyễn Thu Hà');
+    await expect(form.getByRole('textbox', { name: 'Số điện thoại' })).toHaveValue('0901 234 567');
+    await expect(form.getByRole('checkbox', { name: FILLED_CONSENT })).toBeChecked();
+    await expect(form.getByRole('textbox', { name: 'Họ và tên' })).toBeFocused();
+
+    // A person takes more than 3 seconds to fill the form; faster is taken for a bot (ADR-016).
+    await visitor.waitForTimeout(3100);
+    await form.getByRole('button', { name: 'Gửi đăng ký' }).click();
+    await expect(
+      visitor.getByRole('status').filter({ hasText: 'Đã nhận đăng ký của bạn' }),
+    ).toBeVisible();
+    await context.close();
   });
 });
