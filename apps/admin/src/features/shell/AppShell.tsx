@@ -80,7 +80,9 @@ export function AppShell({ children, ...sidebar }: AppShellProps) {
           </span>
         </header>
         <aside className={styles.sidebar}>
-          <Sidebar {...sidebar} />
+          <div className={styles.sidebarInner}>
+            <Sidebar {...sidebar} />
+          </div>
         </aside>
         <main id="main-content" tabIndex={-1} className={styles.main}>
           {children}
