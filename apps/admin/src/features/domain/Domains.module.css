@@ -82,17 +82,22 @@
   align-items: flex-start;
 }
 
+/* The badges stay on the hostname's line (board 13): a long hostname breaks, they do not drop. */
 .hostLine {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
+.hostLine > :not(.host) {
+  flex: none;
+}
+
 .host {
+  min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-body);
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -147,6 +152,15 @@
   flex-direction: column;
   gap: 10px;
   margin: 0;
+}
+
+.legendNote {
+  margin: 4px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
 }
 
 .legendItem dd {
