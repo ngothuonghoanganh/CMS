@@ -2,6 +2,7 @@ import { type LeadFormContent, leadFormFieldLabels } from '../../schema/sections
 import frame from '../frame.module.css';
 import { LeadFormView } from '../lead-form-view.js';
 import { Text } from '../primitives.js';
+import { MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './LeadForm.module.css';
 
@@ -28,6 +29,7 @@ export function LeadFormSection({ section, content, ctx }: SectionProps<LeadForm
           ctx={ctx}
           sectionId={section.id}
           path="heading"
+          part
           value={content.heading}
           as="h2"
           className={styles.heading}
@@ -37,6 +39,7 @@ export function LeadFormSection({ section, content, ctx }: SectionProps<LeadForm
           ctx={ctx}
           sectionId={section.id}
           path="description"
+          part
           value={content.description}
           as="p"
           className={styles.description}
@@ -44,7 +47,7 @@ export function LeadFormSection({ section, content, ctx }: SectionProps<LeadForm
           placeholder="Mô tả (không bắt buộc)"
         />
       </div>
-      <div className={styles.form}>
+      <div className={styles.form} {...MOTION_TEXT}>
         {leadFormFieldLabels(content).map((label, index) => (
           <div key={label} className={styles.field}>
             <span className={styles.label}>

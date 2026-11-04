@@ -36,6 +36,7 @@ export const testimonialsSection = defineSection<TestimonialsContent>({
       label: 'Nhận xét dạng thẻ',
       description: '3–6 nhận xét có tên và ảnh khách hàng.',
       hasMedia: false,
+      motion: { grid: true, accents: ['lines'] },
       listMin: { items: TESTIMONIALS_CARDS_MIN },
     },
     {
@@ -44,6 +45,7 @@ export const testimonialsSection = defineSection<TestimonialsContent>({
       description:
         'Một nhận xét lớn, phù hợp ngay trước lời kêu gọi. Chỉ hiển thị nhận xét đầu tiên.',
       hasMedia: false,
+      motion: { accents: ['lines'] },
       hiddenFields: ['heading'],
     },
   ],

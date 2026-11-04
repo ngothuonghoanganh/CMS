@@ -282,3 +282,47 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/*
+ * "Các bước nối nhau" (ADR-032): each line to the next step draws once its own step has half
+ * entered, for as long as the steps are apart, so the line reaches each step as it appears.
+ */
+@container plp-page (width >= 768px) {
+  [data-motion='wait'][data-motion-accents~='steps'] .step:not(:last-child)::after {
+    transform: scaleX(0);
+  }
+
+  [data-motion='run'][data-motion-accents~='steps'] .step:not(:last-child)::after {
+    transform-origin: left center;
+    animation-name: draw;
+    animation-duration: calc(var(--plp-m-step) * var(--plp-m-speed, 1));
+    animation-delay: calc(
+      (var(--plp-m-i, 0) * var(--plp-m-step) + var(--plp-m-dur) * 0.5) * var(--plp-m-speed, 1)
+    );
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-motion][data-motion-accents~='steps'] .step:not(:last-child)::after {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+@media print {
+  [data-motion][data-motion-accents~='steps'] .step:not(:last-child)::after {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+@keyframes draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: none;
+  }
+}

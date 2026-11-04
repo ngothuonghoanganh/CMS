@@ -28,6 +28,7 @@ export const faqSection = defineSection<FaqContent>({
       label: 'Hỏi đáp mở rộng',
       description: 'Câu hỏi bấm để mở, đọc được bằng bàn phím.',
       hasMedia: false,
+      motion: { accents: ['lines'] },
     },
   ],
   defaultVariant: 'accordion',

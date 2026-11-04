@@ -33,6 +33,7 @@ export const logosSection = defineSection<LogosContent>({
       description: 'Hàng logo đơn sắc, tự xuống dòng trên điện thoại.',
       // Logos are the whole content: there is no text beside them to reorder on phones.
       hasMedia: false,
+      motion: { grid: true, accents: ['lines'] },
     },
   ],
   defaultVariant: 'row',

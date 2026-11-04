@@ -256,6 +256,109 @@ describe('composition validation on the server', () => {
     });
   });
 
+  describe('motion (ADR-032)', () => {
+    it('stores, publishes and serves the motion presets, without keys no schema knows', async () => {
+      const faq = sampleSection('faq', undefined, 'faqs00000009');
+      const cta = sampleSection('cta_band', undefined, 'ctab00000009');
+      const handMade = [
+        heroSection({ id: 'hero00000009' }),
+        {
+          ...faq,
+          motion: { enter: 'pop', order: 'together', accents: { lines: false }, x: STRAY },
+        },
+        // A section that follows the page in everything stores no motion at all.
+        { ...cta, motion: { accents: {} } },
+      ];
+      const { pageId, response } = await put(handMade, {
+        motion: {
+          style: 'luxe',
+          level: 'high',
+          accents: { image: true },
+          reduceOnMobile: true,
+          x: STRAY,
+        },
+      });
+      expect(response.status).toBe(200);
+
+      const stored = (await storedDraft(pageId)).composition as Composition;
+      expect(JSON.stringify(stored)).not.toContain(STRAY);
+      expect(stored.motion).toEqual({
+        style: 'luxe',
+        level: 'high',
+        accents: { image: true },
+        reduceOnMobile: true,
+      });
+      expect(stored.sections[1]?.motion).toEqual({
+        enter: 'pop',
+        order: 'together',
+        accents: { lines: false },
+      });
+      expect(stored.sections[2]).not.toHaveProperty('motion');
+
+      const published = await publish(client, site.id, pageId);
+      expect(published.release.changeSummary.map((change) => change.label)).toContain(
+        'Chuyển động: Sang trọng',
+      );
+      const release = await t
+        .workspaceDb(workspaceId)
+        .collection<{ composition: Composition }>('releases')
+        .findOne({ _id: new Types.ObjectId(published.release.id) });
+      expect(release?.composition.motion).toEqual(stored.motion);
+      expect(release?.composition.sections[1]?.motion).toEqual(stored.sections[1]?.motion);
+
+      const resolved = resolveResponseSchema.parse(
+        (
+          await new TestClient(t.app)
+            .get(`/public/sites/${site.subdomain}/resolve?path=${published.release.slug}`)
+            .expect(200)
+        ).body,
+      );
+      if (resolved.kind !== 'page') {
+        throw new Error('Expected the page');
+      }
+      expect(resolved.data.page.composition.motion).toEqual(stored.motion);
+    });
+
+    it('stores no motion for a page that does not move', async () => {
+      const { pageId, response } = await put([heroSection({ id: 'hero00000010' })], {
+        motion: { style: 'none', level: 'mid', accents: {}, reduceOnMobile: false },
+      });
+      expect(response.status).toBe(200);
+      expect((await storedDraft(pageId)).composition).not.toHaveProperty('motion');
+    });
+
+    it('refuses a style or an effect that is not one of the presets', async () => {
+      const page = await createPage(client, site.id);
+      for (const [frame, sections, path] of [
+        [
+          { motion: { style: 'parallax', level: 'mid', accents: {}, reduceOnMobile: false } },
+          [heroSection({ id: 'hero00000011' })],
+          ['composition', 'motion', 'style'],
+        ],
+        [
+          {},
+          [
+            heroSection({ id: 'hero00000012' }),
+            { ...sampleSection('faq'), motion: { enter: 'typewriter' } },
+          ],
+          ['composition', 'sections', 1, 'motion', 'enter'],
+        ],
+      ] as const) {
+        const response = await client.put(`/sites/${site.id}/pages/${page.page.id}/draft`, {
+          baseRevision: 0,
+          slug: page.page.slug,
+          composition: { version: 1, sections, ...frame },
+          seo: cleanSeo(),
+        });
+        expect(response.status).toBe(422);
+        expect(problemSchema.parse(response.body).issues).toEqual([
+          expect.objectContaining({ path }),
+        ]);
+      }
+      expect(await storedDraft(page.page.id)).toMatchObject({ revision: 0 });
+    });
+  });
+
   describe('page structure', () => {
     it('refuses a navigation bar that is not first and a footer that is not last', async () => {
       await expectRejected(

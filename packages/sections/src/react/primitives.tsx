@@ -3,6 +3,7 @@ import { isCtaUsed, isExternalHref, linkHref } from '../schema/links.js';
 import type { RenderContext } from './context.js';
 import { EditableText } from './EditableText.js';
 import frame from './frame.module.css';
+import { MOTION_TEXT } from './motion/parts.js';
 
 type TextTag = 'h1' | 'h2' | 'h3' | 'p' | 'span' | 'div' | 'blockquote' | 'cite' | 'strong';
 
@@ -16,6 +17,8 @@ export interface TextProps {
   className?: string | undefined;
   multiline?: boolean;
   placeholder?: string;
+  /** The text enters on its own when the section moves (ADR-032). */
+  part?: boolean;
 }
 
 /** Text from section content: plain in live mode, editable on the canvas in edit mode. */
@@ -28,6 +31,7 @@ export function Text({
   className,
   multiline = false,
   placeholder = 'Nhập nội dung',
+  part = false,
 }: TextProps) {
   const classes =
     [className, multiline ? frame.preLine : undefined].filter(Boolean).join(' ') || undefined;
@@ -51,7 +55,11 @@ export function Text({
     return null;
   }
   const Tag = as;
-  return <Tag className={classes}>{value}</Tag>;
+  return (
+    <Tag className={classes} {...(part && MOTION_TEXT)}>
+      {value}
+    </Tag>
+  );
 }
 
 export interface SectionImageProps {
@@ -106,6 +114,8 @@ export interface CtaButtonProps {
   /** `link` draws a small text link (footer links) instead of a button. */
   variant?: 'primary' | 'secondary' | 'link';
   className?: string | undefined;
+  /** The button enters on its own when the section moves (ADR-032). */
+  part?: boolean;
 }
 
 const ctaVariantClasses = {
@@ -125,14 +135,16 @@ export function CtaButton({
   cta,
   variant = 'primary',
   className,
+  part = false,
 }: CtaButtonProps) {
   if (!isCtaUsed(cta)) {
     return null;
   }
   const classes = [...ctaVariantClasses[variant], className].filter(Boolean).join(' ');
+  const motion = part ? MOTION_TEXT : undefined;
   if (ctx.mode === 'edit') {
     return (
-      <span className={classes}>
+      <span className={classes} {...motion}>
         <Text
           ctx={ctx}
           sectionId={sectionId}
@@ -145,7 +157,11 @@ export function CtaButton({
   }
   const href = linkHref(cta.link, ctx.pagePaths);
   if (!href) {
-    return <span className={classes}>{cta.label}</span>;
+    return (
+      <span className={classes} {...motion}>
+        {cta.label}
+      </span>
+    );
   }
   const external = isExternalHref(href);
   return (
@@ -153,6 +169,7 @@ export function CtaButton({
       className={classes}
       href={href}
       {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+      {...motion}
     >
       {cta.label}
     </a>

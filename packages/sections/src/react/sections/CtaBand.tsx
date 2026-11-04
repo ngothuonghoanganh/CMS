@@ -10,6 +10,7 @@ export function CtaBandSection({ section, content, ctx }: SectionProps<CtaBandCo
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -19,6 +20,7 @@ export function CtaBandSection({ section, content, ctx }: SectionProps<CtaBandCo
         ctx={ctx}
         sectionId={section.id}
         path="text"
+        part
         value={content.text}
         as="p"
         className={styles.text}
@@ -31,6 +33,7 @@ export function CtaBandSection({ section, content, ctx }: SectionProps<CtaBandCo
         path="cta"
         cta={content.cta}
         className={styles.cta}
+        part
       />
     </div>
   );

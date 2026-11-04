@@ -1,5 +1,6 @@
 import type { LogosContent } from '../../schema/sections/logos.js';
 import { SectionImage, Text } from '../primitives.js';
+import { MOTION_MEDIA } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './Logos.module.css';
 
@@ -18,6 +19,7 @@ export function LogosSection({ section, content, ctx, leading }: SectionProps<Lo
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -26,7 +28,7 @@ export function LogosSection({ section, content, ctx, leading }: SectionProps<Lo
       {logos.length > 0 && (
         <ul className={styles.logos}>
           {logos.map(({ image, index }) => (
-            <li key={index} className={styles.logo}>
+            <li key={index} className={styles.logo} {...MOTION_MEDIA}>
               <SectionImage
                 ctx={ctx}
                 image={image}

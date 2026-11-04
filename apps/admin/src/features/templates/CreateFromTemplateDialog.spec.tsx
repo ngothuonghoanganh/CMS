@@ -165,7 +165,7 @@ describe('CreateFromTemplateDialog', () => {
             kind: 'template',
             source: 'system',
             templateId: 'nha-khoa-uu-dai',
-            version: 1,
+            version: 2,
           },
         },
       },

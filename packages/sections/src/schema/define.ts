@@ -1,4 +1,4 @@
-import type { ColorSchemeId, LinkKind, SectionType } from '@plp/contracts';
+import type { ColorSchemeId, LinkKind, MotionAccent, SectionType } from '@plp/contracts';
 import type { z } from 'zod';
 
 interface FieldBase {
@@ -93,6 +93,11 @@ export interface SectionVariant {
    * fit: a process lists steps, not benefits.
    */
   listLabels?: Readonly<Record<string, ListLabels>>;
+  /**
+   * What the variant can show of the motion presets (ADR-032): whether its parts sit in rows
+   * ("Theo hàng") and which accents have matching content. Absent: no rows, no accents.
+   */
+  motion?: { grid?: boolean; accents?: readonly MotionAccent[] };
 }
 
 export type SectionCategory =

@@ -1,11 +1,14 @@
 import type { Composition, SectionInstance, ThemePresetId } from '@plp/contracts';
 import { Fragment, type ReactElement, type ReactNode } from 'react';
+import { pageMotionOf, resolveSectionMotion } from '../schema/motion.js';
 import { themePresets } from '../schema/themes.js';
 import type { RenderContext } from './context.js';
 import frame from './frame.module.css';
+import { MotionRuntime } from './motion/MotionRuntime.js';
+import motionStyles from './motion/motion.module.css';
 import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
-import { fontStyle } from './theme-style.js';
+import { fontStyle, motionLevelStyle } from './theme-style.js';
 
 /** Id of the page's <main> in live mode, the target of the renderer's skip link. */
 export const MAIN_CONTENT_ID = 'main-content';
@@ -20,17 +23,25 @@ export interface PageViewProps {
 
 /**
  * The whole page as visitors see it. The navigation bar (always first) and footer (always last)
- * stay outside <main>, so the page has proper header/main/footer landmarks.
+ * stay outside <main>, so the page has proper header/main/footer landmarks. A page with a motion
+ * style moves on live pages and previews only; the canvas stays still (ADR-032).
  */
 export function PageView({ composition, themePresetId, ctx, wrapSection }: PageViewProps) {
   const theme = themePresets[themePresetId];
+  const motion = pageMotionOf(composition);
+  const moving = motion.style !== 'none';
   // The page body opens with the first section after the navigation bar.
   const leading = composition.sections.find(
     (section, index) => index > 0 || section.type !== 'navbar',
   );
   const rendered = composition.sections.map((section, index) => {
     const element = (
-      <SectionFrame key={section.id} section={section} theme={theme}>
+      <SectionFrame
+        key={section.id}
+        section={section}
+        theme={theme}
+        motion={resolveSectionMotion(composition, index)}
+      >
         {renderSectionContent(section, ctx, section === leading)}
       </SectionFrame>
     );
@@ -49,7 +60,14 @@ export function PageView({ composition, themePresetId, ctx, wrapSection }: PageV
   const footer = last && last !== header && last.section.type === 'footer' ? last : undefined;
   const body = rendered.filter((entry) => entry !== header && entry !== footer);
   return (
-    <div className={frame.page} style={fontStyle(theme)}>
+    <div
+      className={moving ? `${frame.page} ${motionStyles.root}` : frame.page}
+      style={{ ...fontStyle(theme), ...(moving ? motionLevelStyle(motion) : {}) }}
+      {...(moving && {
+        'data-motion-root': '',
+        ...(motion.reduceOnMobile && { 'data-motion-reduce-mobile': '' }),
+      })}
+    >
       {header?.node}
       {ctx.mode === 'live' ? (
         <main id={MAIN_CONTENT_ID}>{body.map((entry) => entry.node)}</main>
@@ -58,6 +76,7 @@ export function PageView({ composition, themePresetId, ctx, wrapSection }: PageV
         <div>{body.map((entry) => entry.node)}</div>
       )}
       {footer?.node}
+      {moving && ctx.mode === 'live' ? <MotionRuntime /> : null}
     </div>
   );
 }

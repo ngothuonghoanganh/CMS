@@ -2,6 +2,7 @@ import type { ImageRef } from '@plp/contracts';
 import type { BeforeAfterContent } from '../../schema/sections/before-after.js';
 import type { RenderContext } from '../context.js';
 import { SectionImage, Text } from '../primitives.js';
+import { MOTION_MEDIA } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './BeforeAfter.module.css';
 
@@ -29,7 +30,7 @@ function Photo({ ctx, sectionId, image, captionPath, caption, placeholder, prior
   const editing = ctx.mode === 'edit';
   const captioned = caption.trim() !== '';
   return (
-    <figure className={styles.photo}>
+    <figure className={styles.photo} {...MOTION_MEDIA}>
       <SectionImage
         ctx={ctx}
         image={image}
@@ -67,6 +68,7 @@ export function BeforeAfterSection({
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h2"
         className={styles.heading}
@@ -103,6 +105,7 @@ export function BeforeAfterSection({
         ctx={ctx}
         sectionId={section.id}
         path="note"
+        part
         value={content.note}
         as="p"
         className={styles.note}

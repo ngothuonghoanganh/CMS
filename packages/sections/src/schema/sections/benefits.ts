@@ -64,6 +64,7 @@ export const benefitsSection = defineSection<BenefitsContent>({
       label: 'Lưới 3–6 lợi ích',
       description: 'Biểu tượng, tiêu đề ngắn và một câu mô tả.',
       hasMedia: false,
+      motion: { grid: true, accents: ['lines'] },
       hiddenFields: ['items.image'],
       listMin: { items: BENEFITS_GRID_MIN },
     },
@@ -72,6 +73,7 @@ export const benefitsSection = defineSection<BenefitsContent>({
       label: 'Xen kẽ ảnh và chữ',
       description: 'Giải thích chi tiết từng điểm mạnh, mỗi điểm một ảnh.',
       hasMedia: true,
+      motion: { accents: ['lines', 'image'] },
       hiddenFields: ['items.icon'],
     },
     {
@@ -79,6 +81,7 @@ export const benefitsSection = defineSection<BenefitsContent>({
       label: 'Quy trình 3 bước',
       description: 'Khách biết điều gì xảy ra sau khi đăng ký.',
       hasMedia: false,
+      motion: { grid: true, accents: ['lines', 'steps'] },
       // The step number takes the place of the icon.
       hiddenFields: ['items.icon', 'items.image'],
       listMin: { items: STEPS_MIN },

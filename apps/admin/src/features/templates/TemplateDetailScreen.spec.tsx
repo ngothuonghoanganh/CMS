@@ -113,7 +113,7 @@ describe('TemplateDetailScreen', () => {
       .getAllByRole('term')
       .map((term) => [term.textContent, term.nextElementSibling?.textContent]);
     expect(facts).toEqual([
-      ['Phiên bản', 'v1 · cập nhật 02/11/2026'],
+      ['Phiên bản', 'v2 · cập nhật 04/11/2026'],
       ['Theme', 'Bạc hà · 4 color scheme đạt AA'],
       ['Đã dùng', '3 trang trong workspace'],
     ]);
@@ -218,7 +218,7 @@ describe('TemplateDetailScreen', () => {
       options: {
         body: {
           baseRevision: 3,
-          template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 1 },
+          template: { source: 'system', templateId: 'nha-khoa-uu-dai', version: 2 },
         },
       },
     });

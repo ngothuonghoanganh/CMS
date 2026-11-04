@@ -29,6 +29,7 @@ export const beforeAfterSection = defineSection<BeforeAfterContent>({
       description: 'Hai ảnh so sánh, có chú thích và mô tả ảnh.',
       // The photos are the whole content and phones always show "before" first.
       hasMedia: false,
+      motion: { accents: ['lines', 'image'] },
     },
   ],
   defaultVariant: 'side_by_side',

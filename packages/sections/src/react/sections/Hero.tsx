@@ -1,5 +1,6 @@
 import type { HeroContent } from '../../schema/sections/hero.js';
 import { CtaButton, SectionImage, Text } from '../primitives.js';
+import { MOTION_MEDIA, MOTION_TEXT } from '../motion/parts.js';
 import type { SectionProps } from '../types.js';
 import styles from './Hero.module.css';
 
@@ -17,6 +18,7 @@ export function HeroSection({ section, content, ctx, leading }: SectionProps<Her
         ctx={ctx}
         sectionId={section.id}
         path="eyebrow"
+        part
         value={content.eyebrow}
         as="p"
         className={styles.eyebrow}
@@ -26,6 +28,7 @@ export function HeroSection({ section, content, ctx, leading }: SectionProps<Her
         ctx={ctx}
         sectionId={section.id}
         path="heading"
+        part
         value={content.heading}
         as="h1"
         className={styles.heading}
@@ -35,13 +38,14 @@ export function HeroSection({ section, content, ctx, leading }: SectionProps<Her
         ctx={ctx}
         sectionId={section.id}
         path="subheading"
+        part
         value={content.subheading}
         as="p"
         className={styles.subheading}
         multiline
         placeholder="Mô tả"
       />
-      <div className={styles.actions}>
+      <div className={styles.actions} {...MOTION_TEXT}>
         <CtaButton
           ctx={ctx}
           sectionId={section.id}
@@ -76,7 +80,7 @@ export function HeroSection({ section, content, ctx, leading }: SectionProps<Her
           .filter(Boolean)
           .join(' ')}
       >
-        <div className={styles.backgroundImage}>
+        <div className={styles.backgroundImage} {...MOTION_MEDIA}>
           <SectionImage
             ctx={ctx}
             image={content.image}
@@ -96,7 +100,7 @@ export function HeroSection({ section, content, ctx, leading }: SectionProps<Her
         .join(' ')}
     >
       {text}
-      <div className={styles.media}>
+      <div className={styles.media} {...MOTION_MEDIA}>
         <SectionImage ctx={ctx} image={content.image} priority={leading} />
       </div>
     </div>

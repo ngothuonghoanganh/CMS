@@ -2,6 +2,7 @@ import { LEAD_ROUTE, leadFormFieldNames as names, type PublicLeadCapture } from 
 import type { Ref, SubmitEvent } from 'react';
 import type { LeadFormContent } from '../schema/sections/lead-form.js';
 import frame from './frame.module.css';
+import { MOTION_TEXT } from './motion/parts.js';
 import styles from './sections/LeadForm.module.css';
 
 /** Fields that can show an error under them. */
@@ -104,15 +105,18 @@ export function LeadFormView({
   return (
     <div className={styles.root}>
       <div className={styles.intro}>
-        <h2 id={headingId} className={styles.heading}>
+        <h2 id={headingId} className={styles.heading} {...MOTION_TEXT}>
           {content.heading}
         </h2>
         {content.description.trim() === '' ? null : (
-          <p className={[styles.description, frame.preLine].join(' ')}>{content.description}</p>
+          <p className={[styles.description, frame.preLine].join(' ')} {...MOTION_TEXT}>
+            {content.description}
+          </p>
         )}
       </div>
       <form
         className={styles.form}
+        {...MOTION_TEXT}
         method="post"
         action={canSend ? LEAD_ROUTE : undefined}
         noValidate

@@ -40,6 +40,7 @@ export const leadFormSection = defineSection<LeadFormContent>({
       label: 'Form đăng ký',
       description: 'Mặc định Họ và tên + Số điện thoại, ô đồng ý không tick sẵn.',
       hasMedia: false,
+      motion: { accents: ['lines'] },
     },
   ],
   defaultVariant: 'stacked',

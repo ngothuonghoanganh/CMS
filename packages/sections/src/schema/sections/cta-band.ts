@@ -21,6 +21,7 @@ export const ctaBandSection = defineSection<CtaBandContent>({
       label: 'Dải kêu gọi',
       description: 'Nhắc lại lời mời ở cuối trang.',
       hasMedia: false,
+      motion: { accents: ['lines'] },
     },
   ],
   defaultVariant: 'band',
