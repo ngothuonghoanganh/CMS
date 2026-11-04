@@ -250,7 +250,7 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
           {missingAlt.length > 1 ? `Thiếu mô tả ảnh (${missingAlt.length})` : 'Thiếu mô tả ảnh'}
         </button>
       ) : null}
-      {canInsertAfter ? (
+      {canInsertAfter && !played ? (
         <div className={styles.insert}>
           <button
             type="button"

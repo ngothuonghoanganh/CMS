@@ -94,6 +94,9 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
   const enter = own.enter ?? style.enter;
   const pageOrder = style.order === 'rows' && !capability.grid ? 'stagger' : style.order;
   const order = own.order ?? pageOrder;
+  // Connected steps enter one by one along their line, whatever order is chosen.
+  const stepsOn =
+    capability.accents.includes('steps') && (own.accents?.steps ?? pageAccentOn(motion, 'steps'));
   const orders: MotionOrder[] = capability.grid
     ? ['together', 'stagger', 'rows']
     : ['together', 'stagger'];
@@ -160,32 +163,38 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
                 {status(own.order !== undefined)}
               </span>
             </span>
-            <div role="group" aria-label="Thứ tự trong section" className={styles.orders}>
-              {orders.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={id === order}
-                  className={styles.order}
-                  onClick={() => {
-                    store.getState().setSectionOrder(section.id, id);
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={id === 'rows' ? styles.boxesRows : styles.boxes}
+            {stepsOn ? (
+              <p className={styles.help}>
+                Các bước hiện lần lượt theo đường nối, vì điểm nhấn “Các bước nối nhau” đang bật.
+              </p>
+            ) : (
+              <div role="group" aria-label="Thứ tự trong section" className={styles.orders}>
+                {orders.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={id === order}
+                    className={styles.order}
+                    onClick={() => {
+                      store.getState().setSectionOrder(section.id, id);
+                    }}
                   >
-                    {ORDER_BOXES[id].map((n, box) => (
-                      <span key={box} className={styles.box}>
-                        {n}
-                      </span>
-                    ))}
-                  </span>
-                  {MOTION_ORDER_LABELS[id]}
-                </button>
-              ))}
-            </div>
-            {own.order === undefined ? null : (
+                    <span
+                      aria-hidden="true"
+                      className={id === 'rows' ? styles.boxesRows : styles.boxes}
+                    >
+                      {ORDER_BOXES[id].map((n, box) => (
+                        <span key={box} className={styles.box}>
+                          {n}
+                        </span>
+                      ))}
+                    </span>
+                    {MOTION_ORDER_LABELS[id]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {own.order === undefined || stepsOn ? null : (
               <Button
                 size="sm"
                 variant="ghost"

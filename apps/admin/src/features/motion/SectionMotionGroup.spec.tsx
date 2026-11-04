@@ -76,6 +76,21 @@ describe('SectionMotionGroup (board 38, ADR-032)', () => {
     expect(within(orders()).getByRole('button', { name: /Theo hàng/ })).toBeVisible();
   });
 
+  it('leaves the order to connected steps, which enter one by one along their line', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().addSection('benefits', 'steps', 3);
+    const steps = store.getState().selection.sectionId ?? '';
+    store.getState().setMotionStyle('smooth');
+    const view = renderGroup(store, steps);
+    expect(screen.queryByRole('group', { name: 'Thứ tự trong section' })).toBeNull();
+    expect(screen.getByText(/Các bước hiện lần lượt theo đường nối/)).toBeVisible();
+    await user.click(screen.getByRole('switch', { name: 'Các bước nối nhau' }));
+    view.unmount();
+    renderGroup(store, steps);
+    expect(screen.getByRole('group', { name: 'Thứ tự trong section' })).toBeVisible();
+  });
+
   it('switches an accent for this section, and back to the page by switching it again', async () => {
     const user = userEvent.setup();
     const store = makeStore();
