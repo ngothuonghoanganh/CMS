@@ -11,6 +11,14 @@ body {
   outline-offset: var(--focus-offset);
 }
 
+/* Code moves focus (`tabIndex={-1}`) onto a heading or a message so a screen reader reads it out.
+   It is not a control and nothing happens on it, so it draws no ring; controls keep theirs, and so
+   do roving-tabindex items (menu items, tabs, options), which always carry a role. */
+[tabindex='-1']:not(a[href], button, input, select, textarea, summary, [role]):focus-visible,
+[tabindex='-1']:is([role='status'], [role='alert']):focus-visible {
+  outline: none;
+}
+
 /* The boards' base link color. `:where` keeps it below any class, hover included, so a link its
    own rule styles never takes it. */
 :where(a) {
