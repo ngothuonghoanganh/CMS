@@ -88,11 +88,6 @@
    The label's text block takes the rest of the row so the count can sit at its end. */
 .option {
   min-height: 36px;
-  align-items: center;
-}
-
-.option > :last-child {
-  flex: 1 1 auto;
 }
 
 .option label {
