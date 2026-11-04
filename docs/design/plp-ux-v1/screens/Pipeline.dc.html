@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Pipeline cơ hội — Nha khoa Smile Care</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="crm" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 28px 48px">
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Cơ hội</h1>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">23 cơ hội đang mở · giá trị dự kiến 412.000.000 ₫ · tháng này thắng 6, thua 4</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <div role="group" aria-label="Kiểu xem" style="display: flex; gap: 2px; padding: 3px; background: #ECEEF2; border-radius: 10px">
+            <button type="button" aria-pressed="{{ vK.pressed }}" onClick="{{ setKanban }}" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ vK.bg }}; box-shadow: {{ vK.shadow }}; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Kanban</button>
+            <button type="button" aria-pressed="{{ vL.pressed }}" onClick="{{ setList }}" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ vL.bg }}; box-shadow: {{ vL.shadow }}; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Danh sách</button>
+          </div>
+          <label for="pl-owner" class="sr-only">Người phụ trách</label>
+          <select id="pl-owner" style="min-height: 40px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 13px; background: #FFFFFF"><option>Mọi người phụ trách</option><option>Thu Hà</option><option>Lan Phương</option></select>
+          <button type="button" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Tạo cơ hội
+          </button>
+        </div>
+      </header>
+
+      <sc-if value="{{ isKanban }}" hint-placeholder-val="{{ true }}">
+        <div style="overflow-x: auto; padding-bottom: 8px">
+          <div style="display: flex; gap: 14px; align-items: flex-start; min-width: 1100px">
+            <sc-for list="{{ columns }}" as="col" hint-placeholder-count="5">
+              <section aria-label="{{ col.name }}, {{ col.count }} cơ hội" style="flex: 1 1 220px; min-width: 210px; display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: #ECEEF2">
+                <div style="display: flex; flex-direction: column; gap: 2px; padding: 4px 4px 2px">
+                  <span style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: {{ col.dot }}"></span>{{ col.name }}<span style="font-weight: 500; color: #5E6573">{{ col.count }}</span></span>
+                  <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #5E6573">{{ col.total }}</span>
+                </div>
+                <sc-for list="{{ col.cards }}" as="c" hint-placeholder-count="3">
+                  <article style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: #FFFFFF; border: 1px solid {{ c.border }}; box-shadow: 0 1px 2px rgba(21,23,28,0.08)">
+                    <a href="ContactProfile.dc.html" style="display: flex; flex-direction: column; gap: 2px; color: #15171C; text-decoration: none">
+                      <span style="font-size: 14px; font-weight: 600">{{ c.title }}</span>
+                      <span style="font-size: 13px; color: #3C424E">{{ c.who }}</span>
+                    </a>
+                    <span style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+                      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px">{{ c.value }}</span>
+                      <span aria-label="Phụ trách: {{ c.owner }}" style="width: 26px; height: 26px; border-radius: 999px; background: #EEF0FF; color: #3730A3; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600">{{ c.ini }}</span>
+                    </span>
+                    <span style="font-size: 12px; font-weight: {{ c.nextFw }}; color: {{ c.nextFg }}">{{ c.next }}</span>
+                    <button type="button" onClick="{{ c.move }}" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px; border: 1px solid #E2E5EA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 12px; font-weight: 600; color: #3C424E; cursor: pointer">{{ c.moveLabel }}<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></button>
+                  </article>
+                </sc-for>
+              </section>
+            </sc-for>
+            <button type="button" style="flex: none; width: 56px; min-height: 160px; border: 0; border-radius: 14px; background: #ECEEF2; font: inherit; font-size: 13px; font-weight: 600; color: #474E5C; cursor: pointer; writing-mode: vertical-rl">Thua · 4</button>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 12px; color: #5E6573">Kéo thẻ để đổi giai đoạn, hoặc dùng nút trên thẻ. Thẻ viền đỏ có việc quá hạn.</p>
+      </sc-if>
+
+      <sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+        <section aria-label="Danh sách cơ hội" style="border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow-x: auto">
+          <div style="min-width: 900px">
+            <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) 150px 150px 100px minmax(0, 1.6fr); gap: 12px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+              <span>CƠ HỘI</span><span>KHÁCH HÀNG</span><span>GIAI ĐOẠN</span><span>GIÁ TRỊ</span><span>PHỤ TRÁCH</span><span>VIỆC TIẾP THEO</span>
+            </div>
+            <sc-for list="{{ flat }}" as="c" hint-placeholder-count="8">
+              <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) 150px 150px 100px minmax(0, 1.6fr); gap: 12px; align-items: center; padding: 10px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                <span style="font-weight: 600">{{ c.title }}</span>
+                <a href="ContactProfile.dc.html" style="text-decoration: none">{{ c.who }}</a>
+                <label style="display: block"><span class="sr-only">Giai đoạn của {{ c.title }}</span><select style="width: 100%; min-height: 36px; padding: 0 8px; border: 1px solid #CDD2DA; border-radius: 8px; font: inherit; font-size: 13px; background: #FFFFFF"><option>{{ c.stage }}</option><option>Thắng</option><option>Thua</option></select></label>
+                <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px">{{ c.value }}</span>
+                <span style="font-size: 13px">{{ c.owner }}</span>
+                <span style="font-size: 13px; font-weight: {{ c.nextFw }}; color: {{ c.nextFg }}">{{ c.next }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{ showLost }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 110px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="lost-title" style="width: 100%; max-width: 500px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 id="lost-title" style="margin: 0; font-size: 18px; font-weight: 700">Đánh dấu thua</h2>
+          <span style="font-size: 14px; color: #3C424E">Implant 2 trụ · Lê Hoàng Nam</span>
+        </div>
+        <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px">
+          <legend style="padding: 0 0 8px; font-size: 14px; font-weight: 600">Lý do</legend>
+          <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="5">
+            <label style="display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px"><input type="radio" name="lost" checked="{{ r.on }}" style="width: 17px; height: 17px; margin: 0; accent-color: #4338CA">{{ r.label }}</label>
+          </sc-for>
+        </fieldset>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="lost-note" style="font-size: 14px; font-weight: 600">Ghi chú <span style="font-weight: 400; color: #5E6573">(không bắt buộc)</span></label>
+          <input id="lost-note" type="text" value="Chọn phòng khám gần nhà ở Thủ Đức" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+        </div>
+        <span style="font-size: 13px; color: #5E6573">Khách hàng vẫn còn trong danh bạ. Công việc đang mở của cơ hội này sẽ được đóng.</span>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #15171C; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đánh dấu thua</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showWon }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 140px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="won-title" style="width: 100%; max-width: 480px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 id="won-title" style="margin: 0; font-size: 18px; font-weight: 700">Đánh dấu thắng</h2>
+          <span style="font-size: 14px; color: #3C424E">Niềng răng Invisalign · Nguyễn Thu Trang</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 6px"><label for="won-val" style="font-size: 14px; font-weight: 600">Giá trị thực tế</label><input id="won-val" type="text" value="36.500.000 ₫" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px"></div>
+          <div style="display: flex; flex-direction: column; gap: 6px"><label for="won-date" style="font-size: 14px; font-weight: 600">Ngày chốt</label><input id="won-date" type="text" value="01/11/2026" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+        </div>
+        <span style="font-size: 13px; color: #5E6573">Dự kiến 38.000.000 ₫. Giá trị thực tế được dùng cho báo cáo doanh thu theo trang nguồn.</span>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #12A06A; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đánh dấu thắng</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["kanban","list","markWon","markLost"],"default":"kanban"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: null, dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'kanban';
+    var view = this.state.view ?? (s === 'list' ? 'list' : 'kanban');
+    var dialog = this.state.dialog ?? ({ markWon: 'won', markLost: 'lost' }[s] || null);
+    function open(d) { return function () { self.setState({ dialog: d }); }; }
+    var C = [
+      ['Mới', '#4338CA', '6', '84.000.000 ₫', [
+        ['Niềng răng mắc cài sứ', 'Phạm Mỹ Duyên', '28.000.000 ₫', 'Thu Hà', 'TH', 'Gọi lại trong 15 phút · còn 6 phút', false],
+        ['Tẩy trắng răng', 'Đặng Minh Tú', '3.500.000 ₫', 'Lan Phương', 'LP', 'Chưa có việc tiếp theo', false]
+      ]],
+      ['Đã liên hệ', '#8A91A0', '7', '126.000.000 ₫', [
+        ['Implant 2 trụ', 'Lê Hoàng Nam', '42.000.000 ₫', 'Lan Phương', 'LP', 'Gửi báo giá · quá hạn 1 ngày', true],
+        ['Niềng răng trẻ em', 'Bùi Thanh Hương', '24.000.000 ₫', 'Lan Phương', 'LP', 'Gọi lại thứ Hai', false]
+      ]],
+      ['Hẹn lịch', '#E39A12', '5', '148.000.000 ₫', [
+        ['Niềng răng Invisalign', 'Nguyễn Thu Trang', '38.000.000 ₫', 'Thu Hà', 'TH', 'Gọi xác nhận lịch · quá hạn 25 phút', true],
+        ['Bọc răng sứ 6 răng', 'Hồ Gia Bảo', '30.000.000 ₫', 'Thu Hà', 'TH', 'Khám CN 02/11 · 14:00', false]
+      ]],
+      ['Đã đến khám', '#4338CA', '3', '54.000.000 ₫', [
+        ['Tẩy trắng + cạo vôi', 'Trần Quốc Việt', '4.200.000 ₫', 'Lan Phương', 'LP', 'Gửi kế hoạch điều trị', false]
+      ]],
+      ['Thắng', '#12A06A', '2', '61.500.000 ₫', [
+        ['Implant 1 trụ', 'Võ Ngọc Hân', '25.000.000 ₫', 'Thu Hà', 'TH', 'Thắng 29/10', false]
+      ]]
+    ];
+    var flat = [];
+    var columns = C.map(function (col, ci) {
+      var won = ci === 4;
+      return {
+        name: col[0], dot: col[1], count: col[2], total: col[3],
+        cards: col[4].map(function (c) {
+          var card = {
+            title: c[0], who: c[1], value: c[2], owner: c[3], ini: c[4], next: c[5],
+            border: c[6] ? '#F6C9C4' : '#E2E5EA',
+            nextFg: c[6] ? '#B42318' : (won ? '#0B6B45' : '#5E6573'),
+            nextFw: c[6] ? 600 : 500,
+            moveLabel: won ? 'Mở lại' : 'Chuyển giai đoạn',
+            move: open(c[0] === 'Implant 2 trụ' ? 'lost' : 'won'),
+            stage: col[0]
+          };
+          flat.push(card);
+          return card;
+        })
+      };
+    });
+    var reasons = ['Giá cao hơn dự tính', 'Chọn nơi khác', 'Không liên lạc được', 'Chưa có nhu cầu', 'Khác'].map(function (r, i) { return { label: r, on: i === 1 }; });
+    function seg(on) { return { pressed: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', shadow: on ? '0 1px 2px rgba(21,23,28,0.08)' : 'none' }; }
+    return {
+      columns: columns, flat: flat, reasons: reasons,
+      isKanban: view === 'kanban', isList: view === 'list',
+      vK: seg(view === 'kanban'), vL: seg(view === 'list'),
+      setKanban: function () { self.setState({ view: 'kanban' }); },
+      setList: function () { self.setState({ view: 'list' }); },
+      showLost: dialog === 'lost', showWon: dialog === 'won',
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

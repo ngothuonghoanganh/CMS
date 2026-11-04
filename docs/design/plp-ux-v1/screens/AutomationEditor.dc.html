@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thiết lập automation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 8px 16px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+      <a href="Automations.dc.html" aria-label="Quay lại danh sách automation" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: #3C424E">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column">
+        <span style="font-size: 15px; font-weight: 600">Giao lead mới cho người trực</span>
+        <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: #5E6573">
+          <span style="padding: 1px 8px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-weight: 600">Bản nháp</span>
+          Đã lưu · vừa xong
+        </span>
+      </div>
+    </div>
+    <div role="tablist" aria-label="Automation" style="display: flex; gap: 4px">
+      <a href="AutomationEditor.dc.html" role="tab" aria-selected="true" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border-bottom: 2px solid #4338CA; font-size: 14px; font-weight: 600; color: #3730A3; text-decoration: none">Thiết lập</a>
+      <a href="AutomationRuns.dc.html" role="tab" aria-selected="false" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; color: #3C424E; text-decoration: none">Lịch sử chạy</a>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+      <sc-if value="{{ hasMissing }}" hint-placeholder-val="{{ true }}">
+        <span style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: 8px; background: #FFF1D6; color: #8A5300; font-size: 13px; font-weight: 600">1 bước thiếu cấu hình</span>
+      </sc-if>
+      <button type="button" onClick="{{ runTest }}" style="min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Chạy thử</button>
+      <button type="button" onClick="{{ openActivate }}" disabled="{{ hasMissing }}" style="min-height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: {{ activateBg }}; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Bật automation</button>
+    </div>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap">
+    <section aria-label="Các bước" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 24px; display: flex; flex-direction: column; align-items: center">
+      <ol style="list-style: none; margin: 0; padding: 0; width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: stretch">
+        <sc-for list="{{ steps }}" as="st" hint-placeholder-count="5">
+          <li style="display: flex; flex-direction: column; align-items: center">
+            <sc-if value="{{ st.notFirst }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width: 2px; height: 22px; background: #CDD2DA"></span></sc-if>
+            <button type="button" onClick="{{ st.pick }}" aria-pressed="{{ st.pressed }}" style="width: 100%; display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: {{ st.border }}; border-radius: 14px; background: #FFFFFF; text-align: left; font: inherit; color: #15171C; cursor: pointer; box-shadow: {{ st.shadow }}">
+              <span style="flex: none; min-width: 44px; padding: 3px 0; border-radius: 6px; background: {{ st.kindBg }}; color: {{ st.kindFg }}; font-size: 11px; font-weight: 700; text-align: center">{{ st.kind }}</span>
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+                <span style="font-size: 15px; font-weight: 600">{{ st.title }}</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #3C424E">{{ st.summary }}</span>
+                <sc-if value="{{ st.warn }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; font-weight: 600; color: #8A5300">Chưa chọn người nhận</span></sc-if>
+                <sc-if value="{{ st.hasTest }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; font-weight: 600; color: {{ st.testFg }}">{{ st.test }}</span></sc-if>
+              </span>
+            </button>
+          </li>
+        </sc-for>
+        <li style="display: flex; flex-direction: column; align-items: center">
+          <span aria-hidden="true" style="width: 2px; height: 22px; background: #CDD2DA"></span>
+          <button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 1px dashed #CDD2DA; border-radius: 999px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Thêm điều kiện hoặc hành động</button>
+        </li>
+      </ol>
+      <div style="width: 100%; max-width: 560px; margin-top: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 13px; line-height: 1.5">
+        <div style="padding: 12px 14px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA"><strong style="display: block">Không chạy trùng</strong><span style="color: #3C424E">Mỗi lead chỉ chạy automation này một lần, kể cả khi sự kiện đến lại.</span></div>
+        <div style="padding: 12px 14px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA"><strong style="display: block">Khi một bước lỗi</strong><span style="color: #3C424E">Thử lại 3 lần trong 1 giờ, các bước đã xong không chạy lại.</span></div>
+      </div>
+    </section>
+
+    <aside aria-label="Bảng bên phải" style="flex: 1 1 360px; max-width: 420px; box-sizing: border-box; padding: 20px; background: #FFFFFF; border-left: 1px solid #E2E5EA; display: flex; flex-direction: column; gap: 14px">
+      <sc-if value="{{ isConfig }}" hint-placeholder-val="{{ true }}">
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #3C424E">BƯỚC 5 · HÀNH ĐỘNG</span>
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">Gửi email nội bộ</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="em-to" style="font-size: 14px; font-weight: 600">Người nhận</label>
+          <select id="em-to" aria-invalid="{{ hasMissing }}" aria-describedby="em-to-err" style="min-height: 44px; padding: 0 10px; border: 1px solid {{ toBorder }}; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>{{ toValue }}</option><option>Người phụ trách lead</option><option>Ngọc Anh</option><option>Quốc Bảo</option></select>
+          <sc-if value="{{ hasMissing }}" hint-placeholder-val="{{ true }}"><span id="em-to-err" style="font-size: 13px; color: #B42318">Chọn ít nhất một người nhận để bật automation.</span></sc-if>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="em-sub" style="font-size: 14px; font-weight: 600">Tiêu đề</label>
+          <input id="em-sub" type="text" value="Lead mới từ Facebook: «Tên khách»" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 14px; font-weight: 600">Chèn thông tin</span>
+          <span style="display: flex; flex-wrap: wrap; gap: 6px">
+            <button type="button" style="min-height: 30px; padding: 0 10px; border: 1px solid #E2E5EA; border-radius: 999px; background: #FAFBFC; font: inherit; font-size: 12px; cursor: pointer">«Tên khách»</button>
+            <button type="button" style="min-height: 30px; padding: 0 10px; border: 1px solid #E2E5EA; border-radius: 999px; background: #FAFBFC; font: inherit; font-size: 12px; cursor: pointer">«Trang nguồn»</button>
+            <button type="button" style="min-height: 30px; padding: 0 10px; border: 1px solid #E2E5EA; border-radius: 999px; background: #FAFBFC; font: inherit; font-size: 12px; cursor: pointer">«Người phụ trách»</button>
+            <button type="button" style="min-height: 30px; padding: 0 10px; border: 1px solid #E2E5EA; border-radius: 999px; background: #FAFBFC; font: inherit; font-size: 12px; cursor: pointer">«Link hồ sơ»</button>
+          </span>
+          <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Số điện thoại và email của khách không được đưa vào email; người nhận mở hồ sơ để xem.</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isTest }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">Chạy thử</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="tst-lead" style="font-size: 14px; font-weight: 600">Dùng dữ liệu của</label>
+          <select id="tst-lead" style="min-height: 44px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Lead gần nhất · Phạm Mỹ Duyên · 35 phút trước</option><option>Lead mẫu (không có dữ liệu thật)</option></select>
+        </div>
+        <div role="status" style="padding: 12px 14px; border-radius: 12px; background: #EEF0FF; color: #26208A; font-size: 13px; line-height: 1.55">Chạy thử không giao việc, không gửi email, không gọi webhook. Kết quả hiện ngay trên từng bước bên trái.</div>
+        <div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.6">
+          <span><strong style="color: #0B6B45">4 bước sẽ chạy</strong> với lead này.</span>
+          <span><strong style="color: #8A5300">1 bước bị bỏ qua</strong> vì thiếu người nhận email.</span>
+        </div>
+        <button type="button" style="align-self: flex-start; min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Chạy thử lại</button>
+      </sc-if>
+    </aside>
+  </div>
+
+  <sc-if value="{{ showActivate }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 140px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="act-title" style="width: 100%; max-width: 520px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 id="act-title" style="margin: 0; font-size: 18px; font-weight: 700">Bật “Giao lead mới cho người trực”?</h2>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Automation chạy cho lead mới từ lúc bật. 312 lead cũ không bị ảnh hưởng.</p>
+        <label style="display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #E2E5EA; border-radius: 10px; font-size: 14px; line-height: 1.5; cursor: pointer"><input type="checkbox" style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA"><span>Chạy luôn cho 12 lead trong 24 giờ qua chưa có người phụ trách</span></label>
+        <span style="font-size: 13px; color: #5E6573">Bạn tạm dừng được bất cứ lúc nào. Lượt chạy tính vào hạn mức của gói.</span>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Để sau</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Bật automation</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["missingConfig","testRun","readyToActivate"],"default":"missingConfig"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: null, sel: null, dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'missingConfig';
+    var mode = this.state.mode ?? (s === 'testRun' ? 'test' : 'config');
+    var ready = s === 'readyToActivate';
+    var dialog = this.state.dialog ?? (ready ? 'activate' : null);
+    var sel = this.state.sel ?? 4;
+    var K = { 'KHI': ['#EEF0FF', '#3730A3'], 'NẾU': ['#FFF1D6', '#8A5300'], 'THÌ': ['#E2F4EA', '#0B6B45'] };
+    var S = [
+      ['KHI', 'Có lead mới', 'Từ mọi trang có form của Nha khoa Smile Care', 'Khớp: lead lúc 09:58', '#0B6B45'],
+      ['NẾU', 'Nguồn là Facebook và không phải spam', 'utm_source chứa “facebook” · bỏ qua lead trong thư mục Nghi ngờ spam', 'Đạt: utm_source = facebook', '#0B6B45'],
+      ['THÌ', 'Giao người phụ trách', 'Xoay vòng: Thu Hà, Lan Phương', 'Sẽ giao cho Thu Hà', '#0B6B45'],
+      ['THÌ', 'Tạo công việc', '“Gọi lại trong 15 phút” cho người phụ trách', 'Sẽ tạo, hạn 10:13', '#0B6B45'],
+      ['THÌ', 'Gửi email nội bộ', ready ? 'Tới Ngọc Anh · “Lead mới từ Facebook”' : 'Thông báo lead mới', 'Bỏ qua: thiếu người nhận', '#8A5300']
+    ];
+    var testing = mode === 'test';
+    var steps = S.map(function (x, i) {
+      var on = i === sel && !testing;
+      var k = K[x[0]];
+      var warn = i === 4 && !ready;
+      return {
+        kind: x[0], kindBg: k[0], kindFg: k[1], title: x[1], summary: x[2],
+        notFirst: i > 0, pressed: on ? 'true' : 'false',
+        border: warn ? '1px solid #E39A12' : (on ? '2px solid #4338CA' : '1px solid #E2E5EA'),
+        shadow: on ? '0 2px 10px rgba(21,23,28,0.14)' : 'none',
+        warn: warn && !testing,
+        hasTest: testing, test: x[3], testFg: x[4],
+        pick: function () { self.setState({ sel: i, mode: 'config' }); }
+      };
+    });
+    var missing = !ready;
+    return {
+      steps: steps,
+      hasMissing: missing,
+      toBorder: missing ? '#B42318' : '#828998',
+      toValue: missing ? 'Chọn thành viên…' : 'Ngọc Anh',
+      activateBg: missing ? '#A8AEB9' : '#4338CA',
+      isConfig: !testing, isTest: testing,
+      showActivate: dialog === 'activate',
+      runTest: function () { self.setState({ mode: 'test' }); },
+      openActivate: function () { if (!missing) { self.setState({ dialog: 'activate' }); } },
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

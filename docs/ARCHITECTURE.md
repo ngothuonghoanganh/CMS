@@ -62,11 +62,19 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - AI tạo trang đề xuất phong cách; người dùng đổi được (ADR-031).
 - Tương ứng màn 37–39; màn 40 là danh mục tham chiếu, bản đầu giữ 10 hiệu ứng. Lát và trạng thái ở §5.
 
-**Ngoài phạm vi MVP B, Phase 1 và Phase 2:**
+**Phase 3 (chăm sóc khách), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-04, theo board Phase 3 của artifact thiết kế):
+
+- Khách hàng gom từ lead của site, gộp trùng, hồ sơ với ghi chú, công việc và lịch hẹn (ADR-033).
+- Pipeline cơ hội cố định 6 giai đoạn; trạng thái của lead là giai đoạn cơ hội của nó (ADR-033).
+- Automation theo sự kiện của lead và CRM: giao người, tạo công việc, gắn nhãn, email nội bộ, webhook. Hàng đợi nằm trong MongoDB, hạn mức 2.000 lượt mỗi workspace mỗi tháng (ADR-034).
+- Tương ứng màn 22–27. Lát và trạng thái ở §5.
+
+**Ngoài phạm vi MVP B, Phase 1, Phase 2 và Phase 3:**
 
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
 - Form có trường tùy ý, captcha của bên thứ ba, banner cookie, tạo trang chính sách từ mẫu.
-- CRM và automation (Phase 3), gói, thanh toán và marketplace (Phase 4): chưa có quyết định phạm vi. Mọi phần của màn 17–21 nói tới Marketplace hay gói thuộc Phase 4.
+- Gói, thanh toán và marketplace (Phase 4): chưa có quyết định phạm vi. Mọi phần của màn 17–27 nói tới Marketplace hay gói ("Nâng cấp", "hạn mức theo gói") thuộc Phase 4.
+- Gửi tin cho khách (SMS, Zalo), nhiều pipeline hay sửa giai đoạn, trường tùy ý của khách hàng, nhập danh bạ từ file.
 - Free styling, điểm lưu bản nháp, rich text, màu thương hiệu tự nhập.
 
 **Nguyên tắc:**
@@ -1048,6 +1056,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-31 (vòng test thứ ba, admin):**
   - Với Editor, hộp thoại xuất bản không có "Sửa ngay" cho `consent_not_configured` và `lead_destination_missing`. Thay vào đó, hộp thoại ghi rõ chỉ Owner của workspace làm được và đề nghị nhờ Owner.
   - Checklist "Thiết lập site" của màn 01 ghi "Owner của workspace làm bước này" cho các bước của Owner, thay vì link tới màn chỉ đọc.
+- **Amended 2026-11-04 (ADR-033, CRM):**
+  - "Một người" là khách hàng (contact) cùng mọi lead của nó.
+  - Xuất và xóa dữ liệu một người, kể cả khi hoàn tất yêu cầu xóa, gồm hồ sơ, cơ hội, ghi chú, công việc và lịch hẹn. Xóa là một transaction.
+  - Khách hàng và dữ liệu CRM của nó có thời gian lưu theo `retentionMonths` của site, tính từ lead cuối cùng hoặc tương tác gần nhất.
+  - Dữ liệu đã gửi qua webhook của automation (ADR-034) không bị xóa theo, như email.
 
 ### ADR-018 — Hộp thư lead và email thông báo
 
@@ -1161,6 +1174,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Đo bằng `explain` trên 54.000 lead có trạng thái lệch.
     - Lệnh đếm tệ nhất quét 3.200 key.
 - **Amended 2026-11-01 (ADR-029):** đường gửi email chọn bằng `MAIL_TRANSPORT`: SMTP như trên (mặc định), hoặc plp-mailer qua SQS. Với SQS, `sent` nghĩa là thư đã vào hàng đợi của plp-mailer.
+- **Amended 2026-11-04 (ADR-033, CRM):**
+  - Trạng thái của lead là giai đoạn của cơ hội gắn với nó: ô trạng thái và bộ lọc trạng thái dùng 6 giai đoạn của pipeline.
+  - Trạng thái cũ được chuyển một lần, `unreachable` thành Thua với lý do "Không liên lạc được".
+  - Lead nghi ngờ spam không tạo khách hàng hay cơ hội cho tới khi được chuyển ra khỏi spam.
+  - Email nội bộ của automation (ADR-034) đi cùng đường gửi với email lead.
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 
@@ -1307,6 +1325,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Thêm một endpoint theo site mà không chọn quyền thì không biên dịch được. Thêm một quyền thì phải thêm dòng của nó trên màn 16 (`permissionGroups`) và vào ma trận test.
   - E2E của các vai trò khác Chủ sở hữu chờ lời mời (C2); C1 có E2E của màn 16 và test giao diện theo từng vai trò.
 - **Amended 2026-11-02 (ADR-030, lát G2):** bảng quyền có thêm `templates.manage` ("Lưu và quản lý template của workspace", nhóm Nội dung): Chủ sở hữu, Quản trị và Biên tập.
+- **Amended 2026-11-04 (Phase 3, board 16):**
+  - `leads.view` ("Xem lead, khách hàng, pipeline") và `leads.handle` ("Đổi trạng thái, ghi chú, giao việc") phủ cả CRM (ADR-033).
+  - Bảng quyền có thêm nhóm Automation (ADR-034):
+    - `automations.view` ("Xem automation và lịch sử chạy"): Chủ sở hữu, Quản trị, Chăm sóc khách hàng;
+    - `automations.manage` ("Tạo, bật, tạm dừng automation"): Chủ sở hữu, Quản trị.
+  - Sidebar v2 có thêm "Khách hàng" và "Automation" theo hai quyền xem.
 
 ### ADR-021 — Thành viên, lời mời, yêu cầu đổi quyền và chuyển quyền sở hữu
 
@@ -1718,6 +1742,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Admin:** thành viên không tạo được site có lối ra ở màn tạo site: quay về site đầu tiên nếu workspace có site; một địa chỉ thì nút "Mở {workspace}" cho từng workspace khác; có địa chỉ workspace thì "Xem tất cả workspace" khi còn workspace khác; workspace chưa có site thì "Đăng xuất". Sidebar chỉ có "Xem tất cả workspace" khi thuộc từ hai workspace; thẻ "Chưa có workspace" có "Đăng xuất". Màn 35 và 36 có tiêu đề trang; màn 35 ghi "· toàn workspace" như board.
 - **Amended 2026-11-02 (ADR-026):** đăng ký có hai bước. Database của workspace chỉ được tạo khi email đã xác nhận, lúc `POST /auth/signup/verify`, theo đúng thứ tự ở trên.
 - **Amended 2026-11-02 (ADR-030, lát G2):** workspace DB có thêm `templates` và `template_versions`; `workspaces` ở master có thêm bộ đếm `templateSeq`.
+- **Amended 2026-11-04 (Phase 3):**
+  - Workspace DB có thêm `contacts`, `opportunities`, `contact_events`, `tasks`, `meetings`, `merge_suggestions` (ADR-033), và `automations`, `automation_runs`, `automation_usage` (ADR-034).
+  - Master có thêm `job_wakeups { workspaceId, dueAt }`: mốc đến hạn sớm nhất của hàng đợi automation, không có dữ liệu của khách. Mỗi instance theo dõi nó bằng change stream.
 
 ### ADR-026 — Tài khoản: xác nhận email khi đăng ký, quên mật khẩu, đổi mật khẩu
 
@@ -2554,6 +2581,198 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Release cũ không có `motion` vẫn render như trước.
 - **Lát:** M0 tài liệu; M1 mô hình và hiển thị; M2 section Số liệu nổi bật; M3 editor (màn 37–39); M4 AI chọn chuyển động (§5).
 
+### ADR-033 — CRM: khách hàng, cơ hội, công việc và lịch hẹn
+
+- **Date:** 2026-11-04 · **Status:** Accepted
+- **Context:**
+  - Board 22–24 và ghi chú `phase3`, `phase3Decisions` của artifact thiết kế (nhập từ phiên bản `1793751628-0501`).
+  - Chủ sản phẩm quyết định ngày 2026-11-04:
+    - làm cả CRM và automation (màn 22–27), CRM trước;
+    - pipeline cố định ở bản đầu, chưa sửa được giai đoạn.
+- **Decision:**
+  - **Ba khái niệm:**
+    - **Lead** là một lần gửi form. Nó không đổi và giữ bằng chứng đồng ý (ADR-016, ADR-017).
+    - **Khách hàng** (contact) là một người trong một site, gom các lead của người đó. Khách hàng không chia sẻ giữa các site và không gộp giữa các workspace.
+    - **Cơ hội** là một nhu cầu cụ thể của khách hàng, đi qua pipeline.
+  - **Dữ liệu** (workspace DB, ADR-025; mọi document có `workspaceId` và `siteId`):
+    - `contacts`:
+      - `{ name, phone (E.164) | null, email | null, search { phone, email, name }, ownerId | null, tags[], origin, marketing, leadCount, lastActivityAt, createdAt, expiresAt }`;
+      - `origin` là `lead`, hoặc `manual` kèm kênh (`phone_call`, `walk_in`, `message`) và người thêm.
+      - Unique `(siteId, phone)` khi có số điện thoại: lead mới cùng số E.164 với một khách hàng của site thì được gom vào khách hàng đó, trong cùng transaction với lead.
+    - `opportunities`:
+      - `{ contactId, title, stage, value | null, wonValue | null, closedAt | null, lost { reason, note } | null, ownerId | null, sourcePageId | null, stageChangedAt, createdAt, expiresAt }`;
+      - giá trị là số nguyên đồng, tối đa 10 tỷ.
+    - `contact_events` là dòng thời gian, chỉ thêm. Mỗi sự kiện `{ contactId, kind, at, actorId | null, ... }` thuộc một loại:
+      - lead mới;
+      - ghi chú hoặc cuộc gọi (chữ tối đa 2.000 ký tự);
+      - cơ hội đổi giai đoạn;
+      - lịch hẹn;
+      - việc của automation.
+    - `tasks`: `{ contactId, opportunityId | null, title, dueAt, assigneeId, doneAt | null, createdBy, source: user | automation }`. "Quá hạn" được suy ra (`dueAt` đã qua và chưa xong), không lưu.
+    - `meetings`: `{ contactId, opportunityId | null, at, place, with, note }`. Ba chữ cuối tối đa 120, 80 và 500 ký tự.
+    - Lead có thêm `contactId` và `opportunityId`.
+  - **Pipeline cố định** (`opportunityStages` trong contracts): Mới, Đã liên hệ, Hẹn lịch, Đã đến, Thắng, Thua (`new`, `contacted`, `scheduled`, `visited`, `won`, `lost`).
+    - "Đánh dấu thắng" cần giá trị thực tế và ngày chốt.
+    - "Đánh dấu thua" cần một lý do: Giá cao hơn dự tính, Chọn nơi khác, Không liên lạc được, Chưa có nhu cầu, Khác. Ghi chú tối đa 200 ký tự là tùy chọn. Công việc đang mở của cơ hội đó được đóng.
+    - "Mở lại" đưa cơ hội đã thắng hay thua về Đã đến.
+  - **Lead mới** (không nghi ngờ spam):
+    - gom vào khách hàng cùng số điện thoại, hoặc tạo khách hàng mới;
+    - gắn vào cơ hội đang mở của khách hàng đó (chưa thắng, chưa thua), hoặc tạo cơ hội "Mới" mang tên trang;
+    - thêm sự kiện "Lead mới".
+    - Lead nghi ngờ spam không tạo gì. "Không phải spam" làm các bước trên lúc đó. Chuyển một lead đã gom vào spam thì khách hàng giữ nguyên.
+  - **Trạng thái của lead là giai đoạn cơ hội của nó** ("trạng thái lead hiện có chuyển thành giai đoạn"):
+    - Hộp thư (màn 10) hiện và đổi giai đoạn của cơ hội gắn với lead. Lọc theo trạng thái trở thành lọc theo giai đoạn.
+    - Đổi ở hộp thư và đổi ở pipeline là cùng một thao tác, nên chỉ có một sự kiện "cơ hội đổi giai đoạn".
+    - Trạng thái cũ chuyển một lần: `new` → Mới, `contacted` → Đã liên hệ, `scheduled` → Hẹn lịch, `won` → Thắng, `unreachable` → Thua với lý do "Không liên lạc được".
+  - **Chuyển dữ liệu cũ:** lúc khởi động, API dựng khách hàng và cơ hội cho lead chưa có `contactId`, theo từng workspace và từng lô. Bước này chạy lại được (gom theo số điện thoại), như dựng index (ADR-025).
+  - **Gộp trùng** (màn 22, "Có thể trùng"):
+    - Hai khách hàng trong site cùng email (khác số điện thoại), hoặc cùng tên đã chuẩn hóa và có lead từ cùng một trang trong 7 ngày, thì thành một cặp gợi ý (`merge_suggestions`), kèm lý do.
+    - "Gộp hai hồ sơ" giữ hồ sơ cũ hơn. Mỗi trường lấy theo lựa chọn trong bảng so sánh. Lead, cơ hội, ghi chú, công việc và lịch hẹn chuyển sang hồ sơ giữ lại, trong một transaction. Lead và bằng chứng đồng ý của từng lần gửi giữ nguyên.
+    - "Không phải cùng người" bỏ cặp đó; cặp này không được gợi ý lại.
+  - **Thêm tay** (màn 22):
+    - Cần họ tên, số điện thoại, và nguồn ("Bạn có thông tin này từ đâu?"). Nguồn được lưu để chứng minh nguồn dữ liệu.
+    - Số đã thuộc một hồ sơ thì dialog chỉ tới hồ sơ đó, không tạo trùng.
+    - "Khách đã đồng ý nhận thông tin ưu đãi" chỉ tick khi khách nói rõ; khi tick thì lưu kèm người ghi và thời điểm.
+  - **Danh sách khách hàng** (màn 22):
+    - Bốn góc nhìn: Tất cả, Của tôi, Chưa giao, Có thể trùng.
+    - Lọc theo người phụ trách và nhãn. Tìm theo tên, số điện thoại, email, gửi trong body như hộp thư (ADR-018), không bao giờ nằm trong URL.
+    - 25 mục mỗi trang, sắp theo tương tác gần nhất. Số đếm dừng ở 9.999.
+    - Thao tác hàng loạt (tối đa 50 hồ sơ): giao người, gắn nhãn, tạo cơ hội.
+    - Nhãn tối đa 30 ký tự; mỗi hồ sơ tối đa 20 nhãn; mỗi site tối đa 100 nhãn khác nhau.
+  - **Hồ sơ** (màn 23):
+    - Thông tin, người phụ trách, nhãn, cơ hội.
+    - Đồng ý: lấy từ lead, kèm liên kết tới bằng chứng; với hồ sơ thêm tay, lấy từ nguồn đã ghi.
+    - Ô soạn với ba tab Ghi chú, Công việc, Lịch hẹn.
+    - Dòng thời gian, công việc, lịch hẹn sắp tới.
+    - "Gọi" là liên kết `tel:`. "Nhắn Zalo" là liên kết `https://zalo.me/{số}`.
+  - **Pipeline** (màn 24):
+    - Kanban gồm 5 cột (Mới tới Thắng) và cột Thua thu gọn. Ngoài kéo thả, mỗi thẻ có nút "Chuyển giai đoạn", nên bàn phím và trình đọc màn hình đều dùng được.
+    - Kiểu danh sách có ô chọn giai đoạn. Lọc theo người phụ trách.
+    - Dòng đầu: số cơ hội đang mở, tổng giá trị dự kiến, số thắng và thua trong tháng (lịch Việt Nam).
+    - Thẻ viền đỏ khi có việc quá hạn.
+  - **Quyền** (board 16, ADR-020):
+    - `leads.view` xem khách hàng và pipeline.
+    - `leads.handle` sửa: giao người, nhãn, ghi chú, công việc, lịch hẹn, giai đoạn, gộp, thêm tay.
+    - Người phụ trách và người được giao việc phải có `leads.view` trên site.
+    - "Xuất dữ liệu của người này" cần `leads.export`; "Xóa dữ liệu của người này" cần `personalData.manage`. Không có quyền thì mục đó hiện lý do (board 23).
+  - **Dữ liệu cá nhân** (bổ sung ADR-017):
+    - **Một người** là khách hàng cùng mọi lead của nó.
+    - Xuất dữ liệu có thêm hồ sơ, cơ hội, ghi chú, công việc và lịch hẹn.
+    - Xóa dữ liệu một người (từ hồ sơ, từ hộp thư, hay khi hoàn tất yêu cầu xóa) xóa khách hàng cùng mọi lead, cơ hội, sự kiện, công việc và lịch hẹn, trong một transaction.
+    - Lượt chạy automation chỉ giữ id, không giữ tên hay số điện thoại (ADR-034).
+  - **Thời gian lưu:**
+    - `expiresAt` của khách hàng là giá trị muộn nhất trong hai mốc: `expiresAt` của lead cuối cùng, và tương tác gần nhất cộng `retentionMonths` của site.
+    - Cơ hội, sự kiện, công việc và lịch hẹn mang cùng `expiresAt` với khách hàng, được ghi lại cùng lúc, nên TTL xóa chúng cùng nhau.
+    - Mốc chỉ được ghi lại khi lệch quá một ngày, để mỗi ghi chú không kéo theo bốn lệnh cập nhật.
+- **Ngoài phạm vi:**
+  - sửa giai đoạn hay nhiều pipeline;
+  - trường tùy ý;
+  - nhập file danh bạ;
+  - gộp tự động theo email;
+  - báo cáo doanh thu theo trang nguồn (board 24 chỉ nhắc tới);
+  - gửi tin cho khách.
+- **Reason:**
+  - Lead giữ đúng vai trò bằng chứng.
+  - Khách hàng gom theo số điện thoại vì đó là trường bắt buộc của form.
+  - Pipeline cố định cho hộp thư, pipeline và automation cùng một nghĩa của "giai đoạn".
+- **Consequences:**
+  - Mỗi workspace thêm 6 collection.
+  - Lead intake có thêm một upsert khách hàng và một upsert cơ hội trong cùng transaction.
+  - Board 10 không đổi hình, nhưng ô trạng thái của nó giờ là giai đoạn.
+- **Lát:** K1 khách hàng (màn 22); K2 hồ sơ (màn 23); K3 pipeline (màn 24) (§5).
+
+### ADR-034 — Automation: sự kiện, hành động, hàng đợi trong MongoDB
+
+- **Date:** 2026-11-04 · **Status:** Accepted
+- **Context:**
+  - Board 25–27 và ghi chú `phase3Decisions`.
+  - Chủ sản phẩm quyết định ngày 2026-11-04:
+    - hạn mức là một con số cố định mỗi workspace: 2.000 lượt chạy mỗi tháng;
+    - có hành động webhook, kèm bảo vệ;
+    - hàng đợi nằm trong MongoDB, không thêm Redis.
+- **Decision:**
+  - **Một automation** (`automations`, workspace DB) thuộc một site và có các trường:
+    - `{ name, state: draft | on | paused, pausedReason: user | errors | null, version, trigger, conditions[], actions[], consecutiveFailures, createdBy, updatedAt }`;
+    - mỗi lần lưu tăng `version`, và lượt chạy dùng đúng phiên bản lúc nó được tạo.
+    - Tối đa 20 automation mỗi site, 5 điều kiện và 5 hành động mỗi automation.
+  - **Khi nào chạy** (trigger):
+    - `lead_created`: có lead mới (không nghi ngờ spam); tùy chọn giới hạn theo trang.
+    - `lead_still_new`: lead vẫn ở giai đoạn Mới sau 5, 15, 30, 60, 240 hay 1.440 phút.
+    - `opportunity_stage_changed`: cơ hội vào một giai đoạn, hoặc bất kỳ giai đoạn nào.
+    - `task_overdue`: công việc tới hạn mà chưa xong.
+  - **Nếu** (điều kiện, tất cả phải đúng):
+    - nguồn (`utm_source`, `utm_medium`, `utm_campaign`) chứa một chuỗi;
+    - trang là một trong các trang;
+    - khách hàng có nhãn;
+    - giá trị cơ hội từ một mức;
+    - giai đoạn là.
+  - **Thì** (hành động, chạy lần lượt):
+    - **giao người phụ trách:** một thành viên, hoặc xoay vòng giữa tối đa 10 thành viên có `leads.view`;
+    - **tạo công việc:** tên, hạn sau N phút, giao cho người phụ trách hoặc một thành viên;
+    - **gắn nhãn;**
+    - **gửi email nội bộ:** tới tối đa 5 thành viên hoặc tới người phụ trách. Tiêu đề chèn được «Tên khách», «Trang nguồn», «Người phụ trách», «Link hồ sơ». Thư không có số điện thoại hay email của khách: người nhận mở hồ sơ để xem;
+    - **gọi webhook** (bên dưới).
+    - Không có hành động gửi tin cho khách (SMS, Zalo).
+  - **Bản nháp và bật:**
+    - Automation mới ở trạng thái bản nháp. Còn bước thiếu cấu hình thì không bật được, và header ghi "N bước thiếu cấu hình".
+    - Dialog "Bật" cho chạy luôn với lead trong 24 giờ qua chưa có người phụ trách. Lựa chọn này chỉ có với trigger theo lead mới và tính vào hạn mức.
+    - Tạm dừng thì các lượt đang chờ bị dừng (`stopped`). Bật lại thì chỉ sự kiện mới chạy.
+  - **Chạy thử:** dùng lead gần nhất hoặc lead mẫu, không có tác dụng phụ (không giao, không gửi, không gọi webhook), không tính lượt, và trả kết quả của từng bước.
+  - **Lượt chạy** (`automation_runs`):
+    - `{ automationId, version, eventKey, event { kind, leadId | opportunityId | taskId, at }, contactId, status, steps[{ status, attempts, at, error { code, httpStatus? } }], nextAt, lockedUntil | null, createdAt, expiresAt }`;
+    - `status` là `scheduled`, `queued`, `running`, `waiting_retry`, `succeeded`, `failed`, `skipped` hoặc `stopped`.
+    - Unique `(automationId, eventKey)`: một sự kiện chỉ chạy một automation một lần, kể cả khi sự kiện đến lại.
+    - Lượt chạy không chứa dữ liệu cá nhân. Màn 27 đọc tên khách từ hồ sơ lúc hiển thị; hồ sơ đã xóa thì không còn tên.
+    - Lượt chạy tự xóa sau 90 ngày (TTL).
+  - **Hạn mức:**
+    - 2.000 lượt mỗi workspace mỗi tháng lịch Việt Nam, bộ đếm `automation_usage { workspaceId, month }`, như hạn mức AI (ADR-031).
+    - Một lượt được tính khi điều kiện đã đúng và hành động đầu tiên bắt đầu. Lượt dừng vì điều kiện (`skipped`) không tính.
+    - Hết lượt thì sự kiện mới không chạy nữa và được đếm theo automation (`skippedForQuota`). Màn 25 ghi "Đã dùng hết 2.000 lượt tháng này. Automation chạy lại từ 01/MM". Tháng mới chạy lại, không cần bật lại.
+    - Phase 4 gắn con số theo gói.
+  - **Lỗi và thử lại:**
+    - Một bước lỗi được thử lại 3 lần trong một giờ (sau 5, 15 và 40 phút). Bước đã xong không chạy lại.
+    - Sau lần thử cuối, lượt chạy là `failed`. Quản trị trở lên "Thử lại bước này" hoặc "Bỏ qua lượt này".
+    - 20 lượt `failed` liên tiếp thì automation tự tạm dừng (`pausedReason: errors`), và màn 27 có banner.
+    - "Thử lại N lượt lỗi" đưa các lượt đó vào hàng đợi lại. "Bật lại automation" đặt bộ đếm về 0.
+  - **Hàng đợi trong MongoDB:**
+    - **Lượt chạy là hàng đợi.** Lượt cần chạy có `nextAt` (ngay, hay đúng hạn với `lead_still_new` và `task_overdue`). Đổi hạn công việc thì lượt cũ bị dừng và lượt mới được hẹn.
+    - **Master giữ mốc đến hạn sớm nhất** của mỗi workspace, ở `job_wakeups { workspaceId, dueAt }`, ghi bằng `$min` khi có lượt mới. Đây là dữ liệu định tuyến, không có dữ liệu của khách.
+    - **Mỗi instance API đặt một bộ hẹn giờ** tới mốc sớm nhất của `job_wakeups`.
+      - Instance mở một change stream trên `job_wakeups`, nên lượt do instance khác tạo cũng đánh thức nó. Không có vòng lặp polling.
+      - Change stream cần replica set, vốn đã bắt buộc (ADR-006). Change stream bị đóng thì instance mở lại từ resume token và ghi log. Không mở lại được thì instance đọc lại mốc sớm nhất rồi mở change stream mới.
+    - **Khi tới hạn,** instance giành từng lượt của workspace đó bằng update có điều kiện (`queued` → `running`, đặt `lockedUntil` 2 phút), chạy tối đa 4 lượt cùng lúc, rồi tính lại mốc của workspace.
+      - Lượt đang chạy của instance đã chết có `lockedUntil` đã qua, và mốc đó cũng được đưa vào `job_wakeups`, nên instance khác nhận tiếp.
+    - **Khởi động** đọc mốc sớm nhất. Lượt quá hạn lúc API tắt chạy ngay.
+  - **Webhook:**
+    - URL `https://` cổng 443, tối đa 500 ký tự.
+    - Lúc gửi, tên miền được phân giải rồi kết nối thẳng tới IP đã kiểm tra. Mọi IP riêng, loopback, link-local, CGNAT, multicast và IPv6 tương đương đều bị chặn. Không theo chuyển hướng. Hạn 10 giây.
+    - Body JSON `{ version: 1, event, automation { id, name }, site { id, name }, lead { id, name, phone, email, message, page, source, createdAt, consent } }`.
+    - Header `X-PLP-Signature: t={unix},v1={HMAC-SHA256(secret, t.body)}`, `X-PLP-Event`, `Idempotency-Key` (id lượt chạy và bước).
+    - Bí mật sinh ngẫu nhiên cho từng bước webhook, hiện một lần, đổi được. Bí mật được lưu mã hóa AES-256-GCM bằng `AUTOMATION_SECRET_KEY` để còn ký được.
+    - HTTP 2xx là thành công. 408, 429 và 5xx là lỗi được thử lại; 4xx khác là lỗi không thử lại. Chỉ lưu mã trạng thái, không lưu body trả về.
+    - Dữ liệu đã gửi đi qua webhook không bị xóa theo khi xóa dữ liệu một người, như email (ADR-017). Màn 12 và dialog xóa nói rõ.
+  - **Quyền** (board 16):
+    - `automations.view`: xem automation và lịch sử chạy. Có ở Chủ sở hữu, Quản trị và Chăm sóc khách hàng.
+    - `automations.manage`: tạo, sửa, bật, tạm dừng, thử lại. Có ở Chủ sở hữu và Quản trị.
+    - Vai trò tùy chỉnh chọn được cả hai (ADR-024).
+    - Hành động của automation chạy dưới tên automation, không dưới quyền của người tạo: thành viên bị gỡ không làm automation mất quyền. Một bước nhắm tới thành viên không còn thì bước đó lỗi với mã `member_gone`.
+  - **Activity:** `automation.enabled`, `automation.paused`, `automation.auto_paused`, `automation.retried`, không kèm dữ liệu cá nhân.
+- **Ngoài phạm vi:**
+  - gửi tin cho khách;
+  - nhánh điều kiện, vòng lặp, bước chờ giữa các hành động;
+  - lịch chạy định kỳ;
+  - hạn mức theo gói (Phase 4).
+- **Reason:**
+  - Hàng đợi nằm trong database của workspace nên đi cùng backup, xóa site và cô lập workspace (ADR-025, ADR-027) mà không thêm hạ tầng.
+  - Mốc ở master và change stream cho nhiều instance cùng thấy việc mới mà không polling.
+  - Khóa `(automation, sự kiện)` giữ mỗi sự kiện một lượt.
+- **Consequences:**
+  - Thêm `automations`, `automation_runs` và `automation_usage` vào workspace DB, thêm `job_wakeups` ở master.
+  - User MongoDB của API cần quyền `changeStream` trên `job_wakeups` (§6).
+  - Đổi `AUTOMATION_SECRET_KEY` làm mọi bí mật webhook cũ không dùng được; phải đổi bí mật của từng webhook.
+  - Nếu sau này cần nhiều việc nền hơn (ví dụ email lead), chúng có thể dùng cùng hàng đợi; mỗi việc cần bổ sung ADR.
+- **Lát:** A1 hàng đợi, automation và các hành động nội bộ, màn 25; A2 thiết lập và chạy thử, màn 26; A3 webhook và lịch sử chạy, màn 27 (§5).
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -2669,6 +2888,25 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 2. Trong editor đổi phong cách, ghi đè một section, chạy thử → publish.
 3. Trang live: section dưới màn hình chạy hiệu ứng khi cuộn tới; thiết bị giảm chuyển động thấy nội dung ngay.
 4. Rollback về bản trước → trang live trở lại phong cách cũ.
+   **Phase 3 — Chăm sóc khách** (chủ sản phẩm yêu cầu ngày 2026-11-04, ADR-033, ADR-034):
+
+| Lát | Nội dung                                                                                                                                        | Màn    | Trạng thái |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| P0  | Nhập board 22–27, ADR-033 và ADR-034, bổ sung ADR-017, 018, 020, 025                                                                            | —      | Xong       |
+| K1  | Khách hàng: mô hình, gom từ lead và chuyển dữ liệu cũ, danh sách (góc nhìn, lọc, tìm, thao tác hàng loạt), thêm tay, gộp trùng                  | 22     | Chưa làm   |
+| K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Chưa làm   |
+| K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Chưa làm   |
+| A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Chưa làm   |
+| A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Chưa làm   |
+| A3  | Webhook (chặn SSRF, ký HMAC, bí mật mã hóa), lịch sử chạy, thử lại và bỏ qua                                                                    | 27     | Chưa làm   |
+
+**Hoàn thành Phase 3** khi một E2E chạy xanh toàn bộ chuỗi:
+
+1. Khách gửi form trên trang live → hộp thư có lead → hồ sơ khách hàng được tạo; lần gửi thứ hai cùng số điện thoại gom vào hồ sơ đó.
+2. Automation "Giao lead mới" giao người phụ trách và tạo công việc; lịch sử chạy ghi thành công.
+3. Kéo cơ hội sang Thắng → automation gửi email nội bộ (Mailpit) và gọi webhook (máy nhận thử, chữ ký đúng).
+4. Webhook lỗi → thử lại → "Thử lại bước này" thành công, bước đã xong không chạy lại.
+5. Xóa dữ liệu người đó → hồ sơ, lead, cơ hội, công việc biến mất; lịch sử chạy không còn tên.
 
 ## 6. Trước khi phát hành
 
@@ -2708,6 +2946,10 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - index mới trên collection lớn được dựng trước khi deploy;
   - không xóa hay đổi tên index khi API đang chạy.
 
+- Automation (ADR-034):
+  - User MongoDB của API có quyền `changeStream` trên `job_wakeups` của master (vai trò `read` trên master là đủ).
+  - `AUTOMATION_SECRET_KEY` (32 byte ngẫu nhiên, base64) sinh mới cho production; đổi nó làm hỏng mọi bí mật webhook đã có.
+  - Biên cho API gọi ra internet cổng 443 (webhook), không cho gọi vào mạng nội bộ.
 - AI (ADR-031): đặt `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` cho dịch vụ AI của production. Không dùng `fake`.
   - Một job viết `AI_CONCURRENCY` section cùng lúc (mặc định 3). AI tự host xếp hàng các yêu cầu (Ollama mặc định), nên đặt cho nó xử lý song song ít nhất bằng số đó (`OLLAMA_NUM_PARALLEL`), hạ `AI_CONCURRENCY` (1 cho một Ollama không đặt `OLLAMA_NUM_PARALLEL`), hoặc tăng `AI_TIMEOUT_MS`: thời gian chờ trong hàng cũng tính vào hạn của mỗi yêu cầu.
 
@@ -2721,4 +2963,8 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - Hạn xử lý yêu cầu dữ liệu: 2 và 20 ngày làm việc, chưa trừ ngày lễ.
 - Thời gian lưu lead mặc định 12 tháng, và nội dung đồng ý mặc định.
 - Thời gian giữ chính các yêu cầu dữ liệu.
+- CRM và automation (ADR-033, ADR-034):
+  - Thời gian lưu hồ sơ khách hàng theo lead cuối cùng hoặc tương tác gần nhất.
+  - Nguồn của khách hàng thêm tay (gọi điện, đến trực tiếp, nhắn tin) là đủ để ghi nhận dữ liệu.
+  - Webhook gửi dữ liệu cá nhân của lead sang hệ thống do doanh nghiệp tự chọn, và dữ liệu đó không bị xóa theo.
 - Nếu AI của production không tự host (ADR-031): việc gửi brief và chữ của bản nháp (không có dữ liệu cá nhân) cho nhà cung cấp, và điều khoản xử lý dữ liệu của họ.

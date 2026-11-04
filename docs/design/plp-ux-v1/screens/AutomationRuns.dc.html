@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Lịch sử chạy automation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 8px 16px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+      <a href="Automations.dc.html" aria-label="Quay lại danh sách automation" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: #3C424E">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column">
+        <span style="font-size: 15px; font-weight: 600">Gửi lead sang CRM của phòng khám</span>
+        <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: #5E6573">
+          <span style="display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; background: {{ auto.bg }}; color: {{ auto.fg }}; font-weight: 600"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: {{ auto.dot }}"></span>{{ auto.label }}</span>
+          Trạng thái của cả automation
+        </span>
+      </div>
+    </div>
+    <div role="tablist" aria-label="Automation" style="display: flex; gap: 4px">
+      <a href="AutomationEditor.dc.html" role="tab" aria-selected="false" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; color: #3C424E; text-decoration: none">Thiết lập</a>
+      <a href="AutomationRuns.dc.html" role="tab" aria-selected="true" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border-bottom: 2px solid #4338CA; font-size: 14px; font-weight: 600; color: #3730A3; text-decoration: none">Lịch sử chạy</a>
+    </div>
+    <span style="font-size: 13px; color: #5E6573">30 ngày: 410 lượt · {{ errCount }}</span>
+  </header>
+
+  <main style="flex: 1; box-sizing: border-box; padding: 20px 24px 40px">
+    <div style="max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px">
+      <sc-if value="{{ paused }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; padding: 14px 16px; border-radius: 12px; background: #FDEBE9; border: 1px solid #F6C9C4; color: #7A1A12">
+          <span style="flex: 1 1 420px; font-size: 13px; line-height: 1.55"><strong style="font-size: 14px">Automation đã tự tạm dừng lúc 11:40 sau 20 lỗi liên tiếp.</strong> Máy chủ CRM của phòng khám liên tục trả lỗi 500. Lead mới vẫn vào hộp thư bình thường; chỉ việc gửi sang CRM bị dừng.</span>
+          <span style="display: flex; flex-wrap: wrap; gap: 8px">
+            <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #F6C9C4; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #7A1A12; cursor: pointer">Thử lại 20 lượt lỗi</button>
+            <button type="button" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: #B42318; font: inherit; font-size: 13px; font-weight: 600; color: #FFFFFF; cursor: pointer">Bật lại automation</button>
+          </span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ degraded }}" hint-placeholder-val="{{ true }}">
+        <div role="status" style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00; font-size: 13px; line-height: 1.55">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C27803" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+          <span>Automation vẫn đang bật. 3 lượt thất bại trong 24 giờ, đều ở bước gọi webhook. Lượt khác vẫn chạy bình thường.</span>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+        <section aria-label="Các lượt chạy" style="flex: 1 1 340px; max-width: 420px; display: flex; flex-direction: column; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow: hidden">
+          <div style="display: flex; flex-wrap: wrap; gap: 4px; padding: 10px; border-bottom: 1px solid #EEF0F3">
+            <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+              <button type="button" aria-pressed="{{ f.pressed }}" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: {{ f.bg }}; font: inherit; font-size: 12px; font-weight: {{ f.fw }}; color: {{ f.fg }}; cursor: pointer">{{ f.label }}</button>
+            </sc-for>
+          </div>
+          <ul style="list-style: none; margin: 0; padding: 0">
+            <sc-for list="{{ runs }}" as="r" hint-placeholder-count="8">
+              <li>
+                <button type="button" aria-current="{{ r.cur }}" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 14px; border: 0; border-bottom: 1px solid #EEF0F3; background: {{ r.bg }}; text-align: left; font: inherit; color: #15171C; cursor: pointer">
+                  <span aria-hidden="true" style="flex: none; width: 8px; height: 8px; border-radius: 999px; background: {{ r.dot }}"></span>
+                  <span style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+                    <span style="font-size: 14px; font-weight: 600">{{ r.event }}</span>
+                    <span style="font-size: 12px; color: #5E6573">{{ r.when }}</span>
+                  </span>
+                  <span style="font-size: 12px; font-weight: 600; color: {{ r.fg }}">{{ r.status }}</span>
+                </button>
+              </li>
+            </sc-for>
+          </ul>
+        </section>
+
+        <section aria-labelledby="run-h" style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px">
+            <h2 id="run-h" style="margin: 0; font-size: 17px; font-weight: 700">Lượt chạy · lead Phạm Mỹ Duyên</h2>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: {{ run.bg }}; color: {{ run.fg }}; font-size: 12px; font-weight: 600">{{ run.label }}</span>
+          </div>
+          <span style="font-size: 13px; color: #5E6573">Bắt đầu 10:02:11 hôm nay · khóa chống trùng <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">lead_8f3a · automation_12</span></span>
+          <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+            <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+              <li style="display: flex; gap: 12px; padding-bottom: 14px">
+                <span aria-hidden="true" style="flex: none; width: 26px; height: 26px; border-radius: 999px; background: {{ st.bg }}; color: #FFFFFF; border: 2px solid {{ st.ring }}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">{{ st.mark }}</span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid {{ st.border }}; background: {{ st.panel }}">
+                  <span style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px"><span style="font-size: 14px; font-weight: 600">{{ st.title }}</span><span style="font-size: 12px; color: #5E6573">{{ st.time }}</span></span>
+                  <span style="font-size: 13px; line-height: 1.55; color: #3C424E">{{ st.body }}</span>
+                  <sc-if value="{{ st.isFail }}" hint-placeholder-val="{{ false }}">
+                    <span style="padding: 8px 10px; border-radius: 8px; background: #FFFFFF; border: 1px solid #F6C9C4; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #7A1A12; overflow-wrap: anywhere">POST https://crm.smilecare.vn/api/leads → 500 Internal Server Error (3 lần: 10:02, 10:12, 10:42)</span>
+                    <span style="font-size: 13px; line-height: 1.55; color: #3C424E"><strong>Cách sửa:</strong> lỗi nằm ở máy chủ nhận, không phải ở Payload. Nhờ người quản lý CRM kiểm tra, rồi bấm “Thử lại bước này”.</span>
+                    <span style="display: flex; flex-wrap: wrap; gap: 8px">
+                      <button type="button" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: #4338CA; font: inherit; font-size: 13px; font-weight: 600; color: #FFFFFF; cursor: pointer">Thử lại bước này</button>
+                      <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Bỏ qua lượt này</button>
+                    </span>
+                  </sc-if>
+                </div>
+              </li>
+            </sc-for>
+          </ol>
+          <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Thử lại chỉ chạy bước lỗi; các bước đã xong không chạy lại. Chỉ Quản trị trở lên thử lại được.</span>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["failedRun","retrying","success","autoPaused"],"default":"failedRun"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'failedRun';
+    var RS = {
+      ok: ['Thành công', '#0B6B45', '#12A06A'], fail: ['Thất bại', '#B42318', '#B42318'],
+      wait: ['Chờ thử lại', '#8A5300', '#E39A12'], run: ['Đang chạy', '#3730A3', '#4338CA'], stop: ['Dừng giữa chừng', '#474E5C', '#8A91A0']
+    };
+    var firstKind = { failedRun: 'fail', retrying: 'wait', success: 'ok', autoPaused: 'stop' }[s];
+    var R = [
+      ['Lead mới · Phạm Mỹ Duyên', '10:02 hôm nay', firstKind],
+      ['Lead mới · Đặng Minh Tú', '09:41 hôm nay', s === 'autoPaused' ? 'stop' : 'ok'],
+      ['Lead mới · Hồ Gia Bảo', '09:15 hôm nay', 'ok'],
+      ['Lead mới · Lê Hoàng Nam', 'Hôm qua 21:30', 'fail'],
+      ['Lead mới · Bùi Thanh Hương', 'Hôm qua 17:02', 'ok'],
+      ['Lead mới · Nguyễn Thu Trang', '30/10 21:05', 'ok'],
+      ['Lead mới · Trần Quốc Việt', '30/10 15:48', 'fail'],
+      ['Lead mới · Võ Ngọc Hân', '29/10 10:20', 'ok']
+    ];
+    var runs = R.map(function (r, i) {
+      var k = RS[r[2]];
+      return { event: r[0], when: r[1], status: k[0], fg: k[1], dot: k[2], cur: i === 0 ? 'true' : null, bg: i === 0 ? '#F5F5FF' : '#FFFFFF' };
+    });
+    var filters = ['Tất cả', 'Thất bại · 3', 'Chờ thử lại', 'Thành công'].map(function (f, i) {
+      var on = i === 0;
+      return { label: f, pressed: on ? 'true' : 'false', bg: on ? '#EEF0FF' : 'transparent', fg: on ? '#3730A3' : '#3C424E', fw: on ? 600 : 500 };
+    });
+    var DONE = { mark: '✓', bg: '#12A06A', ring: '#12A06A', border: '#E2E5EA', panel: '#FFFFFF', isFail: false };
+    function step(base, title, time, body, extra) {
+      var o = { title: title, time: time, body: body };
+      for (var k in base) o[k] = base[k];
+      for (var j in extra || {}) o[j] = extra[j];
+      return o;
+    }
+    var last = {
+      failedRun: step(DONE, 'Gọi webhook', '10:42:05', 'Gửi lead sang CRM của phòng khám.', { mark: '!', bg: '#B42318', ring: '#B42318', border: '#F6C9C4', panel: '#FDEBE9', isFail: true }),
+      retrying: step(DONE, 'Gọi webhook', 'Thử lại lúc 10:12', 'Lần 1 lỗi 500. Sẽ thử lần 2/3 tự động.', { mark: '', bg: '#FFF1D6', ring: '#E39A12', border: '#F3E2BD', panel: '#FFF8EB' }),
+      success: step(DONE, 'Gọi webhook', '10:02:13', 'CRM trả 201 Created trong 640 ms.'),
+      autoPaused: step(DONE, 'Gọi webhook', 'Không chạy', 'Automation đã tạm dừng trước bước này. Sẽ chạy khi bạn thử lại lượt.', { mark: '', bg: '#FFFFFF', ring: '#CDD2DA', border: '#E2E5EA', panel: '#FAFBFC' })
+    }[s];
+    var steps = [
+      step(DONE, 'Sự kiện: có lead mới', '10:02:11', 'Từ trang “Ưu đãi niềng răng tháng 11” · facebook / cpc'),
+      step(DONE, 'Điều kiện: không phải spam', '10:02:11', 'Đạt.'),
+      step(DONE, 'Gắn nhãn “Facebook”', '10:02:12', 'Đã gắn vào hồ sơ khách hàng.'),
+      last
+    ];
+    var A = {
+      failedRun: ['#E2F4EA', '#0B6B45', '#12A06A', 'Đang bật · có lỗi gần đây'],
+      retrying: ['#E2F4EA', '#0B6B45', '#12A06A', 'Đang bật · có lỗi gần đây'],
+      success: ['#E2F4EA', '#0B6B45', '#12A06A', 'Đang bật'],
+      autoPaused: ['#FDEBE9', '#7A1A12', '#B42318', 'Tạm dừng do lỗi']
+    }[s];
+    var runLabel = { failedRun: ['Thất bại ở bước 4', '#FDEBE9', '#7A1A12'], retrying: ['Chờ thử lại', '#FFF1D6', '#8A5300'], success: ['Thành công', '#E2F4EA', '#0B6B45'], autoPaused: ['Dừng giữa chừng', '#ECEEF2', '#474E5C'] }[s];
+    return {
+      runs: runs, filters: filters, steps: steps,
+      auto: { bg: A[0], fg: A[1], dot: A[2], label: A[3] },
+      run: { label: runLabel[0], bg: runLabel[1], fg: runLabel[2] },
+      paused: s === 'autoPaused',
+      degraded: s === 'failedRun' || s === 'retrying',
+      errCount: s === 'autoPaused' ? '23 lỗi' : '3 lỗi'
+    };
+  }
+}
+</script>
+</body>
+</html>

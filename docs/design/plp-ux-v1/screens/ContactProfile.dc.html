@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Hồ sơ khách hàng — Nguyễn Thu Trang</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="crm" role="{{ sidebarRole }}" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 32px 56px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px">
+      <a href="Contacts.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 13px; font-weight: 600; text-decoration: none">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+        Khách hàng
+      </a>
+      <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 14px">
+          <span aria-hidden="true" style="width: 52px; height: 52px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px">TT</span>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h1 style="margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700">Nguyễn Thu Trang</h1>
+            <span style="display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; color: #3C424E">
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">0912 345 678</span>
+              <span>trang.nt@gmail.com</span>
+              <span>Khách từ 28/10/2026</span>
+            </span>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <a href="#" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"></path></svg>Gọi
+          </a>
+          <a href="#" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: #15171C; font-size: 14px; font-weight: 600; text-decoration: none">Nhắn Zalo</a>
+          <button type="button" onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpen }}" aria-label="Thao tác dữ liệu" style="width: 44px; height: 44px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+        </div>
+      </header>
+
+      <sc-if value="{{ showMenu }}" hint-placeholder-val="{{ false }}">
+        <div role="menu" aria-label="Thao tác dữ liệu" style="align-self: flex-end; margin-top: -8px; width: 320px; display: flex; flex-direction: column; padding: 6px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA; box-shadow: 0 2px 10px rgba(21,23,28,0.14)">
+          <button type="button" role="menuitem" aria-disabled="{{ restricted }}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; font: inherit; font-size: 14px; color: {{ menuFg }}; cursor: pointer">Xuất dữ liệu của người này<sc-if value="{{ restricted }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #5E6573">Cần quyền “Xuất dữ liệu cá nhân”. Hỏi Ngọc Anh.</span></sc-if></button>
+          <button type="button" role="menuitem" onClick="{{ openDelete }}" aria-disabled="{{ restricted }}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; font: inherit; font-size: 14px; color: {{ menuDanger }}; cursor: pointer">Xóa dữ liệu của người này<sc-if value="{{ restricted }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #5E6573">Cần quyền “Xử lý yêu cầu dữ liệu”.</span></sc-if></button>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <aside style="flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 14px">
+          <section aria-labelledby="info-h" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <h2 id="info-h" style="margin: 0; font-size: 14px; font-weight: 700">Thông tin</h2>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="p-owner" style="font-size: 12px; font-weight: 600; color: #5E6573">Người phụ trách</label>
+              <select id="p-owner" style="min-height: 40px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Thu Hà</option><option>Lan Phương</option></select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; font-weight: 600; color: #5E6573">Nhãn</span>
+              <span style="display: flex; flex-wrap: wrap; gap: 6px">
+                <span style="padding: 3px 9px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-size: 12px">Niềng răng</span>
+                <span style="padding: 3px 9px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-size: 12px">Trả góp</span>
+                <button type="button" style="min-height: 26px; padding: 0 8px; border: 1px dashed #CDD2DA; border-radius: 999px; background: #FFFFFF; font: inherit; font-size: 12px; color: #3C424E; cursor: pointer">+ Nhãn</button>
+              </span>
+            </div>
+          </section>
+
+          <section aria-labelledby="opp-h" style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <div style="display: flex; justify-content: space-between; align-items: center"><h2 id="opp-h" style="margin: 0; font-size: 14px; font-weight: 700">Cơ hội</h2><a href="Pipeline.dc.html" style="font-size: 13px; font-weight: 600; text-decoration: none">Pipeline</a></div>
+            <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 10px; border: 1px solid #E2E5EA">
+              <span style="font-size: 14px; font-weight: 600">Niềng răng Invisalign</span>
+              <span style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #8A5300"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: #E39A12"></span>Hẹn lịch</span><span style="font-family: 'JetBrains Mono', ui-monospace, monospace">38.000.000 ₫</span></span>
+              <span style="font-size: 12px; color: #5E6573">Giá trị dự kiến do Thu Hà nhập</span>
+            </div>
+          </section>
+
+          <section aria-labelledby="consent-h" style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.55">
+            <h2 id="consent-h" style="margin: 0; font-size: 14px; font-weight: 700">Đồng ý</h2>
+            <span style="display: flex; gap: 8px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span>Xử lý dữ liệu để tư vấn · 28/10 14:02 · nội dung đồng ý v3 · trang “Ưu đãi niềng răng” bản v12</span></span>
+            <span style="display: flex; gap: 8px"><span aria-hidden="true" style="flex: none; width: 16px; text-align: center; color: #8A91A0">–</span><span>Không đồng ý nhận ưu đãi. Không đưa vào chiến dịch quảng cáo.</span></span>
+            <a href="Leads.dc.html" style="font-weight: 600; text-decoration: none">Xem bằng chứng trong lead</a>
+          </section>
+        </aside>
+
+        <section aria-labelledby="tl-h" style="flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <div role="tablist" aria-label="Thêm vào hồ sơ" style="display: flex; gap: 4px">
+              <sc-for list="{{ composerTabs }}" as="ct" hint-placeholder-count="3">
+                <button type="button" role="tab" aria-selected="{{ ct.sel }}" onClick="{{ ct.pick }}" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ ct.bg }}; font: inherit; font-size: 13px; font-weight: {{ ct.fw }}; color: {{ ct.fg }}; cursor: pointer">{{ ct.label }}</button>
+              </sc-for>
+            </div>
+            <sc-if value="{{ isNote }}" hint-placeholder-val="{{ true }}">
+              <label for="note" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Ghi chú</label>
+              <textarea id="note" rows="2" placeholder="Ghi lại cuộc gọi, nhu cầu, điều cần lưu ý…" style="box-sizing: border-box; padding: 10px 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; resize: vertical"></textarea>
+            </sc-if>
+            <sc-if value="{{ isTask }}" hint-placeholder-val="{{ false }}">
+              <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px">
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="t-title" style="font-size: 12px; font-weight: 600; color: #5E6573">Việc cần làm</label><input id="t-title" type="text" value="Gọi xác nhận lịch hẹn" style="min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="t-due" style="font-size: 12px; font-weight: 600; color: #5E6573">Hạn</label><input id="t-due" type="text" value="01/11 · 16:00" style="min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="t-who" style="font-size: 12px; font-weight: 600; color: #5E6573">Giao cho</label><select id="t-who" style="min-height: 40px; padding: 0 8px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Thu Hà</option></select></div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ isMeeting }}" hint-placeholder-val="{{ false }}">
+              <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="m-date" style="font-size: 12px; font-weight: 600; color: #5E6573">Ngày giờ</label><input id="m-date" type="text" value="02/11 · 09:30" style="min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="m-where" style="font-size: 12px; font-weight: 600; color: #5E6573">Nơi</label><input id="m-where" type="text" value="Chi nhánh Quận 3" style="min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="m-who" style="font-size: 12px; font-weight: 600; color: #5E6573">Người gặp</label><select id="m-who" style="min-height: 40px; padding: 0 8px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>BS. Trần Minh</option></select></div>
+              </div>
+            </sc-if>
+            <div style="display: flex; justify-content: flex-end"><button type="button" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">{{ composerCta }}</button></div>
+          </div>
+
+          <h2 id="tl-h" style="margin: 4px 0 0; font-size: 14px; font-weight: 700">Dòng thời gian</h2>
+          <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+            <sc-for list="{{ timeline }}" as="e" hint-placeholder-count="6">
+              <li style="display: flex; gap: 12px; padding-bottom: 16px">
+                <span aria-hidden="true" style="flex: none; width: 30px; height: 30px; border-radius: 999px; background: {{ e.bg }}; color: {{ e.fg }}; display: flex; align-items: center; justify-content: center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{ e.d }}"></path></svg>
+                </span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA">
+                  <span style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px"><span style="font-size: 14px; font-weight: 600">{{ e.title }}</span><span style="font-size: 12px; color: #5E6573">{{ e.when }}</span></span>
+                  <span style="font-size: 13px; line-height: 1.55; color: #3C424E">{{ e.body }}</span>
+                </div>
+              </li>
+            </sc-for>
+          </ol>
+        </section>
+
+        <aside style="flex: 1 1 240px; max-width: 280px; display: flex; flex-direction: column; gap: 14px">
+          <section aria-labelledby="task-h" style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <h2 id="task-h" style="margin: 0; font-size: 14px; font-weight: 700">Công việc</h2>
+            <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5"><input type="checkbox" style="width: 17px; height: 17px; margin: 1px 0 0; accent-color: #4338CA"><span>Gọi xác nhận lịch hẹn<span style="display: block; font-size: 12px; font-weight: 600; color: #B42318">Quá hạn 25 phút · Thu Hà</span></span></label>
+            <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5"><input type="checkbox" style="width: 17px; height: 17px; margin: 1px 0 0; accent-color: #4338CA"><span>Gửi bảng giá trả góp qua Zalo<span style="display: block; font-size: 12px; color: #5E6573">Mai 10:00 · Thu Hà</span></span></label>
+            <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: #5E6573"><input type="checkbox" checked style="width: 17px; height: 17px; margin: 1px 0 0; accent-color: #4338CA"><span style="text-decoration: line-through">Gọi lại trong 15 phút</span></label>
+          </section>
+          <section aria-labelledby="meet-h" style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <h2 id="meet-h" style="margin: 0; font-size: 14px; font-weight: 700">Lịch hẹn sắp tới</h2>
+            <span style="font-size: 14px; font-weight: 600">CN 02/11 · 09:30</span>
+            <span style="font-size: 13px; color: #3C424E">Khám và chụp phim 3D · Chi nhánh Quận 3 · BS. Trần Minh</span>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ showDelete }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 120px 16px 16px; box-sizing: border-box">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="del-title" style="width: 100%; max-width: 520px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="del-title" style="margin: 0; font-size: 18px; font-weight: 700">Xóa toàn bộ dữ liệu của Nguyễn Thu Trang?</h2>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Xóa thật, không khôi phục được. Thường dùng khi người này yêu cầu xóa dữ liệu.</p>
+        <ul style="margin: 0; padding: 12px 14px 12px 32px; border-radius: 10px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 13px; line-height: 1.65">
+          <li>2 lead và bằng chứng đồng ý, 1 cơ hội, 4 ghi chú, 3 công việc, 1 lịch hẹn.</li>
+          <li>Lịch sử chạy automation giữ lại nhưng không còn tên hay số điện thoại.</li>
+          <li>Số liệu tổng ở màn Hiệu quả giảm 2 lead.</li>
+        </ul>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="del-req" style="font-size: 14px; font-weight: 600">Gắn với yêu cầu dữ liệu</label>
+          <select id="del-req" style="min-height: 44px; padding: 0 10px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>YC-0012 · Yêu cầu xóa · nhận 30/10, hạn 27/11</option><option>Không có yêu cầu</option></select>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #B42318; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Xóa dữ liệu</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["default","addTask","addMeeting","dataMenu","dataMenuRestricted","deletePerson"],"default":"default"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: null, menu: null, dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'default';
+    var tab = this.state.tab ?? ({ addTask: 'task', addMeeting: 'meeting' }[s] || 'note');
+    var menu = this.state.menu ?? (s === 'dataMenu' || s === 'dataMenuRestricted');
+    var dialog = this.state.dialog ?? (s === 'deletePerson' ? 'delete' : null);
+    var restricted = s === 'dataMenuRestricted';
+    var T = [['note', 'Ghi chú', 'Lưu ghi chú'], ['task', 'Công việc', 'Thêm công việc'], ['meeting', 'Lịch hẹn', 'Đặt lịch hẹn']];
+    var composerTabs = T.map(function (t) {
+      var on = t[0] === tab;
+      return { label: t[1], sel: on ? 'true' : 'false', bg: on ? '#EEF0FF' : 'transparent', fg: on ? '#3730A3' : '#3C424E', fw: on ? 600 : 500, pick: function () { self.setState({ tab: t[0] }); } };
+    });
+    var cta = T.filter(function (t) { return t[0] === tab; })[0][2];
+    var I = {
+      lead: 'M4 13l2.5-7h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 13h4l1.5 2.5h5L16 13h4',
+      auto: 'M13 3L5 13h6l-1 8 8-10h-6z',
+      call: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+      stage: 'M5 12h14M13 6l6 6-6 6',
+      cal: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4'
+    };
+    var E = [
+      ['stage', 'Cơ hội chuyển sang Hẹn lịch', '31/10 · 16:20 · Thu Hà', 'Từ “Đã liên hệ”. Giá trị dự kiến 38.000.000 ₫.', '#FFF1D6', '#8A5300'],
+      ['cal', 'Đặt lịch hẹn CN 02/11 · 09:30', '31/10 · 16:18 · Thu Hà', 'Khám và chụp phim 3D tại chi nhánh Quận 3.', '#EEF0FF', '#3730A3'],
+      ['lead', 'Lead mới từ “Tư vấn trả góp”', '30/10 · 21:05', 'Hỏi: trả góp 12 tháng có cần thẻ tín dụng không? · tiktok / video · tự gom vào hồ sơ vì trùng số điện thoại', '#E2F4EA', '#0B6B45'],
+      ['call', 'Cuộc gọi · 6 phút', '28/10 · 14:20 · Thu Hà', 'Quan tâm Invisalign, sợ đau. Hẹn gọi lại sau khi xem bảng giá trả góp.', '#F0F2F5', '#3C424E'],
+      ['auto', 'Automation “Giao lead mới cho người trực”', '28/10 · 14:02', 'Giao cho Thu Hà, tạo công việc “Gọi lại trong 15 phút”.', '#EEF0FF', '#3730A3'],
+      ['lead', 'Lead mới từ “Ưu đãi niềng răng tháng 11”', '28/10 · 14:02', 'Đồng ý xử lý dữ liệu v3 · facebook / cpc / chien-dich-thang-11', '#E2F4EA', '#0B6B45']
+    ];
+    var timeline = E.map(function (e) { return { d: I[e[0]], title: e[1], when: e[2], body: e[3], bg: e[4], fg: e[5] }; });
+    return {
+      composerTabs: composerTabs, composerCta: cta,
+      isNote: tab === 'note', isTask: tab === 'task', isMeeting: tab === 'meeting',
+      timeline: timeline,
+      showMenu: menu, menuOpen: menu ? 'true' : 'false',
+      restricted: restricted,
+      sidebarRole: restricted ? 'sales' : 'owner',
+      menuFg: restricted ? '#A8AEB9' : '#15171C',
+      menuDanger: restricted ? '#A8AEB9' : '#B42318',
+      showDelete: dialog === 'delete',
+      toggleMenu: function () { self.setState({ menu: !menu }); },
+      openDelete: function () { if (!restricted) { self.setState({ dialog: 'delete', menu: false }); } },
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
