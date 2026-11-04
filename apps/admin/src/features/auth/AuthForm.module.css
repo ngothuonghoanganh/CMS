@@ -8,6 +8,22 @@
   margin-top: 4px;
 }
 
+/* Sign-in forms use the large size of screen 34: 14px labels, 48px controls with 15px text. The
+   native input sits inside a 1px frame, hence 46px. */
+.form label {
+  font-size: var(--text-body);
+}
+
+.form input:not([type='checkbox'], [type='radio']) {
+  min-height: 46px;
+  font-size: var(--text-md);
+}
+
+.form button[type='submit'] {
+  min-height: 48px;
+  font-size: var(--text-md);
+}
+
 /* "Chưa có tài khoản? Tạo workspace mới" inside the login card (screen 34). */
 .switch {
   margin: 0;
