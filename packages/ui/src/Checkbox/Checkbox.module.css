@@ -14,9 +14,13 @@
   box-sizing: border-box;
 }
 
-/* One text line of the label's size, so its baseline is the label's; the box is centered on it. */
+/*
+ * One text line of the label's size, so its baseline is the label's; the box is centered on it.
+ * Above the label's row-wide click area, so a click on the box reaches the input itself.
+ */
 .control {
   position: relative;
+  z-index: 1;
   display: block;
   flex: none;
   align-self: baseline;
