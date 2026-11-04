@@ -296,6 +296,11 @@ function PageSettings() {
         className={styles.body}
       >
         <PageMotionPanel />
+        {/* Board 37 has no sticky footer here: the hint scrolls with the settings, at their end. */}
+        <p className={styles.pageHint}>
+          Chọn một section trên trang hoặc trong cấu trúc trang để sửa nội dung, bố cục và cách hiển
+          thị.
+        </p>
       </div>
       <div
         id={panelId('seo')}
@@ -312,10 +317,6 @@ function PageSettings() {
           Cài đặt trang &amp; SEO
         </GuardedLink>
       </div>
-      <p className={styles.footnote}>
-        Chọn một section trên trang hoặc trong cấu trúc trang để sửa nội dung, bố cục và cách hiển
-        thị.
-      </p>
     </aside>
   );
 }

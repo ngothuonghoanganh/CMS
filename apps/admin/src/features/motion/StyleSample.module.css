@@ -1,40 +1,148 @@
 /* Wireframes of a page in the admin's own colors: a sample of how a style moves (ADR-032). */
 
-.thumb {
+/*
+ * Small cards of the style cards (board 37) and the entrance tiles (board 38). Each card is drawn
+ * from the motion MotionSample marks on its root: a trail on the side it comes from
+ * (`data-motion-enter`), steps for parts entering one after another (`data-motion-order`) and a
+ * mark per accent (`data-motion-accents`). The drawing is static (box-shadow, offsets); when the
+ * sample plays, the cards move with transform and opacity only, as on the page.
+ */
+.thumb,
+.tile {
+  --mini-bar: var(--color-subtle);
+  --mini-border: var(--color-border-strong);
+  --mini-trail-color: color-mix(in srgb, var(--color-subtle) 35%, transparent);
+
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 8px;
-  height: 52px;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   border-radius: var(--radius-sm);
-  background: var(--color-surface-subtle);
+  background: var(--color-hover);
   overflow: hidden;
 }
 
-.thumbHeading {
-  display: block;
-  width: 60%;
-  height: 7px;
-  border-radius: 3px;
-  background: var(--color-subtle);
+.thumb {
+  gap: 6px;
+  height: 52px;
 }
 
-.thumbRow {
+.tile {
+  flex: none;
+  width: 40px;
+  height: 32px;
+  border-radius: var(--radius-xs);
+}
+
+.selected {
+  --mini-bar: var(--color-primary);
+  --mini-border: color-mix(in srgb, var(--color-primary) 45%, var(--color-surface));
+}
+
+.mini {
+  position: relative;
   display: flex;
-  gap: 5px;
-  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  box-sizing: border-box;
+  width: 20px;
+  height: 24px;
+  padding: 4px 3px;
+  border: 1px solid var(--mini-border);
+  border-radius: 4px;
+  background: var(--color-surface);
 }
 
-.thumbBlock {
+.tile .mini {
+  gap: 2px;
+  width: 18px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+.miniHeading,
+.miniLine {
   display: block;
-  flex: 1;
-  border-radius: 4px;
+  flex: none;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mini-bar);
+}
+
+.miniLine {
+  width: 60%;
   background: var(--color-border-strong);
 }
 
-.thumbMedia {
-  background: var(--color-focus-ring);
+.tile .miniHeading,
+.tile .miniLine {
+  height: 2px;
+}
+
+/* How the cards enter: where the trail lies says where they come from. */
+[data-motion-enter='fade'] > .mini {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-subtle) 20%, transparent);
+}
+
+[data-motion-enter='up'] > .mini {
+  box-shadow: 0 5px 0 -1px var(--mini-trail-color);
+}
+
+[data-motion-enter='side'] > .mini {
+  box-shadow: -6px 0 0 -1px var(--mini-trail-color);
+}
+
+[data-motion-enter='zoom'] > .mini {
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-subtle) 25%, transparent);
+}
+
+/* "Bật lên" bounces: the only warm trail, so "Vui tươi" reads orange. */
+[data-motion-enter='pop'] > .mini {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-warning) 40%, transparent);
+}
+
+[data-motion-enter='reveal'] > .mini {
+  box-shadow: 0 9px 0 -2px color-mix(in srgb, var(--color-subtle) 25%, transparent);
+}
+
+/* "Lần lượt": each card a step lower than the one before, as they enter one after another. */
+.thumb[data-motion-order='stagger'] > .mini:nth-child(2) {
+  top: 2px;
+}
+
+.thumb[data-motion-order='stagger'] > .mini:nth-child(3) {
+  top: 4px;
+}
+
+/* Accents. "Tiêu đề hiện từng dòng": the heading is two thin lines. */
+.thumb[data-motion-accents~='lines'] .miniHeading {
+  height: 2px;
+  box-shadow: 0 3px 0 var(--mini-bar);
+  margin-bottom: 3px;
+}
+
+/* "Số liệu đếm lên": the second line is a short, bold figure. */
+.thumb[data-motion-accents~='count'] .miniLine {
+  width: 40%;
+  height: 4px;
+  background: var(--mini-bar);
+}
+
+/* "Ảnh hé lộ": a tinted picture fills the bottom of each card. */
+.thumb[data-motion-accents~='image'] .mini {
+  background: linear-gradient(to top, var(--color-focus-ring) 35%, var(--color-surface) 35%);
+}
+
+/* "Các bước nối nhau": a connector runs behind the cards. */
+.thumb[data-motion-accents~='steps']::before {
+  position: absolute;
+  top: 50%;
+  right: 30%;
+  left: 30%;
+  height: 1px;
+  background: var(--mini-border);
+  content: '';
 }
 
 .page {

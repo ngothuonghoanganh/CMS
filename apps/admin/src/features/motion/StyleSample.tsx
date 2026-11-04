@@ -16,22 +16,50 @@ export interface StyleSampleProps {
   /** A new value plays the sample again; 0 shows it still. */
   play: number;
   /**
-   * `thumb`: a heading and two blocks, on the style cards and entrance tiles (boards 37, 38).
-   * `page`: a heading, cards, a picture beside text and figures (board 39).
+   * `thumb`: three small cards, on the style cards (board 37). `tile`: one small card, beside the
+   * name of an entrance tile (board 38). `page`: a heading, cards, a picture beside text and
+   * figures (board 39).
    */
-  layout: 'thumb' | 'page';
+  layout: 'thumb' | 'tile' | 'page';
+  /** The card or tile is the chosen one: its small cards take the brand color. */
+  selected?: boolean | undefined;
 }
 
-/** A wireframe that moves as the published page would (ADR-032); decoration only. */
-export function StyleSample({ motion, level, play, layout }: StyleSampleProps) {
-  if (layout === 'thumb') {
+/** One small card: a heading bar and a shorter line, as the boards draw a section. */
+function MiniCard() {
+  return (
+    <span className={styles.mini} {...MOTION_TEXT}>
+      <span className={styles.miniHeading} />
+      <span className={styles.miniLine} />
+    </span>
+  );
+}
+
+/**
+ * A wireframe that moves as the published page would (ADR-032); decoration only. Still, the small
+ * cards are drawn from the motion itself (its `data-motion-*` attributes): a trail for how they
+ * enter, their offsets for the order, and marks for the accents.
+ */
+export function StyleSample({ motion, level, play, layout, selected = false }: StyleSampleProps) {
+  if (layout === 'thumb' || layout === 'tile') {
     return (
-      <MotionSample motion={motion} level={level} play={play} className={styles.thumb}>
-        <span className={styles.thumbHeading} {...MOTION_TEXT} />
-        <span className={styles.thumbRow}>
-          <span className={styles.thumbBlock} {...MOTION_TEXT} />
-          <span className={`${styles.thumbBlock} ${styles.thumbMedia}`} {...MOTION_MEDIA} />
-        </span>
+      <MotionSample
+        motion={motion}
+        level={level}
+        play={play}
+        className={`${layout === 'thumb' ? styles.thumb : styles.tile}${
+          selected ? ` ${styles.selected}` : ''
+        }`}
+      >
+        {layout === 'thumb' ? (
+          <>
+            <MiniCard />
+            <MiniCard />
+            <MiniCard />
+          </>
+        ) : (
+          <MiniCard />
+        )}
       </MotionSample>
     );
   }
