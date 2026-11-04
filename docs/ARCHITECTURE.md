@@ -2628,9 +2628,9 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                          | Màn            | Trạng thái |
 | --- | ----------------------------------------------------------------------------------------------------------------- | -------------- | ---------- |
 | M0  | Nhập board 37–40, ADR-032, bổ sung ADR-007, 030, 031                                                              | —              | Xong       |
-| M1  | `motion` trong composition, hàm phân giải, CSS và runtime của renderer, chip thay đổi, mẫu hệ thống có phong cách | 09, 05         | Chưa làm   |
-| M2  | Section Số liệu nổi bật, điểm nhấn đếm lên, AI không viết con số                                                  | 04, 09         | Chưa làm   |
-| M3  | Editor: phong cách của trang, hiệu ứng của section, thư viện phong cách, chạy thử                                 | 37, 38, 39, 03 | Chưa làm   |
+| M1  | `motion` trong composition, hàm phân giải, CSS và runtime của renderer, chip thay đổi, mẫu hệ thống có phong cách | 09, 05         | Xong       |
+| M2  | Section Số liệu nổi bật, điểm nhấn đếm lên, AI không viết con số                                                  | 04, 09         | Xong       |
+| M3  | Editor: phong cách của trang, hiệu ứng của section, thư viện phong cách, chạy thử                                 | 37, 38, 39, 03 | Xong       |
 | M4  | AI tạo trang: khối Chuyển động ở bước cấu trúc, AI chọn phong cách và ghi đè section, dự phòng theo bảng ngành    | 20             | Chưa làm   |
 
 **Hoàn thành Chuyển động** khi một E2E chạy xanh toàn bộ chuỗi:
