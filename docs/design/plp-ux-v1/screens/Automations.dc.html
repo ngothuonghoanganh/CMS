@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Automation — Nha khoa Smile Care</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="automation" role="{{ sidebarRole }}" plan-limited="{{ locked }}" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Automation</h1>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">Tự giao lead, nhắc việc và báo tin khi có sự kiện ở Smile Care.</p>
+        </div>
+        <sc-if value="{{ canCreate }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+            <span style="font-size: 13px; color: #5E6573">1.240 lượt chạy tháng này · <a href="Plan.dc.html" style="font-weight: 600; text-decoration: none">hạn mức theo gói</a></span>
+            <a href="AutomationEditor.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Tạo automation
+            </a>
+          </div>
+        </sc-if>
+      </header>
+
+      <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+        <section aria-labelledby="lock-h" style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center; padding: 28px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <div style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 10px">
+            <span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 12px; font-weight: 700">CẦN GÓI CÓ AUTOMATION</span>
+            <h2 id="lock-h" style="margin: 0; font-size: 22px; font-weight: 700">Không để lead nào phải chờ</h2>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Gói Cơ bản hiện tại chưa có automation. Đây là giới hạn của gói, không phải quyền của bạn. Chủ sở hữu workspace có thể nâng cấp.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; padding-top: 4px">
+              <a href="Plan.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">So sánh gói</a>
+              <button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Nhắn Ngọc Anh</button>
+            </div>
+          </div>
+          <ul style="flex: 1 1 300px; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            <sc-for list="{{ recipes }}" as="r" hint-placeholder-count="4">
+              <li style="display: flex; gap: 10px; padding: 12px; border-radius: 12px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 13px; line-height: 1.5"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4338CA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M13 3L5 13h6l-1 8 8-10h-6z"></path></svg><span><strong>{{ r.name }}</strong><span style="display: block; color: #3C424E">{{ r.desc }}</span></span></li>
+            </sc-for>
+          </ul>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ showRecipes }}" hint-placeholder-val="{{ true }}">
+        <section aria-labelledby="rec-h" style="display: flex; flex-direction: column; gap: 10px">
+          <h2 id="rec-h" style="margin: 0; font-size: 14px; font-weight: 700">Bắt đầu từ mẫu</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px">
+            <sc-for list="{{ recipes }}" as="r" hint-placeholder-count="4">
+              <a href="AutomationEditor.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E5EA; color: #15171C; text-decoration: none">
+                <span style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4338CA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13h6l-1 8 8-10h-6z"></path></svg>{{ r.name }}</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #3C424E">{{ r.desc }}</span>
+              </a>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ hasList }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ viewOnly }}" hint-placeholder-val="{{ false }}">
+          <div role="note" style="padding: 10px 14px; border-radius: 10px; background: #F0F2F5; font-size: 13px; color: #3C424E">Bạn đang xem với vai trò Chăm sóc khách hàng. Bật, tạm dừng hay sửa automation cần quyền Quản trị.</div>
+        </sc-if>
+        <section aria-label="Automation của site" style="border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow-x: auto">
+          <div style="min-width: 900px">
+            <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) 130px minmax(0, 1.4fr) 130px 110px; gap: 12px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+              <span>TÊN</span><span>KHI NÀO CHẠY</span><span>TRẠNG THÁI</span><span>LẦN CHẠY GẦN NHẤT</span><span>30 NGÀY</span><span>BẬT</span>
+            </div>
+            <sc-for list="{{ rows }}" as="a" hint-placeholder-count="5">
+              <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) 130px minmax(0, 1.4fr) 130px 110px; gap: 12px; align-items: center; padding: 13px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                <a href="AutomationEditor.dc.html" style="display: flex; flex-direction: column; gap: 2px; color: #15171C; text-decoration: none"><span style="font-weight: 600">{{ a.name }}</span><span style="font-size: 12px; color: #5E6573">{{ a.by }}</span></a>
+                <span style="font-size: 13px; color: #3C424E">{{ a.trigger }}</span>
+                <span><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: {{ a.bg }}; color: {{ a.fg }}; font-size: 12px; font-weight: 600"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: {{ a.dot }}"></span>{{ a.status }}</span></span>
+                <a href="AutomationRuns.dc.html" style="font-size: 13px; font-weight: {{ a.lastFw }}; color: {{ a.lastFg }}; text-decoration: none">{{ a.last }}</a>
+                <span style="font-size: 13px; color: #3C424E">{{ a.stats }}</span>
+                <span style="display: flex; align-items: center; gap: 6px">
+                  <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Bật {{ a.name }}</span><input type="checkbox" role="switch" checked="{{ a.on }}" disabled="{{ a.toggleOff }}" style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA"></label>
+                  <button type="button" aria-label="Nhân bản, lưu trữ {{ a.name }}" style="width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <p style="margin: 0; padding: 18px; border-radius: 12px; border: 1px dashed #CDD2DA; font-size: 14px; color: #3C424E; text-align: center">Chưa có automation nào. Chọn một mẫu ở trên, mọi automation đều bắt đầu ở trạng thái bản nháp và chỉ chạy khi bạn bật.</p>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["list","empty","planLocked","viewOnly"],"default":"list"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'list';
+    var T = {
+      on: ['#E2F4EA', '#0B6B45', '#12A06A'], paused: ['#ECEEF2', '#474E5C', '#8A91A0'],
+      draft: ['#F0F2F5', '#474E5C', '#CDD2DA'], error: ['#FDEBE9', '#7A1A12', '#B42318']
+    };
+    var R = [
+      ['Giao lead mới cho người trực', 'Ngọc Anh · 14/10', 'Có lead mới · trang có form', 'on', 'Đang bật', 'Thành công · 5 phút trước', '412 lượt · 0 lỗi', false],
+      ['Nhắc gọi lại nếu chưa liên hệ', 'Thu Hà · 20/10', 'Lead còn “Mới” sau 15 phút', 'on', 'Đang bật', 'Thành công · 18 phút trước', '96 lượt · 0 lỗi', false],
+      ['Gửi lead sang CRM của phòng khám', 'Quốc Bảo · 22/10', 'Có lead mới · không phải spam', 'error', 'Cần xử lý', 'Thất bại · 10:02 hôm nay', '410 lượt · 3 lỗi', true],
+      ['Báo quản lý khi chốt Implant', 'Ngọc Anh · 25/10', 'Cơ hội chuyển sang Thắng', 'paused', 'Tạm dừng', 'Thành công · 29/10', '6 lượt · 0 lỗi', false],
+      ['Gắn nhãn VIP cho khách Implant', 'Lan Phương · hôm qua', 'Cơ hội đổi giai đoạn', 'draft', 'Bản nháp', 'Chưa chạy', '—', false]
+    ];
+    var viewOnly = s === 'viewOnly';
+    var rows = R.map(function (r) {
+      var t = T[r[3]];
+      return { name: r[0], by: r[1], trigger: r[2], status: r[4], bg: t[0], fg: t[1], dot: t[2], last: r[5], stats: r[6],
+        lastFg: r[7] ? '#B42318' : '#3C424E', lastFw: r[7] ? 600 : 500,
+        on: r[3] === 'on' || r[3] === 'error', toggleOff: viewOnly || r[3] === 'draft' };
+    });
+    var recipes = [
+      { name: 'Giao lead mới cho người trực', desc: 'Xoay vòng giữa các nhân viên, tạo việc “Gọi lại trong 15 phút”.' },
+      { name: 'Nhắc khi lead chưa được gọi', desc: 'Sau 15 phút còn “Mới” thì báo người phụ trách và quản lý.' },
+      { name: 'Báo tin khi chốt được khách', desc: 'Email nội bộ cho quản lý khi cơ hội chuyển sang Thắng.' },
+      { name: 'Gửi lead sang hệ thống khác', desc: 'Gọi webhook với dữ liệu lead, thử lại khi lỗi.' }
+    ];
+    var locked = s === 'planLocked';
+    var empty = s === 'empty';
+    return {
+      rows: rows, recipes: recipes,
+      locked: locked, viewOnly: viewOnly,
+      sidebarRole: viewOnly ? 'sales' : 'owner',
+      canCreate: !locked && !viewOnly,
+      showRecipes: !locked && !viewOnly && (empty || s === 'list'),
+      hasList: s === 'list' || viewOnly,
+      isEmpty: empty
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -5,7 +5,7 @@ Thư mục này là bản sao chỉ đọc của thiết kế sản phẩm. Dùn
 ## Nguồn
 
 - **Artifact:** "Payload Landing Page — Product Design", https://claude.ai/artifact/1zhYYRkfqj7xNUVf1WSn4k
-- **Phiên bản đã nhập:** `1792838787-b170`, ngày 2026-10-24 (màn 01–12, Sidebar). Các board Phase 1 (màn 13–16, 15b, Sidebar v2) và hai ghi chú `phase1`, `phase1Decisions` của `canvas.json` nhập từ `1793503258-d63e`, ngày 2026-11-01. Các board D2 (màn 34–36), Sidebar v2 có trạng thái mở danh sách workspace, và hai ghi chú `d2`, `d2Decisions` nhập từ `1793546061-78b0`, ngày 2026-11-01. Các board Phase 2 (màn 17–21, ảnh thu nhỏ template) và hai ghi chú `phase2`, `phase2Decisions` nhập từ cùng phiên bản, ngày 2026-11-02. Các board Chuyển động (màn 37–40) và hai ghi chú `motion`, `motionDecisions` nhập từ `1793733435-70e7`, ngày 2026-11-04.
+- **Phiên bản đã nhập:** `1792838787-b170`, ngày 2026-10-24 (màn 01–12, Sidebar). Các board Phase 1 (màn 13–16, 15b, Sidebar v2) và hai ghi chú `phase1`, `phase1Decisions` của `canvas.json` nhập từ `1793503258-d63e`, ngày 2026-11-01. Các board D2 (màn 34–36), Sidebar v2 có trạng thái mở danh sách workspace, và hai ghi chú `d2`, `d2Decisions` nhập từ `1793546061-78b0`, ngày 2026-11-01. Các board Phase 2 (màn 17–21, ảnh thu nhỏ template) và hai ghi chú `phase2`, `phase2Decisions` nhập từ cùng phiên bản, ngày 2026-11-02. Các board Chuyển động (màn 37–40) và hai ghi chú `motion`, `motionDecisions` nhập từ `1793733435-70e7`, ngày 2026-11-04. Các board Phase 3 (màn 22–27) và hai ghi chú `phase3`, `phase3Decisions` nhập từ `1793751628-0501`, ngày 2026-11-04.
 - **Nội dung:** `screens/*.dc.html` (một file một board) và `screens/canvas.json` (tên board, bố cục canvas, giả định thiết kế).
 - **Không tìm thấy khi nhập:** `README` gốc (danh sách quy tắc UX cốt lõi), `proposal/` và `research/`. Artifact "Design System" cũng chưa có token.
   - Token admin vì vậy được trích từ inline style của các màn 01–08.
@@ -61,6 +61,17 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 | 20  | Tạo landing page bằng AI    | `AiCreate.dc.html`           | G4     |
 | 21  | Trợ lý AI trong editor      | `AiAssistant.dc.html`        | G5     |
 | —   | Ảnh thu nhỏ template        | `TemplateThumb.dc.html`      | G1     |
+
+**Phase 3 — Chăm sóc khách** (ARCHITECTURE §5, ADR-033, ADR-034):
+
+| #   | Board                   | File                       | Lát |
+| --- | ----------------------- | -------------------------- | --- |
+| 22  | Danh bạ khách hàng      | `Contacts.dc.html`         | K1  |
+| 23  | Hồ sơ khách hàng        | `ContactProfile.dc.html`   | K2  |
+| 24  | Pipeline cơ hội         | `Pipeline.dc.html`         | K3  |
+| 25  | Danh sách automation    | `Automations.dc.html`      | A1  |
+| 26  | Thiết lập automation    | `AutomationEditor.dc.html` | A2  |
+| 27  | Lịch sử chạy automation | `AutomationRuns.dc.html`   | A3  |
 
 **Chuyển động** (ARCHITECTURE §5, ADR-032):
 
