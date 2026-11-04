@@ -1,0 +1,372 @@
+/* Board 22 "Khách hàng". */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* "Có thể trùng · 4" reads amber until it is the view shown. */
+.viewsWithPairs > button:last-child:not([aria-pressed='true']) {
+  color: var(--color-warning-strong-ink);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter {
+  min-width: 0;
+}
+
+.search {
+  width: 240px;
+  max-width: 100%;
+}
+
+.bulkBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-ink);
+  color: var(--color-on-primary);
+  font-size: var(--text-body-sm);
+}
+
+.bulkCount {
+  font-weight: 600;
+}
+
+/* Outlined white on the ink bar, as on the board. The doubled class outweighs the Button's own. */
+.bulkButton.bulkButton {
+  min-height: 34px;
+  border-color: var(--color-muted);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+
+.bulkButton.bulkButton:hover {
+  background: var(--color-ink-2);
+  color: var(--color-on-primary);
+}
+
+.listCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.table th,
+.table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 20px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 20px;
+}
+
+.table thead th {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-bottom-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.checkCell {
+  width: 36px;
+}
+
+/*
+ * Rows as tight as board 22's: the box keeps a 24px target (WCAG 2.5.8) instead of 44px. The
+ * doubled class outweighs the Checkbox's own row height.
+ */
+.rowCheck.rowCheck {
+  min-height: 24px;
+}
+
+.selectedRow {
+  background: var(--color-primary-tint);
+}
+
+.nameCell,
+.sourceCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nameRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.name {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.dupPill {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning-badge-bg);
+  color: var(--color-warning-strong-ink);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.reach {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.sourceCell {
+  font-size: var(--text-body-sm);
+}
+
+.sourceTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceDetail {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.owner,
+.unassigned {
+  font-size: var(--text-body-sm);
+  white-space: nowrap;
+}
+
+.owner {
+  color: var(--color-ink);
+}
+
+.unassigned {
+  color: var(--color-warning-strong-ink);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-neutral-badge-bg);
+  color: var(--color-neutral-badge-ink);
+  font-size: var(--text-sm);
+}
+
+.last {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+  white-space: nowrap;
+}
+
+.noMatch,
+.loading {
+  margin: 0;
+  padding: 24px 20px;
+  font-size: var(--text-body);
+  color: var(--color-muted);
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.pagerButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.empty {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+/* "Có thể trùng": one pair at a time. */
+.mergePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.mergeHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mergeTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.mergeReason {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.compareScroll {
+  overflow-x: auto;
+}
+
+.compare {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  table-layout: fixed;
+}
+
+.compare th,
+.compare td {
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-divider);
+  text-align: left;
+  font-size: var(--text-body);
+}
+
+.compare thead th {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-top: 0;
+  background: var(--color-surface-subtle);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.compare thead th:first-child {
+  width: 160px;
+}
+
+.compare tbody th {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.pickedCell {
+  background: var(--color-primary-tint);
+}
+
+.pickLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.pickLabel input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.mergeNote {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+  color: var(--color-ink-2);
+}
+
+.mergeActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* "Thêm khách hàng". */
+.addForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.addPair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.exists {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-strong-ink);
+  font-size: var(--text-body-sm);
+}
+
+.muted {
+  color: var(--color-muted);
+}

@@ -822,6 +822,47 @@ const ROWS: Row[] = [
       client.post(`/sites/${site.id}/leads/${failedLeadId}/notification/retry`),
   },
   {
+    action: 'Xem khách hàng',
+    permission: 'leads.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/contacts`),
+  },
+  {
+    action: 'Tìm khách hàng',
+    permission: 'leads.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.post(`/sites/${site.id}/contacts/search`, { q: '0909' }),
+  },
+  {
+    action: 'Người phụ trách và nhãn của khách hàng',
+    permission: 'leads.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/contacts/options`),
+  },
+  {
+    action: 'Xem khách hàng có thể trùng',
+    permission: 'leads.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/contact-suggestions`),
+  },
+  {
+    // The same number every time: the first call adds the profile, the others point to it.
+    action: 'Thêm khách hàng',
+    permission: 'leads.handle',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/contacts`, {
+        name: 'Khách gọi điện',
+        phone: '0909 111 222',
+        channel: 'phone_call',
+      }),
+  },
+  {
     action: 'Xem nơi nhận lead',
     permission: 'leads.view',
     scope: 'site',

@@ -5,6 +5,8 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { ContactsRepository } from '../contacts/contacts.repository.js';
+import { MergeSuggestionsRepository } from '../contacts/merge-suggestions.repository.js';
 import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND } from '../sites/sites.service.js';
@@ -26,6 +28,8 @@ export class LeadPersonService {
     private readonly activity: ActivityRepository,
     private readonly sites: SitesRepository,
     private readonly transactions: TransactionRunner,
+    private readonly contacts: ContactsRepository,
+    private readonly suggestions: MergeSuggestionsRepository,
   ) {}
 
   /** "Xóa dữ liệu người này", from one of their leads. */
@@ -64,6 +68,10 @@ export class LeadPersonService {
     person: LeadPerson,
     tx: Tx,
   ): Promise<number> {
+    // Their customer profiles go with their leads (ADR-033).
+    const linked = await this.leads.contactIdsOfPerson(scope, siteId, person, tx);
+    const contacts = await this.contacts.deletePerson(scope, siteId, person, linked, tx);
+    await this.suggestions.deleteForContacts(scope, siteId, contacts, tx);
     const deleted = await this.leads.deletePerson(scope, siteId, person, tx);
     await this.requests.maskPerson(scope, siteId, person, tx);
     await this.activity.record(

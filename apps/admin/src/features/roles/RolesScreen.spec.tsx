@@ -100,7 +100,7 @@ describe('RolesScreen', () => {
     expect(within(table).getAllByText('(phải được duyệt)')).toHaveLength(1);
     const legend = screen.getByRole('list', { name: 'Chú thích' });
     expect(legend).toHaveTextContent('Yêu cầuPhải được duyệt');
-    expect(rowOf('Xem lead và nơi nhận lead')).toBe('yynnyn');
+    expect(rowOf('Xem lead, khách hàng, pipeline')).toBe('yynnyn');
     expect(rowOf('Xuất lead ra CSV / Excel')).toBe('yynnnn');
     expect(rowOf('Xem trang, bản nháp và hiệu quả')).toBe('yyyyyy');
     expect(within(table).getAllByText('Không').length).toBeGreaterThan(0);
@@ -149,7 +149,7 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
       'aria-pressed',
       'true',
     );
-    expect(screen.getByRole('switch', { name: 'Xem lead và nơi nhận lead' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' })).toBeChecked();
     expect(
       screen.getByText(
         '2 người đang giữ vai trò này, tính cả lời mời đang chờ. Quyền mới áp dụng ngay ở thao tác kế tiếp của họ.',
@@ -185,13 +185,16 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
     await user.click(
       screen.getByRole('switch', { name: 'Rollback, hoàn tác, gỡ trang khỏi live' }),
     );
-    await user.click(screen.getByRole('switch', { name: 'Xem lead và nơi nhận lead' }));
+    await user.click(screen.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' }));
     const summary = screen.getByRole('region', { name: 'Tóm tắt trước khi lưu' });
     expect(
       within(summary)
         .getAllByRole('listitem')
         .map((item) => item.textContent),
-    ).toEqual(['Bỏ: Rollback, hoàn tác, gỡ trang khỏi live', 'Thêm: Xem lead và nơi nhận lead']);
+    ).toEqual([
+      'Bỏ: Rollback, hoàn tác, gỡ trang khỏi live',
+      'Thêm: Xem lead, khách hàng, pipeline',
+    ]);
 
     const created: CustomRole = {
       ...contentLead,
@@ -219,7 +222,7 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
     expect(
       screen.getByRole('heading', { name: 'Vai trò: Trưởng nhóm nội dung' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Xem lead và nơi nhận lead' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' })).toBeChecked();
   });
 
   it('asks for a name before saving', async () => {

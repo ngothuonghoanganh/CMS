@@ -46,7 +46,7 @@ describe('the custom role editor (board 16, ADR-024)', () => {
       'Cũng tắt: Xuất bản, cập nhật trang live, Rollback, hoàn tác, gỡ trang khỏi live.',
     );
     expect(alsoChanged([], toggled([], 'leads.export', true), ['leads.export'])).toBe(
-      'Cũng bật: Xem lead và nơi nhận lead.',
+      'Cũng bật: Xem lead, khách hàng, pipeline.',
     );
     expect(alsoChanged([...before], toggled([...before], 'leads.view', true), ['leads.view'])).toBe(
       '',
@@ -85,7 +85,7 @@ describe('the custom role editor (board 16, ADR-024)', () => {
     expect(changeOf(draft, 'pages.edit')).toBeNull();
     expect(summaryLines(draft)).toEqual([
       { change: 'removed', label: 'Rollback, hoàn tác, gỡ trang khỏi live' },
-      { change: 'added', label: 'Xem lead và nơi nhận lead' },
+      { change: 'added', label: 'Xem lead, khách hàng, pipeline' },
     ]);
   });
 });

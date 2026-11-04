@@ -133,6 +133,44 @@ test.describe('Design capture', () => {
     await context.close();
   });
 
+  test('22 Contacts', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(sitePath('/contacts'));
+    const list = page.getByRole('region', { name: 'Danh sách khách hàng' });
+    const rows = list.getByRole('row');
+    await expect(rows.nth(1)).toBeVisible();
+    // Tags and an owner on some profiles, as on the board.
+    await rows.nth(1).getByRole('checkbox').check();
+    await rows.nth(2).getByRole('checkbox').check();
+    const bar = page.getByRole('toolbar', { name: 'Thao tác hàng loạt' });
+    await bar.getByRole('button', { name: 'Gắn nhãn…' }).click();
+    const tagDialog = page.getByRole('dialog', { name: 'Gắn nhãn' });
+    await tagDialog.getByRole('combobox', { name: 'Nhãn' }).fill('Niềng răng');
+    await tagDialog.getByRole('button', { name: 'Gắn nhãn' }).click();
+    await expect(tagDialog).toBeHidden();
+    await rows.nth(1).getByRole('checkbox').check();
+    await bar.getByRole('button', { name: 'Giao cho…' }).click();
+    await page.getByRole('menuitem').first().click();
+    await expect(rows.nth(1)).not.toContainText('Chưa giao');
+    await capture(page, 'Contacts');
+
+    for (const index of [1, 2, 3]) {
+      await rows.nth(index).getByRole('checkbox').check();
+    }
+    await capture(page, 'Contacts-bulk');
+    for (const index of [1, 2, 3]) {
+      await rows.nth(index).getByRole('checkbox').uncheck();
+    }
+
+    await page.getByRole('button', { name: 'Thêm khách hàng' }).click();
+    const add = page.getByRole('dialog', { name: 'Thêm khách hàng' });
+    await add.getByRole('textbox', { name: /Họ và tên/ }).fill('Nguyễn Thu Hà');
+    await add.getByRole('textbox', { name: /Số điện thoại/ }).fill('0901 234 567');
+    await add.getByRole('button', { name: 'Thêm khách hàng' }).click();
+    await expect(add.getByRole('status')).toBeVisible();
+    await capture(page, 'Contacts-add');
+  });
+
   test('10 Leads, 11 Analytics and 12 Consent', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const name = 'Nguyễn Thu Hà';

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
+import { ContactsCoreModule } from '../contacts/contacts-core.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { LeadsModule } from '../leads/leads.module.js';
@@ -14,6 +15,7 @@ import { DataRequestsService } from './data-requests.service.js';
 @Module({
   imports: [
     ActivityModule,
+    ContactsCoreModule,
     DataRequestsCoreModule,
     AuthModule,
     LeadsCoreModule,

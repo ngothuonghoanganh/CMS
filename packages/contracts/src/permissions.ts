@@ -129,8 +129,8 @@ export const permissionGroups: readonly PermissionGroup[] = [
   {
     title: 'Leads',
     rows: [
-      { permission: 'leads.view', label: 'Xem lead và nơi nhận lead' },
-      { permission: 'leads.handle', label: 'Đổi trạng thái, ghi chú, đánh dấu spam' },
+      { permission: 'leads.view', label: 'Xem lead, khách hàng, pipeline' },
+      { permission: 'leads.handle', label: 'Đổi trạng thái, ghi chú, giao việc' },
     ],
   },
   {

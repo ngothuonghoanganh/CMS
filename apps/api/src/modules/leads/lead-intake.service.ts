@@ -1,22 +1,22 @@
-import { Injectable } from '@nestjs/common';
-import {
-  DEFAULT_RETENTION_MONTHS,
-  type PublicLeadValues,
-  type RetentionMonths,
-} from '@plp/contracts';
+import { Injectable, Logger } from '@nestjs/common';
+import type { PublicLeadValues } from '@plp/contracts';
 import { leadFormContentSchema, leadFormSectionOf } from '@plp/sections/schema';
 import type { Env } from '../../config/env.js';
+import { ContactLinker } from '../contacts/contact-linker.service.js';
+import type { ContactRecord } from '../contacts/contact.schema.js';
+import { ContactsRepository } from '../contacts/contacts.repository.js';
 import { SiteHosts } from '../domains/site-hosts.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { addressKeySecret } from '../../shared/renderer-channel/address-key.js';
 import type { RendererClient } from '../../shared/renderer-channel/renderer-request.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { releaseLeadCapture } from '../publishing/release-presentation.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
-import { type SitePrivacyRecord, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
+import { retentionOf, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import {
   addMonthsUtc,
@@ -34,13 +34,6 @@ import { LeadsRepository, SubmissionTakenError } from './leads.repository.js';
 
 const FORM_NOT_FOUND = 'Form này không còn nhận đăng ký';
 
-/**
- * Months a site keeps its leads; null keeps them until deleted by hand. The default only applies
- * without settings, which a form's release cannot have (it snapshotted them).
- */
-function retentionOf(privacy: SitePrivacyRecord | null): RetentionMonths {
-  return privacy === null ? DEFAULT_RETENTION_MONTHS : privacy.retentionMonths;
-}
 const RATE_LIMITED = 'Bạn đã gửi nhiều lần, hãy thử lại sau ít phút.';
 
 export interface IntakeOutcome {
@@ -60,6 +53,7 @@ interface FormRelease {
  */
 @Injectable()
 export class LeadIntakeService {
+  private readonly logger = new Logger(LeadIntakeService.name);
   private readonly addressSecret: Buffer;
 
   constructor(
@@ -71,6 +65,9 @@ export class LeadIntakeService {
     private readonly limits: LeadLimitsRepository,
     private readonly notifier: LeadNotifier,
     private readonly siteHosts: SiteHosts,
+    private readonly linker: ContactLinker,
+    private readonly contacts: ContactsRepository,
+    private readonly transactions: TransactionRunner,
   ) {
     this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
   }
@@ -102,44 +99,57 @@ export class LeadIntakeService {
     const spam = reasons.length > 0;
     const retention = retentionOf(sitePrivacyOf(site));
     let stored: LeadRecord;
+    let contact: ContactRecord | null;
     try {
-      stored = await this.leads.insertPublic(site, {
-        pageId: release.pageId,
-        releaseId: release._id,
-        releaseVersion: release.version,
-        submissionId: submission,
-        fields: {
-          name: input.name,
-          phone: input.phone,
-          // Fields the visitor's form did not ask are not stored, whatever was sent.
-          email: content.showEmail ? input.email : null,
-          message: content.showMessage ? input.message : null,
-        },
-        consent: {
-          // Without a marketing checkbox on the form there is nothing to agree to.
-          marketing: capture.marketingText !== null && input.marketing,
-          at: now,
-          marketingWithdrawnAt: null,
-        },
-        source: normalizeLeadSource({
-          ...input.source,
-          siteHosts: await this.siteHosts.of(site),
-        }),
-        device: deviceFromUserAgent(client.userAgent),
-        spam: { suspected: spam, reasons },
-        // Spam is never emailed (ADR-018).
-        notification: {
-          status: spam ? 'skipped' : 'pending',
-          attempts: 0,
-          lastErrorCode: null,
-          sentAt: null,
-          recipients: null,
-          rejectedRecipients: null,
-          updatedAt: now,
-        },
-        createdAt: now,
-        expiresAt: retention === null ? null : addMonthsUtc(now, retention),
-      });
+      // The profile is part of the lead (ADR-033): both are stored, or neither.
+      ({ stored, contact } = await this.transactions.run(async (tx) => {
+        const lead = await this.leads.insertPublic(
+          site,
+          {
+            pageId: release.pageId,
+            releaseId: release._id,
+            releaseVersion: release.version,
+            submissionId: submission,
+            fields: {
+              name: input.name,
+              phone: input.phone,
+              // Fields the visitor's form did not ask are not stored, whatever was sent.
+              email: content.showEmail ? input.email : null,
+              message: content.showMessage ? input.message : null,
+            },
+            consent: {
+              // Without a marketing checkbox on the form there is nothing to agree to.
+              marketing: capture.marketingText !== null && input.marketing,
+              at: now,
+              marketingWithdrawnAt: null,
+            },
+            source: normalizeLeadSource({
+              ...input.source,
+              siteHosts: await this.siteHosts.of(site),
+            }),
+            device: deviceFromUserAgent(client.userAgent),
+            spam: { suspected: spam, reasons },
+            // Spam is never emailed (ADR-018).
+            notification: {
+              status: spam ? 'skipped' : 'pending',
+              attempts: 0,
+              lastErrorCode: null,
+              sentAt: null,
+              recipients: null,
+              rejectedRecipients: null,
+              updatedAt: now,
+            },
+            createdAt: now,
+            expiresAt: retention === null ? null : addMonthsUtc(now, retention),
+          },
+          tx,
+        );
+        // Suspected spam joins no profile until it is moved out of spam.
+        return {
+          stored: lead,
+          contact: spam ? null : await this.linker.linkIn(site, lead, retention, tx),
+        };
+      }));
     } catch (error) {
       if (error instanceof SubmissionTakenError) {
         return { replayed: true };
@@ -160,7 +170,7 @@ export class LeadIntakeService {
       // The site was deleted meanwhile (ADR-027). The deletion sweeps the site's leads again after
       // its commit, which covers a lead stored while this read still saw the site; this lead may
       // have come after that sweep.
-      await this.leads.deletePublic(site, site._id, stored._id);
+      await this.forget(site, stored, contact);
       throw notFound(FORM_NOT_FOUND);
     }
     if ((await this.releases.findPublicOwner(site, release._id)) === null) {
@@ -168,7 +178,7 @@ export class LeadIntakeService {
       // leads refer to, but it read them before this lead was stored, so this lead's consent
       // evidence went with the page (rule 10). A lead stored while the deletion's transaction was
       // still open can pass this read; reading such a lead shows its evidence as missing.
-      await this.leads.deletePublic(site, site._id, stored._id);
+      await this.forget(site, stored, contact);
       throw notFound(FORM_NOT_FOUND);
     }
     const latest = retentionOf(current.privacy);
@@ -178,8 +188,45 @@ export class LeadIntakeService {
         stored._id,
         latest === null ? null : addMonthsUtc(now, latest),
       );
+      if (contact !== null) {
+        await this.contacts.setPublicExpiry(site, contact._id, latest);
+      }
+    }
+    if (contact !== null) {
+      await this.suggestDuplicates(site, contact, stored);
     }
     return { replayed: false };
+  }
+
+  /** Removes a lead stored for a page or site deleted meanwhile, and what it added to a profile. */
+  private async forget(
+    site: SiteRecord,
+    lead: LeadRecord,
+    contact: ContactRecord | null,
+  ): Promise<void> {
+    await this.leads.deletePublic(site, site._id, lead._id);
+    if (contact !== null) {
+      await this.contacts.dropLead(site, site._id, contact._id);
+    }
+  }
+
+  /**
+   * "Có thể trùng" for the profile the lead joined. The lead is stored and the visitor is answered
+   * either way: a failed check is logged, and the next lead of either person checks again.
+   */
+  private async suggestDuplicates(
+    site: SiteRecord,
+    contact: ContactRecord,
+    lead: LeadRecord,
+  ): Promise<void> {
+    try {
+      await this.linker.suggestFor(site, contact, lead, new Date());
+    } catch (error) {
+      this.logger.error(
+        { err: error, siteId: site._id.toHexString() },
+        'Checking a contact for duplicates failed',
+      );
+    }
   }
 
   /**
