@@ -1,7 +1,7 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   box-sizing: border-box;
   width: 100%;
   min-height: 100%;
@@ -99,11 +99,20 @@
   color: var(--color-muted);
 }
 
-.siteGroup,
-.navGroup {
+.siteGroup {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navGroup > .groupLabel {
+  padding-bottom: 4px;
 }
 
 .noSite {
@@ -176,7 +185,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: var(--target-min);
+  /* The rhythm of Sidebar v2; 40px is still well above the 24px target of WCAG 2.5.8. */
+  min-height: 40px;
   box-sizing: border-box;
   padding: 0 12px;
   border-radius: var(--radius-sm);
@@ -210,8 +220,9 @@
   color: var(--color-muted);
 }
 
-/* Right under the sections, as on the Sidebar board. */
+/* Pinned to the bottom of the sidebar, as on the Sidebar v2 board. */
 .account {
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
 }
