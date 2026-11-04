@@ -16,6 +16,11 @@ const COUNT_SELECTOR = '[data-m-count]';
 const COUNT_MS = 1100;
 /** A section starts once its top passes this share of the viewport's height from the bottom. */
 const START_MARGIN = '0px 0px -15% 0px';
+/**
+ * Or once this share of it is on screen: a section shorter than the margin above, at the end of the
+ * page, never gets its top past it, and would otherwise never show.
+ */
+const START_SHARE = 0.95;
 /** Parts this close to the same top sit in one row. */
 const ROW_TOLERANCE_PX = 4;
 /** Below this page width, "Giảm chuyển động trên điện thoại" applies (§2.1 rule 2). */
@@ -280,17 +285,24 @@ export function startMotion(root: HTMLElement, options: MotionOptions = {}): () 
     return () => undefined;
   }
   const motion = motionController(root, view);
-  const observer = new view.IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting && entry.target instanceof view.HTMLElement) {
-          observer.unobserve(entry.target);
-          motion.run(entry.target);
-        }
+  const start: IntersectionObserverCallback = (entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting && entry.target instanceof view.HTMLElement) {
+        passed.unobserve(entry.target);
+        shown.unobserve(entry.target);
+        motion.run(entry.target);
       }
-    },
-    { root: options.scrollRoot ?? null, rootMargin: START_MARGIN },
-  );
+    }
+  };
+  const scrollRoot = options.scrollRoot ?? null;
+  const passed = new view.IntersectionObserver(start, {
+    root: scrollRoot,
+    rootMargin: START_MARGIN,
+  });
+  const shown = new view.IntersectionObserver(start, {
+    root: scrollRoot,
+    threshold: START_SHARE,
+  });
 
   const viewport = options.scrollRoot?.getBoundingClientRect() ?? {
     top: 0,
@@ -302,11 +314,13 @@ export function startMotion(root: HTMLElement, options: MotionOptions = {}): () 
       continue;
     }
     section.setAttribute('data-motion', 'wait');
-    observer.observe(section);
+    passed.observe(section);
+    shown.observe(section);
   }
 
   return () => {
-    observer.disconnect();
+    passed.disconnect();
+    shown.disconnect();
     motion.stop();
   };
 }

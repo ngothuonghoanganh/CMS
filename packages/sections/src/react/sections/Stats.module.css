@@ -61,6 +61,22 @@
   border: 0;
 }
 
+/* Three figures share one row on a phone too, a little smaller, as on the boards. */
+@container plp-page (width < 768px) {
+  .items:has(> :nth-child(3):last-child) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px 10px;
+  }
+
+  .items:has(> :nth-child(3):last-child) .value {
+    font-size: 24px;
+  }
+
+  .items:has(> :nth-child(3):last-child) .label {
+    font-size: 13px;
+  }
+}
+
 @container plp-page (width >= 768px) {
   .heading {
     font-size: 32px;

@@ -13,6 +13,7 @@ export interface MotionSampleProps {
   level: MotionLevel;
   /** A new value plays the sample again; 0 shows it still. */
   play: number;
+  /** The layout of the sample's parts: it is set on the element that holds them. */
   className?: string | undefined;
   /** The sample's parts, marked like a section's (`MOTION_TEXT`, `MOTION_MEDIA`, `data-m-count`). */
   children: ReactNode;
@@ -35,11 +36,12 @@ export function MotionSample({ motion, level, play, className, children }: Motio
     <div
       ref={root}
       aria-hidden="true"
-      className={[motionStyles.root, className].filter(Boolean).join(' ')}
+      className={motionStyles.root}
       style={motionLevelStyle({ level })}
       data-motion-root=""
     >
       <div
+        className={className}
         style={motionStyle(motion)}
         {...(motion && {
           'data-motion-enter': motion.enter,
