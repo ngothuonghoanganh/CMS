@@ -2,8 +2,9 @@
 
 import type { MotionLevel } from '@plp/contracts';
 import { MOTION_MEDIA, MOTION_TEXT, MotionSample } from '@plp/sections/react';
-import type { ResolvedSectionMotion } from '@plp/sections/schema';
+import type { ColorScheme, ResolvedSectionMotion } from '@plp/sections/schema';
 import Image from 'next/image';
+import type { CSSProperties } from 'react';
 import styles from './StyleSample.module.css';
 
 /** A landscape drawn as an SVG data URL: the picture of the sample, to show "Ảnh hé lộ". */
@@ -23,7 +24,31 @@ export interface StyleSampleProps {
   layout: 'thumb' | 'tile' | 'page';
   /** The card or tile is the chosen one: its small cards take the brand color. */
   selected?: boolean | undefined;
+  /**
+   * `page` only: the page's own look, as on board 39: its theme's light scheme and the heading of
+   * its first section that moves. Without it, the sample keeps the admin's colors.
+   */
+  look?: { scheme: ColorScheme; heading: string } | undefined;
 }
+
+type LookStyle = CSSProperties & Record<`--sample-${string}`, string>;
+
+function lookStyle(scheme: ColorScheme): LookStyle {
+  return {
+    '--sample-bg': scheme.background,
+    '--sample-surface': scheme.surface,
+    '--sample-heading': scheme.heading,
+    '--sample-text': scheme.text,
+    '--sample-accent': scheme.accent,
+    '--sample-border': scheme.border,
+  };
+}
+
+const FIGURES: readonly (readonly [string, string])[] = [
+  ['15', 'năm'],
+  ['8.000+', 'khách'],
+  ['4,9', 'điểm'],
+];
 
 /** One small card: a heading bar and a shorter line, as the boards draw a section. */
 function MiniCard() {
@@ -40,7 +65,14 @@ function MiniCard() {
  * cards are drawn from the motion itself (its `data-motion-*` attributes): a trail for how they
  * enter, their offsets for the order, and marks for the accents.
  */
-export function StyleSample({ motion, level, play, layout, selected = false }: StyleSampleProps) {
+export function StyleSample({
+  motion,
+  level,
+  play,
+  layout,
+  selected = false,
+  look,
+}: StyleSampleProps) {
   if (layout === 'thumb' || layout === 'tile') {
     return (
       <MotionSample
@@ -64,38 +96,52 @@ export function StyleSample({ motion, level, play, layout, selected = false }: S
     );
   }
   return (
-    <MotionSample motion={motion} level={level} play={play} className={styles.page}>
-      <h2 className={styles.heading} {...MOTION_TEXT}>
-        Vì sao khách chọn chúng tôi
-      </h2>
-      <span className={styles.cards}>
-        {[0, 1, 2, 3].map((card) => (
-          <span key={card} className={styles.card} {...MOTION_TEXT} />
-        ))}
-      </span>
-      <span className={styles.row}>
-        <span className={styles.media} {...MOTION_MEDIA}>
-          <Image
-            className={styles.picture}
-            src={PICTURE}
-            alt=""
-            width={72}
-            height={46}
-            unoptimized
-          />
+    <div className={styles.look} style={look ? lookStyle(look.scheme) : undefined}>
+      <MotionSample motion={motion} level={level} play={play} className={styles.page}>
+        <h2 className={styles.heading} {...MOTION_TEXT}>
+          {look?.heading ?? 'Vì sao khách chọn chúng tôi'}
+        </h2>
+        <span className={styles.cards}>
+          {[0, 1, 2, 3].map((card) => (
+            <span key={card} className={styles.card} {...MOTION_TEXT}>
+              <span className={styles.cardDot} />
+              <span className={styles.cardLines}>
+                <span className={styles.line} />
+                <span className={styles.lineShort} />
+              </span>
+            </span>
+          ))}
         </span>
-        <span className={styles.lines} {...MOTION_TEXT}>
-          <span className={styles.line} />
-          <span className={styles.lineShort} />
-        </span>
-      </span>
-      <span className={styles.figures}>
-        {['15', '8.000+', '4,9'].map((figure) => (
-          <span key={figure} className={styles.figure} {...MOTION_TEXT}>
-            <span data-m-count="">{figure}</span>
+        <span className={styles.row}>
+          <span className={styles.media} {...MOTION_MEDIA}>
+            {look ? (
+              <span className={styles.mediaFill} />
+            ) : (
+              <Image
+                className={styles.picture}
+                src={PICTURE}
+                alt=""
+                width={72}
+                height={46}
+                unoptimized
+              />
+            )}
           </span>
-        ))}
-      </span>
-    </MotionSample>
+          <span className={styles.lines} {...MOTION_TEXT}>
+            <span className={styles.lineStrong} />
+            <span className={styles.line} />
+            <span className={styles.lineShort} />
+          </span>
+        </span>
+        <span className={styles.figures}>
+          {FIGURES.map(([figure, label]) => (
+            <span key={figure} className={styles.figure} {...MOTION_TEXT}>
+              <span data-m-count="">{figure}</span>
+              <span className={styles.figureLabel}>{label}</span>
+            </span>
+          ))}
+        </span>
+      </MotionSample>
+    </div>
   );
 }

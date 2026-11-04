@@ -1,19 +1,7 @@
 .group {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.groupTitle {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--color-muted);
-}
-
-.groupTitle:focus {
-  outline: none;
+  gap: 16px;
 }
 
 .row {
@@ -189,8 +177,47 @@
   color: var(--color-muted);
 }
 
-.actions {
+/* Board 38's grey box: why the section stands still, and how to see it move. */
+.run {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-canvas);
+}
+
+.runText {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+.mobileNote {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+.mobileNote > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.inlineLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-primary-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inlineLink:hover {
+  color: var(--color-primary-pressed);
 }

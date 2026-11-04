@@ -272,6 +272,9 @@ test.describe('Design capture', () => {
     await capture(page, 'MotionPage');
 
     await page.setViewportSize({ width: 1440, height: 1200 });
+    // Board 38's state: only the motion group is open, which this button leaves, and folded groups
+    // stay folded on the next section.
+    await settings.getByRole('button', { name: 'Chỉnh riêng cho từng section' }).click();
     await editor.rows
       .filter({ hasText: 'Lợi ích' })
       .first()

@@ -1,7 +1,44 @@
+/* Board 39: a page of its own, centered on the grey canvas. */
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 680px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+
 .actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .levelLabel {
@@ -10,16 +47,10 @@
   color: var(--color-ink);
 }
 
-/* Board 39's outlined brand action. The doubled class outweighs the Button's own colors. */
-.playAll.playAll {
-  border-color: var(--color-primary);
-  color: var(--color-primary-ink);
-}
-
 .intro {
-  margin: 12px 0 18px;
+  margin: 0;
   font-size: var(--text-body);
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--color-ink-2);
 }
 
@@ -28,22 +59,22 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 16px;
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-2xl);
   background: var(--color-surface);
 }
 
 .chosen {
-  padding: 11px;
+  padding: 13px;
   border: 2px solid var(--color-primary);
   box-shadow: var(--shadow-sm);
 }
@@ -92,6 +123,28 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: auto;
+}
+
+.cardActions > button {
+  min-height: 40px;
+}
+
+.applyBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.applyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* "Chọn" is tinted until chosen, then solid ("Đã chọn"). */

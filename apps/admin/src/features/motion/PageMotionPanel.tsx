@@ -32,7 +32,12 @@ export const PAGE_MOTION_HEADING_ID = 'page-motion-heading';
  * moves and its accents, phones, and "Chạy thử". Every control runs a store command; each change
  * is one undo step of the draft, published with it.
  */
-export function PageMotionPanel() {
+export interface PageMotionPanelProps {
+  /** "Chỉnh riêng cho từng section": opens that section's motion. Defaults to selecting it. */
+  onEditSection?: ((sectionId: string) => void) | undefined;
+}
+
+export function PageMotionPanel({ onEditSection }: PageMotionPanelProps = {}) {
   const store = useEditorStoreApi();
   const { openMotionLibrary, announce } = useEditorServices();
   const composition = useEditor((state) => state.draft.composition);
@@ -262,7 +267,12 @@ export function PageMotionPanel() {
           size="sm"
           onClick={() => {
             const section = firstMovingSection();
-            if (section !== null) {
+            if (section === null) {
+              return;
+            }
+            if (onEditSection) {
+              onEditSection(section.id);
+            } else {
               store.getState().select(section.id);
             }
           }}

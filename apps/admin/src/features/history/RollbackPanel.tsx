@@ -210,6 +210,7 @@ export function RollbackPanel({
             Hủy
           </Button>
           <Button
+            variant="ink"
             loading={rollback.isPending}
             disabled={trimmed === ''}
             aria-describedby={trimmed === '' ? hintId : undefined}

@@ -137,6 +137,48 @@
   gap: 10px;
 }
 
+/* Board 39: the whole window, a white header bar over the grey canvas. */
+.content.full {
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  background: var(--color-canvas);
+  box-shadow: none;
+  transform: none;
+  animation: fade-in var(--duration-normal) ease-out;
+}
+
+.full .header {
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.full .heading {
+  gap: 0;
+}
+
+.full .title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.full .description {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.full .body {
+  padding: 0;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

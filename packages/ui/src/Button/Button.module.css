@@ -93,6 +93,29 @@
   color: var(--color-on-primary);
 }
 
+/* A brand action beside the main one: "Xem thử tất cả" (board 39), "Chạy thử section này" (38). */
+.outline {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-primary);
+  color: var(--color-primary-ink);
+}
+
+.outline:hover {
+  background: var(--color-primary-tint);
+  color: var(--color-primary-pressed);
+}
+
+/* Confirms a consequential step that is not destructive: "Khôi phục v11" on board 06. */
+.ink {
+  background: var(--color-ink);
+  color: var(--color-on-primary);
+}
+
+.ink:hover {
+  background: var(--color-ink-2);
+  color: var(--color-on-primary);
+}
+
 /* A loading button keeps its colors; only a truly disabled one turns grey. */
 .loading {
   cursor: progress;
@@ -104,12 +127,14 @@
 }
 
 .primary:is(:disabled, [aria-disabled='true']):not(.loading),
-.danger:is(:disabled, [aria-disabled='true']):not(.loading) {
+.danger:is(:disabled, [aria-disabled='true']):not(.loading),
+.ink:is(:disabled, [aria-disabled='true']):not(.loading) {
   background: var(--color-border);
   color: var(--color-muted);
 }
 
-.secondary:is(:disabled, [aria-disabled='true']):not(.loading) {
+.secondary:is(:disabled, [aria-disabled='true']):not(.loading),
+.outline:is(:disabled, [aria-disabled='true']):not(.loading) {
   background: var(--color-surface-subtle);
   border-color: var(--color-border);
   color: var(--color-muted);

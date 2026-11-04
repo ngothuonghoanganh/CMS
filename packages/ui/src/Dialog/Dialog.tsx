@@ -3,13 +3,13 @@
 import { Dialog as RadixDialog } from 'radix-ui';
 import type { ReactElement, ReactNode, RefObject } from 'react';
 import { IconButton } from '../IconButton/IconButton';
-import { CloseIcon } from '../icons';
+import { ArrowLeftIcon, CloseIcon } from '../icons';
 import { cx } from '../internal/cx';
 import { hasContent } from '../internal/hasContent';
 import { useReturnFocus } from './useReturnFocus';
 import styles from './Dialog.module.css';
 
-export type DialogSize = 'md' | 'lg';
+export type DialogSize = 'md' | 'lg' | 'full';
 
 export interface DialogProps {
   open?: boolean | undefined;
@@ -28,7 +28,10 @@ export interface DialogProps {
   footer?: ReactNode;
   /** Note on the left of the footer, e.g. "Bản v12 vẫn được lưu…". */
   footerStart?: ReactNode;
-  /** `md` is 560px wide, `lg` is 1060px ("Thêm section"). Defaults to `md`. */
+  /**
+   * `md` is 560px wide, `lg` is 1060px ("Thêm section"). `full` covers the window like a page of
+   * its own, with a slim header (board 39); its body lays out its own content. Defaults to `md`.
+   */
   size?: DialogSize | undefined;
   /** Remove the body padding when the body lays out its own panes. */
   flush?: boolean | undefined;
@@ -40,6 +43,8 @@ export interface DialogProps {
    * Focus otherwise returns to the opener. Without it, the page's `<main>` takes focus.
    */
   fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
+  /** With a name, a back arrow before the title also closes the dialog, as on board 39. */
+  backLabel?: string | undefined;
   /** Accessible name of the close button. Defaults to "Đóng". */
   closeLabel?: string | undefined;
   className?: string | undefined;
@@ -61,6 +66,7 @@ export function Dialog({
   flush = false,
   initialFocusRef,
   fallbackFocusRef,
+  backLabel,
   closeLabel = 'Đóng',
   className,
 }: DialogProps) {
@@ -99,6 +105,11 @@ export function Dialog({
           }}
         >
           <div className={styles.header}>
+            {backLabel === undefined ? null : (
+              <RadixDialog.Close asChild>
+                <IconButton aria-label={backLabel} icon={<ArrowLeftIcon />} size="sm" />
+              </RadixDialog.Close>
+            )}
             <div className={styles.heading}>
               <RadixDialog.Title className={styles.title}>{title}</RadixDialog.Title>
               {hasDescription ? (

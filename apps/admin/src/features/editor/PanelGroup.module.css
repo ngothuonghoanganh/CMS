@@ -1,0 +1,54 @@
+/* Board 38: a folded group is one 48px row; an open one keeps its content above the divider. */
+.group,
+.groupOpen {
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.groupOpen {
+  padding-bottom: 20px;
+}
+
+.heading {
+  margin: 0;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupOpen .toggle {
+  min-height: 44px;
+  color: var(--color-ink);
+}
+
+.toggle:hover {
+  color: var(--color-ink);
+}
+
+.toggle:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
