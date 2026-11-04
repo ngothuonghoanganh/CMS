@@ -50,6 +50,8 @@ const textPairs: ReadonlyArray<readonly [string, string]> = [
   ['color-muted', 'color-hover'],
   ['color-muted', 'color-surface-subtle'],
   ['color-muted', 'color-border'],
+  // Unselected segments on the segmented control's track.
+  ['color-ink-2', 'color-neutral-badge-bg'],
 ];
 
 describe('admin tokens', () => {
@@ -62,8 +64,8 @@ describe('admin tokens', () => {
   });
 
   // Non-text pairs that identify a control or its state (WCAG 1.4.11): input borders on cards and
-  // the canvas, the switch's off track and its white thumb, the selected segment's edge on the
-  // group, and the drag handle icon on a selected structure row.
+  // the canvas and hover fills, the switch's off track and its white thumb, and the drag handle
+  // icon on a selected structure row.
   it.each([
     ['color-border-control', 'color-surface'],
     ['color-border-control', 'color-canvas'],
