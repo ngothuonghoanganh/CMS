@@ -168,6 +168,14 @@ describe('readMotionChoice', () => {
     ).toEqual({ style: 'subtle', sections: { 6: { order: 'stagger' }, 3: { enter: 'none' } } });
   });
 
+  it('takes a section’s first answer only, even one that changes nothing', () => {
+    expect(
+      chosen(
+        answer('smooth', [override('6', { accent: 'count' }), override('6', { enter: 'pop' })]),
+      ),
+    ).toEqual({ style: 'smooth', sections: {} });
+  });
+
   it('keeps at most three sections, the first answer for each, and skips malformed ones', () => {
     expect(
       chosen(

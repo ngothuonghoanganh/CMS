@@ -247,7 +247,8 @@ function cleanOverride(
 /**
  * The AI's answer as a motion choice for `sections`, or null when it is not one: not JSON (a code
  * fence around it is tolerated), or no style that moves. Section answers that cannot apply are
- * dropped one by one; at most `MAX_MOTION_OVERRIDES` are kept, in the answer's order.
+ * dropped one by one, as is any answer after a section's first; at most `MAX_MOTION_OVERRIDES` are
+ * kept, in the answer's order.
  */
 export function readMotionChoice(
   text: string,
@@ -269,6 +270,7 @@ export function readMotionChoice(
   }
   const motion: PageMotion = { ...DEFAULT_PAGE_MOTION, style: answer.data.style };
   const chosen = new Map<string, SectionMotion>();
+  const answered = new Set<number>();
   for (const entry of answer.data.sections) {
     if (chosen.size === MAX_MOTION_OVERRIDES) {
       break;
@@ -279,9 +281,10 @@ export function readMotionChoice(
     }
     const index = Number(override.data.section) - 1;
     const section = Number.isInteger(index) ? sections[index] : undefined;
-    if (section === undefined || isMotionLocked(sections, index) || chosen.has(section.id)) {
+    if (section === undefined || isMotionLocked(sections, index) || answered.has(index)) {
       continue;
     }
+    answered.add(index);
     const own = cleanOverride(motion, section, override.data);
     if (own !== undefined) {
       chosen.set(section.id, own);
