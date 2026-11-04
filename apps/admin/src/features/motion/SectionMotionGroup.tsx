@@ -18,30 +18,10 @@ import {
 import { Button, LockIcon, Switch } from '@plp/ui';
 import { useState } from 'react';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor/editor-context';
+import { ResetIcon } from './icons';
 import { ENTER_DESCRIPTIONS, lockReasonOf, styleSample } from './motion-view';
 import styles from './SectionMotionGroup.module.css';
 import { StyleSample } from './StyleSample';
-
-/** "↻" of "Dùng lại cài đặt trang" (board 38): the circle of HistoryIcon, without its hands. */
-function ResetIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      width={13}
-      height={13}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.5" />
-      <path d="M4 4v4.5h4.5" />
-    </svg>
-  );
-}
 
 const ORDER_BOXES: Readonly<Record<MotionOrder, readonly number[]>> = {
   together: [1, 1, 1],
