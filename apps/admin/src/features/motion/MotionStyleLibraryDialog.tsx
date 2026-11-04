@@ -14,10 +14,9 @@ import {
   MOTION_STYLES,
   pageMotionOf,
 } from '@plp/sections/schema';
-import { Badge, Button, Dialog, SegmentedControl, VisuallyHidden } from '@plp/ui';
+import { Badge, Button, Dialog, PlayIcon, SegmentedControl, VisuallyHidden } from '@plp/ui';
 import { useState } from 'react';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor/editor-context';
-import { PlayIcon } from './icons';
 import styles from './MotionStyleLibraryDialog.module.css';
 import { motionFitsOf, styleSample } from './motion-view';
 import { StyleSample } from './StyleSample';

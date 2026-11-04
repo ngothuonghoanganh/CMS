@@ -15,10 +15,9 @@ import {
   pageAccentOn,
   pageMotionOf,
 } from '@plp/sections/schema';
-import { Button, LockIcon, Switch } from '@plp/ui';
+import { Button, LockIcon, RefreshIcon, Switch } from '@plp/ui';
 import { useState } from 'react';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor/editor-context';
-import { ResetIcon } from './icons';
 import { ENTER_DESCRIPTIONS, lockReasonOf, styleSample } from './motion-view';
 import styles from './SectionMotionGroup.module.css';
 import { StyleSample } from './StyleSample';
@@ -150,7 +149,7 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
             size="sm"
             variant="ghost"
             className={styles.reset}
-            leadingIcon={<ResetIcon />}
+            leadingIcon={<RefreshIcon />}
             onClick={() => {
               store.getState().setSectionEnter(section.id, null);
             }}
@@ -205,7 +204,7 @@ export function SectionMotionGroup({ section, index }: SectionMotionGroupProps) 
                 size="sm"
                 variant="ghost"
                 className={styles.reset}
-                leadingIcon={<ResetIcon />}
+                leadingIcon={<RefreshIcon />}
                 onClick={() => {
                   store.getState().setSectionOrder(section.id, null);
                 }}

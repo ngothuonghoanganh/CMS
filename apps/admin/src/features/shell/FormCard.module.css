@@ -1,8 +1,11 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  box-shadow: var(--shadow-sm);
+  gap: 18px;
+  /* Boards 34 and 36: a flat bordered card, 28px in. */
+  padding: 28px;
+  border-radius: var(--radius-2xl);
+  box-shadow: none;
 }
 
 .heading {
@@ -13,8 +16,8 @@
 
 .title {
   margin: 0;
-  font-size: var(--text-2xl);
-  line-height: 1.2;
+  font-size: 22px;
+  line-height: 1.25;
   font-weight: 700;
   letter-spacing: -0.02em;
 }

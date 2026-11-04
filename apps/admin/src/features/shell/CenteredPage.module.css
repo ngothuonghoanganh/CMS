@@ -15,13 +15,36 @@
   margin-bottom: 28px;
 }
 
+/* Board 34: the sign-in pages draw the logo larger than the sidebar does. */
+@media (min-width: 768px) {
+  .brand > :first-child {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+  }
+
+  .brand > :last-child {
+    font-size: 17px;
+  }
+}
+
+/* Board 15b: on a phone the brand sits at the left edge, above the card. */
+@media (max-width: 767px) {
+  .header {
+    align-self: stretch;
+    justify-content: flex-start;
+    margin-bottom: 20px;
+    padding: 4px 4px 0;
+  }
+}
+
 .main {
   width: 100%;
   min-width: 0;
 }
 
 .sm {
-  max-width: 440px;
+  max-width: 420px;
 }
 
 .md {

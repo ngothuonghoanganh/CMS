@@ -215,10 +215,6 @@
   color: var(--color-muted);
 }
 
-.flip {
-  transform: scaleX(-1);
-}
-
 /* Board 14's status box: the text, the time of the last check on the right, the button below. */
 .statusBox {
   display: flex;

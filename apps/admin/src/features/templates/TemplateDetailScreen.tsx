@@ -19,7 +19,7 @@ import {
   Callout,
   Card,
   CheckIcon,
-  ChevronRightIcon,
+  ChevronLeftIcon,
   DesktopIcon,
   ImageIcon,
   InfoCircleIcon,
@@ -101,7 +101,7 @@ export function TemplateDetailScreen({
   return (
     <PageContainer>
       <Link href={libraryHref} className={styles.back}>
-        <ChevronRightIcon size={16} className={styles.flip} />
+        <ChevronLeftIcon size={16} />
         Templates
       </Link>
 

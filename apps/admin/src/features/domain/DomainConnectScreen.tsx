@@ -15,12 +15,13 @@ import {
   Callout,
   Card,
   CheckIcon,
-  ChevronRightIcon,
+  ChevronLeftIcon,
   CopyIcon,
   Field,
   IconButton,
   Input,
   RadioCardGroup,
+  RefreshIcon,
   useToast,
 } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -305,7 +306,7 @@ export function DomainConnectScreen({
           href={`${siteHref(site.id)}/domain`}
           variant="ghost"
           size="sm"
-          leadingIcon={<ChevronRightIcon size={16} className={styles.flip} />}
+          leadingIcon={<ChevronLeftIcon size={16} />}
         >
           Tên miền
         </ButtonLink>
@@ -356,6 +357,7 @@ export function DomainConnectScreen({
                         variant="secondary"
                         size="sm"
                         loading={check.isPending}
+                        leadingIcon={<RefreshIcon size={14} />}
                         onClick={() => {
                           check.mutate(domain.id);
                         }}
