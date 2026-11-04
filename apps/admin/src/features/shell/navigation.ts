@@ -1,7 +1,7 @@
 import type { Permission } from '@plp/contracts';
 
 /** Site sections in the sidebar, in the order of the design. */
-export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'privacy' | 'settings';
+export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'settings' | 'privacy';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
 export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles';
@@ -44,17 +44,17 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
       permissions: ['domains.manage'],
     },
     {
+      key: 'settings',
+      label: 'Cài đặt site',
+      href: `${base}/settings`,
+      permissions: ['pages.edit'],
+    },
+    {
       key: 'privacy',
       label: 'Dữ liệu & đồng ý',
       href: privacyHref(siteId),
       // The settings, or the data requests of the people who sent a form (ADR-017, ADR-024).
       permissions: ['privacy.manage', 'personalData.manage'],
-    },
-    {
-      key: 'settings',
-      label: 'Cài đặt site',
-      href: `${base}/settings`,
-      permissions: ['pages.edit'],
     },
   ];
 }
