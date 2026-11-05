@@ -5,6 +5,7 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { ContactRecordsRepository } from '../contacts/contact-records.repository.js';
 import { ContactsRepository } from '../contacts/contacts.repository.js';
 import { MergeSuggestionsRepository } from '../contacts/merge-suggestions.repository.js';
 import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
@@ -30,6 +31,7 @@ export class LeadPersonService {
     private readonly transactions: TransactionRunner,
     private readonly contacts: ContactsRepository,
     private readonly suggestions: MergeSuggestionsRepository,
+    private readonly records: ContactRecordsRepository,
   ) {}
 
   /** "Xóa dữ liệu người này", from one of their leads. */
@@ -52,27 +54,40 @@ export class LeadPersonService {
    * activity log, in one transaction, so the log never claims a deletion that did not happen. It
    * writes the site too: the entry never outlives a site deleted meanwhile (ADR-027).
    */
-  deletePerson(scope: WorkspaceScope, siteId: ObjectId, person: LeadPerson): Promise<number> {
+  deletePerson(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    profiles: readonly ObjectId[] = [],
+  ): Promise<number> {
     return this.transactions.run(async (tx) => {
       if (!(await this.sites.recordDataWrite(scope, siteId, tx))) {
         throw notFound(SITE_NOT_FOUND);
       }
-      return this.deletePersonIn(scope, siteId, person, tx);
+      return this.deletePersonIn(scope, siteId, person, tx, profiles);
     });
   }
 
-  /** `deletePerson` inside the caller's transaction, e.g. completing a request to delete data. */
+  /**
+   * `deletePerson` inside the caller's transaction, e.g. completing a request to delete data.
+   * `profiles` are profiles known to be the person's, such as the one a deletion starts from.
+   */
   async deletePersonIn(
     scope: WorkspaceScope,
     siteId: ObjectId,
     person: LeadPerson,
     tx: Tx,
+    profiles: readonly ObjectId[] = [],
   ): Promise<number> {
-    // Their customer profiles go with their leads (ADR-033).
-    const linked = await this.leads.contactIdsOfPerson(scope, siteId, person, tx);
+    // Their customer profiles go with their leads, and everything the profiles hold (ADR-033).
+    const linked = [
+      ...profiles,
+      ...(await this.leads.contactIdsOfPerson(scope, siteId, person, tx)),
+    ];
     const contacts = await this.contacts.deletePerson(scope, siteId, person, linked, tx);
     await this.suggestions.deleteForContacts(scope, siteId, contacts, tx);
-    const deleted = await this.leads.deletePerson(scope, siteId, person, tx);
+    await this.records.deleteForContacts(scope, siteId, contacts, tx);
+    const deleted = await this.leads.deletePerson(scope, siteId, person, contacts, tx);
     await this.requests.maskPerson(scope, siteId, person, tx);
     await this.activity.record(
       scope,

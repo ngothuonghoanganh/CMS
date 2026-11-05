@@ -139,6 +139,12 @@
 .name {
   font-weight: 600;
   color: var(--color-ink);
+  text-decoration: none;
+}
+
+/* The name opens the profile (board 23). */
+.name:hover {
+  text-decoration: underline;
 }
 
 .dupPill {

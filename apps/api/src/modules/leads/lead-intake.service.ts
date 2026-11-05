@@ -4,6 +4,7 @@ import { leadFormContentSchema, leadFormSectionOf } from '@plp/sections/schema';
 import type { Env } from '../../config/env.js';
 import { ContactLinker } from '../contacts/contact-linker.service.js';
 import type { ContactRecord } from '../contacts/contact.schema.js';
+import { ContactRecordsRepository } from '../contacts/contact-records.repository.js';
 import { ContactsRepository } from '../contacts/contacts.repository.js';
 import { SiteHosts } from '../domains/site-hosts.js';
 import { InjectEnv } from '../../shared/env.js';
@@ -67,6 +68,7 @@ export class LeadIntakeService {
     private readonly siteHosts: SiteHosts,
     private readonly linker: ContactLinker,
     private readonly contacts: ContactsRepository,
+    private readonly records: ContactRecordsRepository,
     private readonly transactions: TransactionRunner,
   ) {
     this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
@@ -189,7 +191,10 @@ export class LeadIntakeService {
         latest === null ? null : addMonthsUtc(now, latest),
       );
       if (contact !== null) {
-        await this.contacts.setPublicExpiry(site, contact._id, latest);
+        const expiresAt = await this.contacts.setPublicExpiry(site, contact._id, latest);
+        if (expiresAt !== undefined) {
+          await this.records.alignExpiry(site, site._id, contact._id, expiresAt);
+        }
       }
     }
     if (contact !== null) {

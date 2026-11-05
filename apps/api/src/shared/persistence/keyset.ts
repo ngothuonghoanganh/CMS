@@ -29,7 +29,7 @@ export function afterCursor(cursor: string | undefined): AfterCursorFilter {
 }
 
 /** Same as `afterCursor` for an already decoded position, e.g. when merging two lists. */
-function afterPosition(position: CursorPosition): AfterCursorFilter {
+export function afterPosition(position: CursorPosition): AfterCursorFilter {
   return {
     $or: [
       { createdAt: { $lt: position.createdAt } },

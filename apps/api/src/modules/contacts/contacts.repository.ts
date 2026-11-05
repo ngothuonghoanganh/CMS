@@ -201,9 +201,15 @@ export class ContactsRepository {
     }
   }
 
-  findById(scope: WorkspaceRef, siteId: ObjectId, id: ObjectId): Promise<ContactRecord | null> {
+  findById(
+    scope: WorkspaceRef,
+    siteId: ObjectId,
+    id: ObjectId,
+    tx?: Tx,
+  ): Promise<ContactRecord | null> {
     return this.contacts(scope)
       .findOne({ _id: id, workspaceId: scope.workspaceId, siteId })
+      .session(tx ?? null)
       .lean<ContactRecord>()
       .exec();
   }
@@ -339,6 +345,72 @@ export class ContactsRepository {
       .exec();
   }
 
+  /**
+   * A note, task or meeting is an interaction (ADR-033): the profile moves up the lists and its
+   * expiry counts from now. Null when the profile is gone.
+   */
+  touch(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    id: ObjectId,
+    at: Date,
+    months: RetentionMonths,
+    tx: Tx,
+  ): Promise<ContactRecord | null> {
+    return this.contacts(scope)
+      .findOneAndUpdate(
+        { _id: id, workspaceId: scope.workspaceId, siteId },
+        [
+          { $set: { lastActivityAt: { $max: ['$lastActivityAt', at] } } },
+          { $set: { expiresAt: expiryExpression(months) } },
+        ],
+        { returnDocument: 'after', updatePipeline: true, session: tx },
+      )
+      .lean<ContactRecord>()
+      .exec();
+  }
+
+  /** Takes one tag off a profile; false when the profile is gone. */
+  async removeTag(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    id: ObjectId,
+    tag: string,
+  ): Promise<boolean> {
+    const result = await this.contacts(scope)
+      .updateOne({ _id: id, workspaceId: scope.workspaceId, siteId }, { $pull: { tags: tag } })
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /**
+   * "Sửa thông tin" (ADR-017): the name, phone number and email with their search keys. A number
+   * of another profile of the site is a `ContactPhoneTakenError`. Null when the profile is gone.
+   */
+  async updateDetails(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    id: ObjectId,
+    details: { name: string; phone: string; email: string | null },
+    tx: Tx,
+  ): Promise<ContactRecord | null> {
+    try {
+      return await this.contacts(scope)
+        .findOneAndUpdate(
+          { _id: id, workspaceId: scope.workspaceId, siteId },
+          { $set: { ...details, search: contactSearchKeys(details) } },
+          { returnDocument: 'after', session: tx },
+        )
+        .lean<ContactRecord>()
+        .exec();
+    } catch (error) {
+      if (isDuplicateKeyError(error, CONTACTS_PHONE_INDEX)) {
+        throw new ContactPhoneTakenError({ cause: error });
+      }
+      throw error;
+    }
+  }
+
   /** Other profiles of the site with this email, for "Có thể trùng" (ADR-033). */
   findByEmail(
     ref: WorkspaceRef,
@@ -421,15 +493,24 @@ export class ContactsRepository {
       .exec();
   }
 
-  /** The intake's correction when the retention changed while it stored a lead. */
-  async setPublicExpiry(ref: WorkspaceRef, id: ObjectId, months: RetentionMonths): Promise<void> {
-    await this.contacts(ref)
-      .updateOne(
+  /**
+   * The intake's correction when the retention changed while it stored a lead; returns the
+   * profile's expiry now (undefined when it is gone).
+   */
+  async setPublicExpiry(
+    ref: WorkspaceRef,
+    id: ObjectId,
+    months: RetentionMonths,
+  ): Promise<Date | null | undefined> {
+    const updated = await this.contacts(ref)
+      .findOneAndUpdate(
         { _id: id, workspaceId: ref.workspaceId },
         [{ $set: { expiresAt: expiryExpression(months) } }],
-        { updatePipeline: true },
+        { returnDocument: 'after', updatePipeline: true, projection: { expiresAt: 1 } },
       )
+      .lean<Pick<ContactRecord, 'expiresAt'>>()
       .exec();
+    return updated?.expiresAt;
   }
 
   /**
@@ -443,22 +524,7 @@ export class ContactsRepository {
     linked: readonly ObjectId[],
     tx: Tx,
   ): Promise<ObjectId[]> {
-    const filter = {
-      workspaceId: scope.workspaceId,
-      siteId,
-      $or: [
-        { _id: { $in: linked } },
-        ...(person.phone === null ? [] : [{ 'search.phone': person.phone }]),
-        ...(person.email === null ? [] : [{ 'search.email': person.email }]),
-      ],
-    };
-    const found = await this.contacts(scope)
-      .find(filter)
-      .select({ _id: 1 })
-      .session(tx)
-      .lean<Pick<ContactRecord, '_id'>[]>()
-      .exec();
-    const ids = found.map((contact) => contact._id);
+    const ids = await this.idsOfPerson(scope, siteId, person, linked, tx);
     if (ids.length > 0) {
       await this.contacts(scope)
         .deleteMany({ _id: { $in: ids }, workspaceId: scope.workspaceId })
@@ -466,6 +532,31 @@ export class ContactsRepository {
         .exec();
     }
     return ids;
+  }
+
+  /** The profiles `deletePerson` would delete. */
+  async idsOfPerson(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    linked: readonly ObjectId[],
+    tx?: Tx,
+  ): Promise<ObjectId[]> {
+    const found = await this.contacts(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        siteId,
+        $or: [
+          { _id: { $in: linked } },
+          ...(person.phone === null ? [] : [{ 'search.phone': person.phone }]),
+          ...(person.email === null ? [] : [{ 'search.email': person.email }]),
+        ],
+      })
+      .select({ _id: 1 })
+      .session(tx ?? null)
+      .lean<Pick<ContactRecord, '_id'>[]>()
+      .exec();
+    return found.map((contact) => contact._id);
   }
 
   /** The person withdrew their agreement to offers (ADR-017): their profiles follow. */

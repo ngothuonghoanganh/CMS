@@ -10,7 +10,7 @@ import {
 } from '@plp/contracts';
 import type { z } from 'zod';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
-import { toObjectId } from '../../shared/persistence/object-id.js';
+import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -201,26 +201,62 @@ export class DataRequestsService {
     return file;
   }
 
-  /**
-   * Completes the request. A deletion deletes the person's leads and masks the contact of each of
-   * their requests in the site; a withdrawal stamps the withdrawn marketing consent on their
-   * leads. Each in one transaction with the completion and the activity, so neither can happen
-   * without the other.
-   */
+  /** Completes the request (`completeRequest`). */
   async complete(
     user: AuthenticatedUser,
     siteId: string,
     requestId: string,
   ): Promise<DataRequestDetail> {
     const { scope, site, request } = await this.requestAccess(user, siteId, requestId);
+    const { completed } = await this.completeRequest(scope, site, request, []);
+    return this.detail(scope, site, completed);
+  }
+
+  /**
+   * "Xóa dữ liệu của người này" with "Gắn với yêu cầu dữ liệu" (board 23): completes a request to
+   * delete data, the profile deleted with the request's person (ADR-033). Returns how many leads
+   * went.
+   */
+  async completeDeletionWithProfile(
+    user: AuthenticatedUser,
+    siteId: string,
+    requestId: string,
+    contactId: ObjectId,
+  ): Promise<number> {
+    const { scope, site, request } = await this.requestAccess(user, siteId, requestId);
+    if (request.type !== 'delete') {
+      throw stepConflict('Chỉ gắn được yêu cầu xóa dữ liệu');
+    }
+    const { count } = await this.completeRequest(scope, site, request, [contactId]);
+    return count ?? 0;
+  }
+
+  /**
+   * Completes the request. A deletion deletes the person's leads and masks the contact of each of
+   * their requests in the site; a withdrawal stamps the withdrawn marketing consent on their
+   * leads. Each in one transaction with the completion and the activity, so neither can happen
+   * without the other.
+   */
+  private async completeRequest(
+    scope: WorkspaceScope,
+    site: SiteRecord,
+    request: DataRequestRecord,
+    profiles: readonly ObjectId[],
+  ): Promise<{ completed: DataRequestRecord; count: number | null }> {
     this.requireStep('complete', request);
     const person = personOfRequest(request);
-    const completed = await this.transactions.run(async (tx) => {
+    return this.transactions.run(async (tx) => {
       const at = new Date();
       let count: number | null = null;
-      if (person !== null && request.type === 'delete') {
+      if (request.type === 'delete' && (person !== null || profiles.length > 0)) {
         // The person's other requests are masked with their leads (this one is completed below).
-        count = await this.people.deletePersonIn(scope, site._id, person, tx);
+        count = await this.people.deletePersonIn(
+          scope,
+          site._id,
+          person ?? { leadId: null, phone: null, email: null },
+          tx,
+          profiles,
+        );
       } else if (person !== null && request.type === 'withdraw_marketing') {
         count = await this.leads.withdrawMarketing(scope, site._id, person, at, tx);
         await this.contacts.withdrawMarketing(scope, site._id, person, tx);
@@ -248,9 +284,8 @@ export class DataRequestsService {
         { siteId: site._id, type: 'data_request.completed', data: { count } },
         tx,
       );
-      return updated;
+      return { completed: updated, count };
     });
-    return this.detail(scope, site, completed);
   }
 
   /**

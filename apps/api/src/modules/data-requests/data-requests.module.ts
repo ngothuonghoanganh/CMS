@@ -26,5 +26,7 @@ import { DataRequestsService } from './data-requests.service.js';
   ],
   controllers: [DataRequestsController],
   providers: [DataRequestsService],
+  // "Xóa dữ liệu của người này" on a profile may complete a request (board 23).
+  exports: [DataRequestsService],
 })
 export class DataRequestsModule {}

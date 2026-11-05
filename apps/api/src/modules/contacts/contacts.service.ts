@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import {
-  can,
   CONTACT_COUNT_CAP,
   CONTACT_PAGE_SIZE,
   CONTACT_TAGS_MAX,
@@ -34,11 +33,10 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { retentionOf, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
-import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
-import { accessOf } from '../workspaces/domain/member-access.js';
-import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import { ContactAssignees } from './contact-assignees.service.js';
 import type { ContactRecord, MergeSuggestionRecord } from './contact.schema.js';
+import { ContactRecordsRepository } from './contact-records.repository.js';
 import {
   type ContactCriteria,
   ContactPhoneTakenError,
@@ -131,11 +129,11 @@ export class ContactsService {
     private readonly siteRecords: SitesRepository,
     private readonly contacts: ContactsRepository,
     private readonly suggestions: MergeSuggestionsRepository,
+    private readonly records: ContactRecordsRepository,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
     private readonly users: UsersRepository,
-    private readonly workspaces: WorkspacesRepository,
-    private readonly customRoles: CustomRolesRepository,
+    private readonly assigneeList: ContactAssignees,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -143,7 +141,7 @@ export class ContactsService {
   async options(user: AuthenticatedUser, siteId: string): Promise<ContactOptionsResponse> {
     const { scope, site } = await this.sites.access(user, siteId, 'leads.view');
     const [assignees, tags] = await Promise.all([
-      this.assignees(scope, site._id),
+      this.assigneeList.list(scope, site._id),
       this.contacts.tags(scope, site._id),
     ]);
     return { assignees, tags: tags.sort((a, b) => a.localeCompare(b, 'vi')) };
@@ -271,7 +269,7 @@ export class ContactsService {
         const ownerId = values.ownerId === null ? null : toObjectId(values.ownerId);
         if (
           ownerId !== null &&
-          !(await this.assignees(scope, site._id)).some((person) => person.id === values.ownerId)
+          !(await this.assigneeList.includes(scope, site._id, ownerId.toHexString()))
         ) {
           throw validationFailed([
             {
@@ -398,6 +396,8 @@ export class ContactsService {
         throw notFound(SUGGESTION_GONE);
       }
       await this.leads.moveToContact(scope, site._id, b._id, a._id, tx);
+      await this.records.moveToContact(scope, site._id, b._id, a._id, tx);
+      await this.records.alignExpiry(scope, site._id, a._id, merged.expiresAt, tx);
       // The pair itself and every other pair of the profile merged away.
       await this.suggestions.deleteForContacts(scope, site._id, [b._id], tx);
       return merged;
@@ -412,28 +412,6 @@ export class ContactsService {
     if (!(await this.suggestions.dismiss(scope, site._id, id, new Date()))) {
       throw notFound(SUGGESTION_GONE);
     }
-  }
-
-  /**
-   * Members a profile can be given to: they hold `leads.view` and may open the site (ADR-020,
-   * ADR-033), in the order of the members screen.
-   */
-  private async assignees(scope: WorkspaceScope, siteId: ObjectId): Promise<ContactPerson[]> {
-    const [memberships, roles] = await Promise.all([
-      this.workspaces.listMembers(scope),
-      this.customRoles.mapForWorkspace(scope),
-    ]);
-    const eligible = memberships.filter(
-      (membership) =>
-        can(accessOf(membership, roles), 'leads.view') &&
-        ((membership.siteIds ?? null) === null ||
-          membership.siteIds?.some((id) => id.equals(siteId))),
-    );
-    const refs = await this.users.findRefs(eligible.map((membership) => membership.userId));
-    return eligible.flatMap((membership) => {
-      const ref = refs.get(membership.userId.toHexString());
-      return ref ? [ref] : [];
-    });
   }
 
   private async names(

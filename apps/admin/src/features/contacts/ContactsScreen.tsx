@@ -38,7 +38,7 @@ import { api } from '../../lib/api';
 import { formatDateTime, formatRelativeTime } from '../../lib/format';
 import { normalizeLeadSearch } from '../leads/filters';
 import { cx } from '../shell/cx';
-import { leadsHref, siteHref } from '../shell/navigation';
+import { contactHref, leadsHref, siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
 import { useDebouncedValue } from '../shell/use-debounced-value';
@@ -193,14 +193,6 @@ export function ContactsScreen({
             setAddOpen(false);
             toast({ tone: 'success', title: `Đã thêm ${contact.name}` });
             refresh();
-          }}
-          onFindExisting={(phone) => {
-            setAddOpen(false);
-            setView('all');
-            setOwnerId('');
-            setTag('');
-            setSearchText(phone);
-            resetPaging();
           }}
         />
       ) : null}
@@ -368,6 +360,7 @@ export function ContactsScreen({
                       {items.map((contact) => (
                         <ContactRow
                           key={contact.id}
+                          siteId={site.id}
                           contact={contact}
                           now={now}
                           selectable={canHandle}
@@ -423,6 +416,7 @@ export function ContactsScreen({
 }
 
 interface ContactRowProps {
+  siteId: string;
   contact: ContactListItem;
   now: number;
   selectable: boolean;
@@ -430,7 +424,7 @@ interface ContactRowProps {
   onSelect: (selected: boolean) => void;
 }
 
-function ContactRow({ contact, now, selectable, selected, onSelect }: ContactRowProps) {
+function ContactRow({ siteId, contact, now, selectable, selected, onSelect }: ContactRowProps) {
   const source = contactSourceLines(contact);
   return (
     <tr className={selected ? styles.selectedRow : undefined}>
@@ -449,7 +443,9 @@ function ContactRow({ contact, now, selectable, selected, onSelect }: ContactRow
       <td>
         <span className={styles.nameCell}>
           <span className={styles.nameRow}>
-            <span className={styles.name}>{contact.name}</span>
+            <Link href={contactHref(siteId, contact.id)} className={styles.name}>
+              {contact.name}
+            </Link>
             {contact.possibleDuplicate ? (
               <span className={styles.dupPill}>CÓ THỂ TRÙNG</span>
             ) : null}

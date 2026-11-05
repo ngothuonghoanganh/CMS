@@ -166,6 +166,11 @@ export function contactsHref(siteId: string): string {
   return `${siteHref(siteId)}/contacts`;
 }
 
+/** A customer's profile (board 23, ADR-033). */
+export function contactHref(siteId: string, contactId: string): string {
+  return `${contactsHref(siteId)}/${encodeURIComponent(contactId)}`;
+}
+
 /** "Hiệu quả" (ADR-019), optionally with its range and page, such as `?range=30d`. */
 function analyticsHref(siteId: string, search = ''): string {
   return `${siteHref(siteId)}/analytics${search}`;

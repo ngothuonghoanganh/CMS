@@ -175,6 +175,38 @@ export class DataRequestsRepository {
   }
 
   /**
+   * Open requests to delete the person's data, deadline first: what "Gắn với yêu cầu dữ liệu"
+   * offers (board 23). A site holds few requests; the read stays within the site's index.
+   */
+  openDeletionsFor(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    limit: number,
+  ): Promise<DataRequestRecord[]> {
+    const keys = [
+      ...(person.phone === null ? [] : [{ 'search.phone': person.phone }]),
+      ...(person.email === null ? [] : [{ 'search.email': person.email }]),
+    ];
+    if (keys.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.requests(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        siteId,
+        type: 'delete',
+        status: { $ne: 'completed' },
+        masked: false,
+        $or: keys,
+      })
+      .sort({ completeBy: 1, _id: 1 })
+      .limit(limit)
+      .lean<DataRequestRecord[]>()
+      .exec();
+  }
+
+  /**
    * Masks every request of the person in the site that still shows their contact, and drops its
    * search keys: once their data is deleted, no request may keep it (ADR-017). The same direct
    * match as a person's leads. Requests are recorded by hand, so a person has few; each is masked

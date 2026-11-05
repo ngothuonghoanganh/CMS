@@ -15,6 +15,7 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { ContactRecordsRepository } from '../contacts/contact-records.repository.js';
 import { ContactsRepository } from '../contacts/contacts.repository.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
@@ -63,6 +64,7 @@ export class PrivacyService {
     private readonly transactions: TransactionRunner,
     private readonly leads: LeadsRepository,
     private readonly contacts: ContactsRepository,
+    private readonly records: ContactRecordsRepository,
   ) {}
 
   async get(user: AuthenticatedUser, siteId: string): Promise<PrivacySettings> {
@@ -93,12 +95,14 @@ export class PrivacyService {
     // again repairs leads a failed attempt left behind (ADR-017).
     await this.leads.recomputeExpiry(scope, site._id, input.retentionMonths);
     await this.contacts.recomputeExpiry(scope, site._id, input.retentionMonths);
+    await this.records.alignSite(scope, site._id);
     // Two saves at once may recompute out of order: the leads follow the period saved last.
     const saved = await this.sites.findById(scope, site._id);
     const retention = saved === null ? null : sitePrivacyOf(saved);
     if (retention !== null && retention.retentionMonths !== input.retentionMonths) {
       await this.leads.recomputeExpiry(scope, site._id, retention.retentionMonths);
       await this.contacts.recomputeExpiry(scope, site._id, retention.retentionMonths);
+      await this.records.alignSite(scope, site._id);
     }
     return this.settingsOf(updated, await this.versions.findCurrent(scope, site._id));
   }

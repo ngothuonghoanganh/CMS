@@ -2688,8 +2688,25 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Một cặp "Có thể trùng" hết hạn cùng hồ sơ hết hạn trước. Cặp có hồ sơ đã mất (TTL) được xóa khi đọc, nên số đếm ở tab có thể cao hơn trong chốc lát. Gộp xóa mọi cặp của hồ sơ bị gộp.
   - Thêm tay và gộp ghi `dataSeq` của site trong transaction, như mọi dữ liệu cá nhân (ADR-027).
   - Danh sách là `GET …/contacts` (góc nhìn, người phụ trách, nhãn, con trỏ); tìm là `POST …/contacts/search`, như hộp thư (ADR-018).
-  - K1 chưa có cột "Cơ hội", nút "Xem pipeline" và "Tạo cơ hội" hàng loạt của màn 22; chúng đến cùng cơ hội ở K3. Tên khách hàng chưa mở hồ sơ cho tới K2.
+  - K1 chưa có cột "Cơ hội", nút "Xem pipeline" và "Tạo cơ hội" hàng loạt của màn 22; chúng đến cùng cơ hội ở K3. Tên khách hàng mở hồ sơ từ K2.
   - Sửa thông tin của một lead (ADR-017) chưa đổi hồ sơ khách hàng; K2 sửa thông tin ngay trên hồ sơ.
+- **Amended 2026-11-05 (K2, cách làm):**
+  - **Dòng thời gian** ghép hai nguồn:
+    - lead của hồ sơ, đọc thẳng từ `leads` (lead vẫn là bằng chứng, không chép sang `contact_events`);
+    - ghi chú và lịch hẹn trong `contact_events`.
+    - Mỗi nguồn đọc 21 mục sau cùng một con trỏ `(at, _id)`, gộp lại và lấy 20, nên không lặp hay bỏ mục nào. Index `leads_contact_time (contactId, createdAt, _id)` thay `leads_contact` của K1.
+  - **Ghi chú, công việc và lịch hẹn:**
+    - Mỗi lần ghi là một tương tác: trong một transaction, ghi `dataSeq` của site, đẩy `lastActivityAt` và `expiresAt` của hồ sơ, rồi ghi bản ghi với hạn đó.
+    - Bản ghi cũ hơn hạn của hồ sơ quá một ngày thì được dời theo (`alignExpiry`, qua index bắt đầu bằng `contactId` của mỗi collection). Đổi thời gian lưu thì mỗi collection được tính lại bằng một lệnh `$lookup` + `$merge`.
+    - Một hồ sơ có tối đa 50 công việc đang mở và 20 lịch hẹn sắp tới. Lịch hẹn phải từ bây giờ trở đi.
+    - Ô "Người gặp" là chữ tự do (tối đa 80 ký tự), không phải danh sách thành viên: người gặp có thể là bác sĩ hay nhân viên không dùng ứng dụng. Ô soạn lịch hẹn có thêm "Nội dung hẹn" (tùy chọn), vì màn 23 hiện nội dung đó ở dòng thời gian và lịch hẹn sắp tới.
+    - "Cuộc gọi · 6 phút" của board cần ô nhập thời lượng mà ô soạn chưa có; K2 chỉ có ghi chú.
+  - **Sửa thông tin** nằm trong menu "Thao tác dữ liệu", cần `personalData.manage`, như sửa thông tin của lead. Số đã thuộc hồ sơ khác là lỗi ở ô số điện thoại, kèm tên hồ sơ đó. Lead giữ nguyên thông tin khách đã gửi.
+  - **Xóa dữ liệu một người** gồm hồ sơ, hồ sơ cùng số điện thoại hoặc email, mọi lead của chúng (kể cả lead đã gộp từ số khác), ghi chú, công việc và lịch hẹn.
+    - Dialog đếm từng loại khi mở và đề nghị các yêu cầu xóa đang mở của người đó.
+    - Chọn một yêu cầu thì việc xóa hoàn tất yêu cầu đó, cùng transaction và nhật ký như "Hoàn tất". Yêu cầu không phải yêu cầu xóa trả 409.
+  - **Xuất dữ liệu** từ hồ sơ là file JSON: lead kèm bằng chứng đồng ý như ở hộp thư, thêm hồ sơ, ghi chú, công việc và lịch hẹn (tối đa 1.000 mục mỗi loại). Việc xuất được ghi nhật ký như xuất lead.
+  - Thẻ "Cơ hội" và sự kiện đổi giai đoạn đến ở K3; việc của automation đến ở A1–A3.
 
 ### ADR-034 — Automation: sự kiện, hành động, hàng đợi trong MongoDB
 
@@ -2904,7 +2921,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
 | P0  | Nhập board 22–27, ADR-033 và ADR-034, bổ sung ADR-017, 018, 020, 025                                                                            | —      | Xong       |
 | K1  | Khách hàng: mô hình, gom từ lead và chuyển dữ liệu cũ, danh sách (góc nhìn, lọc, tìm, thao tác hàng loạt), thêm tay, gộp trùng                  | 22     | Xong       |
-| K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Chưa làm   |
+| K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Xong       |
 | K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Chưa làm   |
 | A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Chưa làm   |
 | A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Chưa làm   |

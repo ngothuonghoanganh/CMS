@@ -8,8 +8,10 @@ import type {
 } from '@plp/contracts';
 import { type QueryFilter, type Model, Types } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
+import type { CursorPosition } from '../../shared/cursor.js';
 import {
   afterCursor,
+  afterPosition,
   type KeysetPage,
   NEWEST_FIRST,
   toKeysetPage,
@@ -136,6 +138,17 @@ function personFilter(person: LeadPerson): QueryFilter<LeadRecord> {
   ];
   // Nobody to look for matches no lead (`$or` needs at least one clause).
   return clauses.length === 0 ? { _id: { $in: [] } } : { $or: clauses };
+}
+
+/** The person's leads, and the leads of their profiles whatever number or email those carry. */
+function personOrProfilesFilter(
+  person: LeadPerson,
+  contactIds: readonly ObjectId[],
+): QueryFilter<LeadRecord> {
+  if (contactIds.length === 0) {
+    return personFilter(person);
+  }
+  return { $or: [personFilter(person), { contactId: { $in: contactIds } }] };
 }
 
 /** A lead the background sender works on, with the workspace whose database holds it (ADR-025). */
@@ -754,6 +767,40 @@ export class LeadsRepository {
       .exec();
   }
 
+  /** A profile's leads strictly after a position, newest first: its timeline (board 23). */
+  listOfContact(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    contactId: ObjectId,
+    after: CursorPosition | null,
+    limit: number,
+  ): Promise<LeadRecord[]> {
+    return this.leads(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        siteId,
+        contactId,
+        ...(after === null ? {} : afterPosition(after)),
+      })
+      .sort(NEWEST_FIRST)
+      .limit(limit)
+      .lean<LeadRecord[]>()
+      .exec();
+  }
+
+  /** The latest lead of a profile: its consent evidence ("Đồng ý", board 23). */
+  latestOfContact(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    contactId: ObjectId,
+  ): Promise<LeadRecord | null> {
+    return this.leads(scope)
+      .findOne({ workspaceId: scope.workspaceId, siteId, contactId })
+      .sort(NEWEST_FIRST)
+      .lean<LeadRecord>()
+      .exec();
+  }
+
   /**
    * Leads without a profile, oldest first, after a position: the startup backfill (ADR-033).
    * Suspected spam is passed over and never joins one, so the position moves past it.
@@ -816,7 +863,7 @@ export class LeadsRepository {
     scope: WorkspaceScope,
     siteId: ObjectId,
     person: LeadPerson,
-    tx: Tx,
+    tx?: Tx,
   ): Promise<ObjectId[]> {
     const ids = await this.leads(scope)
       .distinct('contactId', {
@@ -824,23 +871,67 @@ export class LeadsRepository {
         siteId,
         ...personFilter(person),
       })
-      .session(tx)
+      .session(tx ?? null)
       .exec();
     return ids.filter((id): id is ObjectId => id instanceof Types.ObjectId);
   }
 
-  /** Deletes every lead of the person in the site and returns how many there were. */
+  /**
+   * Deletes every lead of the person in the site, and every lead of their profiles (ADR-033), and
+   * returns how many there were.
+   */
   async deletePerson(
     scope: WorkspaceScope,
     siteId: ObjectId,
     person: LeadPerson,
+    contactIds: readonly ObjectId[],
     tx: Tx,
   ): Promise<number> {
     const result = await this.leads(scope)
-      .deleteMany({ workspaceId: scope.workspaceId, siteId, ...personFilter(person) })
+      .deleteMany({
+        workspaceId: scope.workspaceId,
+        siteId,
+        ...personOrProfilesFilter(person, contactIds),
+      })
       .session(tx)
       .exec();
     return result.deletedCount;
+  }
+
+  /** How many leads `deletePerson` would delete, at most `limit`. */
+  countPersonOrProfiles(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    contactIds: readonly ObjectId[],
+    limit: number,
+  ): Promise<number> {
+    return this.leads(scope)
+      .countDocuments(
+        { workspaceId: scope.workspaceId, siteId, ...personOrProfilesFilter(person, contactIds) },
+        { limit },
+      )
+      .exec();
+  }
+
+  /** The leads `deletePerson` would delete, newest first, at most `limit`: a profile's export. */
+  listPersonOrProfiles(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    contactIds: readonly ObjectId[],
+    limit: number,
+  ): Promise<LeadRecord[]> {
+    return this.leads(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        siteId,
+        ...personOrProfilesFilter(person, contactIds),
+      })
+      .sort(NEWEST_FIRST)
+      .limit(limit)
+      .lean<LeadRecord[]>()
+      .exec();
   }
 
   private criteriaFilter(

@@ -10,10 +10,12 @@ import {
   manualContactChannels,
   manualContactChannelSchema,
 } from '@plp/contracts';
-import { Button, Callout, Checkbox, Dialog, Field, Input, Select } from '@plp/ui';
+import { Button, ButtonLink, Callout, Checkbox, Dialog, Field, Input, Select } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
+import Link from 'next/link';
 import { type SubmitEvent, useId, useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import { contactHref } from '../shell/navigation';
 import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import styles from './Contacts.module.css';
@@ -23,8 +25,6 @@ export interface AddContactDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdded: (contact: ContactListItem) => void;
-  /** "Tìm hồ sơ đó": the list searches the number that already has a profile. */
-  onFindExisting: (phone: string) => void;
 }
 
 const FIELDS = ['name', 'phone'] as const;
@@ -35,13 +35,7 @@ const nameAndPhoneSchema = createContactRequestSchema.pick({ name: true, phone: 
  * required and kept as proof of where the data came from; the agreement to offers is ticked only
  * when the person said so.
  */
-export function AddContactDialog({
-  siteId,
-  open,
-  onOpenChange,
-  onAdded,
-  onFindExisting,
-}: AddContactDialogProps) {
+export function AddContactDialog({ siteId, open, onOpenChange, onAdded }: AddContactDialogProps) {
   const formId = useId();
   const form = useSchemaForm(nameAndPhoneSchema, { name: '', phone: '' });
   const [channel, setChannel] = useState<ManualContactChannel>('phone_call');
@@ -161,15 +155,9 @@ export function AddContactDialog({
             <span>
               Số này đã thuộc hồ sơ <strong>{existing.name}</strong>.
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onFindExisting(form.values.phone);
-              }}
-            >
-              Tìm hồ sơ đó
-            </Button>
+            <ButtonLink variant="ghost" size="sm" as={Link} href={contactHref(siteId, existing.id)}>
+              Mở hồ sơ đó
+            </ButtonLink>
           </div>
         )}
         <Field
