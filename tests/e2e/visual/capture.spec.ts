@@ -254,6 +254,31 @@ test.describe('Design capture', () => {
     await capture(page, 'Pipeline-list');
   });
 
+  test('25 Automations', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(sitePath('/automations'));
+    for (const name of [
+      'Giao lead mới cho người trực',
+      'Nhắc khi lead chưa được gọi',
+      'Báo tin khi chốt được khách',
+    ]) {
+      await page.getByRole('button', { name: new RegExp(name) }).click();
+      await expect(
+        page.getByRole('region', { name: 'Automation của site' }).getByText(name, { exact: true }),
+      ).toBeVisible();
+    }
+    await page.getByRole('switch', { name: 'Bật Giao lead mới cho người trực' }).check();
+    await page.getByRole('switch', { name: 'Bật Nhắc khi lead chưa được gọi' }).check();
+    await page.getByRole('switch', { name: 'Bật Nhắc khi lead chưa được gọi' }).uncheck();
+    await expect(
+      page.getByRole('switch', { name: 'Bật Nhắc khi lead chưa được gọi' }),
+    ).not.toBeChecked();
+    await expect(page.getByRole('status').filter({ hasText: 'Đã' })).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await capture(page, 'Automations');
+  });
+
   test('10 Leads, 11 Analytics and 12 Consent', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const name = 'Nguyễn Thu Hà';

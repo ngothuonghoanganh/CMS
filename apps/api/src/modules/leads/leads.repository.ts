@@ -843,6 +843,14 @@ export class LeadsRepository {
       .exec();
   }
 
+  /** A lead of the site for a background job, such as an automation's run (ADR-034). */
+  findOf(ref: WorkspaceRef, siteId: ObjectId, id: ObjectId): Promise<LeadRecord | null> {
+    return this.leads(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId, siteId })
+      .lean<LeadRecord>()
+      .exec();
+  }
+
   /** A profile's leads strictly after a position, newest first: its timeline (board 23). */
   listOfContact(
     scope: WorkspaceScope,

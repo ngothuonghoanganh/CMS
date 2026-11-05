@@ -14,7 +14,8 @@ import {
 } from './navigation';
 
 const siteId = '64b000000000000000000001';
-const [pages, leads, contacts, analytics, domain, settings, privacy] = siteNavItems(siteId);
+const [pages, leads, contacts, analytics, automations, domain, settings, privacy] =
+  siteNavItems(siteId);
 
 describe('siteNavItems', () => {
   it('lists the sections of a site in the order of the design', () => {
@@ -37,6 +38,12 @@ describe('siteNavItems', () => {
         label: 'Hiệu quả',
         href: `/sites/${siteId}/analytics`,
         permissions: ['pages.view'],
+      },
+      {
+        key: 'automations',
+        label: 'Automation',
+        href: `/sites/${siteId}/automations`,
+        permissions: ['automations.view'],
       },
       {
         key: 'domain',
@@ -91,13 +98,23 @@ describe('siteNavItems', () => {
 
 describe('navCurrent', () => {
   it('marks the current section page', () => {
-    if (!pages || !leads || !contacts || !analytics || !domain || !privacy || !settings) {
+    if (
+      !pages ||
+      !leads ||
+      !contacts ||
+      !analytics ||
+      !automations ||
+      !domain ||
+      !privacy ||
+      !settings
+    ) {
       throw new Error('missing nav items');
     }
     expect(navCurrent(`/sites/${siteId}`, pages)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/leads`, leads)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/contacts`, contacts)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/analytics`, analytics)).toBe('page');
+    expect(navCurrent(`/sites/${siteId}/automations`, automations)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/analytics`, leads)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/leads`, pages)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/domain`, domain)).toBe('page');

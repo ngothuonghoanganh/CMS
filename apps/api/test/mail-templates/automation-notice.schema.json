@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "automation-notice",
+  "description": "Email nội bộ của một automation (ADR-034). Không có số điện thoại hay email của khách.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "siteName",
+    "automationName",
+    "subject",
+    "contactName",
+    "pageTitle",
+    "ownerName",
+    "profileUrl"
+  ],
+  "properties": {
+    "siteName": { "type": "string", "minLength": 1 },
+    "automationName": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "minLength": 1, "description": "Tiêu đề đã chèn các biến." },
+    "contactName": { "type": "string", "minLength": 1 },
+    "pageTitle": { "type": ["string", "null"], "description": "Trang của lead; null khi không có." },
+    "ownerName": { "type": ["string", "null"], "description": "null khi hồ sơ chưa có người phụ trách." },
+    "profileUrl": { "type": "string", "format": "http-url", "description": "Hồ sơ khách trong admin." }
+  }
+}

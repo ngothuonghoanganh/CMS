@@ -25,6 +25,8 @@ const BOARD: Record<string, string> = {
   'privacy.manage': 'yynnnn',
   'sites.manage': 'yynnnn',
   'domains.manage': 'yynnnn',
+  'automations.view': 'yynnyn',
+  'automations.manage': 'yynnnn',
   'members.manage': 'yynnnn',
   'accessRequests.decide': 'ynnnnn',
   'workspace.transferOwnership': 'ynnnnn',

@@ -291,14 +291,14 @@ export class ContactsRepository {
   }
 
   /** The tags the site uses, at most `SITE_CONTACT_TAGS_MAX` by construction. */
-  async tags(scope: WorkspaceScope, siteId: ObjectId): Promise<string[]> {
+  async tags(scope: WorkspaceRef, siteId: ObjectId): Promise<string[]> {
     const tags = await this.contacts(scope)
       .distinct('tags', { workspaceId: scope.workspaceId, siteId })
       .exec();
     return tags.filter((tag): tag is string => typeof tag === 'string');
   }
 
-  async hasTag(scope: WorkspaceScope, siteId: ObjectId, tag: string): Promise<boolean> {
+  async hasTag(scope: WorkspaceRef, siteId: ObjectId, tag: string): Promise<boolean> {
     return (
       (await this.contacts(scope)
         .exists({ workspaceId: scope.workspaceId, siteId, tags: tag })
@@ -308,7 +308,7 @@ export class ContactsRepository {
 
   /** "Giao cho…" / "Bỏ giao"; returns how many profiles were found. */
   async assign(
-    scope: WorkspaceScope,
+    scope: WorkspaceRef,
     siteId: ObjectId,
     ids: readonly ObjectId[],
     ownerId: ObjectId | null,
@@ -327,7 +327,7 @@ export class ContactsRepository {
    * many have it now.
    */
   async addTag(
-    scope: WorkspaceScope,
+    scope: WorkspaceRef,
     siteId: ObjectId,
     ids: readonly ObjectId[],
     tag: string,

@@ -467,6 +467,15 @@ export class SitesRepository {
     return site === null ? null : { privacy: sitePrivacyOf(site) };
   }
 
+  /** The site's name for a background job, such as an automation's email; null when it is gone. */
+  async findPublicName(ref: WorkspaceRef, siteId: ObjectId): Promise<string | null> {
+    const site = await this.sites(ref)
+      .findOne({ _id: siteId, workspaceId: ref.workspaceId }, { name: 1 })
+      .lean<Pick<SiteRecord, 'name'>>()
+      .exec();
+    return site?.name ?? null;
+  }
+
   /** Sets or clears the primary custom domain (ADR-022); null when the site is gone. */
   setPrimaryDomain(
     scope: WorkspaceScope,

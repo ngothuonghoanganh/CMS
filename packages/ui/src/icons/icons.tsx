@@ -267,6 +267,8 @@ export const InboxIcon = createIcon(
   <path d="M4 13l2.5-7h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 13h4l1.5 2.5h5L16 13h4" />,
 );
 export const TagIcon = createIcon('tag', <path d="M3 12V4h8l10 10-8 8zM7.5 7.5h.01" />);
+/** Automation (board 25): something that runs on its own. */
+export const BoltIcon = createIcon('bolt', <path d="M13 3L5 13h6l-1 8 8-10h-6z" />);
 export const CalendarIcon = createIcon(
   'calendar',
   <path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M8 3v4M16 3v4" />,

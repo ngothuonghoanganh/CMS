@@ -137,6 +137,12 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
       return { text: `cấp chứng chỉ HTTPS cho ${host(item)}`, tone: 'primary' };
     case 'domain.lost':
       return { text: `phát hiện ${host(item)} mất kết nối`, tone: 'warning' };
+    case 'automation.enabled':
+      return { text: 'bật một automation', tone: 'success' };
+    case 'automation.paused':
+      return { text: 'tạm dừng một automation', tone: 'muted' };
+    case 'automation.auto_paused':
+      return { text: 'tạm dừng một automation sau 20 lượt lỗi liên tiếp', tone: 'warning' };
   }
 }
 

@@ -21,6 +21,8 @@ export const permissionSchema = z.enum([
   'privacy.manage',
   'sites.manage',
   'domains.manage',
+  'automations.view',
+  'automations.manage',
   'members.manage',
   'accessRequests.decide',
   'workspace.transferOwnership',
@@ -44,7 +46,7 @@ const grants: Record<Role, readonly Permission[]> = {
   ),
   editor: ['pages.view', 'pages.edit', 'templates.manage', 'pages.publish', 'pages.manageLive'],
   contributor: ['pages.view', 'pages.edit', 'pages.requestPublish'],
-  support: ['pages.view', 'leads.view', 'leads.handle'],
+  support: ['pages.view', 'leads.view', 'leads.handle', 'automations.view'],
   viewer: ['pages.view'],
 };
 
@@ -154,6 +156,13 @@ export const permissionGroups: readonly PermissionGroup[] = [
   {
     title: 'Tên miền',
     rows: [{ permission: 'domains.manage', label: 'Xem và quản lý tên miền' }],
+  },
+  {
+    title: 'Automation',
+    rows: [
+      { permission: 'automations.view', label: 'Xem automation và lịch sử chạy' },
+      { permission: 'automations.manage', label: 'Tạo, bật, tạm dừng automation' },
+    ],
   },
   {
     title: 'Thành viên',

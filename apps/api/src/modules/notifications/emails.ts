@@ -6,6 +6,23 @@ import { formatLeadPhone, leadSourceLabel, vnDateTimeOf } from '@plp/contracts';
  * here (`email-templates.ts`), plp-mailer renders the same data with its own templates.
  */
 
+/**
+ * An internal email of an automation (ADR-034). It names the customer but never holds their phone
+ * number or email: the reader opens the profile for those.
+ */
+export interface AutomationNoticeData {
+  siteName: string;
+  automationName: string;
+  /** The automation's subject with its placeholders filled in. */
+  subject: string;
+  contactName: string;
+  /** The page of the lead; null when there is none or it was deleted. */
+  pageTitle: string | null;
+  /** null while the profile has no owner. */
+  ownerName: string | null;
+  profileUrl: string;
+}
+
 export interface LeadNotificationData {
   siteName: string;
   pageTitle: string;
@@ -127,7 +144,8 @@ export type Email =
   | { template: 'domain-moved'; data: DomainEmailData }
   | { template: 'approval-request'; data: ApprovalRequestData }
   | { template: 'approval-published'; data: ApprovalPublishedData }
-  | { template: 'approval-rejected'; data: ApprovalRejectedData };
+  | { template: 'approval-rejected'; data: ApprovalRejectedData }
+  | { template: 'automation-notice'; data: AutomationNoticeData };
 
 export type EmailTemplate = Email['template'];
 
@@ -371,6 +389,21 @@ export function approvalRejectedEmail(
   return {
     template: 'approval-rejected',
     idempotencyKey: `approval-rejected:${approvalId}`,
+    data,
+  };
+}
+
+/**
+ * An automation's internal email (ADR-034): one key per run and step, so a retried step never
+ * sends a second email.
+ */
+export function automationNoticeEmail(
+  input: AutomationNoticeData & { runId: string; step: number },
+): KeyedEmail {
+  const { runId, step, ...data } = input;
+  return {
+    template: 'automation-notice',
+    idempotencyKey: `automation-notice:${runId}:${step}`,
     data,
   };
 }

@@ -133,6 +133,11 @@ export function formatRelativeTime(
   return `${pad(then.day)}/${pad(then.month)}/${then.year}`;
 }
 
+/** "1.240": a whole number grouped by thousands, the same on the server and in the browser. */
+export function formatCount(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 /** "38.000.000 ₫": the same text on the server and in the browser. */
 export function formatVnd(value: number): string {
   return `${String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;

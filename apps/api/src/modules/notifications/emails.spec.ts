@@ -6,6 +6,7 @@ import {
   accountExistsEmail,
   approvalPublishedEmail,
   approvalRejectedEmail,
+  automationNoticeEmail,
   approvalRequestEmail,
   domainActiveEmail,
   domainLostEmail,
@@ -158,8 +159,21 @@ const approvalRejected = approvalRejectedEmail({
   pageUrl: `http://localhost:3100/sites/${ID}/pages/${OTHER_ID}/edit`,
 });
 
+const automationNotice = automationNoticeEmail({
+  runId: ID,
+  step: 1,
+  siteName: 'Nha khoa Smile Care',
+  automationName: 'Nhắc khi lead chưa được gọi',
+  subject: 'Nguyễn Thu Trang chưa được gọi sau 15 phút',
+  contactName: 'Nguyễn Thu Trang',
+  pageTitle: null,
+  ownerName: null,
+  profileUrl: `http://localhost:3100/sites/${ID}/contacts/${OTHER_ID}`,
+});
+
 /** Every email the API can send, in each shape its data can take. */
 const EVERY_EMAIL: Array<[string, KeyedEmail]> = [
+  ['automation-notice without a page or an owner', automationNotice],
   ['lead-notification', leadEmail()],
   [
     'lead-notification without email, message or campaign',

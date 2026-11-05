@@ -66,6 +66,12 @@ import {
   pipelineResponseSchema,
   updateOpportunityRequestSchema,
 } from './opportunities.js';
+import {
+  automationListItemSchema,
+  automationListResponseSchema,
+  createAutomationRequestSchema,
+  setAutomationStateRequestSchema,
+} from './automations.js';
 import { meResponseSchema } from './membership.js';
 import {
   acceptInvitationResponseSchema,
@@ -963,6 +969,41 @@ export const endpoints = {
     request: moveOpportunityRequestSchema,
     query: null,
     response: opportunitySchema,
+  }),
+
+  // Automations (boards 25–27, ADR-034): `automations.view` reads, `automations.manage` changes
+  listAutomations: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/automations`,
+    request: null,
+    query: null,
+    response: automationListResponseSchema,
+  }),
+  /** "Bắt đầu từ mẫu": a draft from a recipe; it runs once enabled. */
+  createAutomation: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/automations`,
+    request: createAutomationRequestSchema,
+    query: null,
+    response: automationListItemSchema,
+  }),
+  /** "Bật" or "Tạm dừng"; a paused automation's waiting runs stop. */
+  setAutomationState: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/state`,
+    request: setAutomationStateRequestSchema,
+    query: null,
+    response: automationListItemSchema,
+  }),
+  /** "Nhân bản": a draft copy. */
+  duplicateAutomation: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/duplicate`,
+    request: null,
+    query: null,
+    response: automationListItemSchema,
   }),
 
   // Analytics (ADR-019)

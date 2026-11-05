@@ -2,7 +2,7 @@ import type { Permission } from '@plp/contracts';
 
 /** Site sections in the sidebar, in the order of the design. */
 export type SiteNavKey =
-  'pages' | 'leads' | 'contacts' | 'analytics' | 'domain' | 'settings' | 'privacy';
+  'pages' | 'leads' | 'contacts' | 'analytics' | 'automations' | 'domain' | 'settings' | 'privacy';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
 export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles';
@@ -43,6 +43,12 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
       label: 'Hiệu quả',
       href: analyticsHref(siteId),
       permissions: ['pages.view'],
+    },
+    {
+      key: 'automations',
+      label: 'Automation',
+      href: automationsHref(siteId),
+      permissions: ['automations.view'],
     },
     {
       key: 'domain',
@@ -164,6 +170,11 @@ export function leadsHref(siteId: string, search = ''): string {
 /** "Khách hàng" (board 22, ADR-033). */
 export function contactsHref(siteId: string): string {
   return `${siteHref(siteId)}/contacts`;
+}
+
+/** The automations of a site (board 25, ADR-034). */
+export function automationsHref(siteId: string): string {
+  return `${siteHref(siteId)}/automations`;
 }
 
 /** The pipeline (board 24, ADR-033), under "Khách hàng" in the sidebar. */

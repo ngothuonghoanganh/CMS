@@ -5,6 +5,7 @@ import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import { CUSTOM_ROLE_MODEL, type CustomRoleRecord } from './custom-role.schema.js';
+import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from './workspace-scope.js';
 
 export type CustomRoleChange = Pick<
@@ -17,7 +18,7 @@ export type CustomRoleChange = Pick<
 export class CustomRolesRepository {
   constructor(@InjectModel(CUSTOM_ROLE_MODEL) private readonly roles: Model<CustomRoleRecord>) {}
 
-  list(scope: WorkspaceScope): Promise<CustomRoleRecord[]> {
+  list(scope: WorkspaceRef): Promise<CustomRoleRecord[]> {
     return this.roles
       .find({ workspaceId: scope.workspaceId })
       .sort({ createdAt: 1, _id: 1 })
@@ -70,7 +71,7 @@ export class CustomRolesRepository {
   }
 
   /** The workspace's roles keyed by id hex, for the access of its members (at most 10). */
-  async mapForWorkspace(scope: WorkspaceScope): Promise<Map<string, CustomRoleRecord>> {
+  async mapForWorkspace(scope: WorkspaceRef): Promise<Map<string, CustomRoleRecord>> {
     return new Map((await this.list(scope)).map((role) => [role._id.toHexString(), role]));
   }
 

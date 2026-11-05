@@ -380,6 +380,11 @@
   color: var(--color-warning-strong-ink);
 }
 
+.tone-automation {
+  background: var(--color-primary-tint);
+  color: var(--color-primary-ink);
+}
+
 .tone-meeting {
   background: var(--color-primary-tint);
   color: var(--color-primary-ink);

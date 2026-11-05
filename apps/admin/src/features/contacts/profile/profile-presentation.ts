@@ -115,7 +115,7 @@ export function meetingDetail(meeting: Omit<ContactMeeting, 'id'>): string {
 }
 
 export interface TimelineView {
-  tone: 'lead' | 'note' | 'meeting' | 'stage';
+  tone: 'lead' | 'note' | 'meeting' | 'stage' | 'automation';
   title: string;
   when: string;
   body: string;
@@ -147,6 +147,13 @@ export function timelineView(entry: TimelineEntry): TimelineView {
         title: 'Ghi chú',
         when: entry.actor === null ? moment : `${moment} · ${entry.actor.name}`,
         body: entry.text,
+      };
+    case 'automation':
+      return {
+        tone: 'automation',
+        title: `Automation “${entry.name}”`,
+        when: moment,
+        body: entry.summary,
       };
     case 'stage': {
       const who = entry.actor === null ? moment : `${moment} · ${entry.actor.name}`;

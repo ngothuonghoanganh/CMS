@@ -2817,6 +2817,31 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Đổi `AUTOMATION_SECRET_KEY` làm mọi bí mật webhook cũ không dùng được; phải đổi bí mật của từng webhook.
   - Nếu sau này cần nhiều việc nền hơn (ví dụ email lead), chúng có thể dùng cùng hàng đợi; mỗi việc cần bổ sung ADR.
 - **Lát:** A1 hàng đợi, automation và các hành động nội bộ, màn 25; A2 thiết lập và chạy thử, màn 26; A3 webhook và lịch sử chạy, màn 27 (§5).
+- **Amended 2026-11-05 (A1, cách làm):**
+  - **Lượt chạy giữ định nghĩa của nó** (`definition`, cùng `version`), không phải một bảng phiên bản riêng: định nghĩa không có dữ liệu cá nhân, và lượt chạy đã có TTL 90 ngày.
+  - **Hàng đợi:**
+    - `nextAt` chỉ có ở lượt đang chờ hoặc đang chạy (index sparse). Lượt đang chạy có `nextAt` bằng `lockedUntil`, nên lượt của instance đã chết tự đến hạn lại.
+    - Một instance giành lượt bằng `findOneAndUpdate` có điều kiện, tối đa 4 lượt một lần.
+    - `job_wakeups` có thêm `seq`: lượt mới tăng `seq` cùng `$min`. Instance chạy xong một workspace chỉ đặt lại mốc nếu `seq` chưa đổi, nên không xóa mất việc vừa đến.
+    - Tài liệu `job_wakeups` của workspace được tạo khi bật automation, để lệnh `$min` trong transaction của sự kiện không phải upsert.
+  - **Sự kiện tạo lượt chạy trong cùng transaction** với sự kiện:
+    - lead gắn vào cơ hội (lúc nhận lead, hoặc "Không phải spam");
+    - đổi giai đoạn (pipeline, hộp thư);
+    - tạo công việc (hồ sơ, automation).
+    - Lead cũ được backfill không tạo lượt chạy. Mở cơ hội mới không phải "đổi giai đoạn".
+  - **Lúc chạy:** đọc lại dữ liệu hiện tại.
+    - `lead_still_new` bỏ qua (`not_new`) lead đã đổi giai đoạn.
+    - `task_overdue` bỏ qua (`task_done`) công việc đã xong hoặc đã đổi hạn.
+    - Điều kiện sai thì `skipped` (`conditions`), không tính lượt.
+  - **Hành động nội bộ:**
+    - Giao người đặt người phụ trách của hồ sơ, và của cơ hội nếu cơ hội chưa có. Xoay vòng dùng một bộ đếm `$inc` trên automation.
+    - Công việc của automation có `source: automation`.
+    - Email nội bộ là template `automation-notice`, khóa idempotency theo lượt và bước. Template đã có ở đường SMTP; plp-mailer cần thêm template cùng tên trước khi dùng đường SQS (§6).
+    - Mỗi lượt thành công ghi một sự kiện "Automation “…”" vào dòng thời gian hồ sơ.
+  - **Màn 25 ở A1:**
+    - Có 3 mẫu: giao lead, nhắc lead chưa gọi, báo tin thắng. Mỗi mẫu tạo bản nháp đã đủ cấu hình: xoay vòng giữa thành viên xem được khách hàng của site, email cho thành viên quản lý automation.
+    - Mẫu webhook đến ở A3. Nút "Tạo automation" và tên dẫn tới màn 26 đến ở A2.
+    - Menu của dòng có "Nhân bản"; ADR không có xóa hay lưu trữ.
 
 ---
 
@@ -2941,7 +2966,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | K1  | Khách hàng: mô hình, gom từ lead và chuyển dữ liệu cũ, danh sách (góc nhìn, lọc, tìm, thao tác hàng loạt), thêm tay, gộp trùng                  | 22     | Xong       |
 | K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Xong       |
 | K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Xong       |
-| A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Chưa làm   |
+| A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Xong       |
 | A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Chưa làm   |
 | A3  | Webhook (chặn SSRF, ký HMAC, bí mật mã hóa), lịch sử chạy, thử lại và bỏ qua                                                                    | 27     | Chưa làm   |
 
@@ -2977,7 +3002,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
-- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 14 template (PR plp-mailer#1 đã merge) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 15 template (14 template của PR plp-mailer#1 đã merge, và `automation-notice` của ADR-034 chưa có ở đó) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):

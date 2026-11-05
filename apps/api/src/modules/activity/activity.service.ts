@@ -29,6 +29,9 @@ const seenWith: Partial<Record<ActivityType, Permission>> = {
   'lead.recipients_changed': 'leads.view',
   'data_request.created': 'personalData.manage',
   'data_request.completed': 'personalData.manage',
+  'automation.enabled': 'automations.view',
+  'automation.paused': 'automations.view',
+  'automation.auto_paused': 'automations.view',
 };
 
 @Injectable()
