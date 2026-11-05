@@ -137,11 +137,12 @@ export class ContactRecordsRepository {
   }
 
   async insertTask(
-    scope: WorkspaceScope,
+    scope: WorkspaceRef,
     siteId: ObjectId,
     contactId: ObjectId,
     task: NewTask,
     tx: Tx,
+    source: TaskRecord['source'] = 'user',
   ): Promise<TaskRecord> {
     const [created] = await this.tasks(scope).create(
       [
@@ -155,7 +156,7 @@ export class ContactRecordsRepository {
           assigneeId: task.assigneeId,
           doneAt: null,
           createdBy: task.createdBy,
-          source: 'user',
+          source,
           createdAt: task.at,
           expiresAt: task.expiresAt,
         },
@@ -469,6 +470,38 @@ export class ContactRecordsRepository {
       ],
       { session: tx },
     );
+  }
+
+  findTask(ref: WorkspaceRef, siteId: ObjectId, id: ObjectId): Promise<TaskRecord | null> {
+    return this.tasks(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId, siteId })
+      .lean<TaskRecord>()
+      .exec();
+  }
+
+  /** "Automation “…”": what a run did on the profile, in the timeline (board 23). */
+  async insertAutomationEvent(
+    ref: WorkspaceRef,
+    siteId: ObjectId,
+    contactId: ObjectId,
+    automation: { automationId: ObjectId; name: string; summary: string },
+    at: Date,
+    expiresAt: Date | null,
+  ): Promise<void> {
+    await this.eventModel(ref).create({
+      workspaceId: ref.workspaceId,
+      siteId,
+      contactId,
+      kind: 'automation',
+      text: null,
+      meetingId: null,
+      meeting: null,
+      stage: null,
+      automation,
+      at,
+      actorId: null,
+      expiresAt,
+    });
   }
 
   /** "Đánh dấu thua" closes the opportunity's open tasks (ADR-033). */

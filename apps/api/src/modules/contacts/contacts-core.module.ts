@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-databases.js';
+import { AutomationsCoreModule } from '../automations/automations-core.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { ContactLinker } from './contact-linker.service.js';
@@ -19,6 +20,8 @@ import { CONTACT_EVENT_COLLECTION, MEETING_COLLECTION, TASK_COLLECTION } from '.
  */
 @Module({
   imports: [
+    // New leads, stage moves and tasks start the site's automations (ADR-034).
+    AutomationsCoreModule,
     LeadsCoreModule,
     // A lead's opportunity is named after its page (ADR-033).
     PagesModule,

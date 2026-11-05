@@ -10,6 +10,7 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { LeadRecord } from '../leads/lead.schema.js';
+import { AutomationTriggers } from '../automations/automation-triggers.service.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
@@ -63,6 +64,7 @@ export class OpportunityFlow {
     private readonly records: ContactRecordsRepository,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
+    private readonly triggers: AutomationTriggers,
   ) {}
 
   /**
@@ -95,6 +97,21 @@ export class OpportunityFlow {
       !(await this.leads.linkOpportunity(ref, lead._id, opportunity._id, opportunity.stage, tx))
     ) {
       throw new LeadAlreadyLinkedError();
+    }
+    if (!backfill) {
+      // "Có lead mới" starts the site's automations (ADR-034); leads stored before do not.
+      await this.triggers.leadCreated(
+        ref,
+        {
+          siteId: lead.siteId,
+          leadId: lead._id,
+          pageId: lead.pageId,
+          contactId: contact._id,
+          opportunityId: opportunity._id,
+          at: lead.createdAt,
+        },
+        tx,
+      );
     }
     if (!backfill || lead.status === opportunity.stage || lead.status === 'new') {
       return opportunity;
@@ -161,6 +178,11 @@ export class OpportunityFlow {
       opportunity,
       stageChangeOf(request, at),
       scope.userId,
+      tx,
+    );
+    await this.triggers.stageChanged(
+      scope,
+      { siteId, opportunityId: moved._id, contactId: contact._id, stage: moved.stage, at },
       tx,
     );
     if (moved.stage === 'lost') {

@@ -5,7 +5,7 @@ import { UsersRepository } from '../auth/users.repository.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
-import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 
 /**
  * Members a profile or a task can be given to: they hold `leads.view` and may open the site
@@ -19,7 +19,7 @@ export class ContactAssignees {
     private readonly users: UsersRepository,
   ) {}
 
-  async list(scope: WorkspaceScope, siteId: ObjectId): Promise<ContactPerson[]> {
+  async list(scope: WorkspaceRef, siteId: ObjectId): Promise<ContactPerson[]> {
     const [memberships, roles] = await Promise.all([
       this.workspaces.listMembers(scope),
       this.customRoles.mapForWorkspace(scope),
@@ -37,7 +37,7 @@ export class ContactAssignees {
     });
   }
 
-  async includes(scope: WorkspaceScope, siteId: ObjectId, userId: string): Promise<boolean> {
+  async includes(scope: WorkspaceRef, siteId: ObjectId, userId: string): Promise<boolean> {
     return (await this.list(scope, siteId)).some((person) => person.id === userId);
   }
 }

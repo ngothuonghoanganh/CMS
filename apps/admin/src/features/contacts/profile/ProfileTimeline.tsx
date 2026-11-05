@@ -1,7 +1,15 @@
 'use client';
 
 import { endpoints, type TimelineResponse } from '@plp/contracts';
-import { ArrowRightIcon, Button, CalendarIcon, Callout, FileIcon, InboxIcon } from '@plp/ui';
+import {
+  ArrowRightIcon,
+  BoltIcon,
+  Button,
+  CalendarIcon,
+  Callout,
+  FileIcon,
+  InboxIcon,
+} from '@plp/ui';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../../lib/api';
 import { cx } from '../../shell/cx';
@@ -15,6 +23,7 @@ const ICONS: Record<TimelineView['tone'], typeof InboxIcon> = {
   note: FileIcon,
   meeting: CalendarIcon,
   stage: ArrowRightIcon,
+  automation: BoltIcon,
 };
 
 export interface ProfileTimelineProps {

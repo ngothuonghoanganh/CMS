@@ -122,6 +122,14 @@ export const timelineEntrySchema = z.discriminatedUnion('kind', [
     actor: contactPersonSchema.nullable(),
     meeting: contactMeetingSchema.omit({ id: true }),
   }),
+  /** "Automation “Giao lead mới cho người trực”": what one run did (ADR-034). */
+  z.object({
+    kind: z.literal('automation'),
+    id: idSchema,
+    at: isoDateTimeSchema,
+    name: z.string(),
+    summary: z.string(),
+  }),
   /** "Cơ hội chuyển sang Hẹn lịch": one entry per move, from the pipeline or the inbox. */
   z.object({
     kind: z.literal('stage'),

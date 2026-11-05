@@ -884,6 +884,24 @@ const ROWS: Row[] = [
       }),
   },
   {
+    action: 'Xem automation',
+    permission: 'automations.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/automations`),
+  },
+  {
+    // An automation that does not exist: an allowed role gets 404, a refused one 403 before it.
+    action: 'Bật automation',
+    permission: 'automations.manage',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/automations/64b0000000000000000000a1/state`, {
+        state: 'paused',
+      }),
+  },
+  {
     action: 'Xem nơi nhận lead',
     permission: 'leads.view',
     scope: 'site',

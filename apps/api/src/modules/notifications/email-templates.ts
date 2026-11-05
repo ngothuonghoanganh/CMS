@@ -4,6 +4,7 @@ import type {
   AccountExistsData,
   ApprovalPublishedData,
   ApprovalRejectedData,
+  AutomationNoticeData,
   ApprovalRequestData,
   DomainEmailData,
   Email,
@@ -284,6 +285,24 @@ function approvalRejected(data: ApprovalRejectedData): RenderedEmail {
   };
 }
 
+/** An automation's internal email (ADR-034): who it is about, and the way to their profile. */
+function automationNotice(data: AutomationNoticeData): RenderedEmail {
+  const body = [
+    `Automation "${data.automationName}" của ${data.siteName} gửi thư này về khách ${data.contactName}.`,
+    data.pageTitle === null ? null : `Trang nguồn: ${data.pageTitle}.`,
+    `Người phụ trách: ${data.ownerName ?? 'chưa giao'}.`,
+  ].filter((line): line is string => line !== null);
+  const action = 'Mở hồ sơ để xem số điện thoại, email và các lần liên hệ.';
+  return {
+    subject: data.subject,
+    text: [...body, '', action, data.profileUrl].join('\n'),
+    html: layout(
+      data.subject,
+      `${body.map(paragraph).join('')}${button(data.profileUrl, 'Mở hồ sơ')}${smallPrint(action)}`,
+    ),
+  };
+}
+
 /**
  * The subject and both parts of an email, as SMTP sends it (ADR-018). plp-mailer renders the same
  * data with its own copy of these texts (ADR-029).
@@ -318,5 +337,7 @@ export function renderEmail(email: Email): RenderedEmail {
       return approvalPublished(email.data);
     case 'approval-rejected':
       return approvalRejected(email.data);
+    case 'automation-notice':
+      return automationNotice(email.data);
   }
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { AutomationsCoreModule } from '../automations/automations-core.module.js';
 import { DataRequestsCoreModule } from '../data-requests/data-requests-core.module.js';
 import { DataRequestsModule } from '../data-requests/data-requests.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
@@ -25,6 +26,7 @@ import { PipelineService } from './pipeline.service.js';
 @Module({
   imports: [
     AuthModule,
+    AutomationsCoreModule,
     ContactsCoreModule,
     DataRequestsCoreModule,
     DataRequestsModule,
@@ -44,6 +46,7 @@ import { PipelineService } from './pipeline.service.js';
     ContactAssignees,
     ContactsBackfill,
   ],
-  exports: [ContactsBackfill],
+  // An automation's steps give profiles and tasks to the same members (ADR-034).
+  exports: [ContactsBackfill, ContactAssignees],
 })
 export class ContactsModule {}

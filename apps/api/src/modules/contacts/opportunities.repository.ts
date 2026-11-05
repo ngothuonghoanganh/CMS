@@ -81,7 +81,7 @@ export class OpportunitiesRepository {
   }
 
   findById(
-    scope: WorkspaceScope,
+    scope: WorkspaceRef,
     siteId: ObjectId,
     id: ObjectId,
     tx?: Tx,
@@ -154,7 +154,7 @@ export class OpportunitiesRepository {
   }
 
   update(
-    scope: WorkspaceScope,
+    scope: WorkspaceRef,
     siteId: ObjectId,
     id: ObjectId,
     changes: Partial<Pick<OpportunityRecord, 'title' | 'value' | 'valueBy' | 'ownerId'>>,

@@ -26,6 +26,9 @@ export const activityTypes = [
   'domain.primary_changed',
   'domain.activated',
   'domain.lost',
+  'automation.enabled',
+  'automation.paused',
+  'automation.auto_paused',
 ] as const;
 export const activityTypeSchema = z.enum(activityTypes);
 export type ActivityType = z.infer<typeof activityTypeSchema>;
@@ -49,6 +52,8 @@ export const domainActivityTypes = [
 export const systemActivityTypes = [
   'domain.activated',
   'domain.lost',
+  // After 20 failed runs in a row (ADR-034).
+  'automation.auto_paused',
 ] as const satisfies readonly ActivityType[];
 export type SystemActivityType = (typeof systemActivityTypes)[number];
 

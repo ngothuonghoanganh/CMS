@@ -35,6 +35,7 @@ import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js
 import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { AutomationTriggers } from '../automations/automation-triggers.service.js';
 import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
 import { DataRequestsService } from '../data-requests/data-requests.service.js';
 import { type LeadFile, LeadExportService } from '../leads/lead-export.service.js';
@@ -92,6 +93,7 @@ export class ContactProfileService {
     private readonly contacts: ContactsRepository,
     private readonly records: ContactRecordsRepository,
     private readonly opportunities: OpportunitiesRepository,
+    private readonly triggers: AutomationTriggers,
     private readonly assignees: ContactAssignees,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -329,7 +331,7 @@ export class ContactProfileService {
         ]);
       }
       const current = await this.opportunities.findOpenOfContact(scope, site._id, contact._id, tx);
-      return this.records.insertTask(
+      const task = await this.records.insertTask(
         scope,
         site._id,
         contact._id,
@@ -344,6 +346,18 @@ export class ContactProfileService {
         },
         tx,
       );
+      await this.triggers.taskCreated(
+        scope,
+        {
+          siteId: site._id,
+          taskId: task._id,
+          contactId: contact._id,
+          opportunityId: task.opportunityId,
+          dueAt: task.dueAt,
+        },
+        tx,
+      );
+      return task;
     });
     return toTask(task, await this.names(scope, [task.assigneeId]));
   }

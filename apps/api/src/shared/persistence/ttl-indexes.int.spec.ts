@@ -36,6 +36,8 @@ const EXPIRING_IN_WORKSPACE: Record<string, string> = {
   tasks: 'expiresAt',
   meetings: 'expiresAt',
   opportunities: 'expiresAt',
+  // A run holds only ids and goes after 90 days (ADR-034).
+  automation_runs: 'expiresAt',
   analytics_seen: 'expiresAt',
   analytics_daily: 'expiresAt',
   publish_approvals: 'purgeAt',

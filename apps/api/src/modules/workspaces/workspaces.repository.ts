@@ -35,6 +35,7 @@ export function storedGrant(grant: AccessGrant): StoredGrant {
       }
     : { role: 'custom', customRoleId: toObjectId(customRoleId), siteIds: storedSiteIds(grant) };
 }
+import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from './workspace-scope.js';
 import {
   MEMBERSHIP_MODEL,
@@ -214,7 +215,8 @@ export class WorkspacesRepository {
   }
 
   /** Members of the workspace, oldest first; at most `MEMBERS_MAX` (ADR-021). */
-  async listMembers(scope: WorkspaceScope): Promise<MembershipRecord[]> {
+  /** A scope, or a workspace a background job works for (an automation, ADR-034). */
+  async listMembers(scope: WorkspaceRef): Promise<MembershipRecord[]> {
     const members = await this.memberships
       .find({ workspaceId: scope.workspaceId })
       .sort({ createdAt: 1, _id: 1 })

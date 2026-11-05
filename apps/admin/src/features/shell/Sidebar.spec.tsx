@@ -188,7 +188,15 @@ describe('Sidebar', () => {
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Sites 1 site', 'Templates', 'Trang 6 trang', 'Leads', 'Khách hàng', 'Hiệu quả']);
+    ).toEqual([
+      'Sites 1 site',
+      'Templates',
+      'Trang 6 trang',
+      'Leads',
+      'Khách hàng',
+      'Hiệu quả',
+      'Automation',
+    ]);
     support.unmount();
 
     // A custom role answering data requests finds them under "Dữ liệu & đồng ý" (ADR-024).
@@ -253,6 +261,7 @@ describe('Sidebar', () => {
       'Leads',
       'Khách hàng',
       'Hiệu quả',
+      'Automation',
       'Tên miền',
       'Cài đặt site',
       'Dữ liệu & đồng ý',

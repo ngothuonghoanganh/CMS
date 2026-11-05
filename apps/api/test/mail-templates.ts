@@ -24,6 +24,8 @@ export const MAIL_TEMPLATES: readonly EmailTemplate[] = [
   'approval-request',
   'approval-published',
   'approval-rejected',
+  // Written here first (ADR-034): plp-mailer needs the same template before it sends it.
+  'automation-notice',
 ];
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

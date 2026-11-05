@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import {
   approvalResponseSchema,
+  automationListItemSchema,
   createInvitationsResponseSchema,
   type Domain,
   domainSchema,
@@ -11,6 +12,7 @@ import {
   type MeResponse,
   myAccessRequestResponseSchema,
   type PageApproval,
+  pipelineResponseSchema,
   problemSchema,
   type Site,
 } from '@plp/contracts';
@@ -31,6 +33,7 @@ import { publishableDraft } from '../../../test/compositions.js';
 import { pointHere } from '../../../test/domains.js';
 import { createLiveFormPage, leadBody, submitLead } from '../../../test/leads.js';
 import { MAIL_TEMPLATES, templateDataProblems } from '../../../test/mail-templates.js';
+import { AutomationScheduler } from '../automations/automation-scheduler.service.js';
 import { newEmail } from '../../../test/members.js';
 import {
   createPage,
@@ -352,7 +355,7 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     return domainSchema.parse(response.body);
   }
 
-  it('queues each of the 14 emails, once, with data its template renders', async () => {
+  it('queues each of the 15 emails, once, with data its template renders', async () => {
     const ownerEmail = owner.me.user.email;
 
     // Account emails (ADR-026); the owner's own sign-up queued the first confirmation.
@@ -371,6 +374,31 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
       recipients: 1,
       rejectedRecipients: 0,
     });
+
+    // An automation's internal email, when the lead's opportunity is won (ADR-034).
+    const automation = automationListItemSchema.parse(
+      (
+        await owner.client
+          .post(`/sites/${form.site.id}/automations`, { recipe: 'notify_won' })
+          .expect(201)
+      ).body,
+    );
+    await owner.client
+      .post(`/sites/${form.site.id}/automations/${automation.id}/state`, { state: 'on' })
+      .expect(200);
+    const board = pipelineResponseSchema.parse(
+      (await owner.client.get(`/sites/${form.site.id}/pipeline`).expect(200)).body,
+    );
+    const opportunityId = board.columns.find((column) => column.stage === 'new')?.items[0]?.id;
+    await owner.client
+      .post(`/sites/${form.site.id}/opportunities/${String(opportunityId)}/stage`, {
+        stage: 'won',
+        from: 'new',
+        value: 1_000_000,
+        on: '2026-11-05',
+      })
+      .expect(200);
+    await t.app.get(AutomationScheduler).wake();
 
     // An invitation, a request for another role and its refusal (ADR-021).
     const invited = newEmail('sqs');

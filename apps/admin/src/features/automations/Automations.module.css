@@ -1,0 +1,173 @@
+/* Board 25 "Automation". */
+.usage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.recipesTitle {
+  margin: 0 0 10px;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.recipes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.recipe {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.recipe:hover {
+  border-color: var(--color-primary);
+}
+
+.recipe:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.recipeName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.recipeIcon {
+  color: var(--color-primary);
+}
+
+.recipeText {
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+.listCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.table th,
+.table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 20px;
+}
+
+.table thead th {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-bottom-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.nameCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.by {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.muted {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.failed {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-danger-ink);
+}
+
+.toggleCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.switch input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: inherit;
+}
+
+.switch input:disabled {
+  cursor: not-allowed;
+}
+
+.empty {
+  margin: 0;
+  padding: 20px;
+  font-size: var(--text-body);
+  color: var(--color-muted);
+}

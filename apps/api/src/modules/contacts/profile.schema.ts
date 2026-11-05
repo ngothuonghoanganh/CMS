@@ -20,7 +20,7 @@ export interface MeetingSnapshot {
   note: string;
 }
 
-export const contactEventKinds = ['note', 'meeting', 'stage'] as const;
+export const contactEventKinds = ['note', 'meeting', 'stage', 'automation'] as const;
 export type ContactEventKind = (typeof contactEventKinds)[number];
 
 /** "Cơ hội chuyển sang …": an opportunity created (`from` null) or moved. */
@@ -30,6 +30,13 @@ export interface StageSnapshot {
   from: OpportunityStage | null;
   to: OpportunityStage;
   value: number | null;
+}
+
+/** "Automation “…”": what one run did, in words without personal data (ADR-034). */
+export interface AutomationSnapshot {
+  automationId: Types.ObjectId;
+  name: string;
+  summary: string;
 }
 
 /**
@@ -48,6 +55,7 @@ export interface ContactEventRecord {
   meetingId: Types.ObjectId | null;
   meeting: MeetingSnapshot | null;
   stage: StageSnapshot | null;
+  automation?: AutomationSnapshot | null;
   expiresAt: Date | null;
 }
 
@@ -80,6 +88,17 @@ const contactEventSchema = new Schema<ContactEventRecord>(
           from: { type: String, enum: [...opportunityStages, null], default: null },
           to: { type: String, enum: opportunityStages, required: true },
           value: { type: Number, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+    automation: {
+      type: new Schema<AutomationSnapshot>(
+        {
+          automationId: { type: Schema.Types.ObjectId, required: true },
+          name: { type: String, required: true },
+          summary: { type: String, required: true },
         },
         { _id: false },
       ),

@@ -56,6 +56,18 @@ export function eventEntry(event: ContactEventRecord, names: ProfileNames): Time
     }
     return { kind: 'note', ...shared, text: event.text };
   }
+  if (event.kind === 'automation') {
+    if (!event.automation) {
+      throw new Error(`Automation entry ${event._id.toHexString()} has no automation`);
+    }
+    return {
+      kind: 'automation',
+      id: shared.id,
+      at: shared.at,
+      name: event.automation.name,
+      summary: event.automation.summary,
+    };
+  }
   if (event.kind === 'stage') {
     if (event.stage === null) {
       throw new Error(`Stage entry ${event._id.toHexString()} has no stage`);
