@@ -9,12 +9,14 @@ import {
 } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { CONTACT_COLLECTION } from './contact.schema.js';
+import { OPPORTUNITY_COLLECTION, type OpportunityRecord } from './opportunity.schema.js';
 import {
   CONTACT_EVENT_COLLECTION,
   type ContactEventRecord,
   MEETING_COLLECTION,
   type MeetingRecord,
   type MeetingSnapshot,
+  type StageSnapshot,
   TASK_COLLECTION,
   type TaskRecord,
 } from './profile.schema.js';
@@ -24,6 +26,8 @@ const EXPIRY_SLACK_MS = 24 * 60 * 60 * 1000;
 
 /** A task as "Thêm công việc" creates it. */
 export interface NewTask {
+  /** The profile's open opportunity the task belongs to, if any: "Thua" closes its tasks. */
+  opportunityId: ObjectId | null;
   title: string;
   dueAt: Date;
   assigneeId: ObjectId;
@@ -34,6 +38,7 @@ export interface NewTask {
 
 /** How many records a profile holds, for "Xóa dữ liệu của người này". */
 export interface ContactRecordCounts {
+  opportunities: number;
   notes: number;
   tasks: number;
   meetings: number;
@@ -41,6 +46,7 @@ export interface ContactRecordCounts {
 
 /** Everything the profiles hold, for "Xuất dữ liệu của người này". */
 export interface ContactRecordsExport {
+  opportunities: OpportunityRecord[];
   notes: ContactEventRecord[];
   tasks: TaskRecord[];
   meetings: MeetingRecord[];
@@ -74,6 +80,7 @@ export class ContactRecordsRepository {
           text,
           meetingId: null,
           meeting: null,
+          stage: null,
           at,
           actorId: scope.userId,
           expiresAt,
@@ -111,6 +118,7 @@ export class ContactRecordsRepository {
           ...owned,
           kind: 'meeting',
           text: null,
+          stage: null,
           meetingId: booked._id,
           meeting,
           at,
@@ -141,7 +149,7 @@ export class ContactRecordsRepository {
           workspaceId: scope.workspaceId,
           siteId,
           contactId,
-          opportunityId: null,
+          opportunityId: task.opportunityId,
           title: task.title,
           dueAt: task.dueAt,
           assigneeId: task.assigneeId,
@@ -295,6 +303,10 @@ export class ContactRecordsRepository {
       expiresAt: { $lt: new Date(expiresAt.getTime() - EXPIRY_SLACK_MS) },
     };
     const update = { $set: { expiresAt } };
+    await this.opportunities(ref)
+      .updateMany(lagging, update)
+      .session(tx ?? null)
+      .exec();
     await this.eventModel(ref)
       .updateMany(lagging, update)
       .session(tx ?? null)
@@ -331,9 +343,11 @@ export class ContactRecordsRepository {
       { $project: { expiresAt: '$contact.expiresAt' } },
       { $merge: { into, on: '_id', whenMatched: 'merge', whenNotMatched: 'discard' } },
     ];
+    const opportunities = this.opportunities(scope);
     const events = this.eventModel(scope);
     const tasks = this.tasks(scope);
     const meetings = this.meetings(scope);
+    await opportunities.aggregate(stagesInto(opportunities.collection.collectionName)).exec();
     await events.aggregate(stagesInto(events.collection.collectionName)).exec();
     await tasks.aggregate(stagesInto(tasks.collection.collectionName)).exec();
     await meetings.aggregate(stagesInto(meetings.collection.collectionName)).exec();
@@ -349,6 +363,7 @@ export class ContactRecordsRepository {
   ): Promise<void> {
     const filter = { workspaceId: scope.workspaceId, siteId, contactId: from };
     const update = { $set: { contactId: to } };
+    await this.opportunities(scope).updateMany(filter, update).session(tx).exec();
     await this.eventModel(scope).updateMany(filter, update).session(tx).exec();
     await this.tasks(scope).updateMany(filter, update).session(tx).exec();
     await this.meetings(scope).updateMany(filter, update).session(tx).exec();
@@ -365,6 +380,7 @@ export class ContactRecordsRepository {
       return;
     }
     const filter = { workspaceId: ref.workspaceId, siteId, contactId: { $in: contactIds } };
+    await this.opportunities(ref).deleteMany(filter).session(tx).exec();
     await this.eventModel(ref).deleteMany(filter).session(tx).exec();
     await this.tasks(ref).deleteMany(filter).session(tx).exec();
     await this.meetings(ref).deleteMany(filter).session(tx).exec();
@@ -376,14 +392,15 @@ export class ContactRecordsRepository {
     contactIds: readonly ObjectId[],
   ): Promise<ContactRecordCounts> {
     const filter = { workspaceId: scope.workspaceId, siteId, contactId: { $in: contactIds } };
-    const [notes, tasks, meetings] = await Promise.all([
+    const [opportunities, notes, tasks, meetings] = await Promise.all([
+      this.opportunities(scope).countDocuments(filter).exec(),
       this.eventModel(scope)
         .countDocuments({ ...filter, kind: 'note' })
         .exec(),
       this.tasks(scope).countDocuments(filter).exec(),
       this.meetings(scope).countDocuments(filter).exec(),
     ]);
-    return { notes, tasks, meetings };
+    return { opportunities, notes, tasks, meetings };
   }
 
   /** At most `limit` of each kind, oldest first. */
@@ -394,7 +411,13 @@ export class ContactRecordsRepository {
     limit: number,
   ): Promise<ContactRecordsExport> {
     const filter = { workspaceId: scope.workspaceId, siteId, contactId: { $in: contactIds } };
-    const [notes, tasks, meetings] = await Promise.all([
+    const [opportunities, notes, tasks, meetings] = await Promise.all([
+      this.opportunities(scope)
+        .find(filter)
+        .sort({ createdAt: 1, _id: 1 })
+        .limit(limit)
+        .lean<OpportunityRecord[]>()
+        .exec(),
       this.eventModel(scope)
         .find({ ...filter, kind: 'note' })
         .sort({ at: 1, _id: 1 })
@@ -414,7 +437,81 @@ export class ContactRecordsRepository {
         .lean<MeetingRecord[]>()
         .exec(),
     ]);
-    return { notes, tasks, meetings };
+    return { opportunities, notes, tasks, meetings };
+  }
+
+  /** "Cơ hội chuyển sang …", in the caller's transaction; a null actor is the intake. */
+  async insertStageEvent(
+    ref: WorkspaceRef,
+    siteId: ObjectId,
+    contactId: ObjectId,
+    stage: StageSnapshot,
+    actorId: ObjectId | null,
+    at: Date,
+    expiresAt: Date | null,
+    tx: Tx,
+  ): Promise<void> {
+    await this.eventModel(ref).create(
+      [
+        {
+          workspaceId: ref.workspaceId,
+          siteId,
+          contactId,
+          kind: 'stage',
+          text: null,
+          meetingId: null,
+          meeting: null,
+          stage,
+          at,
+          actorId,
+          expiresAt,
+        },
+      ],
+      { session: tx },
+    );
+  }
+
+  /** "Đánh dấu thua" closes the opportunity's open tasks (ADR-033). */
+  async closeTasksOfOpportunity(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    opportunityId: ObjectId,
+    at: Date,
+    tx: Tx,
+  ): Promise<void> {
+    await this.tasks(scope)
+      .updateMany(
+        { workspaceId: scope.workspaceId, siteId, opportunityId, doneAt: null },
+        { $set: { doneAt: at } },
+      )
+      .session(tx)
+      .exec();
+  }
+
+  /** The open task due first of each profile: "Việc tiếp theo" of the pipeline's cards. */
+  async nextTasks(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    contactIds: readonly ObjectId[],
+  ): Promise<Map<string, { title: string; dueAt: Date }>> {
+    if (contactIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.tasks(scope)
+      .aggregate<{ _id: ObjectId; title: string; dueAt: Date }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            siteId,
+            contactId: { $in: contactIds },
+            doneAt: null,
+          },
+        },
+        { $sort: { contactId: 1, dueAt: 1, _id: 1 } },
+        { $group: { _id: '$contactId', title: { $first: '$title' }, dueAt: { $first: '$dueAt' } } },
+      ])
+      .exec();
+    return new Map(rows.map((row) => [row._id.toHexString(), row]));
   }
 
   private of(scope: WorkspaceRef, siteId: ObjectId, contactId: ObjectId) {
@@ -423,6 +520,10 @@ export class ContactRecordsRepository {
 
   private eventModel(ref: WorkspaceRef): Model<ContactEventRecord> {
     return this.databases.model(ref, CONTACT_EVENT_COLLECTION);
+  }
+
+  private opportunities(ref: WorkspaceRef): Model<OpportunityRecord> {
+    return this.databases.model(ref, OPPORTUNITY_COLLECTION);
   }
 
   private tasks(ref: WorkspaceRef): Model<TaskRecord> {

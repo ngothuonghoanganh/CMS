@@ -37,6 +37,8 @@ import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { ContactAssignees } from './contact-assignees.service.js';
 import type { ContactRecord, MergeSuggestionRecord } from './contact.schema.js';
 import { ContactRecordsRepository } from './contact-records.repository.js';
+import { OpportunitiesRepository } from './opportunities.repository.js';
+import type { OpportunityRecord } from './opportunity.schema.js';
 import {
   type ContactCriteria,
   ContactPhoneTakenError,
@@ -82,7 +84,12 @@ function sourceOf(contact: ContactRecord, names: Names): ContactListItem['source
   };
 }
 
-function toListItem(contact: ContactRecord, names: Names, duplicate: boolean): ContactListItem {
+function toListItem(
+  contact: ContactRecord,
+  names: Names,
+  duplicate: boolean,
+  opportunity: OpportunityRecord | null = null,
+): ContactListItem {
   return {
     id: contact._id.toHexString(),
     name: contact.name,
@@ -93,6 +100,14 @@ function toListItem(contact: ContactRecord, names: Names, duplicate: boolean): C
     owner: personOf(names, contact.ownerId),
     tags: contact.tags,
     possibleDuplicate: duplicate,
+    opportunity:
+      opportunity === null
+        ? null
+        : {
+            stage: opportunity.stage,
+            value:
+              opportunity.stage === 'won' ? (opportunity.won?.value ?? null) : opportunity.value,
+          },
     lastActivityAt: contact.lastActivityAt.toISOString(),
   };
 }
@@ -130,6 +145,7 @@ export class ContactsService {
     private readonly contacts: ContactsRepository,
     private readonly suggestions: MergeSuggestionsRepository,
     private readonly records: ContactRecordsRepository,
+    private readonly opportunities: OpportunitiesRepository,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
     private readonly users: UsersRepository,
@@ -179,9 +195,14 @@ export class ContactsService {
       this.contacts.count(scope, site._id, criteriaOf('unassigned'), CONTACT_COUNT_CAP + 1),
       this.suggestions.countOpen(scope, site._id, CONTACT_COUNT_CAP + 1),
     ]);
-    const [names, open] = await Promise.all([
+    const [names, open, opportunities] = await Promise.all([
       this.names(scope, page.items),
       this.suggestions.openFor(
+        scope,
+        site._id,
+        page.items.map((contact) => contact._id),
+      ),
+      this.opportunities.latestOfContacts(
         scope,
         site._id,
         page.items.map((contact) => contact._id),
@@ -190,7 +211,12 @@ export class ContactsService {
     const paired = new Set(open.flatMap((pair) => pair.contactIds.map((id) => id.toHexString())));
     return {
       items: page.items.map((contact) =>
-        toListItem(contact, names, paired.has(contact._id.toHexString())),
+        toListItem(
+          contact,
+          names,
+          paired.has(contact._id.toHexString()),
+          opportunities.get(contact._id.toHexString()) ?? null,
+        ),
       ),
       nextCursor: page.nextCursor,
       counts: {
@@ -402,7 +428,15 @@ export class ContactsService {
       await this.suggestions.deleteForContacts(scope, site._id, [b._id], tx);
       return merged;
     });
-    return { contact: toListItem(kept, await this.names(scope, [kept]), false) };
+    const latest = await this.opportunities.latestOfContacts(scope, site._id, [kept._id]);
+    return {
+      contact: toListItem(
+        kept,
+        await this.names(scope, [kept]),
+        false,
+        latest.get(kept._id.toHexString()) ?? null,
+      ),
+    };
   }
 
   /** "Không phải cùng người": the pair is never suggested again. */

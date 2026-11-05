@@ -2,6 +2,7 @@
 
 import {
   type ContactMeeting,
+  type Opportunity,
   type ContactPerson,
   type ContactProfile,
   type ContactTask,
@@ -15,7 +16,9 @@ import Link from 'next/link';
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
 import { cx } from '../../shell/cx';
-import { leadHref } from '../../shell/navigation';
+import { cardValue, formatVnd } from '../../pipeline/pipeline-presentation';
+import { StageMark } from '../../pipeline/StageMove';
+import { leadHref, pipelineHref } from '../../shell/navigation';
 import { problemMessage, reportUnexpected } from '../../shell/problem-message';
 import {
   isOverdue,
@@ -204,6 +207,57 @@ export function InfoCard({ siteId, contact, assignees, siteTags, onChanged }: In
           </>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+export interface OpportunitiesCardProps {
+  siteId: string;
+  contact: ContactProfile;
+  opportunities: readonly Opportunity[];
+  onCreate: () => void;
+}
+
+/** "Cơ hội": open ones first, each with its stage and value, and the way to the pipeline. */
+export function OpportunitiesCard({
+  siteId,
+  contact,
+  opportunities,
+  onCreate,
+}: OpportunitiesCardProps) {
+  return (
+    <section aria-labelledby="opportunities-title" className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 id="opportunities-title" className={styles.cardTitle}>
+          Cơ hội
+        </h2>
+        <Link href={pipelineHref(siteId)} className={styles.textLink}>
+          Pipeline
+        </Link>
+      </div>
+      {opportunities.length === 0 ? <p className={styles.empty}>Chưa có cơ hội.</p> : null}
+      {opportunities.map((item) => {
+        const value = cardValue(item);
+        return (
+          <div key={item.id} className={styles.opportunity}>
+            <span className={styles.opportunityTitle}>{item.title}</span>
+            <span className={styles.opportunityRow}>
+              <StageMark stage={item.stage} />
+              {value === null ? null : <span className={styles.mono}>{formatVnd(value)}</span>}
+            </span>
+            {item.won === null && item.value !== null && item.valueBy !== null ? (
+              <span className={styles.opportunityNote}>
+                Giá trị dự kiến do {item.valueBy.name} nhập
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+      {contact.can.handle ? (
+        <button type="button" className={styles.addTag} onClick={onCreate}>
+          + Tạo cơ hội
+        </button>
+      ) : null}
     </section>
   );
 }

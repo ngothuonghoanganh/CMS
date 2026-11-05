@@ -13,7 +13,7 @@ import {
   IDEMPOTENCY_KEY_HEADER,
   leadDetailSchema,
   leadListResponseSchema,
-  type LeadStatus,
+  type OpenOpportunityStage,
   pageDetailResponseSchema,
   type PageDetailResponse,
   type PageSummary,
@@ -178,7 +178,7 @@ export interface BoardLead {
   slug: string;
   source: { utmSource: string | null; utmMedium: string | null; referrer: string | null };
   phoneDevice: boolean;
-  status: LeadStatus;
+  status: OpenOpportunityStage;
   email?: string;
   message?: string;
   spam?: boolean;
@@ -276,7 +276,7 @@ const BOARD_LEADS: BoardLead[] = [
     slug: '',
     source: { utmSource: 'tiktok', utmMedium: 'paid', referrer: null },
     phoneDevice: true,
-    status: 'unreachable',
+    status: 'visited',
   },
   {
     name: 'Phạm Gia Huy',

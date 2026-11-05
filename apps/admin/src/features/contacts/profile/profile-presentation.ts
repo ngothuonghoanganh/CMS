@@ -5,11 +5,12 @@ import {
   DELETED_PAGE_LABEL,
   holdersOf,
   manualContactChannelShortLabels,
+  opportunityStageLabels,
   type Permission,
   permissionGroups,
   type TimelineEntry,
 } from '@plp/contracts';
-import { formatDayMonth, formatTime } from '../../../lib/format';
+import { formatDayMonth, formatTime, formatVnd } from '../../../lib/format';
 
 /** The admin works in Vietnam's time (UTC+7, no daylight saving), like every label (lib/format). */
 const VN_OFFSET_MS = 7 * 3_600_000;
@@ -72,7 +73,8 @@ export function defaultDue(now: number): number {
   return Math.ceil((now + 30 * MINUTE) / HOUR) * HOUR;
 }
 
-function span(ms: number): string {
+/** "25 phút", "3 giờ", "2 ngày". */
+export function span(ms: number): string {
   if (ms < HOUR) {
     return `${Math.max(1, Math.floor(ms / MINUTE))} phút`;
   }
@@ -83,7 +85,7 @@ function span(ms: number): string {
 }
 
 /** "Hôm nay 16:00", "Mai 10:00", or "03/11 10:00". */
-function dueMoment(iso: string, now: number): string {
+export function dueMoment(iso: string, now: number): string {
   const time = Date.parse(iso);
   const days = vnParts(time).day - vnParts(now).day;
   const prefix = days === 0 ? 'Hôm nay' : days === 1 ? 'Mai' : formatDayMonth(iso);
@@ -113,7 +115,7 @@ export function meetingDetail(meeting: Omit<ContactMeeting, 'id'>): string {
 }
 
 export interface TimelineView {
-  tone: 'lead' | 'note' | 'meeting';
+  tone: 'lead' | 'note' | 'meeting' | 'stage';
   title: string;
   when: string;
   body: string;
@@ -146,6 +148,26 @@ export function timelineView(entry: TimelineEntry): TimelineView {
         when: entry.actor === null ? moment : `${moment} · ${entry.actor.name}`,
         body: entry.text,
       };
+    case 'stage': {
+      const who = entry.actor === null ? moment : `${moment} · ${entry.actor.name}`;
+      const value =
+        entry.value === null
+          ? null
+          : `${entry.to === 'won' ? 'Giá trị thực tế' : 'Giá trị dự kiến'} ${formatVnd(entry.value)}.`;
+      return entry.from === null
+        ? {
+            tone: 'stage',
+            title: `Cơ hội mới “${entry.title}”`,
+            when: who,
+            body: value ?? '',
+          }
+        : {
+            tone: 'stage',
+            title: `Cơ hội chuyển sang ${opportunityStageLabels[entry.to]}`,
+            when: who,
+            body: [`Từ “${opportunityStageLabels[entry.from]}”.`, value].filter(Boolean).join(' '),
+          };
+    }
     case 'meeting':
       return {
         tone: 'meeting',

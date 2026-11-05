@@ -205,6 +205,11 @@
   font-size: var(--text-sm);
 }
 
+.noOpportunity {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
 .last {
   font-size: var(--text-body-sm);
   color: var(--color-ink-2);

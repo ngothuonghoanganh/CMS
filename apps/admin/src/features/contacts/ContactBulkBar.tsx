@@ -19,6 +19,7 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useId, useState } from 'react';
 import { api } from '../../lib/api';
+import { CreateOpportunityDialog } from '../pipeline/CreateOpportunityDialog';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import styles from './Contacts.module.css';
 
@@ -31,10 +32,14 @@ export interface ContactBulkBarProps {
   onDone: () => void;
 }
 
-/** "Thao tác hàng loạt" of board 22, on at most `CONTACT_BULK_MAX` selected profiles. */
+/**
+ * "Thao tác hàng loạt" of board 22, on at most `CONTACT_BULK_MAX` selected profiles: assign, tag,
+ * and one new opportunity each.
+ */
 export function ContactBulkBar({ siteId, selected, assignees, tags, onDone }: ContactBulkBarProps) {
   const { toast } = useToast();
   const [tagOpen, setTagOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [tag, setTag] = useState('');
   const [tagError, setTagError] = useState<string | null>(null);
   const formId = useId();
@@ -115,6 +120,27 @@ export function ContactBulkBar({ siteId, selected, assignees, tags, onDone }: Co
       >
         Gắn nhãn…
       </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        className={styles.bulkButton}
+        onClick={() => {
+          setCreateOpen(true);
+        }}
+      >
+        Tạo cơ hội
+      </Button>
+      <CreateOpportunityDialog
+        siteId={siteId}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        target={{ kind: 'selected', contactIds: selected }}
+        onCreated={(created) => {
+          setCreateOpen(false);
+          toast({ tone: 'success', title: `Đã tạo ${created} cơ hội` });
+          onDone();
+        }}
+      />
       <Dialog
         open={tagOpen}
         onOpenChange={(next) => {

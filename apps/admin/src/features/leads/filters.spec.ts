@@ -39,7 +39,8 @@ describe('lead inbox filters', () => {
       parseLeadFilters({
         folder: 'trash',
         pageId: 'abc',
-        status: 'lost',
+        // A status before K3: the stages replaced it (ADR-033).
+        status: 'unreachable',
         range: '90d',
         from: '2026-10-01',
       }),

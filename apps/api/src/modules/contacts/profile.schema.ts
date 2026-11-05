@@ -1,3 +1,4 @@
+import { type OpportunityStage, opportunityStages } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
@@ -19,12 +20,21 @@ export interface MeetingSnapshot {
   note: string;
 }
 
-export const contactEventKinds = ['note', 'meeting'] as const;
+export const contactEventKinds = ['note', 'meeting', 'stage'] as const;
 export type ContactEventKind = (typeof contactEventKinds)[number];
+
+/** "Cơ hội chuyển sang …": an opportunity created (`from` null) or moved. */
+export interface StageSnapshot {
+  opportunityId: Types.ObjectId;
+  title: string;
+  from: OpportunityStage | null;
+  to: OpportunityStage;
+  value: number | null;
+}
 
 /**
  * An entry of "Dòng thời gian". Append only; leads are read from the leads themselves. A note has
- * `text`; a meeting has `meetingId` and `meeting`.
+ * `text`; a meeting has `meetingId` and `meeting`; a stage move has `stage`.
  */
 export interface ContactEventRecord {
   _id: Types.ObjectId;
@@ -37,6 +47,7 @@ export interface ContactEventRecord {
   text: string | null;
   meetingId: Types.ObjectId | null;
   meeting: MeetingSnapshot | null;
+  stage: StageSnapshot | null;
   expiresAt: Date | null;
 }
 
@@ -61,6 +72,19 @@ const contactEventSchema = new Schema<ContactEventRecord>(
     text: { type: String, default: null },
     meetingId: { type: Schema.Types.ObjectId, default: null },
     meeting: { type: meetingSnapshotSchema, default: null },
+    stage: {
+      type: new Schema<StageSnapshot>(
+        {
+          opportunityId: { type: Schema.Types.ObjectId, required: true },
+          title: { type: String, required: true },
+          from: { type: String, enum: [...opportunityStages, null], default: null },
+          to: { type: String, enum: opportunityStages, required: true },
+          value: { type: Number, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     expiresAt: { type: Date, default: null },
   },
   { collection: 'contact_events', versionKey: false },

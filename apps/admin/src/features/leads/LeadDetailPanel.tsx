@@ -42,6 +42,7 @@ import { formatDate, formatDateTime } from '../../lib/format';
 import { analyticsQueryKeys } from '../analytics/queries';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { useStageMove } from '../pipeline/StageMove';
 import { adoptServerRender } from '../shell/server-render';
 import { useNow } from '../shell/use-now';
 import { ConsentEvidenceDialog } from './ConsentEvidenceDialog';
@@ -152,6 +153,15 @@ export function LeadDetailPanel({
     void queryClient.invalidateQueries({ queryKey: siteQueryKeys.pages(siteId) });
     void queryClient.invalidateQueries({ queryKey: analyticsQueryKeys.all(siteId) });
   }
+
+  // "Thắng" and "Thua" move the lead's opportunity through the pipeline's dialogs (ADR-033).
+  const stageMove = useStageMove({
+    siteId,
+    onMoved: () => {
+      void queryClient.invalidateQueries({ queryKey: detailKey });
+      refreshLists();
+    },
+  });
 
   const update = useMutation({
     mutationFn: (body: UpdateLeadRequest) => api(endpoints.updateLead, [siteId, leadId], { body }),
@@ -295,18 +305,42 @@ export function LeadDetailPanel({
           <span className={styles.sub}>{leadDetailMeta(lead)}</span>
         </div>
         {canHandle ? (
-          <Field label="Trạng thái lead" hideLabel className={styles.statusField}>
+          <Field
+            label="Trạng thái lead"
+            hideLabel
+            className={styles.statusField}
+            help={
+              lead.opportunity === null
+                ? 'Lead nghi ngờ spam chưa có cơ hội, nên chưa đổi được trạng thái.'
+                : undefined
+            }
+          >
             <Select
               className={styles.statusSelect}
               value={pendingStatus ?? lead.status}
               // Never disabled while saving: that would drop keyboard focus. A choice made before
               // the save answers is ignored; the select shows the status being saved.
               aria-busy={update.isPending}
+              disabled={lead.opportunity === null}
               onChange={(event) => {
                 const status = leadStatusSchema.safeParse(event.target.value);
-                if (status.success && !update.isPending) {
-                  update.mutate({ status: status.data });
+                if (!status.success || update.isPending || lead.opportunity === null) {
+                  return;
                 }
+                if (status.data === 'won' || status.data === 'lost') {
+                  stageMove.moveTo(
+                    {
+                      id: lead.opportunity.id,
+                      title: lead.opportunity.title,
+                      stage: lead.status,
+                      value: lead.opportunity.value,
+                      contactName: lead.name,
+                    },
+                    status.data,
+                  );
+                  return;
+                }
+                update.mutate({ status: status.data });
               }}
             >
               {leadStatuses.map((status) => (
@@ -637,6 +671,7 @@ export function LeadDetailPanel({
           </p>
         </ConfirmDialog>
       ) : null}
+      {stageMove.dialogs}
     </aside>
   );
 }

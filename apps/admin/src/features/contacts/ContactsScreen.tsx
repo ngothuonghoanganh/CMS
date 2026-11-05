@@ -38,7 +38,8 @@ import { api } from '../../lib/api';
 import { formatDateTime, formatRelativeTime } from '../../lib/format';
 import { normalizeLeadSearch } from '../leads/filters';
 import { cx } from '../shell/cx';
-import { contactHref, leadsHref, siteHref } from '../shell/navigation';
+import { StageMark } from '../pipeline/StageMove';
+import { contactHref, leadsHref, pipelineHref, siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
 import { useDebouncedValue } from '../shell/use-debounced-value';
@@ -170,17 +171,22 @@ export function ContactsScreen({
           </>
         }
         actions={
-          canHandle ? (
-            <Button
-              leadingIcon={<PlusIcon size={16} />}
-              onClick={() => {
-                setAddKey((key) => key + 1);
-                setAddOpen(true);
-              }}
-            >
-              Thêm khách hàng
-            </Button>
-          ) : null
+          <>
+            <ButtonLink as={Link} href={pipelineHref(site.id)} variant="secondary">
+              Xem pipeline
+            </ButtonLink>
+            {canHandle ? (
+              <Button
+                leadingIcon={<PlusIcon size={16} />}
+                onClick={() => {
+                  setAddKey((key) => key + 1);
+                  setAddOpen(true);
+                }}
+              >
+                Thêm khách hàng
+              </Button>
+            ) : null}
+          </>
         }
       />
       {canHandle ? (
@@ -353,6 +359,7 @@ export function ContactsScreen({
                         <th scope="col">NGUỒN</th>
                         <th scope="col">PHỤ TRÁCH</th>
                         <th scope="col">NHÃN</th>
+                        <th scope="col">CƠ HỘI</th>
                         <th scope="col">TƯƠNG TÁC</th>
                       </tr>
                     </thead>
@@ -470,6 +477,13 @@ function ContactRow({ siteId, contact, now, selectable, selected, onSelect }: Co
             </span>
           ))}
         </span>
+      </td>
+      <td>
+        {contact.opportunity === null ? (
+          <span className={styles.noOpportunity}>Chưa có</span>
+        ) : (
+          <StageMark stage={contact.opportunity.stage} />
+        )}
       </td>
       <td className={styles.last}>
         <time dateTime={contact.lastActivityAt} title={formatDateTime(contact.lastActivityAt)}>

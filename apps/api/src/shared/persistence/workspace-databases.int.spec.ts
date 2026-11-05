@@ -41,6 +41,7 @@ const WORKSPACE_COLLECTIONS = [
   'leads',
   'meetings',
   'merge_suggestions',
+  'opportunities',
   'pages',
   'publish_approvals',
   'redirects',

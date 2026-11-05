@@ -1,8 +1,15 @@
-import type { ContactMeeting, ContactPerson, ContactTask, TimelineEntry } from '@plp/contracts';
+import type {
+  ContactMeeting,
+  ContactPerson,
+  ContactTask,
+  Opportunity,
+  TimelineEntry,
+} from '@plp/contracts';
 import type { CursorPosition } from '../../../shared/cursor.js';
 import type { ObjectId } from '../../../shared/persistence/object-id.js';
 import type { LeadRecord } from '../../leads/lead.schema.js';
 import type { ContactRecord } from '../contact.schema.js';
+import type { OpportunityRecord } from '../opportunity.schema.js';
 import type { ContactEventRecord, MeetingRecord, TaskRecord } from '../profile.schema.js';
 
 /** Names read once for a profile or a page of its timeline. */
@@ -48,6 +55,19 @@ export function eventEntry(event: ContactEventRecord, names: ProfileNames): Time
       throw new Error(`Note ${event._id.toHexString()} has no text`);
     }
     return { kind: 'note', ...shared, text: event.text };
+  }
+  if (event.kind === 'stage') {
+    if (event.stage === null) {
+      throw new Error(`Stage entry ${event._id.toHexString()} has no stage`);
+    }
+    return {
+      kind: 'stage',
+      ...shared,
+      title: event.stage.title,
+      from: event.stage.from,
+      to: event.stage.to,
+      value: event.stage.value,
+    };
   }
   if (event.meeting === null) {
     throw new Error(`Meeting entry ${event._id.toHexString()} has no meeting`);
@@ -125,5 +145,34 @@ export function mergeTimeline<A, B>(
       all.length > limit && last !== undefined
         ? { createdAt: last.item.at, id: last.item.id.toHexString() }
         : null,
+  };
+}
+
+/** An opportunity for a card, a list row or a profile. */
+export function toOpportunity(
+  opportunity: OpportunityRecord,
+  people: ReadonlyMap<string, ContactPerson>,
+  contactName: string,
+  next: { title: string; dueAt: Date } | null,
+): Opportunity {
+  const person = (id: ObjectId | null) =>
+    id === null ? null : (people.get(id.toHexString()) ?? null);
+  return {
+    id: opportunity._id.toHexString(),
+    title: opportunity.title,
+    stage: opportunity.stage,
+    value: opportunity.value,
+    valueBy: person(opportunity.valueBy),
+    won: opportunity.won,
+    lost: opportunity.lost,
+    owner: person(opportunity.ownerId),
+    contact: { id: opportunity.contactId.toHexString(), name: contactName },
+    // Closed opportunities have nothing next.
+    next:
+      next === null || opportunity.stage === 'won' || opportunity.stage === 'lost'
+        ? null
+        : { title: next.title, dueAt: next.dueAt.toISOString() },
+    stageChangedAt: opportunity.stageChangedAt.toISOString(),
+    createdAt: opportunity.createdAt.toISOString(),
   };
 }

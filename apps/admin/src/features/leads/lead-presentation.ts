@@ -14,13 +14,14 @@ import {
 import type { BadgeTone } from '@plp/ui';
 import { type DateInput, formatDate, formatDayMonth, formatTime } from '../../lib/format';
 
-/** Badge colors of board 10: "Mới" in the brand color, "Hẹn lịch" and "Đã chốt" green. */
+/** Badge colors of the stages on board 10: "Mới" in the brand color, "Đã đến" and "Thắng" green. */
 export const leadStatusTones: Record<LeadStatus, BadgeTone> = {
   new: 'info',
   contacted: 'neutral',
-  scheduled: 'success',
-  unreachable: 'warning',
+  scheduled: 'warning',
+  visited: 'success',
   won: 'success',
+  lost: 'neutral',
 };
 
 export const spamReasonLabels: Record<SpamReason, string> = {

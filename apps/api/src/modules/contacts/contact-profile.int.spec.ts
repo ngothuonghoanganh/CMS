@@ -160,8 +160,13 @@ describe('contact profile', () => {
 
     // The later lead says it joined the profile by its number; the first created it.
     const page = await timeline(form.site, contactId);
-    expect(page.items.map((item) => item.kind === 'lead' && item.joined)).toEqual([true, false]);
-    expect(page.items[0]).toMatchObject({ kind: 'lead', message: 'Trả góp được không?' });
+    // The first lead also opened an opportunity, at the same instant (ADR-033).
+    const leads = page.items.filter((item) => item.kind === 'lead');
+    expect(leads.map((item) => item.joined)).toEqual([true, false]);
+    expect(leads[0]).toMatchObject({ kind: 'lead', message: 'Trả góp được không?' });
+    expect(page.items.filter((item) => item.kind === 'stage')).toMatchObject([
+      { from: null, to: 'new', actor: null },
+    ]);
   });
 
   it('writes notes, tasks and meetings as interactions, and reads them back in order', async () => {
@@ -233,7 +238,7 @@ describe('contact profile', () => {
     expect(profile.meetings).toEqual([meeting]);
 
     const page = await timeline(form.site, contactId);
-    expect(page.items.map((item) => item.kind)).toEqual(['meeting', 'note', 'lead']);
+    expect(page.items.map((item) => item.kind)).toEqual(['meeting', 'note', 'stage', 'lead']);
     expect(page.items[0]).toMatchObject({
       kind: 'meeting',
       meeting: { place: 'Chi nhánh Quận 3', with: 'BS. Trần Minh' },
@@ -284,13 +289,19 @@ describe('contact profile', () => {
     expect(first.items).toHaveLength(20);
     expect(first.nextCursor).not.toBeNull();
     const second = await timeline(form.site, contactId, first.nextCursor ?? undefined);
-    expect(second.items).toHaveLength(5);
+    // 23 notes, 2 leads and the opportunity the first lead opened.
+    expect(second.items).toHaveLength(6);
     expect(second.nextCursor).toBeNull();
     const all: TimelineEntry[] = [...first.items, ...second.items];
-    expect(new Set(all.map((item) => item.id)).size).toBe(25);
+    expect(new Set(all.map((item) => item.id)).size).toBe(26);
     const times = all.map((item) => Date.parse(item.at));
     expect([...times].sort((a, b) => b - a)).toEqual(times);
-    expect(all.slice(-2).map((item) => item.kind)).toEqual(['lead', 'lead']);
+    expect(
+      all
+        .slice(-3)
+        .map((item) => item.kind)
+        .sort(),
+    ).toEqual(['lead', 'lead', 'stage']);
   });
 
   it('moves the records with the profile’s expiry: a lagging one by a note, all by a new retention', async () => {

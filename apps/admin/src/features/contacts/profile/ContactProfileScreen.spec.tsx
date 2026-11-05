@@ -92,6 +92,22 @@ function profileOf(overrides: Partial<ContactProfile> = {}): ContactProfileRespo
         note: 'Khám và chụp phim 3D',
       },
     ],
+    opportunities: [
+      {
+        id: '64b0000000000000000000f7',
+        title: 'Niềng răng Invisalign',
+        stage: 'scheduled',
+        value: 38_000_000,
+        valueBy: HA,
+        won: null,
+        lost: null,
+        owner: HA,
+        contact: { id: '64b0000000000000000000c1', name: 'Nguyễn Thu Trang' },
+        next: null,
+        stageChangedAt: '2026-10-31T09:20:00.000Z',
+        createdAt: '2026-10-28T07:02:00.000Z',
+      },
+    ],
   };
 }
 
@@ -206,6 +222,19 @@ describe('ContactProfileScreen (board 23)', () => {
     expect(
       within(consent).getByRole('link', { name: 'Xem bằng chứng trong lead' }),
     ).toHaveAttribute('href', expect.stringContaining(`lead=${LEAD_ID}`));
+  });
+
+  it('lists the opportunities with their stage, value and who entered it', () => {
+    render();
+    const card = screen.getByRole('region', { name: 'Cơ hội' });
+    expect(within(card).getByText('Niềng răng Invisalign')).toBeInTheDocument();
+    expect(within(card).getByText('Hẹn lịch')).toBeInTheDocument();
+    expect(within(card).getByText('38.000.000 ₫')).toBeInTheDocument();
+    expect(within(card).getByText('Giá trị dự kiến do Thu Hà nhập')).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: 'Pipeline' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/contacts/pipeline`,
+    );
   });
 
   it('lists tasks with what is overdue, upcoming meetings, and the timeline', () => {

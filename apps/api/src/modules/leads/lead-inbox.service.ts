@@ -4,6 +4,7 @@ import {
   type LeadDetail,
   type LeadFilters,
   type LeadListResponse,
+  type OpenOpportunityStage,
   recentDaysWindow,
   type updateLeadContactRequestSchema,
   type updateLeadRequestSchema,
@@ -15,8 +16,12 @@ import { LeadNotifier } from '../notifications/lead-notifier.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import { ContactLinker } from '../contacts/contact-linker.service.js';
+import { OpportunitiesRepository } from '../contacts/opportunities.repository.js';
+import { OpportunityFlow } from '../contacts/opportunity-flow.service.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { retentionOf, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
-import { SitesService } from '../sites/sites.service.js';
+import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { type LeadCriteria, leadCriteria } from './domain/lead-filters.js';
 import { LeadAccessService, personOfLead } from './lead-access.service.js';
@@ -61,6 +66,10 @@ export class LeadInboxService {
     private readonly releases: ReleasesRepository,
     private readonly notifier: LeadNotifier,
     private readonly linker: ContactLinker,
+    private readonly opportunities: OpportunitiesRepository,
+    private readonly flow: OpportunityFlow,
+    private readonly siteRecords: SitesRepository,
+    private readonly transactions: TransactionRunner,
   ) {}
 
   /**
@@ -126,7 +135,14 @@ export class LeadInboxService {
       leadId,
       'leads.handle',
     );
-    const updated = await this.leads.update(scope, lead._id, input);
+    const { status, ...rest } = input;
+    if (status !== undefined) {
+      await this.moveStage(scope, site, lead, status);
+    }
+    const updated =
+      Object.keys(rest).length === 0
+        ? await this.leads.findById(scope, lead._id)
+        : await this.leads.update(scope, lead._id, rest);
     if (!updated) {
       // Deleted (by the owner or its retention period) since it was read.
       throw notFound(LEAD_NOT_FOUND);
@@ -141,6 +157,38 @@ export class LeadInboxService {
       }
     }
     return this.detail(scope, site, updated);
+  }
+
+  /**
+   * The status of a lead is its opportunity's stage (ADR-033): changing it here moves the
+   * opportunity as the pipeline does, from the stage the lead showed. Suspected spam has none.
+   */
+  private async moveStage(
+    scope: WorkspaceScope,
+    site: SiteRecord,
+    lead: LeadRecord,
+    status: OpenOpportunityStage,
+  ): Promise<void> {
+    const opportunityId = lead.opportunityId ?? null;
+    if (opportunityId === null) {
+      throw new AppError(409, 'conflict', 'Lead nghi ngờ spam chưa có cơ hội', {
+        detail: 'Chuyển lead ra khỏi Nghi ngờ spam để đổi trạng thái.',
+      });
+    }
+    await this.transactions.run(async (tx) => {
+      if (!(await this.siteRecords.recordDataWrite(scope, site._id, tx))) {
+        throw notFound(SITE_NOT_FOUND);
+      }
+      await this.flow.move(
+        scope,
+        site._id,
+        opportunityId,
+        { stage: status, from: lead.status },
+        retentionOf(sitePrivacyOf(site)),
+        new Date(),
+        tx,
+      );
+    });
   }
 
   /**
@@ -193,15 +241,27 @@ export class LeadInboxService {
     site: SiteRecord,
     lead: LeadRecord,
   ): Promise<LeadDetail> {
-    const [titles, captures, personLeads] = await Promise.all([
+    const [titles, captures, personLeads, opportunity] = await Promise.all([
       this.pages.findTitles(scope, [lead.pageId]),
       this.releases.findLeadCaptures(scope, [lead.releaseId]),
       this.leads.countPerson(scope, site._id, personOfLead(lead), CAPPED_COUNT_LIMIT),
+      lead.opportunityId
+        ? this.opportunities.findById(scope, site._id, lead.opportunityId)
+        : Promise.resolve(null),
     ]);
     return toLeadDetail(lead, {
       pageTitle: pageTitleOf(titles, lead.pageId),
       capture: consentOf(captures, lead),
       personLeads: toCappedCount(personLeads),
+      opportunity:
+        opportunity === null
+          ? null
+          : {
+              id: opportunity._id.toHexString(),
+              title: opportunity.title,
+              value: opportunity.value,
+              contactId: opportunity.contactId.toHexString(),
+            },
     });
   }
 }

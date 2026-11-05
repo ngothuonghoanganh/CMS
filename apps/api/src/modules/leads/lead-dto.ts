@@ -90,6 +90,8 @@ export interface LeadDetailInput {
   /** Null when the lead's release is gone (`consentOf`). */
   capture: LeadCapture | null;
   personLeads: CappedCount;
+  /** The opportunity the lead joined; null for suspected spam (ADR-033). */
+  opportunity: LeadDetail['opportunity'];
 }
 
 function consentEvidence(
@@ -132,6 +134,7 @@ export function toLeadDetail(lead: LeadRecord, input: LeadDetailInput): LeadDeta
     createdAt: lead.createdAt.toISOString(),
     expiresAt: lead.expiresAt?.toISOString() ?? null,
     personLeads: input.personLeads,
+    opportunity: input.opportunity,
   };
 }
 

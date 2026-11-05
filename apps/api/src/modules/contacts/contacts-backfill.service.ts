@@ -11,9 +11,9 @@ import { ContactLinker } from './contact-linker.service.js';
 const BATCH = 200;
 
 /**
- * Gathers the leads stored before customer profiles existed (ADR-033), after startup, one
- * workspace and one batch at a time. Safe to run again and on several instances at once: a lead
- * joins a profile once (`LeadsRepository.linkContact`), by phone number.
+ * Gathers the leads stored before customer profiles and opportunities existed (ADR-033), after
+ * startup, one workspace and one batch at a time. Safe to run again and on several instances at
+ * once: a lead joins a profile and an opportunity once (`linkContact`, `linkOpportunity`).
  */
 @Injectable()
 export class ContactsBackfill implements OnApplicationBootstrap {
@@ -40,13 +40,17 @@ export class ContactsBackfill implements OnApplicationBootstrap {
     }
   }
 
-  /** Every lead of the workspace stored up to `until` without a profile; returns how many joined. */
+  /**
+   * Every lead of the workspace stored up to `until` without a profile or an opportunity, after
+   * "Chưa liên lạc được" became "Thua"; returns how many joined.
+   */
   async runWorkspace(ref: WorkspaceRef, until: Date): Promise<number> {
+    await this.leads.migrateUnreachable(ref);
     const retention = new Map<string, RetentionMonths | 'gone'>();
     let after: { createdAt: Date; id: ObjectId } | null = null;
     let linked = 0;
     for (;;) {
-      const batch = await this.leads.listUnlinked(ref, after, until, BATCH);
+      const batch = await this.leads.listWithoutOpportunity(ref, after, until, BATCH);
       for (const lead of batch) {
         if (lead.spam.suspected) {
           continue;
@@ -62,7 +66,15 @@ export class ContactsBackfill implements OnApplicationBootstrap {
           // The site's deletion removes its leads.
           continue;
         }
-        const contact = await this.linker.link(ref, lead, months);
+        const contactId = lead.contactId ?? null;
+        if (contactId !== null) {
+          // Joined its profile in K1 or K2: it joins the profile's opportunity now.
+          if (await this.linker.joinOpportunity(ref, lead, contactId)) {
+            linked += 1;
+          }
+          continue;
+        }
+        const contact = await this.linker.link(ref, lead, months, true);
         if (contact !== null) {
           linked += 1;
           await this.linker.suggestFor(ref, contact, lead, new Date());

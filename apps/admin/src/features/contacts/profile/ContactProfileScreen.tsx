@@ -34,7 +34,9 @@ import { contactQueryKeys } from '../queries';
 import { DeletePersonDialog } from './DeletePersonDialog';
 import { EditContactDialog } from './EditContactDialog';
 import { ProfileComposer } from './ProfileComposer';
-import { ConsentCard, InfoCard, MeetingsCard, TasksCard } from './ProfileCards';
+import { CreateOpportunityDialog } from '../../pipeline/CreateOpportunityDialog';
+import { pipelineQueryKeys } from '../../pipeline/queries';
+import { ConsentCard, InfoCard, MeetingsCard, OpportunitiesCard, TasksCard } from './ProfileCards';
 import { ProfileTimeline } from './ProfileTimeline';
 import {
   displayPhone,
@@ -85,7 +87,8 @@ export function ContactProfileScreen({
     initialData: initialOptions,
     initialDataUpdatedAt: loadedAt,
   });
-  const { contact, tasks, meetings } = profileQuery.data;
+  const { contact, tasks, meetings, opportunities } = profileQuery.data;
+  const [createOpen, setCreateOpen] = useState(false);
 
   /** The card changed: the profile shows it at once, the list reads it again. */
   function adopt(next: ContactProfile) {
@@ -230,6 +233,14 @@ export function ContactProfileScreen({
               siteTags={optionsQuery.data.tags}
               onChanged={adopt}
             />
+            <OpportunitiesCard
+              siteId={site.id}
+              contact={contact}
+              opportunities={opportunities}
+              onCreate={() => {
+                setCreateOpen(true);
+              }}
+            />
             <ConsentCard siteId={site.id} contact={contact} />
           </aside>
           <section className={styles.main} aria-labelledby="timeline-title">
@@ -262,6 +273,20 @@ export function ContactProfileScreen({
           </aside>
         </div>
       </div>
+      {contact.can.handle ? (
+        <CreateOpportunityDialog
+          siteId={site.id}
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          target={{ kind: 'contact', contact: { id: contact.id, name: contact.name } }}
+          onCreated={() => {
+            setCreateOpen(false);
+            toast({ tone: 'success', title: 'Đã tạo cơ hội' });
+            refresh();
+            void queryClient.invalidateQueries({ queryKey: pipelineQueryKeys.all(site.id) });
+          }}
+        />
+      ) : null}
       {contact.can.manage ? (
         <>
           <EditContactDialog

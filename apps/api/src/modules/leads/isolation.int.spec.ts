@@ -75,7 +75,7 @@ describe('workspace isolation of leads', () => {
     for (const siteId of [siteA.id, siteB.id]) {
       const lead = `/sites/${siteId}/leads/${leadId}`;
       await expectNotFound(ownerB.get(lead));
-      await expectNotFound(ownerB.patch(lead, { status: 'won', note: 'chen ngang' }));
+      await expectNotFound(ownerB.patch(lead, { status: 'contacted', note: 'chen ngang' }));
       await expectNotFound(ownerB.post(`${lead}/person/export`, { format: 'json' }));
       await expectNotFound(ownerB.delete(`${lead}/person`));
     }

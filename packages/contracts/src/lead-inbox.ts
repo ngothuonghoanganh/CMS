@@ -10,8 +10,12 @@ import { leadNotificationSchema } from './lead-recipients.js';
  * `leads.export` or `personalData.manage` (ADR-017, ADR-020).
  */
 
-/** One list of statuses for the filter, the badge, the detail and the CSV. */
-export const leadStatuses = ['new', 'contacted', 'scheduled', 'unreachable', 'won'] as const;
+/**
+ * A lead's status is the stage of its opportunity (ADR-033): the six fixed stages of the
+ * pipeline, for the filter, the badge, the detail and the CSV. `opportunityStages` is the same
+ * list.
+ */
+export const leadStatuses = ['new', 'contacted', 'scheduled', 'visited', 'won', 'lost'] as const;
 export const leadStatusSchema = z.enum(leadStatuses);
 export type LeadStatus = z.infer<typeof leadStatusSchema>;
 
@@ -19,8 +23,9 @@ export const leadStatusLabels: Record<LeadStatus, string> = {
   new: 'Mới',
   contacted: 'Đã liên hệ',
   scheduled: 'Hẹn lịch',
-  unreachable: 'Chưa liên lạc được',
-  won: 'Đã chốt',
+  visited: 'Đã đến',
+  won: 'Thắng',
+  lost: 'Thua',
 };
 
 export const leadDevices = ['mobile', 'desktop'] as const;
@@ -270,6 +275,18 @@ export const leadDetailSchema = z.object({
   expiresAt: isoDateTimeSchema.nullable(),
   /** Leads of the site with the same phone number or email, this one included. */
   personLeads: cappedCountSchema,
+  /**
+   * The opportunity the lead joined (ADR-033): `status` is its stage. Null while the lead is
+   * suspected spam, which joins none.
+   */
+  opportunity: z
+    .object({
+      id: idSchema,
+      title: z.string(),
+      value: z.number().int().nonnegative().nullable(),
+      contactId: idSchema,
+    })
+    .nullable(),
 });
 export type LeadDetail = z.infer<typeof leadDetailSchema>;
 
@@ -277,7 +294,11 @@ export const LEAD_NOTE_MAX = 1000;
 
 export const updateLeadRequestSchema = z
   .object({
-    status: leadStatusSchema,
+    /**
+     * Moves the lead's opportunity to an open stage, as the pipeline does. "Thắng" and "Thua" ask
+     * for more and go through `moveOpportunity`.
+     */
+    status: z.enum(['new', 'contacted', 'scheduled', 'visited']),
     note: z.string().trim().max(LEAD_NOTE_MAX, `Ghi chú tối đa ${LEAD_NOTE_MAX} ký tự`),
     /** Moves the lead to "Nghi ngờ spam" (true) or back to the inbox (false). */
     spam: z.boolean(),

@@ -40,6 +40,7 @@ function contact(overrides: Partial<ContactListItem> = {}): ContactListItem {
     owner: HA,
     tags: ['Niềng răng', 'Trả góp'],
     possibleDuplicate: false,
+    opportunity: { stage: 'scheduled', value: 38_000_000 },
     lastActivityAt: '2026-11-04T07:50:00.000Z',
     ...overrides,
   };
@@ -182,8 +183,14 @@ describe('ContactsScreen (board 22)', () => {
     });
   });
 
-  it('opens a profile from its name', () => {
+  it('opens a profile from its name, and shows its opportunity and the way to the pipeline', () => {
     render();
+    expect(screen.getByRole('link', { name: 'Xem pipeline' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/contacts/pipeline`,
+    );
+    const rows = screen.getAllByRole('row');
+    expect(within(rows[1] as HTMLElement).getByText('Hẹn lịch')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Nguyễn Thu Trang' })).toHaveAttribute(
       'href',
       `/sites/${site.id}/contacts/${trang.id}`,

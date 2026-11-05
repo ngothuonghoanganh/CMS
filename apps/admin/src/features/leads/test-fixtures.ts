@@ -81,6 +81,12 @@ export function leadDetail(overrides: Partial<LeadDetail> = {}): LeadDetail {
     createdAt: '2026-10-24T09:42:00.000Z',
     expiresAt: '2027-10-24T09:42:00.000Z',
     personLeads: { count: 2, capped: false },
+    opportunity: {
+      id: '64b0000000000000000000f9',
+      title: 'Ưu đãi niềng răng',
+      value: null,
+      contactId: '64b0000000000000000000c9',
+    },
     ...overrides,
   };
 }

@@ -3,6 +3,7 @@ import {
   CLIENT_IP_HEADER,
   CLIENT_UA_HEADER,
   endpoints,
+  type LeadStatus,
   type PublicLeadRequest,
   type PublishResponse,
   RENDERER_SIGNATURE_HEADER,
@@ -129,7 +130,8 @@ export interface StoredLeadInput {
   /** E.164, as intake stores it. */
   phone?: string;
   email?: string | null;
-  status?: 'new' | 'contacted' | 'scheduled' | 'unreachable' | 'won';
+  /** A status before K3 ('unreachable') too, as the backfill finds it. */
+  status?: LeadStatus | 'unreachable';
   spam?: boolean;
   /** Ticked the optional marketing checkbox. */
   marketing?: boolean;
