@@ -35,6 +35,7 @@ const EXPIRING_IN_WORKSPACE: Record<string, string> = {
   contact_events: 'expiresAt',
   tasks: 'expiresAt',
   meetings: 'expiresAt',
+  opportunities: 'expiresAt',
   analytics_seen: 'expiresAt',
   analytics_daily: 'expiresAt',
   publish_approvals: 'purgeAt',

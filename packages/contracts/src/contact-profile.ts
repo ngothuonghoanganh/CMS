@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { idSchema, isoDateTimeSchema } from './common.js';
 import { contactPersonSchema, contactTagSchema, manualContactChannelSchema } from './contacts.js';
 import { leadEmailSchema, leadNameSchema, leadPhoneSchema } from './lead.js';
-import { leadPageRefSchema, personExportFileSchema } from './lead-inbox.js';
+import { leadPageRefSchema, leadStatusSchema, personExportFileSchema } from './lead-inbox.js';
+import { opportunitySchema } from './opportunities.js';
 
 /**
  * A customer's profile (board 23, ADR-033): notes, tasks and meetings, the timeline, and the
@@ -87,6 +88,8 @@ export const contactProfileResponseSchema = z.object({
   tasks: z.array(contactTaskSchema),
   /** Meetings from now on, soonest first. */
   meetings: z.array(contactMeetingSchema),
+  /** Open opportunities first, then the latest closed ones (`CONTACT_OPPORTUNITIES_SHOWN`). */
+  opportunities: z.array(opportunitySchema),
 });
 export type ContactProfileResponse = z.infer<typeof contactProfileResponseSchema>;
 
@@ -118,6 +121,18 @@ export const timelineEntrySchema = z.discriminatedUnion('kind', [
     at: isoDateTimeSchema,
     actor: contactPersonSchema.nullable(),
     meeting: contactMeetingSchema.omit({ id: true }),
+  }),
+  /** "Cơ hội chuyển sang Hẹn lịch": one entry per move, from the pipeline or the inbox. */
+  z.object({
+    kind: z.literal('stage'),
+    id: idSchema,
+    at: isoDateTimeSchema,
+    actor: contactPersonSchema.nullable(),
+    title: z.string(),
+    /** Null for an opportunity just created. */
+    from: leadStatusSchema.nullable(),
+    to: leadStatusSchema,
+    value: z.number().int().nonnegative().nullable(),
   }),
 ]);
 export type TimelineEntry = z.infer<typeof timelineEntrySchema>;
@@ -200,6 +215,7 @@ export type DeletionRequestOption = z.infer<typeof deletionRequestOptionSchema>;
 /** What "Xóa dữ liệu của người này" removes, counted when the dialog opens. */
 export const contactDeletionPreviewSchema = z.object({
   leads: z.number().int().nonnegative(),
+  opportunities: z.number().int().nonnegative(),
   notes: z.number().int().nonnegative(),
   tasks: z.number().int().nonnegative(),
   meetings: z.number().int().nonnegative(),
@@ -231,6 +247,14 @@ export const contactExportFileSchema = personExportFileSchema.extend({
     tags: z.array(z.string()),
   }),
   notes: z.array(z.object({ at: isoDateTimeSchema, text: z.string() })),
+  opportunities: z.array(
+    z.object({
+      title: z.string(),
+      stage: z.string(),
+      value: z.number().int().nonnegative().nullable(),
+      createdAt: isoDateTimeSchema,
+    }),
+  ),
   tasks: z.array(
     z.object({ title: z.string(), dueAt: isoDateTimeSchema, doneAt: isoDateTimeSchema.nullable() }),
   ),

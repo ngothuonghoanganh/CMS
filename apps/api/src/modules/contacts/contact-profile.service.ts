@@ -4,6 +4,7 @@ import {
   CONTACT_COUNT_CAP,
   CONTACT_DONE_TASKS_SHOWN,
   CONTACT_OPEN_TASKS_MAX,
+  CONTACT_OPPORTUNITIES_SHOWN,
   CONTACT_TAGS_MAX,
   CONTACT_UPCOMING_MEETINGS_MAX,
   type ContactDeletionPreview,
@@ -18,6 +19,7 @@ import {
   type DeleteContactPersonRequest,
   type DeleteContactPersonResponse,
   manualContactChannelShortLabels,
+  opportunityStageLabels,
   type Permission,
   SITE_CONTACT_TAGS_MAX,
   TIMELINE_PAGE_SIZE,
@@ -49,6 +51,7 @@ import { ContactAssignees } from './contact-assignees.service.js';
 import type { ContactRecord } from './contact.schema.js';
 import { ContactRecordsRepository } from './contact-records.repository.js';
 import { ContactPhoneTakenError, ContactsRepository } from './contacts.repository.js';
+import { OpportunitiesRepository } from './opportunities.repository.js';
 import {
   eventEntry,
   leadEntry,
@@ -56,6 +59,7 @@ import {
   personIn,
   type ProfileNames,
   toMeeting,
+  toOpportunity,
   toTask,
 } from './domain/profile-dto.js';
 
@@ -65,6 +69,10 @@ const TASK_NOT_FOUND = 'Không tìm thấy công việc';
 const EXPORT_RECORDS_MAX = 1000;
 /** Requests "Gắn với yêu cầu dữ liệu" offers at most. */
 const DELETION_REQUESTS_SHOWN = 10;
+
+function isId(id: ObjectId | null): id is ObjectId {
+  return id !== null;
+}
 
 /** The person a profile is: its number and email, as a person's leads are found (ADR-017). */
 function personOfContact(contact: ContactRecord): LeadPerson {
@@ -83,6 +91,7 @@ export class ContactProfileService {
     private readonly siteRecords: SitesRepository,
     private readonly contacts: ContactsRepository,
     private readonly records: ContactRecordsRepository,
+    private readonly opportunities: OpportunitiesRepository,
     private readonly assignees: ContactAssignees,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -101,7 +110,7 @@ export class ContactProfileService {
     contactId: string,
   ): Promise<ContactProfileResponse> {
     const { scope, site, contact } = await this.access(user, siteId, contactId, 'leads.view');
-    const [view, tasks, meetings] = await Promise.all([
+    const [view, tasks, meetings, opportunities] = await Promise.all([
       this.view(scope, contact),
       this.records.tasksOf(
         scope,
@@ -117,15 +126,20 @@ export class ContactProfileService {
         new Date(),
         CONTACT_UPCOMING_MEETINGS_MAX,
       ),
+      this.opportunities.ofContact(scope, site._id, contact._id, CONTACT_OPPORTUNITIES_SHOWN),
     ]);
-    const names = await this.names(
-      scope,
-      tasks.map((task) => task.assigneeId),
-    );
+    const names = await this.names(scope, [
+      ...tasks.map((task) => task.assigneeId),
+      ...opportunities.flatMap((item) => [item.ownerId, item.valueBy]).filter(isId),
+    ]);
+    const next = tasks.find((task) => task.doneAt === null) ?? null;
     return {
       contact: view,
       tasks: tasks.map((task) => toTask(task, names)),
       meetings: meetings.map(toMeeting),
+      opportunities: opportunities.map((item) =>
+        toOpportunity(item, names.people, contact.name, next),
+      ),
     };
   }
 
@@ -314,11 +328,13 @@ export class ContactProfileService {
           },
         ]);
       }
+      const current = await this.opportunities.findOpenOfContact(scope, site._id, contact._id, tx);
       return this.records.insertTask(
         scope,
         site._id,
         contact._id,
         {
+          opportunityId: current?._id ?? null,
           title: request.title,
           dueAt: new Date(request.dueAt),
           assigneeId: toObjectId(request.assigneeId),
@@ -434,6 +450,12 @@ export class ContactProfileService {
         },
         tags: contact.tags,
       },
+      opportunities: held.opportunities.map((item) => ({
+        title: item.title,
+        stage: opportunityStageLabels[item.stage],
+        value: item.stage === 'won' ? (item.won?.value ?? null) : item.value,
+        createdAt: item.createdAt.toISOString(),
+      })),
       notes: held.notes.map((note) => ({ at: note.at.toISOString(), text: note.text ?? '' })),
       tasks: held.tasks.map((task) => ({
         title: task.title,

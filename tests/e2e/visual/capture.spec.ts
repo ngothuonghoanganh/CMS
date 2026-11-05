@@ -228,6 +228,32 @@ test.describe('Design capture', () => {
     await dialog.getByRole('button', { name: 'Hủy' }).click();
   });
 
+  test('24 Pipeline', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(sitePath('/contacts/pipeline'));
+    await expect(page.getByRole('heading', { level: 1, name: 'Cơ hội' })).toBeVisible();
+    await capture(page, 'Pipeline');
+
+    const first = page.getByRole('button', { name: /Chuyển giai đoạn/ }).first();
+    await first.click();
+    await page.getByRole('menuitem', { name: 'Đánh dấu thắng…' }).click();
+    await expect(page.getByRole('dialog', { name: 'Đánh dấu thắng' })).toBeVisible();
+    await capture(page, 'Pipeline-won');
+    await page.getByRole('button', { name: 'Hủy' }).click();
+
+    await first.click();
+    await page.getByRole('menuitem', { name: 'Đánh dấu thua…' }).click();
+    const lost = page.getByRole('dialog', { name: 'Đánh dấu thua' });
+    await lost.getByRole('radio', { name: 'Chọn nơi khác' }).check();
+    await lost.getByRole('textbox', { name: /Ghi chú/ }).fill('Chọn phòng khám gần nhà ở Thủ Đức');
+    await capture(page, 'Pipeline-lost');
+    await lost.getByRole('button', { name: 'Hủy' }).click();
+
+    await page.getByRole('button', { name: 'Danh sách' }).click();
+    await expect(page.getByRole('region', { name: 'Danh sách cơ hội' })).toBeVisible();
+    await capture(page, 'Pipeline-list');
+  });
+
   test('10 Leads, 11 Analytics and 12 Consent', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const name = 'Nguyễn Thu Hà';

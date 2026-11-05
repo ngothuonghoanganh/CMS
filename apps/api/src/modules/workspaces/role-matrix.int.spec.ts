@@ -33,6 +33,7 @@ import { heroSection } from '../../../test/compositions.js';
 import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
+import { ContactsBackfill } from '../contacts/contacts-backfill.service.js';
 import {
   createPage,
   currentPublishBody,
@@ -863,6 +864,26 @@ const ROWS: Row[] = [
       }),
   },
   {
+    action: 'Xem pipeline',
+    permission: 'leads.view',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/pipeline`),
+  },
+  {
+    // A profile that does not exist: an allowed role creates nothing.
+    action: 'Tạo cơ hội hàng loạt',
+    permission: 'leads.handle',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/opportunities/bulk`, {
+        contactIds: ['64b0000000000000000000a1'],
+        title: 'Tẩy trắng răng',
+        value: null,
+      }),
+  },
+  {
     action: 'Xem nơi nhận lead',
     permission: 'leads.view',
     scope: 'site',
@@ -1168,6 +1189,10 @@ describe('the six roles on every endpoint', () => {
       notification: { status: 'failed', attempts: 3 },
     });
     await insertLeads(t, [lead, failed]);
+    // As leads stored before K3: they join a profile and an opportunity (ADR-033).
+    await t.app
+      .get(ContactsBackfill)
+      .runWorkspace({ workspaceId: new Types.ObjectId(workspaceId) }, new Date());
     const request = await owner
       .post(`/sites/${site.id}/data-requests`, {
         name: 'Lê Mai Anh',

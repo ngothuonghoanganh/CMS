@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { idSchema, isoDateTimeSchema } from './common.js';
 import { leadNameSchema, leadPhoneSchema } from './lead.js';
-import { leadPageRefSchema, leadSearchSchema, leadSourceSchema } from './lead-inbox.js';
+import {
+  leadPageRefSchema,
+  leadSearchSchema,
+  leadSourceSchema,
+  leadStatusSchema,
+} from './lead-inbox.js';
 
 /**
  * Customers of a site (board 22, ADR-033): one profile per person, gathered from the site's leads
@@ -90,6 +95,10 @@ export const contactListItemSchema = z.object({
   tags: z.array(z.string()),
   /** Part of an open "Có thể trùng" pair. */
   possibleDuplicate: z.boolean(),
+  /** The "Cơ hội" column: the open opportunity moved last, else the latest closed one. */
+  opportunity: z
+    .object({ stage: leadStatusSchema, value: z.number().int().nonnegative().nullable() })
+    .nullable(),
   lastActivityAt: isoDateTimeSchema,
 });
 export type ContactListItem = z.infer<typeof contactListItemSchema>;

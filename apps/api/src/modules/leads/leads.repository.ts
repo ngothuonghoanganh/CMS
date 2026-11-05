@@ -750,6 +750,82 @@ export class LeadsRepository {
     return result.modifiedCount === 1;
   }
 
+  /**
+   * Joins the lead to its opportunity, whose stage becomes its status (ADR-033). False when it
+   * had joined one already: the caller's transaction must not count it again.
+   */
+  async linkOpportunity(
+    ref: WorkspaceRef,
+    leadId: ObjectId,
+    opportunityId: ObjectId,
+    stage: LeadStatus,
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.leads(ref)
+      .updateOne(
+        { _id: leadId, workspaceId: ref.workspaceId, opportunityId: null },
+        { $set: { opportunityId, status: stage } },
+      )
+      .session(tx)
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** The opportunity moved: every lead of it shows the new stage as its status. */
+  async setStatusOfOpportunity(
+    ref: WorkspaceRef,
+    opportunityId: ObjectId,
+    stage: LeadStatus,
+    tx: Tx,
+  ): Promise<void> {
+    await this.leads(ref)
+      .updateMany({ workspaceId: ref.workspaceId, opportunityId }, { $set: { status: stage } })
+      .session(tx)
+      .exec();
+  }
+
+  /**
+   * Leads without an opportunity, oldest first, after a position: the startup backfill
+   * (ADR-033). Suspected spam is passed over and never joins one, so the position moves past it.
+   */
+  listWithoutOpportunity(
+    ref: WorkspaceRef,
+    after: { createdAt: Date; id: ObjectId } | null,
+    until: Date,
+    limit: number,
+  ): Promise<LeadRecord[]> {
+    return this.leads(ref)
+      .find({
+        workspaceId: ref.workspaceId,
+        opportunityId: null,
+        createdAt: { $lte: until },
+        ...(after === null
+          ? {}
+          : {
+              $or: [
+                { createdAt: { $gt: after.createdAt } },
+                { createdAt: after.createdAt, _id: { $gt: after.id } },
+              ],
+            }),
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit)
+      .lean<LeadRecord[]>()
+      .exec();
+  }
+
+  /**
+   * "Chưa liên lạc được" before K3 becomes "Thua" (ADR-033), once per workspace: the leads that
+   * join an opportunity take its stage, suspected spam keeps this one.
+   */
+  async migrateUnreachable(ref: WorkspaceRef): Promise<void> {
+    // The old value is no longer a status the model knows, so the driver writes it.
+    await this.leads(ref).collection.updateMany(
+      { workspaceId: ref.workspaceId, status: 'unreachable' },
+      { $set: { status: 'lost' } },
+    );
+  }
+
   /** "Gộp hai hồ sơ": the merged profile's leads go to the one kept, untouched otherwise. */
   async moveToContact(
     scope: WorkspaceScope,
@@ -798,36 +874,6 @@ export class LeadsRepository {
       .findOne({ workspaceId: scope.workspaceId, siteId, contactId })
       .sort(NEWEST_FIRST)
       .lean<LeadRecord>()
-      .exec();
-  }
-
-  /**
-   * Leads without a profile, oldest first, after a position: the startup backfill (ADR-033).
-   * Suspected spam is passed over and never joins one, so the position moves past it.
-   */
-  listUnlinked(
-    ref: WorkspaceRef,
-    after: { createdAt: Date; id: ObjectId } | null,
-    until: Date,
-    limit: number,
-  ): Promise<LeadRecord[]> {
-    return this.leads(ref)
-      .find({
-        workspaceId: ref.workspaceId,
-        contactId: null,
-        createdAt: { $lte: until },
-        ...(after === null
-          ? {}
-          : {
-              $or: [
-                { createdAt: { $gt: after.createdAt } },
-                { createdAt: after.createdAt, _id: { $gt: after.id } },
-              ],
-            }),
-      })
-      .sort({ createdAt: 1, _id: 1 })
-      .limit(limit)
-      .lean<LeadRecord[]>()
       .exec();
   }
 

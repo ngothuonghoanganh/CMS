@@ -15,9 +15,11 @@ import { ContactsBackfill } from './contacts-backfill.service.js';
 import { ContactsCoreModule } from './contacts-core.module.js';
 import { ContactsController } from './contacts.controller.js';
 import { ContactsService } from './contacts.service.js';
+import { PipelineController } from './pipeline.controller.js';
+import { PipelineService } from './pipeline.service.js';
 
 /**
- * The customers screen and profiles (boards 22 and 23, ADR-033), and the backfill of leads stored
+ * The customers screen, profiles and the pipeline (boards 22–24, ADR-033), and the backfill of leads stored
  * before them.
  */
 @Module({
@@ -34,8 +36,14 @@ import { ContactsService } from './contacts.service.js';
     WorkspacesModule,
   ],
   // The list's fixed routes (`contacts/options`, `contacts/search`) before `contacts/:contactId`.
-  controllers: [ContactsController, ContactProfileController],
-  providers: [ContactsService, ContactProfileService, ContactAssignees, ContactsBackfill],
+  controllers: [ContactsController, ContactProfileController, PipelineController],
+  providers: [
+    ContactsService,
+    ContactProfileService,
+    PipelineService,
+    ContactAssignees,
+    ContactsBackfill,
+  ],
   exports: [ContactsBackfill],
 })
 export class ContactsModule {}

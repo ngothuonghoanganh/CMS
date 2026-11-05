@@ -2707,6 +2707,24 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Chọn một yêu cầu thì việc xóa hoàn tất yêu cầu đó, cùng transaction và nhật ký như "Hoàn tất". Yêu cầu không phải yêu cầu xóa trả 409.
   - **Xuất dữ liệu** từ hồ sơ là file JSON: lead kèm bằng chứng đồng ý như ở hộp thư, thêm hồ sơ, ghi chú, công việc và lịch hẹn (tối đa 1.000 mục mỗi loại). Việc xuất được ghi nhật ký như xuất lead.
   - Thẻ "Cơ hội" và sự kiện đổi giai đoạn đến ở K3; việc của automation đến ở A1–A3.
+- **Amended 2026-11-05 (K3, cách làm):**
+  - **Trạng thái của lead** là bản sao của giai đoạn cơ hội (`lead.status`), ghi trong cùng transaction mỗi lần cơ hội đổi giai đoạn, cho mọi lead của cơ hội đó (index `leads_opportunity`).
+    - Nhờ vậy bộ lọc, số "N mới" và các index của hộp thư (ADR-018) dùng nguyên được, không phải join.
+    - Lead nghi ngờ spam không có cơ hội, nên hộp thư không đổi trạng thái của nó (409) cho tới khi chuyển ra khỏi spam.
+  - **Hộp thư:** `PATCH …/leads/:id` chỉ nhận 4 giai đoạn đang mở. "Thắng" và "Thua" đi qua `POST …/opportunities/:id/stage` với cùng dialog như pipeline.
+  - **Đổi giai đoạn** gửi kèm giai đoạn đang thấy (`from`). Thẻ đã bị chuyển trong lúc đó thì trả 409, không nhảy giai đoạn. Mỗi lần đổi là một tương tác của hồ sơ, và là một sự kiện `stage` trong dòng thời gian (kể cả lúc cơ hội được mở).
+  - **Cơ hội mới:**
+    - Lead mới mở cơ hội "Mới" mang tên trang, giao cho người phụ trách hồ sơ.
+    - Công việc tạo trên hồ sơ thuộc cơ hội đang mở mới nhất của hồ sơ, nên "Đánh dấu thua" đóng đúng các việc đó.
+    - Tạo tay (pipeline, hồ sơ) và "Tạo cơ hội" hàng loạt ở màn 22: tối đa 50 hồ sơ, mỗi hồ sơ một cơ hội.
+  - **Màn 24:**
+    - Mỗi cột tối đa 50 thẻ, gần đây nhất trước; số đếm và tổng giá trị tính trên mọi thẻ.
+    - "Thắng" và "Thua" chỉ gồm cơ hội đóng trong tháng này (lịch Việt Nam).
+    - "Việc tiếp theo" là công việc mở có hạn sớm nhất của hồ sơ.
+    - Màn nằm ở `…/contacts/pipeline`, dưới mục "Khách hàng" của sidebar như board.
+    - Giai đoạn thứ tư tên là "Đã đến" như ADR và màn 22; board 24 ghi "Đã đến khám" vì là ví dụ nha khoa.
+  - **Chuyển dữ liệu cũ:** backfill lúc khởi động đổi `unreachable` thành `lost`, rồi cho mỗi lead chưa có cơ hội vào cơ hội đang mở của hồ sơ, hoặc mở cơ hội mới. Giai đoạn theo trạng thái cũ của lead: `won` có giá trị thực tế trống, `lost` có lý do "Không liên lạc được". Mỗi lead chỉ được gắn một lần, kể cả khi nhiều instance chạy cùng lúc.
+  - Dòng "Giá trị thực tế được dùng cho báo cáo doanh thu theo trang nguồn" của board chưa hiện, vì báo cáo đó nằm ngoài phạm vi.
 
 ### ADR-034 — Automation: sự kiện, hành động, hàng đợi trong MongoDB
 
@@ -2922,7 +2940,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | P0  | Nhập board 22–27, ADR-033 và ADR-034, bổ sung ADR-017, 018, 020, 025                                                                            | —      | Xong       |
 | K1  | Khách hàng: mô hình, gom từ lead và chuyển dữ liệu cũ, danh sách (góc nhìn, lọc, tìm, thao tác hàng loạt), thêm tay, gộp trùng                  | 22     | Xong       |
 | K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Xong       |
-| K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Chưa làm   |
+| K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Xong       |
 | A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Chưa làm   |
 | A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Chưa làm   |
 | A3  | Webhook (chặn SSRF, ký HMAC, bí mật mã hóa), lịch sử chạy, thử lại và bỏ qua                                                                    | 27     | Chưa làm   |

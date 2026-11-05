@@ -94,7 +94,7 @@ test.describe('K1 · customers', () => {
     const pair = page.getByRole('region', { name: 'Cặp 1/1 · có thể là cùng một người' });
     await expect(pair).toContainText('cùng đăng ký trang Ưu đãi niềng răng trong cùng ngày');
     await pair.getByRole('button', { name: 'Gộp hai hồ sơ' }).click();
-    await expect(page.getByText('Đã gộp vào hồ sơ Lê Thị Mai')).toBeVisible();
+    await expect(page.getByText('Đã gộp vào hồ sơ Lê Thị Mai', { exact: true })).toBeVisible();
     await expect(views.getByRole('button', { name: 'Có thể trùng · 0' })).toBeVisible();
     await views.getByRole('button', { name: 'Tất cả · 3' }).click();
     await expect(list.getByRole('row').filter({ hasText: 'Lê Thị Mai' })).toContainText('2 lead');

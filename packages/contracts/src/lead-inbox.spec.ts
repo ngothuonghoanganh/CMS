@@ -19,7 +19,7 @@ describe('leadListQuerySchema', () => {
       leadListQuerySchema.parse({
         folder: 'spam',
         pageId: '64b0000000000000000000a1',
-        status: 'unreachable',
+        status: 'visited',
         range: 'custom',
         from: '2026-10-01',
         to: '2026-10-31',
@@ -28,7 +28,7 @@ describe('leadListQuerySchema', () => {
     ).toEqual({
       folder: 'spam',
       pageId: '64b0000000000000000000a1',
-      status: 'unreachable',
+      status: 'visited',
       range: 'custom',
       from: '2026-10-01',
       to: '2026-10-31',
@@ -84,7 +84,8 @@ describe('leadListQuerySchema', () => {
   it('refuses unknown values and long searches', () => {
     expect(leadListQuerySchema.safeParse({ pageId: 'trang-chu' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ folder: 'trash' }).success).toBe(false);
-    expect(leadListQuerySchema.safeParse({ status: 'lost' }).success).toBe(false);
+    // A status before K3: the stages replaced it (ADR-033).
+    expect(leadListQuerySchema.safeParse({ status: 'unreachable' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ range: '90d' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ from: '25/10/2026' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ limit: 51 }).success).toBe(false);
@@ -146,11 +147,13 @@ describe('leadSearchRequestSchema', () => {
 describe('updateLeadRequestSchema', () => {
   it('refuses a status or a spam flag of another kind', () => {
     expect(updateLeadRequestSchema.safeParse({ spam: 'true' }).success).toBe(false);
+    // "Thắng" and "Thua" ask for more and move the opportunity instead (ADR-033).
     expect(updateLeadRequestSchema.safeParse({ status: 'lost' }).success).toBe(false);
+    expect(updateLeadRequestSchema.safeParse({ status: 'won' }).success).toBe(false);
   });
 
   it('changes any of status, note and spam', () => {
-    expect(updateLeadRequestSchema.parse({ status: 'won' })).toEqual({ status: 'won' });
+    expect(updateLeadRequestSchema.parse({ status: 'visited' })).toEqual({ status: 'visited' });
     expect(updateLeadRequestSchema.parse({ note: '  gọi lại sau 18h ' })).toEqual({
       note: 'gọi lại sau 18h',
     });

@@ -10,17 +10,12 @@ import { ContactRecordsRepository } from './contact-records.repository.js';
 import { ContactsRepository, type LeadForContact } from './contacts.repository.js';
 import { daysApart, namePageWindow, pairExpiry } from './domain/contact-rules.js';
 import { MergeSuggestionsRepository } from './merge-suggestions.repository.js';
+import { LeadAlreadyLinkedError, OpportunityFlow } from './opportunity-flow.service.js';
 
 /** At most this many other profiles are checked for "Có thể trùng" per lead. */
 const DUPLICATE_CANDIDATES_MAX = 20;
 
-/** The lead joined a profile meanwhile: its transaction must not count it again. */
-export class LeadAlreadyLinkedError extends Error {
-  constructor() {
-    super('The lead already joined a contact');
-    this.name = 'LeadAlreadyLinkedError';
-  }
-}
+export { LeadAlreadyLinkedError };
 
 function forContact(lead: LeadRecord): LeadForContact {
   return {
@@ -46,15 +41,21 @@ export class ContactLinker {
     private readonly suggestions: MergeSuggestionsRepository,
     private readonly leads: LeadsRepository,
     private readonly records: ContactRecordsRepository,
+    private readonly flow: OpportunityFlow,
     private readonly transactions: TransactionRunner,
   ) {}
 
-  /** Joins the lead to its profile in the caller's transaction. Never for suspected spam. */
+  /**
+   * Joins the lead to its profile and its profile's open opportunity in the caller's transaction
+   * (ADR-033). Never for suspected spam. `backfill` is a lead stored before K3, whose status moves
+   * the opportunity.
+   */
   async linkIn(
     ref: WorkspaceRef,
     lead: LeadRecord,
     months: RetentionMonths,
     tx: Tx,
+    backfill = false,
   ): Promise<ContactRecord> {
     const contact = await this.contacts.upsertFromLead(
       ref,
@@ -68,6 +69,7 @@ export class ContactLinker {
     }
     // The lead is an interaction: the profile's notes and tasks keep living with it.
     await this.records.alignExpiry(ref, lead.siteId, contact._id, contact.expiresAt, tx);
+    await this.flow.joinLead(ref, lead, contact, tx, backfill);
     return contact;
   }
 
@@ -79,12 +81,39 @@ export class ContactLinker {
     ref: WorkspaceRef,
     lead: LeadRecord,
     months: RetentionMonths,
+    backfill = false,
   ): Promise<ContactRecord | null> {
     try {
-      return await this.transactions.run((tx) => this.linkIn(ref, lead, months, tx));
+      return await this.transactions.run((tx) => this.linkIn(ref, lead, months, tx, backfill));
     } catch (error) {
       if (error instanceof LeadAlreadyLinkedError) {
         return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The backfill of a lead that joined its profile before K3: it joins the profile's open
+   * opportunity now. False when it had joined one already, or its profile is gone.
+   */
+  async joinOpportunity(
+    ref: WorkspaceRef,
+    lead: LeadRecord,
+    contactId: ObjectId,
+  ): Promise<boolean> {
+    try {
+      return await this.transactions.run(async (tx) => {
+        const contact = await this.contacts.findById(ref, lead.siteId, contactId, tx);
+        if (contact === null) {
+          return false;
+        }
+        await this.flow.joinLead(ref, lead, contact, tx, true);
+        return true;
+      });
+    } catch (error) {
+      if (error instanceof LeadAlreadyLinkedError) {
+        return false;
       }
       throw error;
     }

@@ -230,7 +230,7 @@ describe('lead inbox', () => {
     const { site } = await inboxSite();
     for (const query of [
       '?folder=trash',
-      '?status=lost',
+      '?status=unreachable',
       '?range=custom&from=2026-10-01',
       '?range=custom&from=2025-01-01&to=2026-12-31',
       '?limit=51',
@@ -278,8 +278,9 @@ describe('lead inbox', () => {
 
   it('counts new leads of all time and leads of the last 7 days, spam excluded, up to 999', async () => {
     const { site, pageId, releaseId } = await inboxSite();
-    await send(site, releaseId, { name: 'Nguyễn Thu Hà' });
-    await send(site, releaseId, { name: 'Trần Quốc Bảo' });
+    // Two people: one person's leads share an opportunity, and so a status (ADR-033).
+    await send(site, releaseId, { name: 'Nguyễn Thu Hà', phone: '0911 000 001' });
+    await send(site, releaseId, { name: 'Trần Quốc Bảo', phone: '0911 000 002' });
     await send(site, releaseId, { name: 'Bot', honeypot: 'x' });
     const old = { workspaceId, siteId: site.id, pageId, releaseId };
     await insertLeads(t, [
@@ -409,13 +410,14 @@ describe('lead inbox', () => {
     await owner.patch(`/sites/${site.id}/leads/${leadId}`, { spam: false }).expect(200);
     expect(names(await inbox(site))).toEqual(['Nguyễn Thu Hà']);
 
+    // "Thắng" and "Thua" ask for more and go through the pipeline's move.
     for (const body of [{}, { status: 'lost' }, { note: 'a'.repeat(1001) }, { spam: 'yes' }]) {
       await owner.patch(`/sites/${site.id}/leads/${leadId}`, body).expect(422);
     }
     await owner
-      .patch(`/sites/${site.id}/leads/64b0000000000000000000a1`, { status: 'won' })
+      .patch(`/sites/${site.id}/leads/64b0000000000000000000a1`, { status: 'contacted' })
       .expect(404);
-    await owner.patch(`/sites/${site.id}/leads/not-an-id`, { status: 'won' }).expect(404);
+    await owner.patch(`/sites/${site.id}/leads/not-an-id`, { status: 'contacted' }).expect(404);
   });
 
   it('counts leads of the last 7 days on each row of the page list, spam excluded', async () => {

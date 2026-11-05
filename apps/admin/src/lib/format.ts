@@ -132,3 +132,14 @@ export function formatRelativeTime(
   }
   return `${pad(then.day)}/${pad(then.month)}/${then.year}`;
 }
+
+/** "38.000.000 ₫": the same text on the server and in the browser. */
+export function formatVnd(value: number): string {
+  return `${String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
+}
+
+/** What a member typed as an amount ("36.500.000", "36500000 ₫"); null when it holds no digits. */
+export function parseVnd(input: string): number | null {
+  const digits = input.replace(/\D/g, '');
+  return digits === '' ? null : Number(digits);
+}

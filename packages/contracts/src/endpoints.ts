@@ -56,6 +56,16 @@ import {
   updateContactRequestSchema,
   updateTaskRequestSchema,
 } from './contact-profile.js';
+import {
+  bulkCreateOpportunitiesRequestSchema,
+  bulkCreateOpportunitiesResponseSchema,
+  createOpportunityRequestSchema,
+  moveOpportunityRequestSchema,
+  opportunitySchema,
+  pipelineQuerySchema,
+  pipelineResponseSchema,
+  updateOpportunityRequestSchema,
+} from './opportunities.js';
 import { meResponseSchema } from './membership.js';
 import {
   acceptInvitationResponseSchema,
@@ -911,6 +921,48 @@ export const endpoints = {
     request: deleteContactPersonRequestSchema,
     query: null,
     response: deleteContactPersonResponseSchema,
+  }),
+
+  // The pipeline (board 24, ADR-033)
+  pipeline: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/pipeline`,
+    request: null,
+    query: pipelineQuerySchema,
+    response: pipelineResponseSchema,
+  }),
+  /** `leads.handle`: a "Mới" opportunity of one profile, given to the profile's owner. */
+  createOpportunity: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/opportunities`,
+    request: createOpportunityRequestSchema,
+    query: null,
+    response: opportunitySchema,
+  }),
+  /** "Tạo cơ hội" for the profiles selected on board 22. */
+  bulkCreateOpportunities: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/opportunities/bulk`,
+    request: bulkCreateOpportunitiesRequestSchema,
+    query: null,
+    response: bulkCreateOpportunitiesResponseSchema,
+  }),
+  updateOpportunity: endpoint({
+    method: 'PATCH',
+    path: (siteId: string, opportunityId: string) =>
+      `/sites/${e(siteId)}/opportunities/${e(opportunityId)}`,
+    request: updateOpportunityRequestSchema,
+    query: null,
+    response: opportunitySchema,
+  }),
+  /** "Chuyển giai đoạn", "Đánh dấu thắng / thua", "Mở lại": the leads' status follows. */
+  moveOpportunity: endpoint({
+    method: 'POST',
+    path: (siteId: string, opportunityId: string) =>
+      `/sites/${e(siteId)}/opportunities/${e(opportunityId)}/stage`,
+    request: moveOpportunityRequestSchema,
+    query: null,
+    response: opportunitySchema,
   }),
 
   // Analytics (ADR-019)

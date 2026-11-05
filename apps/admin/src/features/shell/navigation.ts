@@ -166,6 +166,11 @@ export function contactsHref(siteId: string): string {
   return `${siteHref(siteId)}/contacts`;
 }
 
+/** The pipeline (board 24, ADR-033), under "Khách hàng" in the sidebar. */
+export function pipelineHref(siteId: string): string {
+  return `${contactsHref(siteId)}/pipeline`;
+}
+
 /** A customer's profile (board 23, ADR-033). */
 export function contactHref(siteId: string, contactId: string): string {
   return `${contactsHref(siteId)}/${encodeURIComponent(contactId)}`;

@@ -70,6 +70,8 @@ export interface LeadRecord {
    * backfill reaches a lead stored before profiles existed (absent then).
    */
   contactId?: Types.ObjectId | null;
+  /** The opportunity it joined (ADR-033); `status` mirrors its stage. Null for suspected spam. */
+  opportunityId?: Types.ObjectId | null;
   createdAt: Date;
   /** Null when the site keeps leads until they are deleted by hand. */
   expiresAt: Date | null;
@@ -121,6 +123,7 @@ const leadSchema = new Schema<LeadRecord>(
       updatedAt: { type: Date, required: true },
     },
     contactId: { type: Schema.Types.ObjectId, default: null },
+    opportunityId: { type: Schema.Types.ObjectId, default: null },
     createdAt: { type: Date, required: true },
     expiresAt: { type: Date, default: null },
   },
@@ -158,9 +161,12 @@ leadSchema.index(
   { 'notification.status': 1, 'notification.updatedAt': 1 },
   { name: 'leads_notification_sweep' },
 );
-// A profile's leads (its timeline, newest first), and the startup backfill of leads without one
-// (oldest first, ADR-033). Replaces `leads_contact` of K1, which lacked `_id` for the keyset.
+// A profile's leads, its timeline newest first (ADR-033). Replaces `leads_contact` of K1, which
+// lacked `_id` for the keyset.
 leadSchema.index({ contactId: 1, createdAt: 1, _id: 1 }, { name: 'leads_contact_time' });
+// The leads of an opportunity, whose status follows its stage, and the startup backfill of leads
+// without one (oldest first, ADR-033).
+leadSchema.index({ opportunityId: 1, createdAt: 1, _id: 1 }, { name: 'leads_opportunity' });
 // Leads without an expiry (null) are kept: the TTL monitor skips them.
 leadSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
