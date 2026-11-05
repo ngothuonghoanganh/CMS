@@ -196,6 +196,47 @@ export class LeadExportService {
   }
 
   /**
+   * The person's leads and the leads of their profiles (at most `LEAD_PERSON_EXPORT_MAX`), with
+   * the consent text each one agreed to, for a profile's export (ADR-033). Recorded as an export.
+   */
+  async personLeadsOfProfiles(
+    scope: WorkspaceScope,
+    site: SiteRecord,
+    person: LeadPerson,
+    contactIds: readonly ObjectId[],
+  ): Promise<{ leads: PersonExportFile['leads']; truncated: boolean }> {
+    const leads = await this.leads.listPersonOrProfiles(
+      scope,
+      site._id,
+      person,
+      contactIds,
+      LEAD_PERSON_EXPORT_MAX + 1,
+    );
+    const included = leads.slice(0, LEAD_PERSON_EXPORT_MAX);
+    const [titles, captures] = await Promise.all([
+      this.pages.findTitles(
+        scope,
+        included.map((item) => item.pageId),
+      ),
+      this.releases.findLeadCaptures(
+        scope,
+        included.map((item) => item.releaseId),
+      ),
+    ]);
+    await this.recordExport(scope, site._id, included.length);
+    return {
+      leads: included.map((item) =>
+        toPersonExportLead(
+          item,
+          pageTitleLabel(pageTitleOf(titles, item.pageId)),
+          consentOf(captures, item),
+        ),
+      ),
+      truncated: leads.length > LEAD_PERSON_EXPORT_MAX,
+    };
+  }
+
+  /**
    * `lead.exported`, in a transaction that writes the site: the entry never outlives a site
    * deleted meanwhile (ADR-027), whose export answers 404 instead.
    */

@@ -171,6 +171,63 @@ test.describe('Design capture', () => {
     await capture(page, 'Contacts-add');
   });
 
+  test('23 ContactProfile', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(sitePath('/contacts'));
+    await page
+      .getByRole('region', { name: 'Danh sách khách hàng' })
+      .getByRole('row')
+      .nth(1)
+      .getByRole('link')
+      .click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    // A call noted, two tasks (one overdue, one done) and a meeting, as on the board.
+    const composer = page.getByRole('tablist', { name: 'Thêm vào hồ sơ' });
+    await composer.getByRole('tab', { name: 'Công việc' }).click();
+    const local = (offsetMs: number) =>
+      new Date(Date.now() + 7 * 3_600_000 + offsetMs).toISOString().slice(0, 16);
+    for (const [title, offset] of [
+      ['Gọi lại trong 15 phút', -3 * 24 * 3_600_000],
+      ['Gửi bảng giá trả góp qua Zalo', 20 * 3_600_000],
+      ['Gọi xác nhận lịch hẹn', -25 * 60_000],
+    ] as const) {
+      await page.getByRole('textbox', { name: 'Việc cần làm' }).fill(title);
+      await page.getByLabel('Hạn', { exact: true }).fill(local(offset));
+      await page.getByRole('button', { name: 'Thêm công việc' }).click();
+      await expect(page.getByRole('region', { name: 'Công việc' }).getByText(title)).toBeVisible();
+    }
+    await page
+      .getByRole('region', { name: 'Công việc' })
+      .getByRole('checkbox', { name: /Gọi lại trong 15 phút/ })
+      .check();
+    await composer.getByRole('tab', { name: 'Lịch hẹn' }).click();
+    await page.getByLabel('Ngày giờ').fill(local(2 * 24 * 3_600_000));
+    await page.getByRole('textbox', { name: 'Nơi' }).fill('Chi nhánh Quận 3');
+    await page.getByRole('textbox', { name: /Người gặp/ }).fill('BS. Trần Minh');
+    await page.getByRole('textbox', { name: /Nội dung hẹn/ }).fill('Khám và chụp phim 3D');
+    await page.getByRole('button', { name: 'Đặt lịch hẹn' }).click();
+    await expect(page.getByRole('region', { name: 'Lịch hẹn sắp tới' })).toContainText(
+      'BS. Trần Minh',
+    );
+    await composer.getByRole('tab', { name: 'Ghi chú' }).click();
+    await page
+      .getByRole('textbox', { name: 'Ghi chú' })
+      .fill('Quan tâm Invisalign, sợ đau. Hẹn gọi lại sau khi xem bảng giá trả góp.');
+    await page.getByRole('button', { name: 'Lưu ghi chú' }).click();
+    await expect(page.getByText('Đã lưu ghi chú', { exact: true })).toBeVisible();
+    await expect(page.getByText('Đã lưu ghi chú', { exact: true })).toBeHidden({ timeout: 15_000 });
+    await capture(page, 'ContactProfile');
+
+    await page.getByRole('button', { name: 'Thao tác dữ liệu' }).click();
+    await expect(page.getByRole('menu')).toBeVisible();
+    await capture(page, 'ContactProfile-menu');
+    await page.getByRole('menuitem', { name: 'Xóa dữ liệu của người này' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog.getByText(/lead và bằng chứng đồng ý/)).toBeVisible();
+    await capture(page, 'ContactProfile-delete');
+    await dialog.getByRole('button', { name: 'Hủy' }).click();
+  });
+
   test('10 Leads, 11 Analytics and 12 Consent', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const name = 'Nguyễn Thu Hà';

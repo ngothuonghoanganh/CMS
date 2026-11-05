@@ -1,26 +1,41 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { DataRequestsCoreModule } from '../data-requests/data-requests-core.module.js';
+import { DataRequestsModule } from '../data-requests/data-requests.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
+import { LeadsModule } from '../leads/leads.module.js';
 import { PagesModule } from '../pages/pages.module.js';
+import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
+import { ContactAssignees } from './contact-assignees.service.js';
+import { ContactProfileController } from './contact-profile.controller.js';
+import { ContactProfileService } from './contact-profile.service.js';
 import { ContactsBackfill } from './contacts-backfill.service.js';
 import { ContactsCoreModule } from './contacts-core.module.js';
 import { ContactsController } from './contacts.controller.js';
 import { ContactsService } from './contacts.service.js';
 
-/** The customers screen (board 22, ADR-033) and the backfill of leads stored before it. */
+/**
+ * The customers screen and profiles (boards 22 and 23, ADR-033), and the backfill of leads stored
+ * before them.
+ */
 @Module({
   imports: [
     AuthModule,
     ContactsCoreModule,
+    DataRequestsCoreModule,
+    DataRequestsModule,
     LeadsCoreModule,
+    LeadsModule,
     PagesModule,
+    PublishingCoreModule,
     SitesCoreModule,
     WorkspacesModule,
   ],
-  controllers: [ContactsController],
-  providers: [ContactsService, ContactsBackfill],
+  // The list's fixed routes (`contacts/options`, `contacts/search`) before `contacts/:contactId`.
+  controllers: [ContactsController, ContactProfileController],
+  providers: [ContactsService, ContactProfileService, ContactAssignees, ContactsBackfill],
   exports: [ContactsBackfill],
 })
 export class ContactsModule {}

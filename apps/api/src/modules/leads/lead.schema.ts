@@ -158,8 +158,9 @@ leadSchema.index(
   { 'notification.status': 1, 'notification.updatedAt': 1 },
   { name: 'leads_notification_sweep' },
 );
-// A profile's leads, and the startup backfill of leads without one (oldest first, ADR-033).
-leadSchema.index({ contactId: 1, createdAt: 1 }, { name: 'leads_contact' });
+// A profile's leads (its timeline, newest first), and the startup backfill of leads without one
+// (oldest first, ADR-033). Replaces `leads_contact` of K1, which lacked `_id` for the keyset.
+leadSchema.index({ contactId: 1, createdAt: 1, _id: 1 }, { name: 'leads_contact_time' });
 // Leads without an expiry (null) are kept: the TTL monitor skips them.
 leadSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

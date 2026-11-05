@@ -6,6 +6,7 @@ import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.
 import type { LeadRecord } from '../leads/lead.schema.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import type { ContactRecord } from './contact.schema.js';
+import { ContactRecordsRepository } from './contact-records.repository.js';
 import { ContactsRepository, type LeadForContact } from './contacts.repository.js';
 import { daysApart, namePageWindow, pairExpiry } from './domain/contact-rules.js';
 import { MergeSuggestionsRepository } from './merge-suggestions.repository.js';
@@ -44,6 +45,7 @@ export class ContactLinker {
     private readonly contacts: ContactsRepository,
     private readonly suggestions: MergeSuggestionsRepository,
     private readonly leads: LeadsRepository,
+    private readonly records: ContactRecordsRepository,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -64,6 +66,8 @@ export class ContactLinker {
     if (!(await this.leads.linkContact(ref, lead._id, contact._id, tx))) {
       throw new LeadAlreadyLinkedError();
     }
+    // The lead is an interaction: the profile's notes and tasks keep living with it.
+    await this.records.alignExpiry(ref, lead.siteId, contact._id, contact.expiresAt, tx);
     return contact;
   }
 

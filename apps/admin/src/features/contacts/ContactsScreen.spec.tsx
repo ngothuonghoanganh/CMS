@@ -182,6 +182,14 @@ describe('ContactsScreen (board 22)', () => {
     });
   });
 
+  it('opens a profile from its name', () => {
+    render();
+    expect(screen.getByRole('link', { name: 'Nguyễn Thu Trang' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/contacts/${trang.id}`,
+    );
+  });
+
   it('offers no changes to a role that only views', () => {
     render({ customRoleId: '64b0000000000000000000d9', name: 'Xem', permissions: ['leads.view'] });
     expect(screen.queryByRole('button', { name: 'Thêm khách hàng' })).not.toBeInTheDocument();
@@ -198,6 +206,10 @@ describe('ContactsScreen (board 22)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Thêm khách hàng' }));
     expect(await within(dialog).findByRole('status')).toHaveTextContent(
       'Số này đã thuộc hồ sơ Nguyễn Thu Trang.',
+    );
+    expect(within(dialog).getByRole('link', { name: 'Mở hồ sơ đó' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/contacts/${trang.id}`,
     );
     expect(lastCallTo(apiMock, endpoints.createContact).options).toEqual({
       body: { name: 'Trang', phone: '0912345678', channel: 'phone_call', marketing: false },

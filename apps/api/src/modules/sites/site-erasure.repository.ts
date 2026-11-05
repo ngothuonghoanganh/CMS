@@ -16,6 +16,11 @@ import {
 } from '../analytics/analytics.schema.js';
 import { ASSET_COLLECTION } from '../assets/asset.schema.js';
 import { CONTACT_COLLECTION, MERGE_SUGGESTION_COLLECTION } from '../contacts/contact.schema.js';
+import {
+  CONTACT_EVENT_COLLECTION,
+  MEETING_COLLECTION,
+  TASK_COLLECTION,
+} from '../contacts/profile.schema.js';
 import { DATA_REQUEST_COLLECTION } from '../data-requests/data-request.schema.js';
 import { LEAD_COLLECTION } from '../leads/lead.schema.js';
 import { PAGE_COLLECTION } from '../pages/page.schema.js';
@@ -60,6 +65,9 @@ export class SiteErasureRepository {
     await this.deleteAll(scope, LEAD_COLLECTION, owned, tx);
     await this.deleteAll(scope, CONTACT_COLLECTION, owned, tx);
     await this.deleteAll(scope, MERGE_SUGGESTION_COLLECTION, owned, tx);
+    await this.deleteAll(scope, CONTACT_EVENT_COLLECTION, owned, tx);
+    await this.deleteAll(scope, TASK_COLLECTION, owned, tx);
+    await this.deleteAll(scope, MEETING_COLLECTION, owned, tx);
     await this.deleteAll(scope, ACTIVITY_COLLECTION, owned, tx);
     await this.deleteAll(scope, CONSENT_VERSION_COLLECTION, owned, tx);
     await this.deleteAll(scope, DATA_REQUEST_COLLECTION, owned, tx);

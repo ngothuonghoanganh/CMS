@@ -38,6 +38,24 @@ import {
   mergeContactsResponseSchema,
   mergeSuggestionListResponseSchema,
 } from './contacts.js';
+import {
+  contactDeletionPreviewSchema,
+  contactMeetingSchema,
+  contactProfileResponseSchema,
+  contactProfileSchema,
+  contactTaskSchema,
+  createMeetingRequestSchema,
+  createNoteRequestSchema,
+  createTaskRequestSchema,
+  deleteContactPersonRequestSchema,
+  deleteContactPersonResponseSchema,
+  timelineEntrySchema,
+  timelineQuerySchema,
+  timelineResponseSchema,
+  updateContactDetailsRequestSchema,
+  updateContactRequestSchema,
+  updateTaskRequestSchema,
+} from './contact-profile.js';
 import { meResponseSchema } from './membership.js';
 import {
   acceptInvitationResponseSchema,
@@ -793,6 +811,106 @@ export const endpoints = {
     request: null,
     query: null,
     response: null,
+  }),
+
+  // A customer's profile (board 23, ADR-033)
+  contactProfile: endpoint({
+    method: 'GET',
+    path: (siteId: string, contactId: string) => `/sites/${e(siteId)}/contacts/${e(contactId)}`,
+    request: null,
+    query: null,
+    response: contactProfileResponseSchema,
+  }),
+  /** `leads.handle`: the owner, or one tag added or taken off. */
+  updateContact: endpoint({
+    method: 'PATCH',
+    path: (siteId: string, contactId: string) => `/sites/${e(siteId)}/contacts/${e(contactId)}`,
+    request: updateContactRequestSchema,
+    query: null,
+    response: contactProfileSchema,
+  }),
+  /** `personalData.manage`: "Sửa thông tin" of the profile; its leads keep what was sent. */
+  updateContactDetails: endpoint({
+    method: 'PATCH',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/details`,
+    request: updateContactDetailsRequestSchema,
+    query: null,
+    response: contactProfileSchema,
+  }),
+  contactTimeline: endpoint({
+    method: 'GET',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/timeline`,
+    request: null,
+    query: timelineQuerySchema,
+    response: timelineResponseSchema,
+  }),
+  createContactNote: endpoint({
+    method: 'POST',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/notes`,
+    request: createNoteRequestSchema,
+    query: null,
+    response: timelineEntrySchema,
+  }),
+  createContactTask: endpoint({
+    method: 'POST',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/tasks`,
+    request: createTaskRequestSchema,
+    query: null,
+    response: contactTaskSchema,
+  }),
+  /** Ticks a task done, or opens it again. */
+  updateContactTask: endpoint({
+    method: 'PATCH',
+    path: (siteId: string, contactId: string, taskId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/tasks/${e(taskId)}`,
+    request: updateTaskRequestSchema,
+    query: null,
+    response: contactTaskSchema,
+  }),
+  createContactMeeting: endpoint({
+    method: 'POST',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/meetings`,
+    request: createMeetingRequestSchema,
+    query: null,
+    response: contactMeetingSchema,
+  }),
+  /**
+   * `leads.export`: a JSON file with the person's leads, consent evidence included, and
+   * everything the profile holds (ADR-017, ADR-033).
+   */
+  exportContactPerson: endpoint({
+    method: 'POST',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/export`,
+    request: null,
+    query: null,
+    response: null,
+  }),
+  /** `personalData.manage`: what a deletion would remove, and the requests it may complete. */
+  contactDeletionPreview: endpoint({
+    method: 'GET',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/deletion`,
+    request: null,
+    query: null,
+    response: contactDeletionPreviewSchema,
+  }),
+  /**
+   * `personalData.manage`: deletes the profile with the person's leads, notes, tasks and
+   * meetings in one transaction, and completes the request picked, if any.
+   */
+  deleteContactPerson: endpoint({
+    method: 'POST',
+    path: (siteId: string, contactId: string) =>
+      `/sites/${e(siteId)}/contacts/${e(contactId)}/delete`,
+    request: deleteContactPersonRequestSchema,
+    query: null,
+    response: deleteContactPersonResponseSchema,
   }),
 
   // Analytics (ADR-019)

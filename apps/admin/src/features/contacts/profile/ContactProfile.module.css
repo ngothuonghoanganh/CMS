@@ -1,0 +1,474 @@
+/* Board 23 "Hồ sơ khách hàng". */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.back {
+  align-self: flex-start;
+  margin-bottom: -6px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-success-strong-ink);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.nameBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.reach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.left {
+  flex: 1 1 280px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.main {
+  flex: 999 1 420px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.right {
+  flex: 1 1 240px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* On a narrow window the columns stack at full width. */
+@media (max-width: 720px) {
+  .left,
+  .right {
+    max-width: none;
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-neutral-badge-bg);
+  color: var(--color-neutral-badge-ink);
+  font-size: var(--text-sm);
+}
+
+.tagRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 24px target (WCAG 2.5.8) inside the chip's own padding. */
+  width: 24px;
+  height: 24px;
+  margin: -5px -7px -5px 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tagRemove:hover {
+  background: var(--color-hover);
+}
+
+.addTag {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  cursor: pointer;
+}
+
+.addTag:hover {
+  background: var(--color-hover);
+}
+
+.consent {
+  gap: 10px;
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+}
+
+.consentLine {
+  display: flex;
+  gap: 8px;
+  color: var(--color-ink);
+}
+
+.consentCheck {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-success);
+}
+
+.consentDash {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--color-subtle);
+}
+
+.textLink {
+  align-self: flex-start;
+  font-weight: 600;
+  color: var(--color-primary-ink);
+  text-decoration: none;
+}
+
+.textLink:hover {
+  text-decoration: underline;
+}
+
+/* The composer: Ghi chú, Công việc, Lịch hẹn. */
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.composerTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.composerTab {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  color: var(--color-ink-2);
+  cursor: pointer;
+}
+
+.composerTab:hover {
+  background: var(--color-hover);
+}
+
+.composerTab[aria-selected='true'] {
+  background: var(--color-primary-tint);
+  font-weight: 600;
+  color: var(--color-primary-ink);
+}
+
+.composerGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.composerGridEven {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .composerGrid,
+  .composerGridEven {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Two lines, as on board 23; the textarea still grows when dragged. The doubled class outweighs
+   the Textarea's own minimum. */
+.composerText.composerText {
+  min-height: 58px;
+}
+
+.composerFoot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.timelineTitle {
+  margin: 4px 0 0;
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.entryIcon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+}
+
+.tone-lead {
+  background: var(--color-success-soft);
+  color: var(--color-success-strong-ink);
+}
+
+.tone-note {
+  background: var(--color-neutral-badge-bg);
+  color: var(--color-ink-2);
+}
+
+.tone-meeting {
+  background: var(--color-primary-tint);
+  color: var(--color-primary-ink);
+}
+
+.entryBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.entryHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.entryTitle {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.entryWhen {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.entryText {
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+  color: var(--color-ink-2);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.more {
+  align-self: center;
+}
+
+.empty {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+/* "Công việc": a box ticks a task done. */
+.tasks {
+  gap: 8px;
+}
+
+.taskRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.taskRow input {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: var(--color-primary);
+}
+
+.taskDone {
+  color: var(--color-muted);
+}
+
+.taskDone .taskTitle {
+  text-decoration: line-through;
+}
+
+.taskMeta {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.taskLate {
+  font-weight: 600;
+  color: var(--color-danger-ink);
+}
+
+.meetings {
+  gap: 8px;
+}
+
+.meeting {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meetingWhen {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.meetingDetail {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+/* "Xóa toàn bộ dữ liệu của …?" */
+.consequences {
+  margin: 0;
+  padding: 12px 14px 12px 32px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-body-sm);
+  line-height: 1.65;
+  color: var(--color-ink);
+}
+
+.dialogForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
