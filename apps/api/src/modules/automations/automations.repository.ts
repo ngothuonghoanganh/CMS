@@ -113,6 +113,36 @@ export class AutomationsRepository {
       .exec();
   }
 
+  /**
+   * The autosave of board 26: each save is a new version, which new runs keep (ADR-034). Null
+   * when the automation is gone.
+   */
+  update(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    id: ObjectId,
+    changes: { name?: string | undefined; definition?: AutomationDefinition | undefined },
+    at: Date,
+  ): Promise<AutomationRecord | null> {
+    return this.automations(scope)
+      .findOneAndUpdate(
+        { _id: id, workspaceId: scope.workspaceId, siteId },
+        {
+          $set: {
+            ...(changes.name === undefined ? {} : { name: changes.name }),
+            ...(changes.definition === undefined
+              ? {}
+              : { definition: changes.definition, triggerKind: changes.definition.trigger.kind }),
+            updatedAt: at,
+          },
+          $inc: { version: 1 },
+        },
+        { returnDocument: 'after' },
+      )
+      .lean<AutomationRecord>()
+      .exec();
+  }
+
   /** The next member of an "assign" rotation: one atomic step, so two runs never pick the same. */
   async takeRotation(ref: WorkspaceRef, id: ObjectId): Promise<number> {
     const before = await this.automations(ref)

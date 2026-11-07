@@ -14,6 +14,8 @@ import {
 import {
   Badge,
   BoltIcon,
+  Button,
+  PlusIcon,
   Callout,
   DropdownMenu,
   DropdownMenuItem,
@@ -22,9 +24,12 @@ import {
   useToast,
 } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
+import { automationHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { useNow } from '../shell/use-now';
@@ -60,6 +65,7 @@ export function AutomationsScreen({
   loadedAt,
 }: AutomationsScreenProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { toast } = useToast();
   const now = useNow(loadedAt);
   const canManage = can(role, 'automations.manage');
@@ -106,6 +112,18 @@ export function AutomationsScreen({
 
   // Set in the click itself, so the controlled switch never flips back while the request runs.
   const [switching, setSwitching] = useState<{ id: string; on: boolean } | null>(null);
+  /** "Tạo automation": a blank draft, set up on board 26. */
+  const blank = useMutation({
+    mutationFn: () => api(endpoints.createAutomation, [site.id], { body: {} }),
+    onSuccess: (item) => {
+      router.push(automationHref(site.id, item.id));
+    },
+    onError: (error) => {
+      reportUnexpected('Creating an automation failed', error);
+      toast({ tone: 'danger', title: 'Chưa tạo được', description: problemMessage(error) });
+    },
+  });
+
   const setState = useMutation({
     mutationFn: ({ id, on }: { id: string; on: boolean }) =>
       api(endpoints.setAutomationState, [site.id, id], {
@@ -147,7 +165,22 @@ export function AutomationsScreen({
       <PageHeader
         title="Automation"
         description={`Tự giao lead, nhắc việc và báo tin khi có sự kiện ở ${site.name}.`}
-        actions={<span className={styles.usage}>{usageLine(usage)}</span>}
+        actions={
+          <span className={styles.usage}>
+            {usageLine(usage)}
+            {canManage ? (
+              <Button
+                leadingIcon={<PlusIcon size={16} />}
+                loading={blank.isPending}
+                onClick={() => {
+                  blank.mutate();
+                }}
+              >
+                Tạo automation
+              </Button>
+            ) : null}
+          </span>
+        }
       />
       {notice === null ? null : (
         <Callout tone="warning" role="status" title={notice}>
@@ -214,7 +247,9 @@ export function AutomationsScreen({
                     <tr key={item.id}>
                       <td>
                         <span className={styles.nameCell}>
-                          <span className={styles.name}>{item.name}</span>
+                          <Link href={automationHref(site.id, item.id)} className={styles.name}>
+                            {item.name}
+                          </Link>
                           <span className={styles.by}>{createdLine(item)}</span>
                         </span>
                       </td>

@@ -177,6 +177,11 @@ export function automationsHref(siteId: string): string {
   return `${siteHref(siteId)}/automations`;
 }
 
+/** An automation's steps (board 26, ADR-034). */
+export function automationHref(siteId: string, automationId: string): string {
+  return `${automationsHref(siteId)}/${encodeURIComponent(automationId)}`;
+}
+
 /** The pipeline (board 24, ADR-033), under "Khách hàng" in the sidebar. */
 export function pipelineHref(siteId: string): string {
   return `${contactsHref(siteId)}/pipeline`;

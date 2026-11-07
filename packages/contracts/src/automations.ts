@@ -190,11 +190,88 @@ export const automationListResponseSchema = z.object({
 });
 export type AutomationListResponse = z.infer<typeof automationListResponseSchema>;
 
-export const createAutomationRequestSchema = z.strictObject({ recipe: automationRecipeSchema });
+/** From a recipe, or a blank draft ("Tạo automation") without one. */
+export const createAutomationRequestSchema = z.strictObject({
+  recipe: automationRecipeSchema.optional(),
+});
 export type CreateAutomationRequest = z.infer<typeof createAutomationRequestSchema>;
 
-/** "Bật" or "Tạm dừng" from the list. */
+/**
+ * "Bật" or "Tạm dừng". `includeRecent` is "Chạy luôn cho … lead trong 24 giờ qua chưa có người
+ * phụ trách", for an automation started by new leads only.
+ */
 export const setAutomationStateRequestSchema = z.strictObject({
   state: z.enum(['on', 'paused']),
+  includeRecent: z.boolean().optional(),
 });
 export type SetAutomationStateRequest = z.infer<typeof setAutomationStateRequestSchema>;
+
+/** Leads a run on enabling may pick up again: those of the last 24 hours without an owner. */
+export const AUTOMATION_RECENT_HOURS = 24;
+export const AUTOMATION_RECENT_MAX = 200;
+
+export const automationOptionsSchema = z.object({
+  /** Members who may be given profiles, tasks and emails: `leads.view` on the site. */
+  members: z.array(contactPersonSchema),
+  pages: z.array(z.object({ id: idSchema, title: z.string() })),
+  tags: z.array(z.string()),
+});
+export type AutomationOptions = z.infer<typeof automationOptionsSchema>;
+
+/** Board 26: the automation with its definition, and the choices its steps offer. */
+export const automationDetailSchema = automationListItemSchema.extend({
+  version: z.number().int().positive(),
+  definition: automationDefinitionSchema,
+  updatedAt: isoDateTimeSchema,
+  options: automationOptionsSchema,
+});
+export type AutomationDetail = z.infer<typeof automationDetailSchema>;
+
+/** The autosave of board 26: the name, the steps, or both. */
+export const updateAutomationRequestSchema = z
+  .strictObject({
+    name: z
+      .string()
+      .trim()
+      .min(1, 'Nhập tên automation')
+      .max(AUTOMATION_NAME_MAX, `Tên tối đa ${AUTOMATION_NAME_MAX} ký tự`),
+    definition: automationDefinitionSchema,
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Không có thay đổi nào để lưu');
+export type UpdateAutomationRequest = z.input<typeof updateAutomationRequestSchema>;
+
+/** "Chạy thử" (ADR-034): with the latest lead of the site, or a sample without real data. */
+export const testAutomationRequestSchema = z.strictObject({
+  definition: automationDefinitionSchema,
+  source: z.enum(['latest', 'sample']),
+});
+export type TestAutomationRequest = z.infer<typeof testAutomationRequestSchema>;
+
+/**
+ * What a step would do: `pass` it holds or would run, `fail` a condition that stops the run,
+ * `skip` an action that would fail, `not_reached` after a condition failed.
+ */
+export const testStepResultSchema = z.object({
+  outcome: z.enum(['pass', 'fail', 'skip', 'not_reached']),
+  text: z.string(),
+});
+export type TestStepResult = z.infer<typeof testStepResultSchema>;
+
+export const testAutomationResponseSchema = z.object({
+  /** The lead the test used; null for the sample. */
+  lead: z.object({ name: z.string(), at: isoDateTimeSchema }).nullable(),
+  trigger: testStepResultSchema,
+  conditions: z.array(testStepResultSchema),
+  actions: z.array(testStepResultSchema),
+});
+export type TestAutomationResponse = z.infer<typeof testAutomationResponseSchema>;
+
+/** What the "Bật" dialog says: the site's leads, and the recent ones without an owner. */
+export const automationActivationSchema = z.object({
+  leads: z.number().int().nonnegative(),
+  recentUnassigned: z.number().int().nonnegative(),
+  /** Whether "Chạy luôn cho …" applies: an automation started by new leads. */
+  canIncludeRecent: z.boolean(),
+});
+export type AutomationActivation = z.infer<typeof automationActivationSchema>;

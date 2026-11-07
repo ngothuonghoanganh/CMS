@@ -843,6 +843,29 @@ export class LeadsRepository {
       .exec();
   }
 
+  /**
+   * The site's leads not suspected of spam since `since`, newest first, at most `limit`: "Chạy
+   * thử" uses the first, and enabling an automation may pick up the recent ones (ADR-034).
+   */
+  listRecentOfSite(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    since: Date | null,
+    limit: number,
+  ): Promise<LeadRecord[]> {
+    return this.leads(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        siteId,
+        'spam.suspected': false,
+        ...(since === null ? {} : { createdAt: { $gte: since } }),
+      })
+      .sort(NEWEST_FIRST)
+      .limit(limit)
+      .lean<LeadRecord[]>()
+      .exec();
+  }
+
   /** A lead of the site for a background job, such as an automation's run (ADR-034). */
   findOf(ref: WorkspaceRef, siteId: ObjectId, id: ObjectId): Promise<LeadRecord | null> {
     return this.leads(ref)

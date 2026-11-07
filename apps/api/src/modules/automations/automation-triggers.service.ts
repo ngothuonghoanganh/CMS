@@ -84,6 +84,43 @@ export class AutomationTriggers {
     await this.plan(ref, event.siteId, event.contactId, planned, now, tx);
   }
 
+  /**
+   * "Chạy luôn cho lead trong 24 giờ qua chưa có người phụ trách" when the automation is enabled
+   * (ADR-034): the same event key as the lead's own, so a lead never runs it twice.
+   */
+  async replayLeads(
+    ref: WorkspaceRef,
+    automation: AutomationRecord,
+    events: readonly LeadEvent[],
+    tx: Tx,
+  ): Promise<void> {
+    const now = new Date();
+    for (const event of events) {
+      await this.plan(
+        ref,
+        event.siteId,
+        event.contactId,
+        [
+          {
+            automation,
+            eventKey: `lead:${event.leadId.toHexString()}`,
+            event: {
+              kind: 'lead_created',
+              leadId: event.leadId,
+              opportunityId: event.opportunityId,
+              taskId: null,
+              stage: null,
+              at: event.at,
+            },
+            dueAt: now,
+          },
+        ],
+        now,
+        tx,
+      );
+    }
+  }
+
   /** "Cơ hội chuyển sang …": each move is an event of its own. */
   async stageChanged(
     ref: WorkspaceRef,

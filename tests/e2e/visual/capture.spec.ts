@@ -279,6 +279,46 @@ test.describe('Design capture', () => {
     await capture(page, 'Automations');
   });
 
+  test('26 AutomationEditor', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(sitePath('/automations'));
+    await page.getByRole('link', { name: 'Giao lead mới cho người trực' }).first().click();
+    await expect(page.getByRole('textbox', { name: 'Tên automation' })).toBeVisible();
+    // Enabled on screen 25: paused so its steps can change, a draft-like state as on the board.
+    await page.getByRole('button', { name: 'Tạm dừng' }).click();
+    await expect(page.getByRole('button', { name: 'Bật automation' })).toBeVisible();
+    // A condition and an email without recipients, as on the board.
+    await page.getByRole('button', { name: /Thêm điều kiện hoặc hành động/ }).click();
+    await page.getByRole('menuitem', { name: 'Nếu · Nguồn chứa' }).click();
+    const panel = page.getByRole('complementary', { name: 'Bảng bên phải' });
+    await panel.getByRole('textbox', { name: 'Chứa' }).fill('facebook');
+    await page.getByRole('button', { name: /Thêm điều kiện hoặc hành động/ }).click();
+    await page.getByRole('menuitem', { name: 'Thì · Gửi email nội bộ' }).click();
+    await panel.getByRole('combobox', { name: 'Người nhận' }).selectOption('members');
+    await panel.getByRole('textbox', { name: /Tiêu đề/ }).fill('Lead mới từ Facebook: ');
+    await panel.getByRole('button', { name: '«Tên khách»' }).click();
+    await expect(page.getByText(/^Đã lưu/)).toBeVisible();
+    await capture(page, 'AutomationEditor');
+
+    await page.getByRole('button', { name: 'Chạy thử' }).click();
+    await expect(page.getByText(/^Sẽ giao cho /)).toBeVisible();
+    await capture(page, 'AutomationEditor-test');
+
+    await panel
+      .getByText('BƯỚC')
+      .waitFor({ state: 'detached' })
+      .catch(() => undefined);
+    await page
+      .getByRole('region', { name: 'Các bước' })
+      .getByRole('button', { name: /Gửi email nội bộ/ })
+      .click();
+    await panel.getByRole('checkbox').first().check();
+    await expect(page.getByText(/^Đã lưu/)).toBeVisible();
+    await page.getByRole('button', { name: 'Bật automation' }).click();
+    await expect(page.getByRole('dialog')).toContainText('lead cũ không bị ảnh hưởng');
+    await capture(page, 'AutomationEditor-activate');
+  });
+
   test('10 Leads, 11 Analytics and 12 Consent', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const name = 'Nguyễn Thu Hà';

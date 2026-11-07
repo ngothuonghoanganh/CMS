@@ -120,6 +120,11 @@
 .name {
   font-weight: 600;
   color: var(--color-ink);
+  text-decoration: none;
+}
+
+.name:hover {
+  text-decoration: underline;
 }
 
 .by {
