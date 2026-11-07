@@ -67,8 +67,13 @@ import {
   updateOpportunityRequestSchema,
 } from './opportunities.js';
 import {
+  automationActivationSchema,
+  automationDetailSchema,
   automationListItemSchema,
   automationListResponseSchema,
+  testAutomationRequestSchema,
+  testAutomationResponseSchema,
+  updateAutomationRequestSchema,
   createAutomationRequestSchema,
   setAutomationStateRequestSchema,
 } from './automations.js';
@@ -995,6 +1000,42 @@ export const endpoints = {
     request: setAutomationStateRequestSchema,
     query: null,
     response: automationListItemSchema,
+  }),
+  /** Board 26. */
+  getAutomation: endpoint({
+    method: 'GET',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}`,
+    request: null,
+    query: null,
+    response: automationDetailSchema,
+  }),
+  /** The autosave of board 26; each save is a new version. */
+  updateAutomation: endpoint({
+    method: 'PATCH',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}`,
+    request: updateAutomationRequestSchema,
+    query: null,
+    response: automationDetailSchema,
+  }),
+  /** "Chạy thử": no side effect, no run counted. */
+  testAutomation: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/test`,
+    request: testAutomationRequestSchema,
+    query: null,
+    response: testAutomationResponseSchema,
+  }),
+  /** The numbers of the "Bật" dialog. */
+  automationActivation: endpoint({
+    method: 'GET',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/activation`,
+    request: null,
+    query: null,
+    response: automationActivationSchema,
   }),
   /** "Nhân bản": a draft copy. */
   duplicateAutomation: endpoint({

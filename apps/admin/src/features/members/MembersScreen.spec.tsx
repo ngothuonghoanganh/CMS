@@ -7,7 +7,7 @@ import {
 } from '@plp/contracts';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
@@ -136,7 +136,14 @@ function chipTexts(dialog: HTMLElement): (string | null)[] {
     .map((chip) => chip.textContent);
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  // Invitations expire by the browser's clock: fixed at the load time, so whether one is still
+  // open does not depend on the day the tests run.
+  vi.useFakeTimers({ toFake: ['Date'], now: LOADED_AT });
   apiMock.mockReset();
   apiMock.mockImplementation((endpoint) => {
     if (endpoint === endpoints.acceptAccessRequest) {

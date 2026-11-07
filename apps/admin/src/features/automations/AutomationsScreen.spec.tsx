@@ -7,6 +7,12 @@ import { siteFixture } from '../dashboard/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { AutomationsScreen } from './AutomationsScreen';
 
+const { router } = vi.hoisted(() => ({
+  router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
+}));
+
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
+
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
   api: vi.fn(),
@@ -148,6 +154,20 @@ describe('AutomationsScreen (board 25)', () => {
       args: [site.id, '64b0000000000000000000a1'],
       options: { body: { state: 'paused' } },
     });
+  });
+
+  it('opens an automation from its name, and a blank one from "Tạo automation"', async () => {
+    const user = userEvent.setup();
+    render();
+    expect(screen.getByRole('link', { name: 'Giao lead mới cho người trực' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/automations/64b0000000000000000000a1`,
+    );
+    await user.click(screen.getByRole('button', { name: 'Tạo automation' }));
+    expect(lastCallTo(apiMock, endpoints.createAutomation).options).toEqual({ body: {} });
+    expect(router.push).toHaveBeenCalledWith(
+      `/sites/${site.id}/automations/64b0000000000000000000b1`,
+    );
   });
 
   it('says when the month’s runs ran out', () => {

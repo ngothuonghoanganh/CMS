@@ -2842,6 +2842,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Có 3 mẫu: giao lead, nhắc lead chưa gọi, báo tin thắng. Mỗi mẫu tạo bản nháp đã đủ cấu hình: xoay vòng giữa thành viên xem được khách hàng của site, email cho thành viên quản lý automation.
     - Mẫu webhook đến ở A3. Nút "Tạo automation" và tên dẫn tới màn 26 đến ở A2.
     - Menu của dòng có "Nhân bản"; ADR không có xóa hay lưu trữ.
+- **Amended 2026-11-07 (A2, cách làm):**
+  - "Tạo automation" tạo bản nháp trống ("Automation mới", có lead mới, chưa có hành động, nên thiếu 1 bước) rồi mở màn 26.
+  - **Tự lưu:** màn 26 lưu tên và các bước sau 0,6 giây không gõ. Mỗi lần lưu là một phiên bản. "Bật automation" chờ lần lưu cuối xong.
+  - **Automation đang bật thì các bước khóa:** sửa định nghĩa trả 409, màn 26 chỉ cho đổi tên và ghi "Tạm dừng để sửa các bước". Như vậy một bước đang sửa dở không làm lượt chạy lỗi; lượt đang chờ vẫn dùng phiên bản đã bật.
+  - **Chạy thử** nhận định nghĩa đang có trên màn, nên không phải chờ lưu.
+    - Dữ liệu dùng: lead mới nhất không nghi ngờ spam của site, cùng hồ sơ và cơ hội của nó; hoặc lead mẫu (facebook / cpc, chưa có người phụ trách).
+    - Kết quả từng bước là `pass`, `fail` (điều kiện sai), `skip` (hành động sẽ lỗi, ví dụ thiếu người nhận) hoặc `not_reached`. Bước giao người tính cho các bước sau.
+    - Cần `automations.manage`, như các thao tác khác của màn 26.
+  - **Dialog "Bật":** đếm lead của site và lead 24 giờ qua chưa có người phụ trách (tối đa 200, theo trang của trigger).
+    - "Chạy luôn cho …" tạo lượt chạy với cùng khóa sự kiện như lead đó, nên không chạy hai lần.
+    - Chỉ có với trigger "Có lead mới".
+  - Người nhận, người được giao và trang chọn bằng danh sách ô tick thay vì ô chọn một giá trị, vì một bước nhận nhiều người hoặc nhiều trang.
+  - Tab "Lịch sử chạy" đến ở A3.
 
 ---
 
@@ -2967,7 +2980,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | K2  | Hồ sơ: ghi chú, công việc, lịch hẹn, dòng thời gian, xuất và xóa dữ liệu một người, thời gian lưu                                               | 23, 12 | Xong       |
 | K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Xong       |
 | A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Xong       |
-| A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Chưa làm   |
+| A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Xong       |
 | A3  | Webhook (chặn SSRF, ký HMAC, bí mật mã hóa), lịch sử chạy, thử lại và bỏ qua                                                                    | 27     | Chưa làm   |
 
 **Hoàn thành Phase 3** khi một E2E chạy xanh toàn bộ chuỗi:

@@ -144,7 +144,7 @@ export interface RunFacts {
   stage: OpportunityStage | null;
 }
 
-function holds(condition: AutomationCondition, facts: RunFacts): boolean {
+export function conditionHolds(condition: AutomationCondition, facts: RunFacts): boolean {
   switch (condition.kind) {
     case 'source_contains': {
       const value = facts.source?.[condition.field] ?? null;
@@ -166,7 +166,7 @@ export function conditionsHold(
   conditions: readonly AutomationCondition[],
   facts: RunFacts,
 ): boolean {
-  return conditions.every((condition) => holds(condition, facts));
+  return conditions.every((condition) => conditionHolds(condition, facts));
 }
 
 /** The values the subject of an internal email may hold. */
