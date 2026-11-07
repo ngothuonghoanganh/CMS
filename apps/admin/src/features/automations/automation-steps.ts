@@ -5,6 +5,7 @@ import {
   type AutomationOptions,
   type AutomationTrigger,
   opportunityStageLabels,
+  webhookUrlSchema,
 } from '@plp/contracts';
 import { formatVnd } from '../../lib/format';
 import { triggerLabel } from './automation-presentation';
@@ -29,6 +30,7 @@ export const actionKindLabels: Record<ActionKind, string> = {
   create_task: 'Tạo công việc',
   add_tag: 'Gắn nhãn',
   email: 'Gửi email nội bộ',
+  webhook: 'Gọi webhook',
 };
 
 /** A new step as "Thêm điều kiện hoặc hành động" adds it: empty where a choice is needed. */
@@ -57,7 +59,25 @@ export function newAction(kind: ActionKind): AutomationAction {
       return { kind, tag: '' };
     case 'email':
       return { kind, to: [], subject: '' };
+    case 'webhook':
+      // The API gives the step its secret on the first save.
+      return { kind, url: '', secretId: '' };
   }
+}
+
+/** The host a webhook step calls, or the text as typed while it is no address yet. */
+export function webhookHost(url: string): string {
+  return URL.canParse(url) ? new URL(url).host : url;
+}
+
+/** Why the typed address is refused: HTTPS on port 443 only (ADR-034); null when it is fine. */
+export function webhookUrlProblem(url: string): string | null {
+  if (url === '') {
+    return 'Chưa nhập địa chỉ webhook';
+  }
+  return webhookUrlSchema.safeParse(url).success
+    ? null
+    : 'Địa chỉ phải bắt đầu bằng https:// và dùng cổng mặc định';
 }
 
 export function newTrigger(kind: AutomationTrigger['kind']): AutomationTrigger {
@@ -172,6 +192,8 @@ export function actionSummary(action: AutomationAction, options: AutomationOptio
           .join(' · ') || 'Chưa có người nhận và tiêu đề'
       );
     }
+    case 'webhook':
+      return action.url === '' ? 'Chưa nhập địa chỉ' : `POST ${webhookHost(action.url)}`;
   }
 }
 
@@ -204,6 +226,8 @@ export function actionProblem(action: AutomationAction): string | null {
         return 'Chưa chọn người nhận';
       }
       return action.subject === '' ? 'Chưa nhập tiêu đề' : null;
+    case 'webhook':
+      return webhookUrlProblem(action.url);
   }
 }
 

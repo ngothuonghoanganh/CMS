@@ -205,6 +205,21 @@ describe('parseEnv', () => {
     });
   });
 
+  it('refuses the webhook test receiver in production (ADR-034)', () => {
+    const receiver = 'http://127.0.0.1:4199/hooks';
+    expect(parseEnv({ ...valid, WEBHOOK_TEST_RECEIVER: receiver }).WEBHOOK_TEST_RECEIVER).toBe(
+      receiver,
+    );
+    expect(() =>
+      parseEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        CUSTOM_DOMAIN_IPV4: '203.0.113.10',
+        WEBHOOK_TEST_RECEIVER: receiver,
+      }),
+    ).toThrow('WEBHOOK_TEST_RECEIVER sends webhooks to a test receiver');
+  });
+
   describe('workspace addresses (ADR-025)', () => {
     const addresses = {
       ADMIN_ORIGIN: 'https://app.example.vn',

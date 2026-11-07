@@ -12,8 +12,20 @@ import {
   leadStillNewMinutes,
   opportunityStageLabels,
   opportunityStages,
+  WEBHOOK_URL_MAX,
 } from '@plp/contracts';
-import { Button, Checkbox, Field, Input, Select, TrashIcon } from '@plp/ui';
+import {
+  Button,
+  Checkbox,
+  CopyIcon,
+  Field,
+  IconButton,
+  Input,
+  RefreshIcon,
+  Select,
+  TrashIcon,
+  useToast,
+} from '@plp/ui';
 import { useId, useRef } from 'react';
 import { parseVnd, formatVnd } from '../../lib/format';
 import {
@@ -22,6 +34,7 @@ import {
   conditionKindLabels,
   conditionProblem,
   newTrigger,
+  webhookUrlProblem,
 } from './automation-steps';
 import styles from './AutomationEditor.module.css';
 
@@ -321,10 +334,24 @@ export interface ActionPanelProps {
   readOnly: boolean;
   onChange: (action: AutomationAction) => void;
   onRemove: () => void;
+  /** A webhook step's secret as the API showed it once, in this page view only. */
+  revealedSecret?: string | undefined;
+  /** "Đổi bí mật"; absent for a role that only views. */
+  onRotateSecret?: (() => void) | undefined;
+  rotating?: boolean;
 }
 
 /** "BƯỚC N · HÀNH ĐỘNG". */
-export function ActionPanel({ action, options, readOnly, onChange, onRemove }: ActionPanelProps) {
+export function ActionPanel({
+  action,
+  options,
+  readOnly,
+  onChange,
+  onRemove,
+  revealedSecret,
+  onRotateSecret,
+  rotating = false,
+}: ActionPanelProps) {
   const listId = useId();
   const subjectRef = useRef<HTMLInputElement>(null);
   const problem = actionProblem(action);
@@ -492,11 +519,124 @@ export function ActionPanel({ action, options, readOnly, onChange, onRemove }: A
           </div>
         </>
       ) : null}
+      {action.kind === 'webhook' ? (
+        <WebhookFields
+          action={action}
+          readOnly={readOnly}
+          onChange={onChange}
+          revealedSecret={revealedSecret}
+          onRotateSecret={onRotateSecret}
+          rotating={rotating}
+        />
+      ) : null}
       {readOnly ? null : (
         <Button variant="ghost" size="sm" leadingIcon={<TrashIcon size={16} />} onClick={onRemove}>
           Xóa hành động “{actionKindLabels[action.kind]}”
         </Button>
       )}
+    </>
+  );
+}
+
+interface WebhookFieldsProps {
+  action: Extract<AutomationAction, { kind: 'webhook' }>;
+  readOnly: boolean;
+  onChange: (action: AutomationAction) => void;
+  revealedSecret: string | undefined;
+  onRotateSecret: (() => void) | undefined;
+  rotating: boolean;
+}
+
+/**
+ * The address a webhook step calls and the secret it signs with (ADR-034). The secret shows once,
+ * as the API returns it; after that only "Đổi bí mật" gives a new one.
+ */
+function WebhookFields({
+  action,
+  readOnly,
+  onChange,
+  revealedSecret,
+  onRotateSecret,
+  rotating,
+}: WebhookFieldsProps) {
+  const { toast } = useToast();
+  const problem = webhookUrlProblem(action.url);
+  return (
+    <>
+      <Field
+        label="Địa chỉ nhận (URL)"
+        help="Payload gửi POST với dữ liệu lead dạng JSON, thử lại khi máy chủ nhận lỗi."
+        error={problem ?? undefined}
+      >
+        <Input
+          type="url"
+          inputMode="url"
+          value={action.url}
+          maxLength={WEBHOOK_URL_MAX}
+          placeholder="https://crm.example.vn/api/leads"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={readOnly}
+          onChange={(event) => {
+            onChange({ ...action, url: event.target.value.trim() });
+          }}
+        />
+      </Field>
+      <div className={styles.fieldGroup}>
+        <span className={styles.fieldLabel}>Bí mật để ký</span>
+        {revealedSecret !== undefined ? (
+          <>
+            <span className={styles.secretRow}>
+              <code className={styles.secret}>{revealedSecret}</code>
+              <IconButton
+                aria-label="Sao chép bí mật"
+                size="sm"
+                variant="secondary"
+                icon={<CopyIcon size={14} />}
+                onClick={() => {
+                  navigator.clipboard.writeText(revealedSecret).then(
+                    () => {
+                      toast({ tone: 'success', title: 'Đã sao chép bí mật' });
+                    },
+                    (error: unknown) => {
+                      console.error('Copying a webhook secret failed', error);
+                      toast({
+                        tone: 'danger',
+                        title: 'Chưa sao chép được',
+                        description: 'Hãy chọn bí mật rồi sao chép thủ công.',
+                      });
+                    },
+                  );
+                }}
+              />
+            </span>
+            <span className={styles.note}>
+              Bí mật chỉ hiện một lần. Lưu vào hệ thống nhận ngay bây giờ.
+            </span>
+          </>
+        ) : (
+          <span className={styles.note}>
+            {action.secretId === ''
+              ? 'Bí mật được tạo khi lưu bước này.'
+              : 'Đã lưu và mã hóa. Bí mật không hiện lại; đổi bí mật nếu đã làm mất.'}
+          </span>
+        )}
+        <span className={styles.note}>
+          Mỗi lần gọi có header X-PLP-Signature (HMAC-SHA256 của “t.body”) và Idempotency-Key để hệ
+          thống nhận bỏ qua lần gửi trùng.
+        </span>
+        {onRotateSecret !== undefined && action.secretId !== '' ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            leadingIcon={<RefreshIcon size={16} />}
+            loading={rotating}
+            onClick={onRotateSecret}
+          >
+            Đổi bí mật
+          </Button>
+        ) : null}
+      </div>
     </>
   );
 }

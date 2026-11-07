@@ -32,6 +32,7 @@ const seenWith: Partial<Record<ActivityType, Permission>> = {
   'automation.enabled': 'automations.view',
   'automation.paused': 'automations.view',
   'automation.auto_paused': 'automations.view',
+  'automation.retried': 'automations.view',
 };
 
 @Injectable()

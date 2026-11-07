@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { DNS_ZONE_FILE } from './support/dns.js';
+import { WEBHOOK_RECEIVER_URL } from './support/webhook-receiver.js';
 import { urls } from './urls.js';
 
 // Runs against production builds (`pnpm build`) and the docker compose infrastructure (`pnpm infra:up`).
@@ -30,6 +31,10 @@ const apiEnv = {
   CUSTOM_DOMAIN_ORIGIN_TEMPLATE: `http://{host}:${new URL(urls.renderer).port}`,
   // Creating a page with AI (ADR-031) uses the fake AI: fixed copy, at once, never a real service.
   AI_PROVIDER: 'fake',
+  // Webhook secrets are encrypted with it (ADR-034).
+  AUTOMATION_SECRET_KEY: 'e2e-automation-secret-key-0123456789abcdef',
+  // Webhooks pass the address rules, then go to the specs' receiver (support/webhook-receiver.ts).
+  WEBHOOK_TEST_RECEIVER: WEBHOOK_RECEIVER_URL,
 };
 
 // Servers are never reused: one started outside this config may point at another database. A

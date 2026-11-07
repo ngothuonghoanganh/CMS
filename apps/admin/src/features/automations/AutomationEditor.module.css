@@ -35,6 +35,8 @@
 }
 
 .nameInput {
+  /* As wide as the name, between the bounds, so a long one is not cut. */
+  field-sizing: content;
   min-width: 240px;
   max-width: 420px;
   padding: 2px 4px;
@@ -80,9 +82,21 @@
 .tab {
   display: inline-flex;
   align-items: center;
+  min-height: 40px;
   padding: 0 12px;
-  border-bottom: 2px solid var(--color-primary);
+  border-bottom: 2px solid transparent;
   font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--color-ink-2);
+  text-decoration: none;
+}
+
+.tab:hover {
+  color: var(--color-ink);
+}
+
+.tab[aria-current='page'] {
+  border-bottom-color: var(--color-primary);
   font-weight: 600;
   color: var(--color-primary-ink);
 }
@@ -406,4 +420,22 @@
   font-size: var(--text-body);
   line-height: 1.6;
   color: var(--color-ink-2);
+}
+
+.secretRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secret {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
 }

@@ -6,6 +6,7 @@ import { type Board, seedBoard } from '../support/board.js';
 import { Editor } from '../support/editor.js';
 import { accountLink, waitForEmail } from '../support/mailpit.js';
 import { uniqueId } from '../support/setup.js';
+import { WebhookReceiver } from '../support/webhook-receiver.js';
 import { siteOrigin } from '../urls.js';
 
 /*
@@ -317,6 +318,57 @@ test.describe('Design capture', () => {
     await page.getByRole('button', { name: 'Bật automation' }).click();
     await expect(page.getByRole('dialog')).toContainText('lead cũ không bị ảnh hưởng');
     await capture(page, 'AutomationEditor-activate');
+  });
+
+  test('27 AutomationRuns', async ({ page }) => {
+    const receiver = new WebhookReceiver();
+    await receiver.start();
+    try {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(sitePath('/automations'));
+      await page.getByRole('button', { name: /Gửi lead sang hệ thống khác/ }).click();
+      await page.getByRole('link', { name: 'Gửi lead sang hệ thống khác' }).first().click();
+      await page
+        .getByRole('textbox', { name: 'Tên automation' })
+        .fill('Gửi lead sang CRM của phòng khám');
+      const panel = page.getByRole('complementary', { name: 'Bảng bên phải' });
+      await page
+        .getByRole('region', { name: 'Các bước' })
+        .getByRole('button', { name: /Gọi webhook/ })
+        .click();
+      await panel
+        .getByRole('textbox', { name: /Địa chỉ nhận/ })
+        .fill('https://crm.smilecare.vn/api/leads');
+      await expect(panel.getByText(/^whsec_/)).toBeVisible();
+      await capture(page, 'AutomationEditor-webhook');
+      await expect(page.getByText(/^Đã lưu/)).toBeVisible();
+
+      // The board's leads of the last 24 hours run it: the CRM refuses some, fails on others.
+      receiver.answerNext(201, 201, 500, 201, 410, 201, 201, 404);
+      await page.getByRole('button', { name: 'Bật automation' }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('checkbox').check();
+      await dialog.getByRole('button', { name: 'Bật automation' }).click();
+      await expect(page.getByRole('button', { name: 'Tạm dừng' })).toBeVisible();
+      await page.getByRole('link', { name: 'Lịch sử chạy' }).click();
+      await expect(page).toHaveURL(/\/runs$/);
+      const runs = page.getByRole('region', { name: 'Các lượt chạy' });
+      await expect(async () => {
+        await page.reload();
+        await expect(
+          runs.getByRole('button', { name: /^Lead mới.*Thất bại$/ }).first(),
+        ).toBeVisible();
+        await expect(runs.getByRole('button', { name: /Đang chờ|Đang chạy/ })).toHaveCount(0);
+      }).toPass({ timeout: 30_000 });
+      await runs
+        .getByRole('button', { name: /^Lead mới.*Thất bại$/ })
+        .first()
+        .click();
+      await expect(page.getByRole('button', { name: 'Thử lại bước này' })).toBeVisible();
+      await capture(page, 'AutomationRuns');
+    } finally {
+      await receiver.stop();
+    }
   });
 
   test('10 Leads, 11 Analytics and 12 Consent', async ({ page }) => {

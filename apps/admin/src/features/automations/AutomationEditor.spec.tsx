@@ -43,6 +43,7 @@ const DETAIL: AutomationDetail = {
   },
   updatedAt: '2026-11-05T02:58:00.000Z',
   options: { members: [HA, PHUONG, ANH], pages: [], tags: ['Niềng răng'] },
+  revealedSecrets: [],
 };
 
 function render(detail = DETAIL, canManage = true) {
@@ -182,6 +183,58 @@ describe('AutomationEditor (board 26)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Bật automation' }));
     expect(lastCallTo(apiMock, endpoints.setAutomationState).options).toEqual({
       body: { state: 'on', includeRecent: true },
+    });
+  });
+
+  it('gives a new webhook step its secret on save, shows it once, and keeps it after', async () => {
+    const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+    render({ ...DETAIL, missing: 0, definition: { ...DETAIL.definition, actions: [] } });
+    apiMock.mockImplementation((endpoint, _args, options) => {
+      if (endpoint === endpoints.updateAutomation) {
+        const body = (options as { body: { definition: AutomationDetail['definition'] } }).body;
+        const actions = body.definition.actions.map((action) =>
+          action.kind === 'webhook' && action.secretId === ''
+            ? { ...action, secretId: 'sec1' }
+            : action,
+        );
+        const fresh = body.definition.actions.some(
+          (action) => action.kind === 'webhook' && action.secretId === '',
+        );
+        return Promise.resolve({
+          ...DETAIL,
+          definition: { ...body.definition, actions },
+          revealedSecrets: fresh ? [{ secretId: 'sec1', secret: 'whsec_abc123' }] : [],
+        });
+      }
+      return Promise.reject(new Error(`Unexpected call to ${endpoint.method}`));
+    });
+    await user.click(screen.getByRole('button', { name: /Thêm điều kiện hoặc hành động/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Thì · Gọi webhook' }));
+    const panel = screen.getByRole('complementary', { name: 'Bảng bên phải' });
+    const url = within(panel).getByRole('textbox', { name: /Địa chỉ nhận/ });
+    await user.type(url, 'http://crm.vn');
+    expect(
+      within(panel).getByText('Địa chỉ phải bắt đầu bằng https:// và dùng cổng mặc định'),
+    ).toBeInTheDocument();
+    await user.clear(url);
+    await user.type(url, 'https://crm.example.vn/hook');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(await within(panel).findByText('whsec_abc123')).toBeInTheDocument();
+    expect(within(panel).getByText(/Bí mật chỉ hiện một lần/)).toBeInTheDocument();
+
+    // The next save names the secret the API gave.
+    await user.type(url, '/v2');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(lastCallTo(apiMock, endpoints.updateAutomation).options).toMatchObject({
+      body: {
+        definition: {
+          actions: [{ kind: 'webhook', url: 'https://crm.example.vn/hook/v2', secretId: 'sec1' }],
+        },
+      },
     });
   });
 

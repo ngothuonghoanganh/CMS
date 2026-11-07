@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { WEBHOOK_RECEIVER_URL } from './support/webhook-receiver.js';
 import { urls } from './urls.js';
 
 /**
@@ -40,6 +41,10 @@ export default defineConfig({
         LEAD_LIMIT_PER_CLIENT: '100',
         // Boards 20 and 21 (ADR-031): the fake AI's fixed copy, never a real service.
         AI_PROVIDER: 'fake',
+        // Board 26's webhook step keeps an encrypted secret (ADR-034).
+        AUTOMATION_SECRET_KEY: 'visual-automation-secret-key-0123456789abcdef',
+        // Board 27's webhook goes to the capture's receiver (support/webhook-receiver.ts).
+        WEBHOOK_TEST_RECEIVER: WEBHOOK_RECEIVER_URL,
       },
       url: `${urls.api}/health`,
       reuseExistingServer: false,

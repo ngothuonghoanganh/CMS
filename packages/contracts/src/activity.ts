@@ -29,6 +29,7 @@ export const activityTypes = [
   'automation.enabled',
   'automation.paused',
   'automation.auto_paused',
+  'automation.retried',
 ] as const;
 export const activityTypeSchema = z.enum(activityTypes);
 export type ActivityType = z.infer<typeof activityTypeSchema>;

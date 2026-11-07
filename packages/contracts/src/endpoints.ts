@@ -67,6 +67,12 @@ import {
   updateOpportunityRequestSchema,
 } from './opportunities.js';
 import {
+  automationRunDetailSchema,
+  automationRunListQuerySchema,
+  automationRunListResponseSchema,
+  retryRunsResponseSchema,
+  revealedSecretSchema,
+  rotateWebhookSecretRequestSchema,
   automationActivationSchema,
   automationDetailSchema,
   automationListItemSchema,
@@ -1036,6 +1042,59 @@ export const endpoints = {
     request: null,
     query: null,
     response: automationActivationSchema,
+  }),
+  /** "Đổi bí mật" of a webhook step: the new secret, shown once. */
+  rotateWebhookSecret: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/webhook-secret`,
+    request: rotateWebhookSecretRequestSchema,
+    query: null,
+    response: revealedSecretSchema,
+  }),
+  /** Board 27, newest first. */
+  listAutomationRuns: endpoint({
+    method: 'GET',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/runs`,
+    request: null,
+    query: automationRunListQuerySchema,
+    response: automationRunListResponseSchema,
+  }),
+  getAutomationRun: endpoint({
+    method: 'GET',
+    path: (siteId: string, automationId: string, runId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/runs/${e(runId)}`,
+    request: null,
+    query: null,
+    response: automationRunDetailSchema,
+  }),
+  /** `automations.manage`: "Thử lại bước này"; the steps done before do not run again. */
+  retryAutomationRun: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string, runId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/runs/${e(runId)}/retry`,
+    request: null,
+    query: null,
+    response: automationRunDetailSchema,
+  }),
+  /** `automations.manage`: "Bỏ qua lượt này". */
+  skipAutomationRun: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string, runId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/runs/${e(runId)}/skip`,
+    request: null,
+    query: null,
+    response: automationRunDetailSchema,
+  }),
+  /** `automations.manage`: "Thử lại N lượt lỗi" of the last 30 days. */
+  retryFailedAutomationRuns: endpoint({
+    method: 'POST',
+    path: (siteId: string, automationId: string) =>
+      `/sites/${e(siteId)}/automations/${e(automationId)}/runs/retry-failed`,
+    request: null,
+    query: null,
+    response: retryRunsResponseSchema,
   }),
   /** "Nhân bản": a draft copy. */
   duplicateAutomation: endpoint({

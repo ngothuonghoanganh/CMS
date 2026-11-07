@@ -140,6 +140,16 @@ const baseEnvSchema = z.object({
    * E2E and is refused in production, `none` turns AI off.
    */
   AI_PROVIDER: z.enum(['none', 'openai-compatible', 'fake']).default('none'),
+  /**
+   * Encrypts the secrets webhook steps sign with (ADR-034). Without it, a webhook step cannot be
+   * saved; changing it leaves every saved secret unreadable, and each step needs "Đổi bí mật".
+   */
+  AUTOMATION_SECRET_KEY: secret.optional(),
+  /**
+   * E2E only: webhooks still pass the address rules (ADR-034) but go to this local receiver over
+   * plain HTTP, with the address they were meant for in `X-PLP-Target`. Refused in production.
+   */
+  WEBHOOK_TEST_RECEIVER: z.url({ protocol: /^https?$/ }).optional(),
   /** E.g. "http://localhost:11434/v1"; required by `openai-compatible`. */
   AI_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
   /** Sent as `Authorization: Bearer …`; never logged. Local servers accept any value. */
@@ -203,6 +213,11 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   }
   checkWorkspaceAddresses(result.data);
   checkAi(result.data);
+  if (result.data.NODE_ENV === 'production' && result.data.WEBHOOK_TEST_RECEIVER !== undefined) {
+    throw new Error(
+      'Invalid API environment:\nWEBHOOK_TEST_RECEIVER sends webhooks to a test receiver; production calls the real addresses',
+    );
+  }
   return result.data;
 }
 

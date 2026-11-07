@@ -20,6 +20,7 @@ export function testEnvInput(
     PREVIEW_SECRET: 'test-preview-secret-0123456789abcdef',
     LOGIN_ATTEMPT_SECRET: TEST_LOGIN_ATTEMPT_SECRET,
     RENDERER_API_SECRET: TEST_RENDERER_API_SECRET,
+    AUTOMATION_SECRET_KEY: 'test-automation-secret-key-0123456789abcdef',
     // Integration tests record emails instead of sending them (test/app.ts); the Mailpit test
     // sends real ones here.
     SMTP_URL: process.env['SMTP_URL'] ?? 'smtp://localhost:1125',

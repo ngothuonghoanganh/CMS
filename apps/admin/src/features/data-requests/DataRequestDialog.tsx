@@ -56,7 +56,7 @@ function confirmation(request: DataRequestDetail): string | null {
   const count = request.leads === null ? '0' : cappedCountLabel(request.leads);
   switch (request.type) {
     case 'delete':
-      return `Xóa ${count} lead có số điện thoại hoặc email này trong site, kèm bằng chứng đồng ý. Không hoàn tác được. Thông báo đã gửi qua email trước đó không bị xóa theo. Yêu cầu chỉ giữ lại thông tin liên hệ đã che.`;
+      return `Xóa ${count} lead có số điện thoại hoặc email này trong site, kèm bằng chứng đồng ý. Không hoàn tác được. Thông báo đã gửi qua email và dữ liệu đã gửi qua webhook trước đó không bị xóa theo. Yêu cầu chỉ giữ lại thông tin liên hệ đã che.`;
     case 'withdraw_marketing':
       return `Ghi nhận việc rút đồng ý nhận ưu đãi trên các lead của người này (${count} lead). Lead vẫn được giữ; đừng gửi ưu đãi cho người này nữa.`;
     case 'access':

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import {
   AUTOMATION_FAILURES_BEFORE_PAUSE,
   AUTOMATION_RUNS_PER_MONTH,
@@ -7,6 +8,8 @@ import {
   SITE_CONTACT_TAGS_MAX,
   vnMonthOf,
 } from '@plp/contracts';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { type Tx, TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
@@ -41,6 +44,8 @@ import {
   retryAt,
   type RunFacts,
 } from './domain/automation-rules.js';
+import { decryptSecret } from './webhook-secrets.js';
+import { WebhookError, WebhookSender } from './webhook-sender.js';
 
 /** How long a run holds its lock; past it, another instance takes the run again (ADR-034). */
 export const RUN_LOCK_MS = 2 * 60_000;
@@ -56,6 +61,8 @@ export class StepFailure extends Error {
     readonly code: string,
     readonly retryable: boolean,
     options?: { cause: unknown },
+    /** The webhook's answer when it gave one. */
+    readonly httpStatus: number | null = null,
   ) {
     super(`Automation step failed: ${code}`, options);
     this.name = 'StepFailure';
@@ -100,6 +107,8 @@ export class AutomationRunner {
     private readonly links: WorkspaceLinks,
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
+    private readonly webhooks: WebhookSender,
+    @InjectEnv() private readonly env: Env,
   ) {}
 
   /** Every run of the workspace due now, `RUNS_AT_ONCE` at a time. */
@@ -192,7 +201,7 @@ export class AutomationRunner {
           status: 'failed',
           attempts,
           at: new Date(),
-          error: { code: failure.code, httpStatus: null },
+          error: { code: failure.code, httpStatus: failure.httpStatus },
           summary: null,
         };
         const next = failure.retryable ? retryAt(attempts, new Date()) : null;
@@ -379,7 +388,95 @@ export class AutomationRunner {
       }
       case 'email':
         return this.email(ref, run, automation, context, action, index);
+      case 'webhook':
+        return this.webhook(ref, run, automation, context, action, index);
     }
+  }
+
+  /**
+   * Sends the lead to another system (ADR-034), signed with the step's secret:
+   * `X-PLP-Signature: t=<seconds>,v1=<HMAC-SHA256 of "t.body">`. `Idempotency-Key` is the same for
+   * each try of the step, so the receiver can drop a repeat.
+   */
+  private async webhook(
+    ref: WorkspaceRef,
+    run: AutomationRunRecord,
+    automation: AutomationRecord,
+    context: RunContext,
+    action: Extract<AutomationAction, { kind: 'webhook' }>,
+    index: number,
+  ): Promise<string> {
+    const stored = automation.webhookSecrets.find((item) => item.id === action.secretId);
+    if (action.url === '' || stored === undefined) {
+      throw new StepFailure('not_configured', false);
+    }
+    const secretKey = this.env.AUTOMATION_SECRET_KEY;
+    if (secretKey === undefined) {
+      throw new StepFailure('secret_unavailable', false);
+    }
+    let secret: string;
+    try {
+      secret = decryptSecret(secretKey, stored);
+    } catch (error) {
+      // The key changed since the secret was saved: "Đổi bí mật" gives the step a new one.
+      throw new StepFailure('secret_unavailable', false, { cause: error });
+    }
+    const siteId = run.siteId;
+    const lead =
+      context.lead ?? (await this.leads.latestOfContact(ref, siteId, context.contact._id));
+    const [siteName, pageTitle] = await Promise.all([
+      this.sites.findPublicName(ref, siteId),
+      lead === null ? Promise.resolve(null) : this.pages.findPublicTitle(ref, lead.pageId),
+    ]);
+    const body = JSON.stringify({
+      version: 1,
+      event: run.event.kind,
+      automation: { id: automation._id.toHexString(), name: automation.name },
+      site: { id: siteId.toHexString(), name: siteName },
+      lead: {
+        id: lead?._id.toHexString() ?? null,
+        contactId: context.contact._id.toHexString(),
+        name: lead?.fields.name ?? context.contact.name,
+        phone: lead?.fields.phone ?? null,
+        email: lead?.fields.email ?? null,
+        message: lead?.fields.message ?? null,
+        page: lead === null ? null : { id: lead.pageId.toHexString(), title: pageTitle },
+        source: lead?.source ?? null,
+        createdAt: lead?.createdAt.toISOString() ?? null,
+        consent:
+          lead === null
+            ? null
+            : {
+                marketing: lead.consent.marketing && lead.consent.marketingWithdrawnAt === null,
+                at: lead.consent.at.toISOString(),
+              },
+      },
+      stage: context.opportunity?.stage ?? null,
+    });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+    try {
+      await this.webhooks.send({
+        url: action.url,
+        headers: {
+          'x-plp-event': run.event.kind,
+          'x-plp-signature': `t=${timestamp},v1=${signature}`,
+          'idempotency-key': `${run._id.toHexString()}:${index}`,
+        },
+        body,
+      });
+    } catch (error) {
+      if (error instanceof WebhookError) {
+        throw new StepFailure(
+          `webhook_${error.code}`,
+          error.retryable,
+          { cause: error },
+          error.httpStatus,
+        );
+      }
+      throw error;
+    }
+    return `gửi lead tới ${new URL(action.url).host}`;
   }
 
   private async email(

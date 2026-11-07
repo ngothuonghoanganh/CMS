@@ -170,6 +170,13 @@ function testAction(
       return action.tag === ''
         ? skip('chưa nhập nhãn')
         : { outcome: 'pass', text: `Sẽ gắn nhãn “${action.tag}”`, assigned: null };
+    case 'webhook': {
+      if (action.url === '') {
+        return skip('chưa nhập địa chỉ webhook');
+      }
+      const host = URL.canParse(action.url) ? new URL(action.url).host : action.url;
+      return { outcome: 'pass', text: `Sẽ gửi dữ liệu lead tới ${host}`, assigned: null };
+    }
     case 'email': {
       const recipients =
         action.to === 'owner'
