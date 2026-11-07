@@ -902,6 +902,32 @@ const ROWS: Row[] = [
       }),
   },
   {
+    action: 'Xem lịch sử chạy',
+    permission: 'automations.view',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) =>
+      client.get(`/sites/${site.id}/automations/64b0000000000000000000a1/runs`),
+  },
+  {
+    action: 'Thử lại lượt chạy lỗi',
+    permission: 'automations.manage',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/automations/64b0000000000000000000a1/runs/retry-failed`),
+  },
+  {
+    action: 'Đổi bí mật webhook',
+    permission: 'automations.manage',
+    scope: 'site',
+    status: 404,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/automations/64b0000000000000000000a1/webhook-secret`, {
+        secretId: 'abc',
+      }),
+  },
+  {
     action: 'Xem nơi nhận lead',
     permission: 'leads.view',
     scope: 'site',

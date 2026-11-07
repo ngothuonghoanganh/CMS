@@ -12,6 +12,7 @@ import {
 } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
+import type { StoredWebhookSecret } from './webhook-secrets.js';
 
 export const AUTOMATION_MODEL = 'Automation';
 export const AUTOMATION_RUN_MODEL = 'AutomationRun';
@@ -38,6 +39,8 @@ export interface AutomationRecord {
   /** The trigger's kind again, for the events' index. */
   triggerKind: AutomationTriggerKind;
   recipe: AutomationRecipe | null;
+  /** The encrypted secrets of the webhook steps, by `secretId` (ADR-034). */
+  webhookSecrets: StoredWebhookSecret[];
   /** The next member of an "assign" rotation, counted up by each run that assigns. */
   rotation: number;
   consecutiveFailures: number;
@@ -60,6 +63,20 @@ const automationSchema = new Schema<AutomationRecord>(
     triggerKind: { type: String, required: true },
     recipe: { type: String, default: null },
     rotation: { type: Number, required: true, min: 0 },
+    webhookSecrets: {
+      type: [
+        new Schema<StoredWebhookSecret>(
+          {
+            id: { type: String, required: true },
+            ciphertext: { type: String, required: true },
+            iv: { type: String, required: true },
+            tag: { type: String, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     consecutiveFailures: { type: Number, required: true, min: 0 },
     skippedForQuota: {
       month: { type: String, default: '' },

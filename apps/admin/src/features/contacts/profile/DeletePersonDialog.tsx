@@ -97,7 +97,9 @@ export function DeletePersonDialog({
         <>
           <ul className={styles.consequences}>
             <li>{deletionSummary(preview.data)}.</li>
-            <li>Thông báo đã gửi qua email trước đó không bị xóa theo.</li>
+            <li>
+              Thông báo đã gửi qua email và dữ liệu đã gửi qua webhook trước đó không bị xóa theo.
+            </li>
             <li>Số liệu tổng ở màn Hiệu quả giảm {preview.data.leads} lead.</li>
           </ul>
           <Field label="Gắn với yêu cầu dữ liệu">

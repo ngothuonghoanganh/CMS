@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { AutomationRunStatus } from '@plp/contracts';
 import type { Model } from 'mongoose';
-import type { ObjectId } from '../../shared/persistence/object-id.js';
+import type { CursorPosition } from '../../shared/cursor.js';
+import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import {
   WorkspaceDatabases,
@@ -205,6 +206,118 @@ export class AutomationRunsRepository {
         ];
       }),
     );
+  }
+
+  /** Board 27, newest first, `limit` after the cursor (keyset on `automation_runs_automation`). */
+  list(
+    scope: WorkspaceScope,
+    automationId: ObjectId,
+    statuses: readonly AutomationRunStatus[] | null,
+    after: CursorPosition | null,
+    limit: number,
+  ): Promise<AutomationRunRecord[]> {
+    return this.runs(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        automationId,
+        ...(statuses === null ? {} : { status: { $in: [...statuses] } }),
+        ...(after === null
+          ? {}
+          : {
+              $or: [
+                { createdAt: { $lt: after.createdAt } },
+                { createdAt: after.createdAt, _id: { $lt: toObjectId(after.id) } },
+              ],
+            }),
+      })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean<AutomationRunRecord[]>()
+      .exec();
+  }
+
+  countFailed(scope: WorkspaceScope, automationId: ObjectId, since: Date): Promise<number> {
+    return this.runs(scope)
+      .countDocuments({
+        workspaceId: scope.workspaceId,
+        automationId,
+        status: 'failed',
+        createdAt: { $gte: since },
+      })
+      .exec();
+  }
+
+  findOf(
+    scope: WorkspaceScope,
+    automationId: ObjectId,
+    runId: ObjectId,
+  ): Promise<AutomationRunRecord | null> {
+    return this.runs(scope)
+      .findOne({ _id: runId, workspaceId: scope.workspaceId, automationId })
+      .lean<AutomationRunRecord>()
+      .exec();
+  }
+
+  /** The failed runs since `since`, oldest first, for "Thử lại N lượt lỗi". */
+  failedSince(
+    scope: WorkspaceScope,
+    automationId: ObjectId,
+    since: Date,
+    limit: number,
+    tx: Tx,
+  ): Promise<AutomationRunRecord[]> {
+    return this.runs(scope)
+      .find({
+        workspaceId: scope.workspaceId,
+        automationId,
+        status: 'failed',
+        createdAt: { $gte: since },
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit)
+      .session(tx)
+      .lean<AutomationRunRecord[]>()
+      .exec();
+  }
+
+  /**
+   * A failed run back in the queue at `at`, its failed step tried again from 0 attempts. Still
+   * counted in its month: a retry takes nothing more from the quota (ADR-034).
+   */
+  async requeue(
+    scope: WorkspaceScope,
+    run: Pick<AutomationRunRecord, '_id' | 'steps'>,
+    at: Date,
+    tx: Tx,
+  ): Promise<boolean> {
+    const steps = run.steps.map((step) =>
+      step.status === 'failed'
+        ? { status: 'pending' as const, attempts: 0, at: null, error: null, summary: null }
+        : step,
+    );
+    const result = await this.runs(scope)
+      .updateOne(
+        { _id: run._id, workspaceId: scope.workspaceId, status: 'failed' },
+        { $set: { status: 'queued', steps, nextAt: at, reason: null, finishedAt: null } },
+      )
+      .session(tx)
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** "Bỏ qua lượt này": a failed run, or one waiting for its retry, ends as skipped. */
+  async skip(scope: WorkspaceScope, runId: ObjectId, at: Date): Promise<boolean> {
+    const result = await this.runs(scope)
+      .updateOne(
+        {
+          _id: runId,
+          workspaceId: scope.workspaceId,
+          status: { $in: ['failed', 'waiting_retry'] },
+        },
+        { $set: { status: 'skipped', reason: 'by_member', finishedAt: at }, $unset: { nextAt: 1 } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
   }
 
   private runs(ref: WorkspaceRef): Model<AutomationRunRecord> {

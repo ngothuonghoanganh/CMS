@@ -1,5 +1,12 @@
-import { Body, Controller, Get, Header, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import {
+  type AutomationRunDetail,
+  type AutomationRunListResponse,
+  automationRunListQuerySchema,
+  type RetryRunsResponse,
+  type RevealedSecret,
+  type RotateWebhookSecretRequest,
+  rotateWebhookSecretRequestSchema,
   type AutomationActivation,
   type AutomationDetail,
   type AutomationListItem,
@@ -13,6 +20,7 @@ import {
   type TestAutomationResponse,
   updateAutomationRequestSchema,
 } from '@plp/contracts';
+import type { z } from 'zod';
 import { ZodPipe } from '../../shared/zod.pipe.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -101,5 +109,72 @@ export class AutomationsController {
     @Param('automationId') automationId: string,
   ): Promise<AutomationActivation> {
     return this.automations.activation(user, siteId, automationId);
+  }
+
+  @Post('sites/:siteId/automations/:automationId/webhook-secret')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  rotateSecret(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('automationId') automationId: string,
+    @Body(new ZodPipe(rotateWebhookSecretRequestSchema)) body: RotateWebhookSecretRequest,
+  ): Promise<RevealedSecret> {
+    return this.automations.rotateSecret(user, siteId, automationId, body);
+  }
+
+  @Get('sites/:siteId/automations/:automationId/runs')
+  @Header('Cache-Control', 'no-store')
+  runs(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('automationId') automationId: string,
+    @Query(new ZodPipe(automationRunListQuerySchema))
+    query: z.output<typeof automationRunListQuerySchema>,
+  ): Promise<AutomationRunListResponse> {
+    return this.automations.listRuns(user, siteId, automationId, query.status, query.cursor);
+  }
+
+  @Post('sites/:siteId/automations/:automationId/runs/retry-failed')
+  @HttpCode(200)
+  retryFailed(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('automationId') automationId: string,
+  ): Promise<RetryRunsResponse> {
+    return this.automations.retryFailed(user, siteId, automationId);
+  }
+
+  @Get('sites/:siteId/automations/:automationId/runs/:runId')
+  @Header('Cache-Control', 'no-store')
+  run(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('automationId') automationId: string,
+    @Param('runId') runId: string,
+  ): Promise<AutomationRunDetail> {
+    return this.automations.run(user, siteId, automationId, runId);
+  }
+
+  @Post('sites/:siteId/automations/:automationId/runs/:runId/retry')
+  @HttpCode(200)
+  retryRun(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('automationId') automationId: string,
+    @Param('runId') runId: string,
+  ): Promise<AutomationRunDetail> {
+    return this.automations.retryRun(user, siteId, automationId, runId);
+  }
+
+  @Post('sites/:siteId/automations/:automationId/runs/:runId/skip')
+  @HttpCode(200)
+  skipRun(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('automationId') automationId: string,
+    @Param('runId') runId: string,
+  ): Promise<AutomationRunDetail> {
+    return this.automations.skipRun(user, siteId, automationId, runId);
   }
 }

@@ -77,6 +77,31 @@ export const automationConditionSchema = z.discriminatedUnion('kind', [
 ]);
 export type AutomationCondition = z.infer<typeof automationConditionSchema>;
 
+/**
+ * The URL a webhook step calls (ADR-034): HTTPS on port 443, at most 500 characters. Addresses
+ * inside private networks are refused when the step runs, after the name is resolved.
+ */
+export const WEBHOOK_URL_MAX = 500;
+export const webhookUrlSchema = z
+  .string()
+  .trim()
+  .max(WEBHOOK_URL_MAX, `Địa chỉ tối đa ${WEBHOOK_URL_MAX} ký tự`)
+  .refine((value) => {
+    if (value === '') {
+      return true;
+    }
+    if (!URL.canParse(value)) {
+      return false;
+    }
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      (url.port === '' || url.port === '443') &&
+      url.username === '' &&
+      url.password === ''
+    );
+  }, 'Nhập địa chỉ https:// trên cổng 443');
+
 /** Who a task or an email goes to: the profile's owner, or named members. */
 export const automationActionSchema = z.discriminatedUnion('kind', [
   /** One member, or a rotation between up to 10. */
@@ -100,6 +125,15 @@ export const automationActionSchema = z.discriminatedUnion('kind', [
     to: z.union([z.literal('owner'), z.array(idSchema).max(AUTOMATION_EMAIL_RECIPIENTS_MAX)]),
     subject: z.string().trim().max(AUTOMATION_EMAIL_SUBJECT_MAX),
   }),
+  /**
+   * "Gọi webhook": POST of the lead to another system, signed with the step's secret. `secretId`
+   * names the secret the API keeps encrypted; empty until the step is first saved.
+   */
+  z.strictObject({
+    kind: z.literal('webhook'),
+    url: webhookUrlSchema,
+    secretId: z.string().max(40),
+  }),
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
 export type AutomationActionKind = AutomationAction['kind'];
@@ -119,8 +153,13 @@ export const automationDefinitionSchema = z.object({
 });
 export type AutomationDefinition = z.infer<typeof automationDefinitionSchema>;
 
-/** "Bắt đầu từ mẫu" of board 25; the webhook recipe comes with webhooks (A3). */
-export const automationRecipes = ['assign_new_leads', 'remind_uncalled', 'notify_won'] as const;
+/** "Bắt đầu từ mẫu" of board 25. */
+export const automationRecipes = [
+  'assign_new_leads',
+  'remind_uncalled',
+  'notify_won',
+  'send_webhook',
+] as const;
 export const automationRecipeSchema = z.enum(automationRecipes);
 export type AutomationRecipe = z.infer<typeof automationRecipeSchema>;
 
@@ -139,6 +178,10 @@ export const automationRecipeLabels: Record<
   notify_won: {
     name: 'Báo tin khi chốt được khách',
     description: 'Email nội bộ cho quản lý khi cơ hội chuyển sang Thắng.',
+  },
+  send_webhook: {
+    name: 'Gửi lead sang hệ thống khác',
+    description: 'Gọi webhook với dữ liệu lead, thử lại khi lỗi.',
   },
 };
 
@@ -224,6 +267,11 @@ export const automationDetailSchema = automationListItemSchema.extend({
   definition: automationDefinitionSchema,
   updatedAt: isoDateTimeSchema,
   options: automationOptionsSchema,
+  /**
+   * Secrets created by this save, shown this once: the receiving system checks
+   * `X-PLP-Signature` with them. Never returned again.
+   */
+  revealedSecrets: z.array(z.object({ secretId: z.string(), secret: z.string() })),
 });
 export type AutomationDetail = z.infer<typeof automationDetailSchema>;
 
@@ -275,3 +323,84 @@ export const automationActivationSchema = z.object({
   canIncludeRecent: z.boolean(),
 });
 export type AutomationActivation = z.infer<typeof automationActivationSchema>;
+
+/** "Đổi bí mật": the step's new secret, shown once; the old one stops signing at once. */
+export const rotateWebhookSecretRequestSchema = z.strictObject({
+  secretId: z.string().min(1).max(40),
+});
+export type RotateWebhookSecretRequest = z.infer<typeof rotateWebhookSecretRequestSchema>;
+export const revealedSecretSchema = z.object({ secretId: z.string(), secret: z.string() });
+export type RevealedSecret = z.infer<typeof revealedSecretSchema>;
+
+/** Board 27's filters. `waiting` is a run that waits for a retry. */
+export const automationRunFilters = ['all', 'failed', 'waiting', 'succeeded'] as const;
+export const automationRunFilterSchema = z.enum(automationRunFilters);
+export type AutomationRunFilter = z.infer<typeof automationRunFilterSchema>;
+
+export const AUTOMATION_RUNS_PAGE_SIZE = 30;
+/** "Thử lại N lượt lỗi" takes at most this many. */
+export const AUTOMATION_RETRY_MAX = 100;
+
+export const automationRunListQuerySchema = z.strictObject({
+  status: automationRunFilterSchema.default('all'),
+  cursor: z.string().min(1).max(200).optional(),
+});
+export type AutomationRunListQuery = z.input<typeof automationRunListQuerySchema>;
+
+export const automationTriggerKindSchema = z.enum([
+  'lead_created',
+  'lead_still_new',
+  'opportunity_stage_changed',
+  'task_overdue',
+]);
+
+export const automationRunItemSchema = z.object({
+  id: idSchema,
+  status: automationRunStatusSchema,
+  trigger: automationTriggerKindSchema,
+  /** The profile's name now; null once it was deleted (runs keep no personal data). */
+  contactName: z.string().nullable(),
+  createdAt: isoDateTimeSchema,
+});
+export type AutomationRunItem = z.infer<typeof automationRunItemSchema>;
+
+export const automationRunListResponseSchema = z.object({
+  items: z.array(automationRunItemSchema),
+  nextCursor: z.string().nullable(),
+  /** Failed runs of the last 30 days: "Thất bại · 3". */
+  failed: z.number().int().nonnegative(),
+  /** Failed runs of the last 24 hours, for the banner. */
+  failedLastDay: z.number().int().nonnegative(),
+  last30Days: z.object({
+    runs: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+  }),
+});
+export type AutomationRunListResponse = z.infer<typeof automationRunListResponseSchema>;
+
+/** One step of a run as board 27 shows it. */
+export const automationRunStepSchema = z.object({
+  action: automationActionSchema,
+  status: z.enum(['pending', 'succeeded', 'failed']),
+  attempts: z.number().int().nonnegative(),
+  at: isoDateTimeSchema.nullable(),
+  error: z.object({ code: z.string(), httpStatus: z.number().int().nullable() }).nullable(),
+  summary: z.string().nullable(),
+});
+export type AutomationRunStep = z.infer<typeof automationRunStepSchema>;
+
+export const automationRunDetailSchema = automationRunItemSchema.extend({
+  /** The key that keeps an event from running the automation twice. */
+  eventKey: z.string(),
+  version: z.number().int().positive(),
+  definition: automationDefinitionSchema,
+  reason: z.string().nullable(),
+  steps: z.array(automationRunStepSchema),
+  nextAt: isoDateTimeSchema.nullable(),
+  finishedAt: isoDateTimeSchema.nullable(),
+});
+export type AutomationRunDetail = z.infer<typeof automationRunDetailSchema>;
+
+/** "Thử lại N lượt lỗi": how many runs went back to the queue. */
+export const retryRunsResponseSchema = z.object({ retried: z.number().int().nonnegative() });
+export type RetryRunsResponse = z.infer<typeof retryRunsResponseSchema>;

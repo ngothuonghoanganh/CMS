@@ -143,6 +143,8 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
       return { text: 'tạm dừng một automation', tone: 'muted' };
     case 'automation.auto_paused':
       return { text: 'tạm dừng một automation sau 20 lượt lỗi liên tiếp', tone: 'warning' };
+    case 'automation.retried':
+      return { text: 'thử lại lượt chạy lỗi của một automation', tone: 'muted' };
   }
 }
 

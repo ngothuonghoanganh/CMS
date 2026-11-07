@@ -470,7 +470,9 @@ describe('LeadInbox', () => {
       name: 'Xóa dữ liệu của Nguyễn Thu Hà?',
     });
     expect(dialog).toHaveTextContent(/Xóa 2 lead có cùng số điện thoại hoặc email/);
-    expect(dialog).toHaveTextContent(/email trước đó không bị xóa/);
+    expect(dialog).toHaveTextContent(
+      /Thông báo đã gửi qua email và dữ liệu đã gửi qua webhook trước đó không bị xóa/,
+    );
     await user.click(within(dialog).getByRole('button', { name: 'Xóa dữ liệu' }));
 
     await vi.waitFor(() => {

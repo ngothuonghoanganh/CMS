@@ -9,6 +9,7 @@ import {
 } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { AUTOMATION_COLLECTION, type AutomationRecord } from './automation.schema.js';
+import type { StoredWebhookSecret } from './webhook-secrets.js';
 
 /** An automation as a recipe or "Nhân bản" creates it: always a draft. */
 export interface NewAutomation {
@@ -16,6 +17,8 @@ export interface NewAutomation {
   definition: AutomationDefinition;
   recipe: AutomationRecipe | null;
   at: Date;
+  /** "Nhân bản" copies the source's secrets with its steps. */
+  webhookSecrets?: StoredWebhookSecret[];
 }
 
 /** The automations of a site (ADR-034); every read starts from the site. */
@@ -39,6 +42,7 @@ export class AutomationsRepository {
       triggerKind: input.definition.trigger.kind,
       recipe: input.recipe,
       rotation: 0,
+      webhookSecrets: input.webhookSecrets ?? [],
       consecutiveFailures: 0,
       skippedForQuota: { month: '', count: 0 },
       createdBy: scope.userId,
@@ -121,7 +125,11 @@ export class AutomationsRepository {
     scope: WorkspaceScope,
     siteId: ObjectId,
     id: ObjectId,
-    changes: { name?: string | undefined; definition?: AutomationDefinition | undefined },
+    changes: {
+      name?: string | undefined;
+      definition?: AutomationDefinition | undefined;
+      webhookSecrets?: StoredWebhookSecret[] | undefined;
+    },
     at: Date,
   ): Promise<AutomationRecord | null> {
     return this.automations(scope)
@@ -133,6 +141,9 @@ export class AutomationsRepository {
             ...(changes.definition === undefined
               ? {}
               : { definition: changes.definition, triggerKind: changes.definition.trigger.kind }),
+            ...(changes.webhookSecrets === undefined
+              ? {}
+              : { webhookSecrets: changes.webhookSecrets }),
             updatedAt: at,
           },
           $inc: { version: 1 },

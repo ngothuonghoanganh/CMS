@@ -182,6 +182,11 @@ export function automationHref(siteId: string, automationId: string): string {
   return `${automationsHref(siteId)}/${encodeURIComponent(automationId)}`;
 }
 
+/** Board 27 "Lịch sử chạy". */
+export function automationRunsHref(siteId: string, automationId: string): string {
+  return `${automationHref(siteId, automationId)}/runs`;
+}
+
 /** The pipeline (board 24, ADR-033), under "Khách hàng" in the sidebar. */
 export function pipelineHref(siteId: string): string {
   return `${contactsHref(siteId)}/pipeline`;

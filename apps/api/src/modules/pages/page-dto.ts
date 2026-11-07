@@ -55,6 +55,7 @@ export function toPointerEvent(record: ActivityRecord, by: UserRef): PointerEven
     case 'automation.enabled':
     case 'automation.paused':
     case 'automation.auto_paused':
+    case 'automation.retried':
       throw new Error(
         `Activity ${record._id.toHexString()} (${record.type}) is not a pointer event`,
       );

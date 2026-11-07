@@ -666,8 +666,8 @@ export function LeadDetailPanel({
           }}
         >
           <p className={styles.confirmNote}>
-            Thông báo đã gửi qua email trước đó không bị xóa theo. Việc xóa được ghi vào nhật ký
-            hoạt động, không kèm dữ liệu cá nhân.
+            Thông báo đã gửi qua email và dữ liệu đã gửi qua webhook trước đó không bị xóa theo.
+            Việc xóa được ghi vào nhật ký hoạt động, không kèm dữ liệu cá nhân.
           </p>
         </ConfirmDialog>
       ) : null}

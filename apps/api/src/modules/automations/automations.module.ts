@@ -13,6 +13,7 @@ import { AutomationScheduler } from './automation-scheduler.service.js';
 import { AutomationsController } from './automations.controller.js';
 import { AutomationsCoreModule } from './automations-core.module.js';
 import { AutomationsService } from './automations.service.js';
+import { WebhookSender } from './webhook-sender.js';
 
 /** The automations screen and the queue that runs them on every API instance (ADR-034). */
 @Module({
@@ -29,7 +30,7 @@ import { AutomationsService } from './automations.service.js';
     WorkspacesModule,
   ],
   controllers: [AutomationsController],
-  providers: [AutomationsService, AutomationRunner, AutomationScheduler],
+  providers: [AutomationsService, AutomationRunner, AutomationScheduler, WebhookSender],
   exports: [AutomationScheduler],
 })
 export class AutomationsModule {}

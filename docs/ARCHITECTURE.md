@@ -2855,6 +2855,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Chỉ có với trigger "Có lead mới".
   - Người nhận, người được giao và trang chọn bằng danh sách ô tick thay vì ô chọn một giá trị, vì một bước nhận nhiều người hoặc nhiều trang.
   - Tab "Lịch sử chạy" đến ở A3.
+- **Amended 2026-11-07 (A3, cách làm):**
+  - **Bí mật webhook:** bước mới gửi `secretId` rỗng; lần lưu đầu tạo bí mật, mã hóa nó (AES-256-GCM, khóa là SHA-256 của `AUTOMATION_SECRET_KEY`, `secretId` làm AAD để bí mật không chuyển được sang bước khác) và trả nó một lần trong `revealedSecrets`.
+    - Bước chỉ được nêu bí mật mà automation đã cấp (422 nếu không). Bí mật không còn bước nào dùng thì bị bỏ khi lưu. "Nhân bản" chép bí mật cùng các bước.
+    - "Đổi bí mật" được dùng cả khi automation đang bật; bí mật cũ ngừng ký ngay, kể cả cho lượt đang chờ thử lại.
+    - Máy chủ không có `AUTOMATION_SECRET_KEY` thì không lưu được bước webhook (422 `webhook_unavailable`); lượt chạy gặp bí mật không đọc được thì lỗi `secret_unavailable`, không thử lại.
+  - **Body** có thêm `lead.contactId`, `page { id, title }` thay cho tên trang, và `stage` của cơ hội. Số điện thoại ở dạng E.164. Lượt không có lead (cơ hội, công việc) gửi lead mới nhất của hồ sơ.
+  - **Mã lỗi của bước:** `webhook_http_error` kèm mã HTTP, `webhook_blocked_address`, `webhook_dns_failed`, `webhook_timeout`, `webhook_network`, `webhook_invalid_url`. Mọi địa chỉ phân giải ra đều phải hợp lệ; kết nối dùng địa chỉ đầu tiên.
+  - **Thử lại và bỏ qua (màn 27):**
+    - "Thử lại bước này" đưa lượt `failed` về `queued` ở bước lỗi, số lần thử của bước đó về 0. Bước đã xong không chạy lại, lượt không tính thêm vào hạn mức.
+    - "Thử lại N lượt lỗi" lấy lượt lỗi trong 30 ngày, tối đa 100, trong một transaction cùng activity `automation.retried`.
+    - Thử lại cần automation đang bật (409 nếu không), vì lượt của automation tạm dừng bị dừng ngay. Banner "tự tạm dừng" của màn 27 nên bật lại rồi mới thử lại.
+    - "Bỏ qua lượt này" kết thúc lượt `failed` hoặc `waiting_retry` thành `skipped` (`by_member`).
+  - **Danh sách:** mới nhất trước, 30 lượt mỗi trang, keyset trên index `automation_runs_automation`. Bộ lọc "Chờ thử lại" gồm mọi lượt chưa xong. Tên khách đọc từ hồ sơ hiện tại; lượt chạy chỉ giữ id.
 
 ---
 
@@ -2981,7 +2994,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | K3  | Pipeline: cơ hội, 6 giai đoạn, kanban và danh sách, thắng và thua, trạng thái lead là giai đoạn                                                 | 24, 10 | Xong       |
 | A1  | Hàng đợi trong MongoDB (`job_wakeups`, change stream), automation, trigger, điều kiện, hành động nội bộ, hạn mức, tự tạm dừng, quyền, danh sách | 25, 16 | Xong       |
 | A2  | Thiết lập automation: các bước, cấu hình, chạy thử, bật                                                                                         | 26     | Xong       |
-| A3  | Webhook (chặn SSRF, ký HMAC, bí mật mã hóa), lịch sử chạy, thử lại và bỏ qua                                                                    | 27     | Chưa làm   |
+| A3  | Webhook (chặn SSRF, ký HMAC, bí mật mã hóa), lịch sử chạy, thử lại và bỏ qua                                                                    | 27     | Xong       |
 
 **Hoàn thành Phase 3** khi một E2E chạy xanh toàn bộ chuỗi:
 

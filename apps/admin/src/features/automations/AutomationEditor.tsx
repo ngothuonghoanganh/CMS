@@ -34,7 +34,7 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatCount, formatRelativeTime } from '../../lib/format';
-import { automationsHref } from '../shell/navigation';
+import { automationHref, automationRunsHref, automationsHref } from '../shell/navigation';
 import { cx } from '../shell/cx';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { useNow } from '../shell/use-now';
@@ -108,6 +108,8 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
   const [saving, setSaving] = useState<Saving>('saved');
   const [savedAt, setSavedAt] = useState(Date.parse(initial.updatedAt));
   const [activateOpen, setActivateOpen] = useState(false);
+  // A webhook step's secret, shown once by the save that created it or by "Đổi bí mật".
+  const [revealed, setRevealed] = useState<ReadonlyMap<string, string>>(new Map());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // An enabled automation's steps wait for "Tạm dừng"; its name can change any time.
   const stepsLocked = detail.state === 'on';
@@ -119,8 +121,19 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
     onMutate: () => {
       setSaving('saving');
     },
-    onSuccess: (saved) => {
+    onSuccess: (saved, body) => {
       setDetail(saved);
+      if (saved.revealedSecrets.length > 0) {
+        setRevealed(
+          (current) =>
+            new Map([
+              ...current,
+              ...saved.revealedSecrets.map((item) => [item.secretId, item.secret] as const),
+            ]),
+        );
+        // A webhook step sent without a secret takes the one the API gave it.
+        setDefinition((current) => adoptSecrets(current, body.definition, saved.definition));
+      }
       setSaving((current) => (current === 'pending' ? current : 'saved'));
       setSavedAt(Date.now());
     },
@@ -171,6 +184,22 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
     onError: (error) => {
       reportUnexpected('Testing an automation failed', error);
       toast({ tone: 'danger', title: 'Chưa chạy thử được', description: problemMessage(error) });
+    },
+  });
+
+  const rotate = useMutation({
+    mutationFn: (secretId: string) =>
+      api(endpoints.rotateWebhookSecret, [site.id, detail.id], { body: { secretId } }),
+    onSuccess: (item) => {
+      setRevealed((current) => new Map([...current, [item.secretId, item.secret]]));
+      toast({
+        tone: 'success',
+        title: 'Đã đổi bí mật',
+        description: 'Bí mật cũ ngừng ký ngay. Cập nhật bí mật mới ở hệ thống nhận.',
+      });
+    },
+    onError: (error) => {
+      toast({ tone: 'danger', title: 'Chưa đổi được bí mật', description: problemMessage(error) });
     },
   });
 
@@ -315,11 +344,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
             </span>
           </div>
         </div>
-        <div role="tablist" aria-label="Automation" className={styles.tabs}>
-          <span role="tab" aria-selected="true" className={styles.tab}>
-            Thiết lập
-          </span>
-        </div>
+        <AutomationTabs siteId={site.id} automationId={detail.id} current="setup" />
         <div className={styles.headerActions}>
           {missing > 0 ? (
             <span className={styles.missingPill}>{missing} bước thiếu cấu hình</span>
@@ -504,6 +529,19 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
                     replaceAction(next);
                   }}
                   onRemove={removeSelected}
+                  revealedSecret={
+                    selectedAction.kind === 'webhook'
+                      ? revealed.get(selectedAction.secretId)
+                      : undefined
+                  }
+                  onRotateSecret={
+                    canManage && selectedAction.kind === 'webhook'
+                      ? () => {
+                          rotate.mutate(selectedAction.secretId);
+                        }
+                      : undefined
+                  }
+                  rotating={rotate.isPending}
                 />
               ) : null}
             </>
@@ -579,6 +617,61 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The secrets of webhook steps the save sent without one, from the API's answer; a step changed
+ * meanwhile keeps what it has.
+ */
+function adoptSecrets(
+  current: AutomationDefinition,
+  sent: AutomationDefinition | undefined,
+  saved: AutomationDefinition,
+): AutomationDefinition {
+  return {
+    ...current,
+    actions: current.actions.map((action, index) => {
+      const before = sent?.actions[index];
+      const after = saved.actions[index];
+      return action.kind === 'webhook' &&
+        action.secretId === '' &&
+        before?.kind === 'webhook' &&
+        before.secretId === '' &&
+        after?.kind === 'webhook'
+        ? { ...action, secretId: after.secretId }
+        : action;
+    }),
+  };
+}
+
+/** "Thiết lập" and "Lịch sử chạy" (boards 26 and 27). */
+export function AutomationTabs({
+  siteId,
+  automationId,
+  current,
+}: {
+  siteId: string;
+  automationId: string;
+  current: 'setup' | 'runs';
+}) {
+  return (
+    <nav aria-label="Automation" className={styles.tabs}>
+      <Link
+        href={automationHref(siteId, automationId)}
+        aria-current={current === 'setup' ? 'page' : undefined}
+        className={styles.tab}
+      >
+        Thiết lập
+      </Link>
+      <Link
+        href={automationRunsHref(siteId, automationId)}
+        aria-current={current === 'runs' ? 'page' : undefined}
+        className={styles.tab}
+      >
+        Lịch sử chạy
+      </Link>
+    </nav>
   );
 }
 

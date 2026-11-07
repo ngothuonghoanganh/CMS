@@ -897,7 +897,7 @@ export class LeadsRepository {
 
   /** The latest lead of a profile: its consent evidence ("Đồng ý", board 23). */
   latestOfContact(
-    scope: WorkspaceScope,
+    scope: WorkspaceRef,
     siteId: ObjectId,
     contactId: ObjectId,
   ): Promise<LeadRecord | null> {

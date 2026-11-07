@@ -80,6 +80,15 @@ export function recipeDefinition(
           ],
         },
       };
+    case 'send_webhook':
+      return {
+        name,
+        definition: {
+          trigger: { kind: 'lead_created', pageIds: [] },
+          conditions: [],
+          actions: [{ kind: 'webhook', url: '', secretId: '' }],
+        },
+      };
     case 'notify_won':
       return {
         name,
@@ -108,6 +117,8 @@ function actionMissing(action: AutomationAction): boolean {
       return action.tag === '';
     case 'email':
       return action.subject === '' || (action.to !== 'owner' && action.to.length === 0);
+    case 'webhook':
+      return action.url === '';
   }
 }
 

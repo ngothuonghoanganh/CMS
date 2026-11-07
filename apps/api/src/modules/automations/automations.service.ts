@@ -1,5 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AUTOMATION_RETRY_MAX,
+  AUTOMATION_RUNS_PAGE_SIZE,
+  type AutomationRunDetail,
+  type AutomationRunFilter,
+  type AutomationRunItem,
+  type AutomationRunListResponse,
+  type AutomationRunStatus,
+  type RetryRunsResponse,
+  type RevealedSecret,
+  type RotateWebhookSecretRequest,
   AUTOMATION_RECENT_HOURS,
   AUTOMATION_RECENT_MAX,
   type AutomationActivation,
@@ -19,6 +29,9 @@ import {
   vnMonthOf,
 } from '@plp/contracts';
 import type { z } from 'zod';
+import { decodeCursor, encodeCursor } from '../../shared/cursor.js';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
@@ -38,7 +51,7 @@ import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js'
 import { accessOf } from '../workspaces/domain/member-access.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import type { AutomationRecord } from './automation.schema.js';
+import type { AutomationRecord, AutomationRunRecord } from './automation.schema.js';
 import { AutomationRunsRepository, type RunStats } from './automation-runs.repository.js';
 import { AutomationUsageRepository } from './automation-usage.repository.js';
 import { AutomationsRepository } from './automations.repository.js';
@@ -46,8 +59,23 @@ import { AutomationTriggers, type LeadEvent } from './automation-triggers.servic
 import { missingSteps, recipeDefinition } from './domain/automation-rules.js';
 import { type TestSubject, testDefinition } from './domain/automation-test.js';
 import { JobWakeupsRepository } from './job-wakeups.repository.js';
+import {
+  encryptSecret,
+  newSecretId,
+  newWebhookSecret,
+  type StoredWebhookSecret,
+} from './webhook-secrets.js';
 
 export const AUTOMATION_NOT_FOUND = 'Không tìm thấy automation';
+const RUN_NOT_FOUND = 'Không tìm thấy lượt chạy';
+
+/** Board 27's filters as run statuses; "Đang chờ" is every run still to finish. */
+const FILTER_STATUSES: Record<AutomationRunFilter, readonly AutomationRunStatus[] | null> = {
+  all: null,
+  failed: ['failed'],
+  waiting: ['scheduled', 'queued', 'running', 'waiting_retry'],
+  succeeded: ['succeeded'],
+};
 const DAY_MS = 86_400_000;
 
 export type UpdateAutomationValues = z.output<typeof updateAutomationRequestSchema>;
@@ -79,6 +107,16 @@ function toItem(
   };
 }
 
+function runItem(run: AutomationRunRecord, names: ReadonlyMap<string, string>): AutomationRunItem {
+  return {
+    id: run._id.toHexString(),
+    status: run.status,
+    trigger: run.event.kind,
+    contactName: run.contactId === null ? null : (names.get(run.contactId.toHexString()) ?? null),
+    createdAt: run.createdAt.toISOString(),
+  };
+}
+
 /**
  * The automations of a site (board 25, ADR-034). `automations.view` reads them;
  * `automations.manage` creates them from a recipe, enables, pauses and copies them.
@@ -103,6 +141,7 @@ export class AutomationsService {
     private readonly opportunities: OpportunitiesRepository,
     private readonly pages: PagesRepository,
     private readonly transactions: TransactionRunner,
+    @InjectEnv() private readonly env: Env,
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<AutomationListResponse> {
@@ -172,6 +211,8 @@ export class AutomationsService {
       definition: source.definition,
       recipe: source.recipe,
       at: new Date(),
+      // The copy signs as the original does, for the same receiving system.
+      webhookSecrets: source.webhookSecrets,
     });
     return this.item(scope, copy);
   }
@@ -271,17 +312,317 @@ export class AutomationsService {
         detail: 'Lượt chạy đang chờ dùng phiên bản đã bật; bật lại sau khi sửa xong.',
       });
     }
+    const secrets =
+      request.definition === undefined
+        ? null
+        : this.withSecrets(request.definition, automation.webhookSecrets);
     const updated = await this.automations.update(
       scope,
       site._id,
       automation._id,
-      request,
+      secrets === null
+        ? { name: request.name }
+        : { name: request.name, definition: secrets.definition, webhookSecrets: secrets.stored },
       new Date(),
     );
     if (updated === null) {
       throw notFound(AUTOMATION_NOT_FOUND);
     }
-    return this.detailOf(scope, site._id, updated);
+    return this.detailOf(scope, site._id, updated, secrets?.revealed ?? []);
+  }
+
+  /**
+   * "Đổi bí mật" (ADR-034): a new secret for the step, shown once; the old one stops signing at
+   * once, also for the runs that wait for a retry. Allowed while the automation is on.
+   */
+  async rotateSecret(
+    user: AuthenticatedUser,
+    siteId: string,
+    automationId: string,
+    request: RotateWebhookSecretRequest,
+  ): Promise<RevealedSecret> {
+    const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
+    const automation = await this.find(scope, site._id, automationId);
+    if (!automation.webhookSecrets.some((item) => item.id === request.secretId)) {
+      throw notFound('Không tìm thấy bí mật của bước webhook');
+    }
+    const secret = newWebhookSecret();
+    const stored = encryptSecret(this.secretKey(), request.secretId, secret);
+    const updated = await this.automations.update(
+      scope,
+      site._id,
+      automation._id,
+      {
+        webhookSecrets: automation.webhookSecrets.map((item) =>
+          item.id === request.secretId ? stored : item,
+        ),
+      },
+      new Date(),
+    );
+    if (updated === null) {
+      throw notFound(AUTOMATION_NOT_FOUND);
+    }
+    return { secretId: request.secretId, secret };
+  }
+
+  /** Board 27: the runs, newest first, with the failures of the last 30 days and 24 hours. */
+  async listRuns(
+    user: AuthenticatedUser,
+    siteId: string,
+    automationId: string,
+    filter: AutomationRunFilter,
+    cursor: string | undefined,
+  ): Promise<AutomationRunListResponse> {
+    const { scope, site } = await this.sites.access(user, siteId, 'automations.view');
+    const automation = await this.find(scope, site._id, automationId);
+    const after = cursor === undefined ? null : decodeCursor(cursor);
+    const now = Date.now();
+    const [rows, failed, failedLastDay, stats] = await Promise.all([
+      this.runs.list(
+        scope,
+        automation._id,
+        FILTER_STATUSES[filter],
+        after,
+        AUTOMATION_RUNS_PAGE_SIZE + 1,
+      ),
+      this.runs.countFailed(scope, automation._id, new Date(now - 30 * DAY_MS)),
+      this.runs.countFailed(scope, automation._id, new Date(now - DAY_MS)),
+      this.runs.stats(scope, [automation._id], new Date(now - 30 * DAY_MS)),
+    ]);
+    const page = rows.slice(0, AUTOMATION_RUNS_PAGE_SIZE);
+    const last = page.at(-1);
+    const names = await this.contactNames(scope, site._id, page);
+    const counts = stats.get(automation._id.toHexString());
+    return {
+      items: page.map((run) => runItem(run, names)),
+      nextCursor:
+        rows.length > AUTOMATION_RUNS_PAGE_SIZE && last !== undefined
+          ? encodeCursor({ createdAt: last.createdAt, id: last._id.toHexString() })
+          : null,
+      failed,
+      failedLastDay,
+      last30Days: { runs: counts?.runs ?? 0, failed: counts?.failed ?? 0 },
+    };
+  }
+
+  async run(
+    user: AuthenticatedUser,
+    siteId: string,
+    automationId: string,
+    runId: string,
+  ): Promise<AutomationRunDetail> {
+    const { scope, site } = await this.sites.access(user, siteId, 'automations.view');
+    const automation = await this.find(scope, site._id, automationId);
+    return this.runDetail(scope, site._id, await this.findRun(scope, automation._id, runId));
+  }
+
+  /**
+   * "Thử lại bước này": a failed run goes back to the queue at its failed step; the steps done
+   * before do not run again, and it takes nothing more from the quota (ADR-034).
+   */
+  async retryRun(
+    user: AuthenticatedUser,
+    siteId: string,
+    automationId: string,
+    runId: string,
+  ): Promise<AutomationRunDetail> {
+    const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
+    const automation = await this.find(scope, site._id, automationId);
+    const run = await this.findRun(scope, automation._id, runId);
+    await this.requeue(scope, site._id, automation, [run], (requeued) => {
+      if (requeued === 0) {
+        throw new AppError(409, 'conflict', 'Lượt chạy này không còn lỗi', {
+          detail: 'Tải lại để xem trạng thái mới nhất của lượt chạy.',
+        });
+      }
+    });
+    return this.runDetail(scope, site._id, await this.findRun(scope, automation._id, runId));
+  }
+
+  /** "Thử lại N lượt lỗi": the failed runs of the last 30 days, at most `AUTOMATION_RETRY_MAX`. */
+  async retryFailed(
+    user: AuthenticatedUser,
+    siteId: string,
+    automationId: string,
+  ): Promise<RetryRunsResponse> {
+    const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
+    const automation = await this.find(scope, site._id, automationId);
+    const since = new Date(Date.now() - 30 * DAY_MS);
+    const retried = await this.requeue(scope, site._id, automation, null, () => undefined, since);
+    return { retried };
+  }
+
+  /** "Bỏ qua lượt này": a failed run, or one waiting for its retry, ends as skipped. */
+  async skipRun(
+    user: AuthenticatedUser,
+    siteId: string,
+    automationId: string,
+    runId: string,
+  ): Promise<AutomationRunDetail> {
+    const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
+    const automation = await this.find(scope, site._id, automationId);
+    const run = await this.findRun(scope, automation._id, runId);
+    if (!(await this.runs.skip(scope, run._id, new Date()))) {
+      throw new AppError(409, 'conflict', 'Lượt chạy này không thể bỏ qua', {
+        detail: 'Chỉ bỏ qua được lượt lỗi hoặc lượt đang chờ thử lại.',
+      });
+    }
+    return this.runDetail(scope, site._id, await this.findRun(scope, automation._id, runId));
+  }
+
+  /**
+   * Failed runs back in the queue, with the activity and the workspace's wake-up in one
+   * transaction. A paused automation would stop them at once: it must be on (ADR-034).
+   */
+  private async requeue(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    automation: AutomationRecord,
+    runs: AutomationRunRecord[] | null,
+    check: (requeued: number) => void,
+    since = new Date(0),
+  ): Promise<number> {
+    if (automation.state !== 'on') {
+      throw new AppError(409, 'conflict', 'Bật lại automation trước khi thử lại', {
+        detail: 'Lượt chạy của automation đang tạm dừng không được thực hiện.',
+      });
+    }
+    await this.wakeups.ensure(scope.workspaceId);
+    const at = new Date();
+    return this.transactions.run(async (tx) => {
+      const chosen =
+        runs ??
+        (await this.runs.failedSince(scope, automation._id, since, AUTOMATION_RETRY_MAX, tx));
+      let requeued = 0;
+      for (const run of chosen) {
+        if (await this.runs.requeue(scope, run, at, tx)) {
+          requeued += 1;
+        }
+      }
+      check(requeued);
+      if (requeued > 0) {
+        await this.wakeups.bump(scope.workspaceId, at, tx);
+        await this.activity.record(scope, { siteId, type: 'automation.retried' }, tx);
+      }
+      return requeued;
+    });
+  }
+
+  private async findRun(
+    scope: WorkspaceScope,
+    automationId: ObjectId,
+    runId: string,
+  ): Promise<AutomationRunRecord> {
+    const run = await this.runs.findOf(scope, automationId, toObjectId(runId, RUN_NOT_FOUND));
+    if (run === null) {
+      throw notFound(RUN_NOT_FOUND);
+    }
+    return run;
+  }
+
+  private async runDetail(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    run: AutomationRunRecord,
+  ): Promise<AutomationRunDetail> {
+    const names = await this.contactNames(scope, siteId, [run]);
+    return {
+      ...runItem(run, names),
+      eventKey: run.eventKey,
+      version: run.version,
+      definition: run.definition,
+      reason: run.reason,
+      steps: run.steps.flatMap((step, index) => {
+        const action = run.definition.actions[index];
+        return action === undefined
+          ? []
+          : [
+              {
+                action,
+                status: step.status,
+                attempts: step.attempts,
+                at: step.at?.toISOString() ?? null,
+                error: step.error,
+                summary: step.summary,
+              },
+            ];
+      }),
+      nextAt: run.nextAt?.toISOString() ?? null,
+      finishedAt: run.finishedAt?.toISOString() ?? null,
+    };
+  }
+
+  /** The profiles' names now: runs keep only ids (ADR-034). */
+  private async contactNames(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    runs: readonly AutomationRunRecord[],
+  ): Promise<Map<string, string>> {
+    const ids = runs.flatMap((run) => (run.contactId === null ? [] : [run.contactId]));
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const contacts = await this.contacts.findByIds(scope, siteId, ids);
+    return new Map(contacts.map((contact) => [contact._id.toHexString(), contact.name]));
+  }
+
+  /**
+   * A webhook step saved without a secret gets one, shown once in `revealedSecrets`; a step keeps
+   * the secret it has. Secrets no step uses any more are dropped. A step cannot name a secret it
+   * was not given.
+   */
+  private withSecrets(
+    definition: AutomationDefinition,
+    current: readonly StoredWebhookSecret[],
+  ): {
+    definition: AutomationDefinition;
+    stored: StoredWebhookSecret[];
+    revealed: RevealedSecret[];
+  } {
+    const revealed: RevealedSecret[] = [];
+    const stored: StoredWebhookSecret[] = [];
+    const actions = definition.actions.map((action, index) => {
+      if (action.kind !== 'webhook') {
+        return action;
+      }
+      if (action.secretId === '') {
+        const secretId = newSecretId();
+        const secret = newWebhookSecret();
+        stored.push(encryptSecret(this.secretKey(), secretId, secret));
+        revealed.push({ secretId, secret });
+        return { ...action, secretId };
+      }
+      const kept = current.find((item) => item.id === action.secretId);
+      if (kept === undefined) {
+        throw validationFailed([
+          {
+            path: ['definition', 'actions', index, 'secretId'],
+            code: 'unknown_secret',
+            message: 'Bí mật của bước webhook không thuộc automation này',
+          },
+        ]);
+      }
+      if (!stored.includes(kept)) {
+        stored.push(kept);
+      }
+      return action;
+    });
+    return { definition: { ...definition, actions }, stored, revealed };
+  }
+
+  private secretKey(): string {
+    const key = this.env.AUTOMATION_SECRET_KEY;
+    if (key === undefined) {
+      // A deployment without the key cannot keep a secret, so it offers no webhook step.
+      throw validationFailed([
+        {
+          path: ['definition'],
+          code: 'webhook_unavailable',
+          message: 'Máy chủ chưa cấu hình khóa bí mật cho webhook (AUTOMATION_SECRET_KEY)',
+        },
+      ]);
+    }
+    return key;
   }
 
   /**
@@ -432,6 +773,7 @@ export class AutomationsService {
     scope: WorkspaceScope,
     siteId: ObjectId,
     automation: AutomationRecord,
+    revealedSecrets: RevealedSecret[] = [],
   ): Promise<AutomationDetail> {
     const [item, members, pages, tags] = await Promise.all([
       this.item(scope, automation),
@@ -449,6 +791,7 @@ export class AutomationsService {
         pages: pages.map((page) => ({ id: page._id.toHexString(), title: page.title })),
         tags: tags.sort((a, b) => a.localeCompare(b, 'vi')),
       },
+      revealedSecrets,
     };
   }
 
