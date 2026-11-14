@@ -86,6 +86,19 @@ pnpm --filter @plp/e2e seed:dev # sample data into the dev DB (after pnpm build,
 pnpm infra:down
 ```
 
+### Cloud sessions (claude.ai/code)
+
+- The SessionStart hook runs `scripts/cloud-env.sh session` (README, "Cloud sessions"): Node 24 on
+  `PATH`, dependencies, Playwright browsers and `pnpm infra:up`. Its summary opens the session. When
+  a step failed, read `/tmp/plp-cloud-env.log`, fix the cause and rerun the script.
+- No port of the VM is reachable from outside, so the owner follows the UI through screenshots.
+  After a change the owner can see, run `pnpm build`, `pnpm --filter @plp/e2e visual:capture` and
+  `pnpm ui:gallery`. Then publish `tests/e2e/visual-captures/index.html` with the Artifact tool,
+  with `artifact-files.json` as `files`, and give the link. Republish to the owner's existing
+  "PLP Screen Captures" artifact (the Artifact tool's `list` finds it) instead of making a new one.
+- A new screen gets a capture in `tests/e2e/visual/capture.spec.ts`, or it never shows up there.
+  Look at the PNGs yourself before saying a screen matches its board.
+
 ## Quality gates
 
 A task is complete only when every applicable gate passes:

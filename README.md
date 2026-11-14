@@ -32,20 +32,47 @@ pnpm dev
 
 `pnpm infra:down` stops the containers; data stays in Docker volumes.
 
+## Cloud sessions
+
+The repository also runs in Claude Code cloud sessions (claude.ai/code). Create one environment
+for it, in the environment selector under the message box:
+
+- **Network access**: Limited, with package managers allowed, plus these allowed domains for
+  Playwright's browsers: `cdn.playwright.dev`, `playwright.download.prss.microsoft.com`,
+  `playwright.azureedge.net`.
+- **Environment variables**: none. `.env` is copied from `.env.example`, whose values are local
+  only. Never put a real secret here: everyone who uses the environment can read it.
+- **Setup script**: it caches Node 24, pnpm, the dependencies, the browsers and the container
+  images between sessions.
+
+  ```sh
+  #!/bin/bash
+  repo="$(git rev-parse --show-toplevel 2>/dev/null)"
+  [ -f "$repo/scripts/cloud-env.sh" ] || repo="$(dirname "$(dirname "$(find / -maxdepth 6 -path '*/scripts/cloud-env.sh' -not -path '/proc/*' -print -quit 2>/dev/null)")")"
+  bash "$repo/scripts/cloud-env.sh" image
+  ```
+
+At each start and resume, the SessionStart hook in `.claude/settings.json` runs
+`scripts/cloud-env.sh session`: Node 24 on `PATH`, changed dependencies, and `pnpm infra:up`.
+Elsewhere it does nothing. The apps' ports are not reachable from outside the session. To see the
+screens, `pnpm --filter @plp/e2e visual:capture` captures each one (after `pnpm build`) and
+`pnpm ui:gallery` turns them into a page that the session publishes as an Artifact.
+
 ## Scripts
 
-| Script            | What it does                                                |
-| ----------------- | ----------------------------------------------------------- |
-| `pnpm dev`        | Runs every app in watch mode                                |
-| `pnpm build`      | Builds packages and apps                                    |
-| `pnpm lint`       | ESLint with type-aware rules                                |
-| `pnpm typecheck`  | `tsc --noEmit` in every package                             |
-| `pnpm test:unit`  | Vitest unit tests                                           |
-| `pnpm test:int`   | API integration tests against MongoDB (needs `infra:up`)    |
-| `pnpm test:e2e`   | Playwright against production builds (needs `infra:up`)     |
-| `pnpm governance` | Module boundaries (dependency-cruiser) and repository rules |
-| `pnpm format`     | Prettier                                                    |
-| `pnpm verify`     | Every gate except E2E                                       |
+| Script            | What it does                                                 |
+| ----------------- | ------------------------------------------------------------ |
+| `pnpm dev`        | Runs every app in watch mode                                 |
+| `pnpm build`      | Builds packages and apps                                     |
+| `pnpm lint`       | ESLint with type-aware rules                                 |
+| `pnpm typecheck`  | `tsc --noEmit` in every package                              |
+| `pnpm test:unit`  | Vitest unit tests                                            |
+| `pnpm test:int`   | API integration tests against MongoDB (needs `infra:up`)     |
+| `pnpm test:e2e`   | Playwright against production builds (needs `infra:up`)      |
+| `pnpm ui:gallery` | A page of the screens `visual:capture` took (Cloud sessions) |
+| `pnpm governance` | Module boundaries (dependency-cruiser) and repository rules  |
+| `pnpm format`     | Prettier                                                     |
+| `pnpm verify`     | Every gate except E2E                                        |
 
 CI (`.github/workflows/ci.yml`) runs every gate, E2E included, on each pull request.
 
