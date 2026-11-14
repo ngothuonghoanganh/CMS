@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thanh toán và hóa đơn</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="billing" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-direction: column; gap: 12px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Gói dịch vụ</h1>
+        <div role="tablist" aria-label="Gói và thanh toán" style="display: flex; gap: 4px; border-bottom: 1px solid #E2E5EA">
+          <a href="Plan.dc.html" role="tab" aria-selected="false" style="display: inline-flex; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; color: #3C424E; text-decoration: none">Gói &amp; mức dùng</a>
+          <a href="Billing.dc.html" role="tab" aria-selected="true" style="display: inline-flex; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 2px solid #4338CA; font-size: 14px; font-weight: 600; color: #3730A3; text-decoration: none">Thanh toán &amp; hóa đơn</a>
+        </div>
+      </header>
+
+      <sc-if value="{{ denied }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; text-align: center">
+          <span style="font-size: 17px; font-weight: 600">Chỉ Chủ sở hữu xem được thanh toán</span>
+          <span style="max-width: 460px; font-size: 14px; line-height: 1.6; color: #3C424E">Bạn là Quản trị nên vẫn xem được gói và mức dùng. Phương thức thanh toán và hóa đơn chỉ Ngọc Anh xem được.</span>
+          <a href="Plan.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Xem gói &amp; mức dùng</a>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ allowed }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ failed }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 16px; border-radius: 12px; background: #FDEBE9; border: 1px solid #F6C9C4; color: #7A1A12">
+            <span style="flex: 1 1 420px; font-size: 13px; line-height: 1.55"><strong style="font-size: 14px">Thanh toán ngày 01/11 không thành công.</strong> Ngân hàng từ chối thẻ •••• 6411 (không đủ hạn mức). Hệ thống tự thử lại ngày 03/11. Bạn có thể đổi thẻ hoặc chuyển khoản ngay.</span>
+            <span style="display: flex; flex-wrap: wrap; gap: 8px">
+              <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #F6C9C4; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #7A1A12; cursor: pointer">Đổi phương thức</button>
+              <button type="button" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: #B42318; font: inherit; font-size: 13px; font-weight: 600; color: #FFFFFF; cursor: pointer">Thanh toán lại</button>
+            </span>
+          </div>
+        </sc-if>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start">
+          <section aria-labelledby="pm-h" style="flex: 1 1 340px; display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <h2 id="pm-h" style="margin: 0; font-size: 15px; font-weight: 700">Phương thức thanh toán</h2>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; border: 1px solid {{ cardBorder }}">
+              <span aria-hidden="true" style="width: 44px; height: 30px; border-radius: 6px; background: #15171C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700">THẺ</span>
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 14px; font-weight: 600">Thẻ quốc tế •••• 6411</span>
+                <span style="font-size: 12px; color: {{ cardNoteFg }}">{{ cardNote }}</span>
+              </span>
+              <span style="padding: 2px 8px; border-radius: 999px; background: #F0F2F5; color: #474E5C; font-size: 11px; font-weight: 700">MẶC ĐỊNH</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Đổi thẻ</button>
+              <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Thêm phương thức</button>
+            </div>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Phương thức được hỗ trợ: [CHƯA CHỐT — thẻ, chuyển khoản, ví điện tử]. Thông tin thẻ do cổng thanh toán lưu, Payload không lưu số thẻ.</span>
+          </section>
+
+          <section aria-labelledby="inv-h" style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+              <h2 id="inv-h" style="margin: 0; font-size: 15px; font-weight: 700">Thông tin xuất hóa đơn</h2>
+              <sc-if value="{{ notEditing }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ edit }}" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Sửa</button></sc-if>
+            </div>
+            <sc-if value="{{ notEditing }}" hint-placeholder-val="{{ true }}">
+              <dl style="margin: 0; display: grid; grid-template-columns: 140px 1fr; gap: 8px 14px; font-size: 14px">
+                <dt style="color: #5E6573">Tên đơn vị</dt><dd style="margin: 0">Công ty TNHH Truyền thông Mây Xanh</dd>
+                <dt style="color: #5E6573">Mã số thuế</dt><dd style="margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace">0315 123 456</dd>
+                <dt style="color: #5E6573">Địa chỉ</dt><dd style="margin: 0">12 Nguyễn Đình Chiểu, Phường Đa Kao, TP. Hồ Chí Minh</dd>
+                <dt style="color: #5E6573">Email nhận hóa đơn</dt><dd style="margin: 0">ketoan@mayxanh.vn</dd>
+              </dl>
+            </sc-if>
+            <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; gap: 12px">
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="iv-name" style="font-size: 13px; font-weight: 600">Tên đơn vị</label><input id="iv-name" type="text" value="Công ty TNHH Truyền thông Mây Xanh" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="iv-tax" style="font-size: 13px; font-weight: 600">Mã số thuế</label><input id="iv-tax" type="text" value="0315 123 45" aria-invalid="true" aria-describedby="iv-tax-err" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #B42318; border-radius: 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px"><span id="iv-tax-err" style="font-size: 13px; color: #B42318">Mã số thuế gồm 10 hoặc 13 chữ số. Hiện có 9.</span></div>
+                <div style="display: flex; flex-direction: column; gap: 6px"><label for="iv-mail" style="font-size: 13px; font-weight: 600">Email nhận hóa đơn điện tử</label><input id="iv-mail" type="email" value="ketoan@mayxanh.vn" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px"></div>
+                <span style="font-size: 12px; color: #5E6573">Thông tin mới áp dụng cho hóa đơn từ kỳ sau. Hóa đơn đã xuất không đổi.</span>
+                <div style="display: flex; justify-content: flex-end; gap: 8px">
+                  <button type="button" onClick="{{ stopEdit }}" style="min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+                  <button type="button" disabled style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: #A8AEB9; font: inherit; font-size: 13px; font-weight: 600; color: #FFFFFF; cursor: not-allowed">Lưu</button>
+                </div>
+              </div>
+            </sc-if>
+          </section>
+        </div>
+
+        <section aria-labelledby="tx-h" style="display: flex; flex-direction: column; gap: 10px">
+          <h2 id="tx-h" style="margin: 0; font-size: 15px; font-weight: 700">Lịch sử giao dịch</h2>
+          <div style="overflow-x: auto; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <div style="min-width: 760px">
+              <div style="display: grid; grid-template-columns: 120px minmax(0, 2fr) 150px 160px 150px; gap: 12px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+                <span>NGÀY</span><span>NỘI DUNG</span><span>SỐ TIỀN</span><span>TRẠNG THÁI</span><span>HÓA ĐƠN</span>
+              </div>
+              <sc-for list="{{ tx }}" as="t" hint-placeholder-count="5">
+                <div style="display: grid; grid-template-columns: 120px minmax(0, 2fr) 150px 160px 150px; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                  <span style="font-size: 13px">{{ t.date }}</span>
+                  <span style="display: flex; flex-direction: column"><span>{{ t.desc }}</span><span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #5E6573">{{ t.id }}</span></span>
+                  <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px">{{ t.amount }}</span>
+                  <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: {{ t.fg }}"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: {{ t.dot }}"></span>{{ t.status }}</span>
+                  <sc-if value="{{ t.hasPdf }}" hint-placeholder-val="{{ true }}"><a href="#" style="font-size: 13px; font-weight: 600; text-decoration: none">Tải hóa đơn PDF</a></sc-if>
+                  <sc-if value="{{ t.noPdf }}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; color: #5E6573">{{ t.pdfNote }}</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["default","paymentFailed","editInvoiceInfo","notOwner"],"default":"default"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { editing: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'default';
+    var editing = this.state.editing ?? (s === 'editInvoiceInfo');
+    var failed = s === 'paymentFailed';
+    var K = {
+      paid: ['Đã thanh toán', '#0B6B45', '#12A06A'], fail: ['Thất bại', '#B42318', '#B42318'],
+      proc: ['Đang xử lý', '#8A5300', '#E39A12'], refund: ['Đã hoàn tiền', '#474E5C', '#8A91A0']
+    };
+    var T = [
+      ['01/11/2026', 'Gói Agency · kỳ 01/11 – 30/11', 'HD-2026-1101', failed ? 'fail' : 'paid'],
+      ['24/10/2026', 'Mẫu “Mở bán dự án căn hộ” · Marketplace', 'MP-2026-0412', 'paid'],
+      ['15/10/2026', 'Mua thêm lượt chạy automation', 'HD-2026-1015', 'refund'],
+      ['01/10/2026', 'Gói Agency · kỳ 01/10 – 31/10', 'HD-2026-1001', 'paid'],
+      ['01/09/2026', 'Gói Agency · kỳ 01/09 – 30/09', 'HD-2026-0901', 'paid']
+    ];
+    var tx = T.map(function (t) {
+      var k = K[t[3]];
+      var pdf = t[3] === 'paid';
+      return { date: t[0], desc: t[1], id: t[2], amount: '[SỐ TIỀN]', status: k[0], fg: k[1], dot: k[2], hasPdf: pdf, noPdf: !pdf, pdfNote: t[3] === 'refund' ? 'Hóa đơn điều chỉnh' : 'Chưa xuất' };
+    });
+    return {
+      tx: tx, failed: failed,
+      denied: s === 'notOwner', allowed: s !== 'notOwner',
+      editing: editing, notEditing: !editing,
+      cardBorder: failed ? '#F6C9C4' : '#E2E5EA',
+      cardNote: failed ? 'Bị từ chối ngày 01/11' : 'Hết hạn 08/2028',
+      cardNoteFg: failed ? '#B42318' : '#5E6573',
+      edit: function () { self.setState({ editing: true }); },
+      stopEdit: function () { self.setState({ editing: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

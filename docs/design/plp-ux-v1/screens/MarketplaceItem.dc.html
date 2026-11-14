@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Khai trương phòng tập — Marketplace</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="marketplace" role="{{ sidebarRole }}" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 32px 56px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px">
+      <a href="Marketplace.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 13px; font-weight: 600; text-decoration: none">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+        Marketplace
+      </a>
+      <header style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 13px; color: #5E6573">Sự kiện · Thể hình · 7 section · v2.1</span>
+        <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Khai trương phòng tập</h1>
+        <p style="margin: 0; max-width: 700px; font-size: 14px; line-height: 1.55; color: #3C424E">Cho chiến dịch khai trương hoặc mở chi nhánh: ưu đãi giới hạn thời gian, lịch lớp học, huấn luyện viên và form giữ chỗ.</p>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <section aria-label="Bản xem trước" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; justify-content: center; padding: 24px; border-radius: 14px; background: #ECEEF2">
+            <div style="width: 100%; height: 520px; border-radius: 10px; overflow: hidden; background: #FFFFFF; border: 1px solid #E2E5EA; box-shadow: 0 2px 10px rgba(21,23,28,0.14)">
+              <dc-import name="TemplateThumb" variant="5" label="Bản xem trước mẫu Khai trương phòng tập" hint-size="100%,520px"></dc-import>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.6; color: #3C424E">
+              <span style="font-size: 14px; font-weight: 700; color: #15171C">Gồm những gì</span>
+              7 section · 2 bộ màu đạt AA · chữ mẫu tiếng Việt · ảnh minh họa có giấy phép thương mại
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.6; color: #3C424E">
+              <span style="font-size: 14px; font-weight: 700; color: #15171C">Giấy phép</span>
+              Dùng cho [SỐ SITE] site trong workspace mua. Không bán lại hay chia sẻ mẫu. Chi tiết: [ĐIỀU KHOẢN GIẤY PHÉP]
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.6; color: #3C424E">
+              <span style="font-size: 14px; font-weight: 700; color: #15171C">Cập nhật &amp; hỗ trợ</span>
+              Phiên bản mới miễn phí trong [THỜI HẠN]. Hỗ trợ: [CAM KẾT HỖ TRỢ CỦA NHÀ CUNG CẤP]
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 13px; line-height: 1.6; color: #3C424E">
+            <span style="font-size: 14px; font-weight: 700; color: #15171C">Có gì mới ở v2.1 · 20/10/2026</span>
+            Thêm section lịch lớp học theo ngày; đổi bộ màu tối cho đạt tương phản AA trên nút.
+          </div>
+        </section>
+
+        <aside style="flex: 1 1 300px; max-width: 360px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 22px; font-weight: 600">{{ priceText }}</span>
+            <span style="font-size: 12px; color: #5E6573">Một lần · [CHÍNH SÁCH VAT] · [CHÍNH SÁCH HOÀN TIỀN]</span>
+            <sc-if value="{{ canBuy }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ openConfirm }}" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Mua mẫu</button>
+            </sc-if>
+            <sc-if value="{{ isOwned }}" hint-placeholder-val="{{ false }}">
+              <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B6B45"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Workspace đã sở hữu · v2.1</span>
+              <a href="TemplateDetail.dc.html" style="display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 15px; font-weight: 600; text-decoration: none">Tạo trang từ mẫu</a>
+            </sc-if>
+            <sc-if value="{{ isNotOwner }}" hint-placeholder-val="{{ false }}">
+              <button type="button" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đề xuất Ngọc Anh mua</button>
+              <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Chỉ Chủ sở hữu workspace mua được. Ngọc Anh sẽ nhận một thông báo kèm link mẫu này.</span>
+            </sc-if>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <span style="display: flex; align-items: center; gap: 10px">
+              <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 10px; background: #7A3E5B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">SL</span>
+              <span style="display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Studio Lam</span><span style="font-size: 12px; color: #5E6573">Nhà cung cấp đã xác minh · 12 mẫu</span></span>
+            </span>
+            <a href="#" style="font-size: 13px; font-weight: 600; text-decoration: none">Xem các mẫu khác của Studio Lam</a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ showDialog }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 110px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="buy-title" style="width: 100%; max-width: 520px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 id="buy-title" style="margin: 0; font-size: 18px; font-weight: 700">{{ dTitle }}</h2>
+
+        <sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ true }}">
+          <dl style="margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; padding: 14px; border-radius: 12px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px">
+            <dt>Khai trương phòng tập · v2.1</dt><dd style="margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace">[GIÁ]</dd>
+            <dt style="color: #5E6573">Thuế</dt><dd style="margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; color: #5E6573">[VAT]</dd>
+            <dt style="font-weight: 700; padding-top: 6px; border-top: 1px solid #E2E5EA">Tổng</dt><dd style="margin: 0; padding-top: 6px; border-top: 1px solid #E2E5EA; font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700">[TỔNG]</dd>
+          </dl>
+          <span style="font-size: 14px">Thanh toán bằng <strong>Thẻ quốc tế •••• 6411</strong> · <a href="Billing.dc.html" style="font-weight: 600">Đổi</a></span>
+          <span style="font-size: 13px; color: #3C424E">Hóa đơn gửi tới ketoan@mayxanh.vn, ghi tên Công ty TNHH Truyền thông Mây Xanh.</span>
+          <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5"><input type="checkbox" style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">Tôi đồng ý với <a href="#">điều khoản giấy phép</a> của mẫu này</label>
+          <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+            <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+            <button type="button" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Thanh toán [TỔNG]</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isProcessing }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; background: #F5F5FF; font-size: 14px">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4338CA" stroke-width="2.4" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>
+            Đang chờ cổng thanh toán xác nhận. Đừng đóng trang; nếu lỡ đóng, giao dịch vẫn được ghi nhận ở Thanh toán &amp; hóa đơn.
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSuccess }}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Mẫu đã có trong Templates của Mây Xanh Agency. Hóa đơn sẽ được gửi tới ketoan@mayxanh.vn.</p>
+          <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+            <a href="Purchases.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Sản phẩm đã mua</a>
+            <a href="TemplateDetail.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none">Tạo trang từ mẫu</a>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isFailed }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="padding: 12px 14px; border-radius: 12px; background: #FDEBE9; border: 1px solid #F6C9C4; color: #7A1A12; font-size: 13px; line-height: 1.55">Ngân hàng từ chối thẻ •••• 6411. Bạn chưa bị trừ tiền và chưa sở hữu mẫu.</div>
+          <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+            <a href="Billing.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Đổi phương thức</a>
+            <button type="button" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Thử lại</button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["default","confirm","processing","success","paymentFailed","owned","notOwner"],"default":"default"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'default';
+    var dialog = this.state.dialog ?? ({ confirm: 'confirm', processing: 'processing', success: 'success', paymentFailed: 'failed' }[s] || null);
+    var owned = s === 'owned';
+    var notOwner = s === 'notOwner';
+    var titles = { confirm: 'Xác nhận mua mẫu', processing: 'Đang thanh toán…', success: 'Đã mua “Khai trương phòng tập”', failed: 'Thanh toán chưa thành công' };
+    return {
+      priceText: owned ? 'Đã sở hữu' : '[GIÁ]',
+      canBuy: !owned && !notOwner,
+      isOwned: owned, isNotOwner: notOwner,
+      sidebarRole: notOwner ? 'editor' : 'owner',
+      showDialog: !!dialog && dialog !== 'none',
+      dTitle: titles[dialog] || '',
+      isConfirm: dialog === 'confirm', isProcessing: dialog === 'processing',
+      isSuccess: dialog === 'success', isFailed: dialog === 'failed',
+      openConfirm: function () { self.setState({ dialog: 'confirm' }); },
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,48 +1,430 @@
 {
   "v": 3,
-  "createdOnFiles": {"v": 1, "at": "2026-10-24T10:40:00Z"},
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-24T10:40:00Z"
+  },
   "title": "Payload Landing Page — Product Design",
-  "launch": {"view": "canvas"},
-  "pages": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [
+    {
+      "id": "product",
+      "name": "Sản phẩm"
+    },
+    {
+      "id": "design-system",
+      "name": "Design system"
+    }
+  ],
   "boards": {
-    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 1080, "title": "01 · Bảng điều khiển — danh sách trang", "expand": "fill", "is_interactive": true},
-    "Onboarding.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 1080, "title": "02 · Tạo trang — chọn mục tiêu & brief", "expand": "fill", "is_interactive": true},
-    "Editor.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 1080, "title": "03 · Editor — section builder có hướng dẫn", "expand": "fill", "is_interactive": true},
-    "AddSection.dc.html": {"x": 4560, "y": 0, "w": 1440, "h": 1080, "title": "04 · Thêm section", "expand": "fill", "is_interactive": true},
-    "Publish.dc.html": {"x": 0, "y": 1560, "w": 1440, "h": 1000, "title": "05 · Xuất bản — kiểm tra trước khi live", "expand": "fill", "is_interactive": true},
-    "History.dc.html": {"x": 1520, "y": 1560, "w": 1440, "h": 1000, "title": "06 · Lịch sử phiên bản & rollback", "expand": "fill", "is_interactive": true},
-    "SEO.dc.html": {"x": 3040, "y": 1560, "w": 1440, "h": 1000, "title": "07 · SEO & chia sẻ", "expand": "fill", "is_interactive": true},
-    "Domain.dc.html": {"x": 4560, "y": 1560, "w": 1440, "h": 1000, "title": "08 · Tên miền", "expand": "fill", "is_interactive": true},
-    "PublicPage.dc.html": {"x": 0, "y": 3060, "w": 390, "h": 1720, "title": "09 · Trang public trên mobile (khách truy cập)"},
-    "Leads.dc.html": {"x": 470, "y": 3060, "w": 1440, "h": 1000, "title": "10 · Hộp thư lead", "expand": "fill", "is_interactive": true},
-    "Analytics.dc.html": {"x": 1990, "y": 3060, "w": 1440, "h": 1000, "title": "11 · Hiệu quả trang", "expand": "fill", "is_interactive": true},
-    "Consent.dc.html": {"x": 3510, "y": 3060, "w": 1440, "h": 1080, "title": "12 · Dữ liệu cá nhân & đồng ý", "expand": "fill", "is_interactive": true},
-    "Sidebar.dc.html": {"x": -368, "y": 0, "w": 248, "h": 900, "title": "Thành phần · Sidebar điều hướng"},
-    "SidebarV2.dc.html": {"x": -368, "y": 5540, "w": 248, "h": 1000, "title": "Thành phần · Sidebar v2 (workspace + site)"},
-    "Domains.dc.html": {"x": 0, "y": 5540, "w": 1440, "h": 1000, "title": "13 · Quản lý tên miền", "expand": "fill", "is_interactive": true},
-    "DomainConnect.dc.html": {"x": 1520, "y": 5540, "w": 1440, "h": 1080, "title": "14 · Kết nối & xác minh tên miền", "expand": "fill", "is_interactive": true},
-    "Members.dc.html": {"x": 3040, "y": 5540, "w": 1440, "h": 1000, "title": "15 · Thành viên workspace", "expand": "fill", "is_interactive": true},
-    "Roles.dc.html": {"x": 4560, "y": 5540, "w": 1440, "h": 1080, "title": "16 · Vai trò & phân quyền", "expand": "fill", "is_interactive": true},
-    "InviteAccept.dc.html": {"x": 6080, "y": 5540, "w": 390, "h": 844, "title": "15b · Nhận lời mời (mobile)", "is_interactive": true},
-    "WorkspaceLogin.dc.html": {"x": 0, "y": 12340, "w": 1440, "h": 900, "title": "34 · Đăng nhập (địa chỉ workspace / địa chỉ chung)", "expand": "fill", "is_interactive": true},
-    "WorkspacePicker.dc.html": {"x": 1520, "y": 12340, "w": 1440, "h": 1000, "title": "35 · Chọn workspace (địa chỉ chung)", "expand": "fill", "is_interactive": true},
-    "NotMember.dc.html": {"x": 3040, "y": 12340, "w": 1440, "h": 900, "title": "36 · Không thuộc workspace ở địa chỉ này", "expand": "fill", "is_interactive": true},
-    "TemplateThumb.dc.html": {"x": -368, "y": 7240, "w": 320, "h": 240, "title": "Thành phần · Ảnh thu nhỏ template"},
-    "TemplateLibrary.dc.html": {"x": 0, "y": 7240, "w": 1440, "h": 1080, "title": "17 · Thư viện template", "expand": "fill", "is_interactive": true},
-    "TemplateDetail.dc.html": {"x": 1520, "y": 7240, "w": 1440, "h": 1080, "title": "18 · Chi tiết & preview template", "expand": "fill", "is_interactive": true},
-    "WorkspaceTemplates.dc.html": {"x": 3040, "y": 7240, "w": 1440, "h": 1000, "title": "19 · Template của workspace", "expand": "fill", "is_interactive": true},
-    "AiCreate.dc.html": {"x": 4560, "y": 7240, "w": 1440, "h": 1080, "title": "20 · Tạo landing page bằng AI", "expand": "fill", "is_interactive": true},
-    "AiAssistant.dc.html": {"x": 6080, "y": 7240, "w": 1440, "h": 1080, "title": "21 · Trợ lý AI trong editor", "expand": "fill", "is_interactive": true},
-    "Contacts.dc.html": {"x": 0, "y": 8940, "w": 1440, "h": 1000, "title": "22 · Danh bạ khách hàng", "expand": "fill", "is_interactive": true},
-    "ContactProfile.dc.html": {"x": 1520, "y": 8940, "w": 1440, "h": 1080, "title": "23 · Hồ sơ khách hàng", "expand": "fill", "is_interactive": true},
-    "Pipeline.dc.html": {"x": 3040, "y": 8940, "w": 1440, "h": 1000, "title": "24 · Pipeline cơ hội", "expand": "fill", "is_interactive": true},
-    "Automations.dc.html": {"x": 4560, "y": 8940, "w": 1440, "h": 1000, "title": "25 · Danh sách automation", "expand": "fill", "is_interactive": true},
-    "AutomationEditor.dc.html": {"x": 6080, "y": 8940, "w": 1440, "h": 1080, "title": "26 · Thiết lập automation", "expand": "fill", "is_interactive": true},
-    "AutomationRuns.dc.html": {"x": 7600, "y": 8940, "w": 1440, "h": 1000, "title": "27 · Lịch sử chạy automation", "expand": "fill", "is_interactive": true},
-    "MotionPage.dc.html": {"x": 0, "y": 13960, "w": 1440, "h": 1560, "title": "37 · Cài đặt trang → Phong cách chuyển động", "expand": "fill", "is_interactive": true},
-    "MotionSection.dc.html": {"x": 1520, "y": 13960, "w": 1440, "h": 1200, "title": "38 · Thuộc tính section → Hiệu ứng xuất hiện", "expand": "fill", "is_interactive": true},
-    "StyleLibrary.dc.html": {"x": 3040, "y": 13960, "w": 1440, "h": 1360, "title": "39 · Thư viện phong cách chuyển động", "expand": "fill", "is_interactive": true},
-    "EffectCatalog.dc.html": {"x": 4560, "y": 13960, "w": 1440, "h": 3040, "title": "40 · Bộ hiệu ứng mở rộng (34 hiệu ứng, chọn cái giữ lại)", "expand": "fill", "is_interactive": true}
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1080,
+      "title": "01 · Bảng điều khiển — danh sách trang",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Onboarding.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1080,
+      "title": "02 · Tạo trang — chọn mục tiêu & brief",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Editor.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1080,
+      "title": "03 · Editor — section builder có hướng dẫn",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "AddSection.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 1080,
+      "title": "04 · Thêm section",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Publish.dc.html": {
+      "x": 0,
+      "y": 1560,
+      "w": 1440,
+      "h": 1000,
+      "title": "05 · Xuất bản — kiểm tra trước khi live",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "History.dc.html": {
+      "x": 1520,
+      "y": 1560,
+      "w": 1440,
+      "h": 1000,
+      "title": "06 · Lịch sử phiên bản & rollback",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "SEO.dc.html": {
+      "x": 3040,
+      "y": 1560,
+      "w": 1440,
+      "h": 1000,
+      "title": "07 · SEO & chia sẻ",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Domain.dc.html": {
+      "x": 4560,
+      "y": 1560,
+      "w": 1440,
+      "h": 1000,
+      "title": "08 · Tên miền",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "PublicPage.dc.html": {
+      "x": 0,
+      "y": 3060,
+      "w": 390,
+      "h": 1720,
+      "title": "09 · Trang public trên mobile (khách truy cập)"
+    },
+    "Leads.dc.html": {
+      "x": 470,
+      "y": 3060,
+      "w": 1440,
+      "h": 1000,
+      "title": "10 · Hộp thư lead",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Analytics.dc.html": {
+      "x": 1990,
+      "y": 3060,
+      "w": 1440,
+      "h": 1000,
+      "title": "11 · Hiệu quả trang",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Consent.dc.html": {
+      "x": 3510,
+      "y": 3060,
+      "w": 1440,
+      "h": 1080,
+      "title": "12 · Dữ liệu cá nhân & đồng ý",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Sidebar.dc.html": {
+      "x": -368,
+      "y": 0,
+      "w": 248,
+      "h": 900,
+      "title": "Thành phần · Sidebar điều hướng"
+    },
+    "SidebarV2.dc.html": {
+      "x": -368,
+      "y": 5540,
+      "w": 248,
+      "h": 1000,
+      "title": "Thành phần · Sidebar v2 (workspace + site)"
+    },
+    "Domains.dc.html": {
+      "x": 0,
+      "y": 5540,
+      "w": 1440,
+      "h": 1000,
+      "title": "13 · Quản lý tên miền",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "DomainConnect.dc.html": {
+      "x": 1520,
+      "y": 5540,
+      "w": 1440,
+      "h": 1080,
+      "title": "14 · Kết nối & xác minh tên miền",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Members.dc.html": {
+      "x": 3040,
+      "y": 5540,
+      "w": 1440,
+      "h": 1000,
+      "title": "15 · Thành viên workspace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Roles.dc.html": {
+      "x": 4560,
+      "y": 5540,
+      "w": 1440,
+      "h": 1080,
+      "title": "16 · Vai trò & phân quyền",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "InviteAccept.dc.html": {
+      "x": 6080,
+      "y": 5540,
+      "w": 390,
+      "h": 844,
+      "title": "15b · Nhận lời mời (mobile)",
+      "is_interactive": true
+    },
+    "TemplateThumb.dc.html": {
+      "x": -368,
+      "y": 7240,
+      "w": 320,
+      "h": 240,
+      "title": "Thành phần · Ảnh thu nhỏ template"
+    },
+    "TemplateLibrary.dc.html": {
+      "x": 0,
+      "y": 7240,
+      "w": 1440,
+      "h": 1080,
+      "title": "17 · Thư viện template",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "TemplateDetail.dc.html": {
+      "x": 1520,
+      "y": 7240,
+      "w": 1440,
+      "h": 1080,
+      "title": "18 · Chi tiết & preview template",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "WorkspaceTemplates.dc.html": {
+      "x": 3040,
+      "y": 7240,
+      "w": 1440,
+      "h": 1000,
+      "title": "19 · Template của workspace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "AiCreate.dc.html": {
+      "x": 4560,
+      "y": 7240,
+      "w": 1440,
+      "h": 1080,
+      "title": "20 · Tạo landing page bằng AI",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "AiAssistant.dc.html": {
+      "x": 6080,
+      "y": 7240,
+      "w": 1440,
+      "h": 1080,
+      "title": "21 · Trợ lý AI trong editor",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Contacts.dc.html": {
+      "x": 0,
+      "y": 8940,
+      "w": 1440,
+      "h": 1000,
+      "title": "22 · Danh bạ khách hàng",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "ContactProfile.dc.html": {
+      "x": 1520,
+      "y": 8940,
+      "w": 1440,
+      "h": 1080,
+      "title": "23 · Hồ sơ khách hàng",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Pipeline.dc.html": {
+      "x": 3040,
+      "y": 8940,
+      "w": 1440,
+      "h": 1000,
+      "title": "24 · Pipeline cơ hội",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Automations.dc.html": {
+      "x": 4560,
+      "y": 8940,
+      "w": 1440,
+      "h": 1000,
+      "title": "25 · Danh sách automation",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "AutomationEditor.dc.html": {
+      "x": 6080,
+      "y": 8940,
+      "w": 1440,
+      "h": 1080,
+      "title": "26 · Thiết lập automation",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "AutomationRuns.dc.html": {
+      "x": 7600,
+      "y": 8940,
+      "w": 1440,
+      "h": 1000,
+      "title": "27 · Lịch sử chạy automation",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Plan.dc.html": {
+      "x": 0,
+      "y": 10640,
+      "w": 1440,
+      "h": 1080,
+      "title": "28 · Gói dịch vụ & mức sử dụng",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Billing.dc.html": {
+      "x": 1520,
+      "y": 10640,
+      "w": 1440,
+      "h": 1080,
+      "title": "29 · Thanh toán & hóa đơn",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Marketplace.dc.html": {
+      "x": 3040,
+      "y": 10640,
+      "w": 1440,
+      "h": 1080,
+      "title": "30 · Marketplace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "MarketplaceItem.dc.html": {
+      "x": 4560,
+      "y": 10640,
+      "w": 1440,
+      "h": 1080,
+      "title": "31 · Chi tiết sản phẩm marketplace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Purchases.dc.html": {
+      "x": 6080,
+      "y": 10640,
+      "w": 1440,
+      "h": 1000,
+      "title": "32 · Sản phẩm đã mua",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Vendor.dc.html": {
+      "x": 7600,
+      "y": 10640,
+      "w": 1440,
+      "h": 1080,
+      "title": "33 · Khu vực nhà cung cấp",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "WorkspaceLogin.dc.html": {
+      "x": 0,
+      "y": 12340,
+      "w": 1440,
+      "h": 900,
+      "title": "34 · Đăng nhập (địa chỉ workspace / địa chỉ chung)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "WorkspacePicker.dc.html": {
+      "x": 1520,
+      "y": 12340,
+      "w": 1440,
+      "h": 1000,
+      "title": "35 · Chọn workspace (địa chỉ chung)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "NotMember.dc.html": {
+      "x": 3040,
+      "y": 12340,
+      "w": 1440,
+      "h": 900,
+      "title": "36 · Không thuộc workspace ở địa chỉ này",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "MotionPage.dc.html": {
+      "x": 0,
+      "y": 13960,
+      "w": 1440,
+      "h": 1560,
+      "title": "37 · Cài đặt trang → Phong cách chuyển động",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "MotionSection.dc.html": {
+      "x": 1520,
+      "y": 13960,
+      "w": 1440,
+      "h": 1200,
+      "title": "38 · Thuộc tính section → Hiệu ứng xuất hiện",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "StyleLibrary.dc.html": {
+      "x": 3040,
+      "y": 13960,
+      "w": 1440,
+      "h": 1360,
+      "title": "39 · Thư viện phong cách chuyển động",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "EffectCatalog.dc.html": {
+      "x": 4560,
+      "y": 13960,
+      "w": 1440,
+      "h": 3040,
+      "title": "40 · Bộ hiệu ứng mở rộng (34 hiệu ứng, chọn cái giữ lại)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "DsFoundations.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 2600,
+      "title": "DS-01 · Nền tảng: màu, chữ, bo góc, đổ bóng, biểu tượng",
+      "page": "design-system",
+      "expand": "fill"
+    },
+    "DsComponents.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 2400,
+      "title": "DS-02 · Thành phần giao diện quản trị",
+      "page": "design-system",
+      "expand": "fill",
+      "is_interactive": true
+    }
   },
   "order": [
     "Main.dc.html",
@@ -64,35 +446,171 @@
     "Members.dc.html",
     "Roles.dc.html",
     "InviteAccept.dc.html",
-    "WorkspaceLogin.dc.html",
-    "WorkspacePicker.dc.html",
-    "NotMember.dc.html",
     "TemplateThumb.dc.html",
     "TemplateLibrary.dc.html",
     "TemplateDetail.dc.html",
     "WorkspaceTemplates.dc.html",
     "AiCreate.dc.html",
     "AiAssistant.dc.html",
+    "Contacts.dc.html",
+    "ContactProfile.dc.html",
+    "Pipeline.dc.html",
+    "Automations.dc.html",
+    "AutomationEditor.dc.html",
+    "AutomationRuns.dc.html",
+    "Plan.dc.html",
+    "Billing.dc.html",
+    "Marketplace.dc.html",
+    "MarketplaceItem.dc.html",
+    "Purchases.dc.html",
+    "Vendor.dc.html",
+    "WorkspaceLogin.dc.html",
+    "WorkspacePicker.dc.html",
+    "NotMember.dc.html",
     "MotionPage.dc.html",
     "MotionSection.dc.html",
     "StyleLibrary.dc.html",
-    "EffectCatalog.dc.html"
+    "EffectCatalog.dc.html",
+    "DsFoundations.dc.html",
+    "DsComponents.dc.html"
   ],
   "notes": {
-    "rowCreate": {"x": 0, "y": -320, "text": "CREATE — Tạo & biên tập trang", "kind": "title1", "maxW": 6000},
-    "rowOperate": {"x": 0, "y": 1240, "text": "OPERATE — Xuất bản an toàn, lịch sử, SEO, tên miền", "kind": "title1", "maxW": 6000},
-    "rowConvert": {"x": 0, "y": 2740, "text": "CONVERT — Lead & đo lường (chỉ khi chọn MVP B)", "kind": "title1", "maxW": 4950},
-    "assumptions": {"x": -888, "y": 0, "w": 440, "fill": "blue", "text": "Giả định thiết kế (chưa phải quyết định)\n\n• ICP chính: SME marketing + small agency — D-01 còn mở\n• Baseline MVP A (publish-first); hàng CONVERT chỉ áp dụng nếu chọn MVP B — D-02\n• Editor: section builder có hướng dẫn — D-03\n• Workspace agency → nhiều site khách hàng — D-05\n• Nội dung mẫu: khách hàng giả định “Nha khoa Smile Care”; số liệu trong mockup là dữ liệu mẫu\n• Font Be Vietnam Pro + JetBrains Mono"},
-    "phase1": {"x": 0, "y": 5220, "text": "PHASE 1 · VẬN HÀNH & ĐỘI NHÓM — Tên miền riêng, thành viên, phân quyền", "kind": "title1", "maxW": 6470},
-    "phase1Decisions": {"x": -888, "y": 5540, "w": 440, "fill": "orange", "text": "Phase 1 · Giả định đang vẽ — cần chốt\n\n• Tên miền: nhận cả tên miền phụ (khuyên dùng) và tên miền gốc; tối đa 5 tên miền mỗi site\n• Một địa chỉ chính; mọi địa chỉ khác chuyển hướng 301 về địa chỉ chính\n• Tên miền đang gắn với site khác: chặn, chủ tên miền xác minh bằng bản ghi TXT rồi mới chuyển\n• Bộ vai trò cố định 6 loại; vai trò tùy chỉnh để sau\n• Phạm vi quyền: toàn workspace hoặc các site được chọn\n• “Xem lead” và “Xuất / xóa dữ liệu cá nhân” là hai quyền riêng\n• Lời mời hết hạn sau 7 ngày, chỉ dùng một lần, gắn với email được mời\n• Bị giới hạn vì gói dịch vụ hiện nhãn “Nâng cấp”, khác với “Không có quyền”"},
-    "d2": {"x": 0, "y": 12020, "text": "TÁCH DATABASE · ĐỊA CHỈ WORKSPACE (D2, ADR-025) — Mỗi workspace một địa chỉ admin", "kind": "title1", "maxW": 4480},
-    "d2Decisions": {"x": -888, "y": 12340, "w": 440, "fill": "orange", "text": "D2 · Giả định đang vẽ — cần chốt\n\n• Mỗi workspace có địa chỉ admin {slug}.app.<tên miền>, tạo từ tên workspace lúc đăng ký; chưa đổi được\n• Tên miền minh họa app.payload.vn, chốt cùng BASE_DOMAIN (§6); admin và trang công khai dùng hai tên miền khác nhau\n• Một lần đăng nhập dùng cho mọi địa chỉ workspace của người đó\n• Địa chỉ chung: thuộc một workspace thì mở thẳng; nhiều thì chọn (màn 35); không thuộc workspace nào thì hiện trạng thái trống\n• Người ngoài, hoặc địa chỉ không tồn tại: cùng màn 36, không lộ tên workspace\n• Đổi workspace ở Sidebar v2 (bật switcherOpen) mở địa chỉ của workspace kia\n• Email (lời mời, lead, duyệt xuất bản, tên miền) dẫn tới địa chỉ của workspace"},
-    "phase2": {"x": 0, "y": 6920, "text": "PHASE 2 · TẠO TRANG NHANH — Template và AI, đều chỉ ghi vào bản nháp", "kind": "title1", "maxW": 7520},
-    "phase2Decisions": {"x": -888, "y": 7240, "w": 440, "fill": "orange", "text": "Phase 2 · Giả định đang vẽ — cần chốt\n\n• Template = các section + theme + chữ mẫu. Không mang theo lead, tên miền, nơi nhận lead hay nội dung đồng ý\n• Tạo từ mẫu tạo bản nháp độc lập, ghi lại phiên bản template đã dùng; sửa template không đổi trang đã tạo\n• Mẫu có form mà site chưa cài nơi nhận lead / đồng ý: vẫn tạo được, checklist xuất bản chặn như hiện tại\n• Áp mẫu vào trang đang sửa chỉ đổi bản nháp, hoàn tác được, trang live không đổi\n• AI bản đầu: tạo trang từ brief + viết lại chữ trong section; chưa tạo ảnh\n• Dữ liệu gửi AI: brief và chữ của bản nháp; không gửi lead hay dữ liệu cá nhân\n• Hạn mức AI tính theo lượt mỗi tháng theo gói — con số chưa có\n• AI không bao giờ xuất bản; mỗi lần áp dụng là một bước hoàn tác"},
-    "phase3": {"x": 0, "y": 8620, "text": "PHASE 3 · CHĂM SÓC KHÁCH — CRM mở rộng từ hộp thư lead, automation chạy theo sự kiện lead/CRM", "kind": "title1", "maxW": 9040},
-    "phase3Decisions": {"x": -888, "y": 8940, "w": 440, "fill": "orange", "text": "Phase 3 · Giả định đang vẽ — cần chốt\n\n• Lead = một lần gửi form, không đổi, giữ bằng chứng đồng ý. Khách hàng (contact) = một người, gom các lead. Cơ hội = một nhu cầu cụ thể của khách, đi qua pipeline\n• Trùng số điện thoại (E.164) trong cùng site → tự gom. Chỉ giống tên hoặc email khác → gợi ý gộp, người dùng quyết\n• Khách hàng thuộc một site; không chia sẻ giữa các site, không gộp giữa workspace\n• Pipeline mặc định mỗi site: Mới → Đã liên hệ → Hẹn lịch → Đã đến → Thắng / Thua. Trạng thái lead hiện có chuyển thành giai đoạn\n• Xóa dữ liệu một người xóa luôn khách hàng, cơ hội, ghi chú, công việc\n• Automation bản đầu: sự kiện = lead mới, cơ hội đổi giai đoạn, công việc quá hạn; hành động = giao người, tạo công việc, gắn nhãn, email nội bộ, webhook. Chưa gửi tin cho khách (SMS, Zalo)\n• Mỗi lượt chạy có khóa (automation, sự kiện); thử lại không chạy lại bước đã thành công\n• Tự tạm dừng sau 20 lỗi liên tiếp; hạn mức lượt chạy theo gói — con số chưa có"},
-    "motion": {"x": 0, "y": 13640, "text": "CHUYỂN ĐỘNG — Phong cách toàn trang, điểm nhấn theo nội dung, hiệu ứng riêng từng section, bộ hiệu ứng mở rộng", "kind": "title1", "maxW": 6000},
-    "motionDecisions": {"x": -888, "y": 13960, "w": 440, "fill": "orange", "text": "Chuyển động · Giả định đang vẽ — cần chốt\n\n• Ba lớp: phong cách cả trang → tùy chỉnh thêm (mức độ, điểm nhấn) → chỉnh riêng từng section (cách xuất hiện, thứ tự, điểm nhấn). Lớp dưới mặc định “theo cài đặt trang”\n• 6 phong cách: Không hiệu ứng (mặc định trang mới), Tinh tế, Mượt mà, Năng động, Sang trọng, Vui tươi. Template có thể chọn sẵn; luôn tắt được toàn bộ (màn 37, tweak “Tạo từ template”)\n• Nhãn “Hợp ngành” cần bảng ngành → phong cách (nha khoa → Tinh tế, Mượt mà là giả định)\n• 6 cách xuất hiện: Hiện dần, Trượt lên, Trượt từ bên (chữ trái, ảnh phải), Phóng nhẹ, Bật lên, Hé lộ. Thứ tự: cùng lúc, lần lượt, theo hàng (chỉ section dạng lưới)\n• 4 điểm nhấn, chỉ chạy ở section có nội dung tương ứng: tiêu đề từng dòng, ảnh hé lộ, số liệu đếm lên, các bước nối nhau. Số liệu luôn có giá trị thật trong HTML\n• Mức độ Nhẹ / Vừa / Rõ: trượt 8 / 12 / 16 px. Mockup dùng 380–750 ms cho dễ xem, dài hơn khung 250–400 ms đề xuất; chốt sau khi thử trên thiết bị thật\n• Thanh điều hướng và section đầu trang luôn hiện ngay. Mỗi section chạy một lần khi vào vùng nhìn; editor đứng yên, chỉ chạy khi bấm Chạy thử (cả trang, một section, xem chậm ¼) hoặc mở xem trước\n• Thiết bị bật giảm chuyển động: tắt hết, số liệu hiện ngay. “Giảm chuyển động trên điện thoại”: chỉ hiện dần, cùng lúc\n• Chỉ transform và opacity; JavaScript lỗi thì nội dung vẫn hiện đủ. Cấu hình thuộc bản nháp; xuất bản và rollback đi cùng phiên bản\n• Hover nút, mở câu hỏi, gửi form: hệ thống quy định, giống nhau ở mọi phong cách. Để sau: parallax, chữ chạy, nhấp nháy, animation lặp, timeline\n• Màn 40: 34 hiệu ứng — 10 đã có, 19 đề xuất thêm, 3 để sau (chữ đổi luân phiên, ảnh trôi khi cuộn, logo chạy ngang), 2 không khuyên dùng (gõ chữ, nút nhấp nháy). Cần chọn cái nào vào bản đầu rồi mới nối vào phong cách và bảng section"}
+    "rowCreate": {
+      "x": 0,
+      "y": -320,
+      "text": "CREATE — Tạo & biên tập trang",
+      "kind": "title1",
+      "maxW": 6000
+    },
+    "rowOperate": {
+      "x": 0,
+      "y": 1240,
+      "text": "OPERATE — Xuất bản an toàn, lịch sử, SEO, tên miền",
+      "kind": "title1",
+      "maxW": 6000
+    },
+    "rowConvert": {
+      "x": 0,
+      "y": 2740,
+      "text": "CONVERT — Lead & đo lường (chỉ khi chọn MVP B)",
+      "kind": "title1",
+      "maxW": 4950
+    },
+    "assumptions": {
+      "x": -888,
+      "y": 0,
+      "w": 440,
+      "fill": "blue",
+      "text": "Giả định thiết kế (chưa phải quyết định)\n\n• ICP chính: SME marketing + small agency — D-01 còn mở\n• Baseline MVP A (publish-first); hàng CONVERT chỉ áp dụng nếu chọn MVP B — D-02\n• Editor: section builder có hướng dẫn — D-03\n• Workspace agency → nhiều site khách hàng — D-05\n• Nội dung mẫu: khách hàng giả định “Nha khoa Smile Care”; số liệu trong mockup là dữ liệu mẫu\n• Font Be Vietnam Pro + JetBrains Mono"
+    },
+    "phase1": {
+      "x": 0,
+      "y": 5220,
+      "text": "PHASE 1 · VẬN HÀNH & ĐỘI NHÓM — Tên miền riêng, thành viên, phân quyền",
+      "kind": "title1",
+      "maxW": 6470
+    },
+    "phase1Decisions": {
+      "x": -888,
+      "y": 5540,
+      "w": 440,
+      "fill": "orange",
+      "text": "Phase 1 · Giả định đang vẽ — cần chốt\n\n• Tên miền: nhận cả tên miền phụ (khuyên dùng) và tên miền gốc; tối đa 5 tên miền mỗi site\n• Một địa chỉ chính; mọi địa chỉ khác chuyển hướng 301 về địa chỉ chính\n• Tên miền đang gắn với site khác: chặn, chủ tên miền xác minh bằng bản ghi TXT rồi mới chuyển\n• Bộ vai trò cố định 6 loại; vai trò tùy chỉnh để sau\n• Phạm vi quyền: toàn workspace hoặc các site được chọn\n• “Xem lead” và “Xuất / xóa dữ liệu cá nhân” là hai quyền riêng\n• Lời mời hết hạn sau 7 ngày, chỉ dùng một lần, gắn với email được mời\n• Bị giới hạn vì gói dịch vụ hiện nhãn “Nâng cấp”, khác với “Không có quyền”"
+    },
+    "phase2": {
+      "x": 0,
+      "y": 6920,
+      "text": "PHASE 2 · TẠO TRANG NHANH — Template và AI, đều chỉ ghi vào bản nháp",
+      "kind": "title1",
+      "maxW": 7520
+    },
+    "phase2Decisions": {
+      "x": -888,
+      "y": 7240,
+      "w": 440,
+      "fill": "orange",
+      "text": "Phase 2 · Giả định đang vẽ — cần chốt\n\n• Template = các section + theme + chữ mẫu. Không mang theo lead, tên miền, nơi nhận lead hay nội dung đồng ý\n• Tạo từ mẫu tạo bản nháp độc lập, ghi lại phiên bản template đã dùng; sửa template không đổi trang đã tạo\n• Mẫu có form mà site chưa cài nơi nhận lead / đồng ý: vẫn tạo được, checklist xuất bản chặn như hiện tại\n• Áp mẫu vào trang đang sửa chỉ đổi bản nháp, hoàn tác được, trang live không đổi\n• AI bản đầu: tạo trang từ brief + viết lại chữ trong section; chưa tạo ảnh\n• Dữ liệu gửi AI: brief và chữ của bản nháp; không gửi lead hay dữ liệu cá nhân\n• Hạn mức AI tính theo lượt mỗi tháng theo gói — con số chưa có\n• AI không bao giờ xuất bản; mỗi lần áp dụng là một bước hoàn tác"
+    },
+    "phase3": {
+      "x": 0,
+      "y": 8620,
+      "text": "PHASE 3 · CHĂM SÓC KHÁCH — CRM mở rộng từ hộp thư lead, automation chạy theo sự kiện lead/CRM",
+      "kind": "title1",
+      "maxW": 9040
+    },
+    "phase3Decisions": {
+      "x": -888,
+      "y": 8940,
+      "w": 440,
+      "fill": "orange",
+      "text": "Phase 3 · Giả định đang vẽ — cần chốt\n\n• Lead = một lần gửi form, không đổi, giữ bằng chứng đồng ý. Khách hàng (contact) = một người, gom các lead. Cơ hội = một nhu cầu cụ thể của khách, đi qua pipeline\n• Trùng số điện thoại (E.164) trong cùng site → tự gom. Chỉ giống tên hoặc email khác → gợi ý gộp, người dùng quyết\n• Khách hàng thuộc một site; không chia sẻ giữa các site, không gộp giữa workspace\n• Pipeline mặc định mỗi site: Mới → Đã liên hệ → Hẹn lịch → Đã đến → Thắng / Thua. Trạng thái lead hiện có chuyển thành giai đoạn\n• Xóa dữ liệu một người xóa luôn khách hàng, cơ hội, ghi chú, công việc\n• Automation bản đầu: sự kiện = lead mới, cơ hội đổi giai đoạn, công việc quá hạn; hành động = giao người, tạo công việc, gắn nhãn, email nội bộ, webhook. Chưa gửi tin cho khách (SMS, Zalo)\n• Mỗi lượt chạy có khóa (automation, sự kiện); thử lại không chạy lại bước đã thành công\n• Tự tạm dừng sau 20 lỗi liên tiếp; hạn mức lượt chạy theo gói — con số chưa có"
+    },
+    "phase4": {
+      "x": 0,
+      "y": 10320,
+      "text": "PHASE 4 · THƯƠNG MẠI HÓA — Gói dịch vụ, thanh toán và marketplace template",
+      "kind": "title1",
+      "maxW": 9040
+    },
+    "phase4Decisions": {
+      "x": -888,
+      "y": 10640,
+      "w": 440,
+      "fill": "orange",
+      "text": "Phase 4 · Chưa chốt — không điền số giả\n\n• Giá, chu kỳ, tiền tệ, dùng thử, hoàn tiền: mọi chỗ hiện [GIÁ …], [HẠN MỨC], [CHÍNH SÁCH …]\n• Giả định: gói tính theo workspace; hạn mức gồm site, thành viên, lượt AI, lượt chạy automation, tên miền riêng\n• Chỉ Chủ sở hữu đổi gói, thanh toán, mua; Quản trị xem mức dùng\n• Hạ gói vượt hạn mức: không xóa dữ liệu, chỉ chặn tạo mới và tạm dừng tính năng không còn trong gói\n• Quá hạn / đã hủy: trang live của khách xử lý thế nào — CẦN CHỐT trước khi vẽ thêm\n• Hóa đơn điện tử: MST, tên, địa chỉ, email nhận\n• Marketplace: ai được bán, kiểm duyệt, giấy phép (bao nhiêu site), chia doanh thu, hoàn tiền, trả tiền cho nhà cung cấp — CẦN CHỐT trước khi làm checkout thật; checkout mới vẽ tới bước xác nhận\n• Template đã mua gắn với workspace; cập nhật phiên bản không đổi trang đã tạo"
+    },
+    "d2": {
+      "x": 0,
+      "y": 12020,
+      "text": "TÁCH DATABASE · ĐỊA CHỈ WORKSPACE (D2, ADR-025) — Mỗi workspace một địa chỉ admin",
+      "kind": "title1",
+      "maxW": 4480
+    },
+    "d2Decisions": {
+      "x": -888,
+      "y": 12340,
+      "w": 440,
+      "fill": "orange",
+      "text": "D2 · Giả định đang vẽ — cần chốt\n\n• Mỗi workspace có địa chỉ admin {slug}.app.<tên miền>, tạo từ tên workspace lúc đăng ký; chưa đổi được\n• Tên miền minh họa app.payload.vn, chốt cùng BASE_DOMAIN (§6); admin và trang công khai dùng hai tên miền khác nhau\n• Một lần đăng nhập dùng cho mọi địa chỉ workspace của người đó\n• Địa chỉ chung: thuộc một workspace thì mở thẳng; nhiều thì chọn (màn 35); không thuộc workspace nào thì hiện trạng thái trống\n• Người ngoài, hoặc địa chỉ không tồn tại: cùng màn 36, không lộ tên workspace\n• Đổi workspace ở Sidebar v2 (bật switcherOpen) mở địa chỉ của workspace kia\n• Email (lời mời, lead, duyệt xuất bản, tên miền) dẫn tới địa chỉ của workspace"
+    },
+    "motion": {
+      "x": 0,
+      "y": 13640,
+      "text": "CHUYỂN ĐỘNG — Phong cách toàn trang, điểm nhấn theo nội dung, hiệu ứng riêng từng section, bộ hiệu ứng mở rộng",
+      "kind": "title1",
+      "maxW": 6000
+    },
+    "motionDecisions": {
+      "x": -888,
+      "y": 13960,
+      "w": 440,
+      "fill": "orange",
+      "text": "Chuyển động · Giả định đang vẽ — cần chốt\n\n• Ba lớp: phong cách cả trang → tùy chỉnh thêm (mức độ, điểm nhấn) → chỉnh riêng từng section (cách xuất hiện, thứ tự, điểm nhấn). Lớp dưới mặc định “theo cài đặt trang”\n• 6 phong cách: Không hiệu ứng (mặc định trang mới), Tinh tế, Mượt mà, Năng động, Sang trọng, Vui tươi. Template có thể chọn sẵn; luôn tắt được toàn bộ (màn 37, tweak “Tạo từ template”)\n• Nhãn “Hợp ngành” cần bảng ngành → phong cách (nha khoa → Tinh tế, Mượt mà là giả định)\n• 6 cách xuất hiện: Hiện dần, Trượt lên, Trượt từ bên (chữ trái, ảnh phải), Phóng nhẹ, Bật lên, Hé lộ. Thứ tự: cùng lúc, lần lượt, theo hàng (chỉ section dạng lưới)\n• 4 điểm nhấn, chỉ chạy ở section có nội dung tương ứng: tiêu đề từng dòng, ảnh hé lộ, số liệu đếm lên, các bước nối nhau. Số liệu luôn có giá trị thật trong HTML\n• Mức độ Nhẹ / Vừa / Rõ: trượt 8 / 12 / 16 px. Mockup dùng 380–750 ms cho dễ xem, dài hơn khung 250–400 ms đề xuất; chốt sau khi thử trên thiết bị thật\n• Thanh điều hướng và section đầu trang luôn hiện ngay. Mỗi section chạy một lần khi vào vùng nhìn; editor đứng yên, chỉ chạy khi bấm Chạy thử (cả trang, một section, xem chậm ¼) hoặc mở xem trước\n• Thiết bị bật giảm chuyển động: tắt hết, số liệu hiện ngay. “Giảm chuyển động trên điện thoại”: chỉ hiện dần, cùng lúc\n• Chỉ transform và opacity; JavaScript lỗi thì nội dung vẫn hiện đủ. Cấu hình thuộc bản nháp; xuất bản và rollback đi cùng phiên bản\n• Hover nút, mở câu hỏi, gửi form: hệ thống quy định, giống nhau ở mọi phong cách. Để sau: parallax, chữ chạy, nhấp nháy, animation lặp, timeline\n• Màn 40: 34 hiệu ứng — 10 đã có, 19 đề xuất thêm, 3 để sau (chữ đổi luân phiên, ảnh trôi khi cuộn, logo chạy ngang), 2 không khuyên dùng (gõ chữ, nút nhấp nháy). Cần chọn cái nào vào bản đầu rồi mới nối vào phong cách và bảng section"
+    },
+    "dsTitle": {
+      "x": 0,
+      "y": -320,
+      "text": "PLP DESIGN SYSTEM — Giao diện quản trị (@plp/ui), liên kết từ artifact Design System",
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "design-system"
+    },
+    "dsLinked": {
+      "x": -520,
+      "y": 0,
+      "w": 440,
+      "fill": "blue",
+      "page": "design-system",
+      "text": "Design system đã liên kết\n\n• Nguồn: artifact PLP Design System, đồng bộ từ packages/ui (main 5081aaa, 03/11/2026): 45 màu, 10 kiểu chữ, 7 bo góc, 4 đổ bóng, 52 biểu tượng\n• Canvas giữ bản sao ở ds/plpui/: tokens.json (màu và kiểu chữ trong menu Theme), tokens.css (board nạp bằng <link>)\n• Bản sao không tự đổi: sửa design system xong thì cập nhật lại liên kết\n• Board mới nên nạp ds/plpui/tokens.css và dùng var(--color-…), var(--text-…), var(--radius-…) thay cho mã màu rời\n• Thành phần chưa build thành bundle: DS-02 dựng lại bằng markup theo module.css của từng thành phần\n• Trang khách (theme @plp/sections, font Lora) không thuộc hệ thống này"
+    }
   },
-  "designSystems": []
+  "designSystems": [
+    {
+      "title": "PLP Design System",
+      "namespace": "plpui",
+      "artifact": "https://claude.ai/artifact/WkQAd6dAontGTrfTXrkczG",
+      "version": "1793712718-91ff",
+      "copiedAt": "2026-11-03T13:47:36Z"
+    }
+  ]
 }
