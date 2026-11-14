@@ -118,6 +118,10 @@ install_browsers() {
 }
 
 start_docker() {
+  if ! command -v docker >/dev/null; then
+    echo "docker is not installed"
+    return 1
+  fi
   if docker info >/dev/null 2>&1; then
     return 0
   fi
