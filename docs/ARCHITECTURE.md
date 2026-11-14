@@ -62,18 +62,27 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - AI tạo trang đề xuất phong cách; người dùng đổi được (ADR-031).
 - Tương ứng màn 37–39; màn 40 là danh mục tham chiếu, bản đầu giữ 10 hiệu ứng. Lát và trạng thái ở §5.
 
-**Phase 3 (chăm sóc khách), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-04, theo board Phase 3 của artifact thiết kế):
+**Phase 3 (chăm sóc khách), đã xong** (chủ sản phẩm yêu cầu ngày 2026-11-04, theo board Phase 3 của artifact thiết kế):
 
 - Khách hàng gom từ lead của site, gộp trùng, hồ sơ với ghi chú, công việc và lịch hẹn (ADR-033).
 - Pipeline cơ hội cố định 6 giai đoạn; trạng thái của lead là giai đoạn cơ hội của nó (ADR-033).
 - Automation theo sự kiện của lead và CRM: giao người, tạo công việc, gắn nhãn, email nội bộ, webhook. Hàng đợi nằm trong MongoDB, hạn mức 2.000 lượt mỗi workspace mỗi tháng (ADR-034).
 - Tương ứng màn 22–27. Lát và trạng thái ở §5.
 
-**Ngoài phạm vi MVP B, Phase 1, Phase 2 và Phase 3:**
+**Phase 4 (thương mại hóa), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-14, theo board Phase 4 của artifact thiết kế). Bản đầu là gói và thanh toán; marketplace để sau:
+
+- Ba gói tính theo workspace, hạn mức site, thành viên, lượt AI, lượt automation, tên miền riêng, và tính năng theo gói ("Theo gói", "Nâng cấp") (ADR-035).
+- Dùng thử, đổi gói, hạ gói theo lịch, hủy và giữ lại gói (ADR-035).
+- Thanh toán qua một cổng có adapter; bản đầu dùng adapter giả. Phương thức thanh toán, thông tin xuất hóa đơn, lịch sử giao dịch, gia hạn, thanh toán lỗi và thời gian ân hạn (ADR-035).
+- Quá hạn hay đã hủy: trang live và form lead vẫn chạy, admin chỉ đọc, không xóa dữ liệu (ADR-035).
+- Tương ứng màn 28–29, mục "Gói & thanh toán" của Sidebar v2 và nhóm Thanh toán của màn 16. Lát và trạng thái ở §5.
+
+**Ngoài phạm vi MVP B và Phase 1–4:**
 
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
 - Form có trường tùy ý, captcha của bên thứ ba, banner cookie, tạo trang chính sách từ mẫu.
-- Gói, thanh toán và marketplace (Phase 4): chưa có quyết định phạm vi. Mọi phần của màn 17–27 nói tới Marketplace hay gói ("Nâng cấp", "hạn mức theo gói") thuộc Phase 4.
+- Marketplace (màn 30–33, tab "Đã sở hữu từ Marketplace" của màn 17): chờ chủ sản phẩm chốt ai được bán, kiểm duyệt, giấy phép, chia doanh thu, hoàn tiền và trả tiền cho nhà cung cấp. Mua thêm lượt (add-on), mã giảm giá.
+- Hóa đơn điện tử hợp lệ theo luật: cần nhà cung cấp hóa đơn điện tử (§6). Bản đầu có biên nhận thanh toán.
 - Gửi tin cho khách (SMS, Zalo), nhiều pipeline hay sửa giai đoạn, trường tùy ý của khách hàng, nhập danh bạ từ file.
 - Free styling, điểm lưu bản nháp, rich text, màu thương hiệu tự nhập.
 
@@ -120,6 +129,11 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
     - Lead tự xóa theo thời gian lưu của site. Xóa dữ liệu một người là xóa thật.
     - Dữ liệu cá nhân của lead không vào log, activity hay số liệu Hiệu quả.
 11. **Đo lường:** không đặt cookie, không lưu IP, không tính lượt xem preview.
+12. **Gói và thanh toán** (ADR-035):
+    - Trạng thái gói (dùng thử, đang hoạt động, quá hạn, đã hủy…) và mức truy cập (`full` / `read_only`) suy ra phía server từ các mốc thời gian và kết quả thanh toán, không lưu trùng.
+    - Hạ gói, quá hạn hay hủy không xóa dữ liệu và không gỡ trang live: phần vượt hạn mức chỉ bị chặn tạo mới; workspace chỉ đọc vẫn nhận lead và vẫn xử lý được yêu cầu về dữ liệu cá nhân.
+    - Hóa đơn đã phát hành bất biến. Mỗi lần trừ tiền có idempotency key; một sự kiện của cổng thanh toán chỉ được áp dụng một lần.
+    - Không lưu số thẻ: cổng thanh toán giữ thẻ, hệ thống chỉ giữ token và bốn số cuối.
 
 ### 2.1 Diễn giải thiết kế thành quy tắc
 
@@ -831,6 +845,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Giới hạn chịu được request đồng thời:** giới hạn được kiểm tra bên trong transaction tạo mới, sau một lần ghi vào document cha (`site.pageSeq` cho trang, `workspace.siteSeq` cho site). Hai lần tạo đồng thời ghi cùng một document nên MongoDB thử lại lần sau, và lần đó đếm được bản ghi của lần trước.
   - **Đọc vượt giới hạn thì báo lỗi:** các phép đọc theo site và theo workspace lấy thêm một bản ghi; dữ liệu vượt giới hạn thì trả 500 và log, không âm thầm cắt bớt.
   - **Giới hạn site:** mỗi workspace tối đa `MAX_SITES_PER_WORKSPACE = 100` site, vì mọi màn trong workspace nạp danh sách site cho bộ chuyển site. Tạo site thứ 101 trả `site_limit_reached`. Chủ sản phẩm đã xác nhận con số này ngày 2026-10-25.
+- **Amended 2026-11-14 (ADR-035):** số site của một workspace còn bị giới hạn bởi gói (`plan_limit_reached`, 402). `MAX_SITES_PER_WORKSPACE` vẫn là giới hạn cứng nằm trên mọi gói.
 
 ### ADR-015 — Cài đặt site được chụp vào release
 
@@ -1331,6 +1346,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `automations.view` ("Xem automation và lịch sử chạy"): Chủ sở hữu, Quản trị, Chăm sóc khách hàng;
     - `automations.manage` ("Tạo, bật, tạm dừng automation"): Chủ sở hữu, Quản trị.
   - Sidebar v2 có thêm "Khách hàng" và "Automation" theo hai quyền xem.
+- **Amended 2026-11-14 (ADR-035, Phase 4):**
+  - Bảng quyền có thêm nhóm Thanh toán: `billing.view` ("Xem gói và mức sử dụng"): Chủ sở hữu, Quản trị; `billing.manage` ("Đổi gói, thanh toán, tải hóa đơn"): chỉ Chủ sở hữu.
+  - Mỗi quyền mang cờ đọc hay ghi. Workspace chỉ đọc bị từ chối các quyền ghi ở cùng lối vào kiểm tra quyền, bằng 402 `workspace_read_only`, trừ những quyền ADR-035 vẫn cho.
+  - Nhãn "Theo gói" của màn 16 có ở các dòng automation. Tính năng không có trong gói trả 402 `plan_feature_required`, khác 403 `forbidden`.
 
 ### ADR-021 — Thành viên, lời mời, yêu cầu đổi quyền và chuyển quyền sở hữu
 
@@ -1427,6 +1446,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - "Tóm tắt thay đổi" chỉ so các site còn trong workspace: hộp thoại chưa sửa gì của thành viên giữ một site đã xóa ghi "Chưa có thay đổi.".
     - Kết quả từ chối hay tham gia, và lỗi của hai nút đó, thuộc về link đã chọn: mở link mời khác trong cùng tab thì hiện lời mời của link đó.
     - Thẻ "đã từ chối" có "Về trang chủ".
+- **Amended 2026-11-14 (ADR-035):** số thành viên của workspace bị giới hạn bởi gói, tính cả lời mời đang chờ. Mời vượt hạn mức trả 402 `plan_limit_reached`. Workspace chỉ đọc không mời được, nhưng vẫn gỡ thành viên và chuyển quyền sở hữu được.
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1522,6 +1542,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Tiêu đề bước cho trạng thái board không vẽ: taken → "Xác minh quyền sở hữu", lost → "Sửa bản ghi DNS", needs_attention → "Chưa bật được HTTPS".
     - Tìm trang so cả slug với dấu gạch ngang là khoảng trắng: "khuyen mai" tìm ra `khuyen-mai`.
     - "Đặt làm chính" cho địa chỉ mặc định không hứa chuyển hướng 301: renderer chỉ chuyển hướng về tên miền riêng đang là địa chỉ chính. Hộp thoại nói tên miền riêng vẫn mở các trang, còn sitemap và canonical chuyển sang địa chỉ mặc định.
+- **Amended 2026-11-14 (ADR-035):** số tên miền riêng tính trên mọi site của workspace và bị giới hạn bởi gói (402 `plan_limit_reached`); 5 tên miền mỗi site vẫn là giới hạn cứng. Hạ gói không ngắt tên miền đang dùng.
 
 ### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
 
@@ -1655,6 +1676,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Nhật ký hoạt động của site chỉ trả sự kiện `lead.*` cho vai trò có `leads.view`, và `data_request.*` cho vai trò có `personalData.manage`: chúng mang số lead và việc xử lý dữ liệu cá nhân.
   - Thông báo từ chối (`holdersOf`) vẫn chỉ nêu vai trò hệ thống, kể cả với quyền chọn được cho vai trò tùy chỉnh.
 - **Amended 2026-11-02 (ADR-030, lát G2):** dòng "Lưu và quản lý template" (`templates.manage`) nay là quyền chọn được, không ràng buộc với quyền nào khác. Dòng "Dùng trợ lý AI" vẫn chờ tính năng của nó (ADR-031).
+- **Amended 2026-11-14 (ADR-035):** `billing.manage` không chọn được cho vai trò tùy chỉnh, như `workspace.transferOwnership`; `billing.view` cũng không. Tạo và sửa vai trò tùy chỉnh cần gói có tính năng này (Doanh nghiệp); hạ gói không đổi quyền của thành viên đang mang vai trò tùy chỉnh.
 
 ### ADR-025 — Master DB và một database cho mỗi workspace
 
@@ -1745,6 +1767,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-04 (Phase 3):**
   - Workspace DB có thêm `contacts`, `opportunities`, `contact_events`, `tasks`, `meetings`, `merge_suggestions` (ADR-033), và `automations`, `automation_runs`, `automation_usage` (ADR-034).
   - Master có thêm `job_wakeups { workspaceId, dueAt }`: mốc đến hạn sớm nhất của hàng đợi automation, không có dữ liệu của khách. Mỗi instance theo dõi nó bằng change stream.
+- **Amended 2026-11-14 (ADR-035):**
+  - Master có thêm `subscriptions` (một gói mỗi workspace, `_id` là `workspaceId`), `invoices`, `billing_events`, `billing_log` và bộ đếm số hóa đơn. Hồ sơ thanh toán nằm ở master để sự kiện của cổng thanh toán được định tuyến trước khi biết workspace, và để còn giữ khi dữ liệu của khách bị xóa.
+  - `job_wakeups` có thêm mốc cho việc thanh toán (gia hạn, thử lại), dùng chung bộ hẹn giờ và change stream của ADR-034.
 
 ### ADR-026 — Tài khoản: xác nhận email khi đăng ký, quên mật khẩu, đổi mật khẩu
 
@@ -2444,6 +2469,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Người dùng đã chọn phong cách thì không gọi AI cho chuyển động và không có ghi đè section.
     - Dữ liệu gửi đi là brief và danh sách loại, variant của section, không thêm gì.
   - "Thử lại N section" không chọn lại chuyển động. Trợ lý trong editor không đổi chuyển động.
+- **Amended 2026-11-14 (ADR-035):** hạn mức lượt AI mỗi tháng lấy từ gói của workspace, thay `AI_MONTHLY_QUOTA`. Bộ đếm, cách giữ và trả lượt không đổi. Màn 20 và 21 có "Xem gói" khi hết lượt, dẫn tới màn 28 với `billing.view`.
 
 ### ADR-032 — Chuyển động: phong cách trang, hiệu ứng xuất hiện của section
 
@@ -2868,6 +2894,112 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Thử lại cần automation đang bật (409 nếu không), vì lượt của automation tạm dừng bị dừng ngay. Banner "tự tạm dừng" của màn 27 nên bật lại rồi mới thử lại.
     - "Bỏ qua lượt này" kết thúc lượt `failed` hoặc `waiting_retry` thành `skipped` (`by_member`).
   - **Danh sách:** mới nhất trước, 30 lượt mỗi trang, keyset trên index `automation_runs_automation`. Bộ lọc "Chờ thử lại" gồm mọi lượt chưa xong. Tên khách đọc từ hồ sơ hiện tại; lượt chạy chỉ giữ id.
+- **Amended 2026-11-14 (ADR-035):**
+  - Hạn mức lượt chạy mỗi tháng lấy từ gói của workspace, thay `AUTOMATION_RUNS_PER_MONTH`. Màn 25 ghi "hạn mức theo gói", dẫn tới màn 28.
+  - Gói không có automation: màn 25 có trạng thái "Cần gói có automation"; tạo và bật trả 402 `plan_feature_required`. Đổi sang gói như vậy tạm dừng automation đang bật với `pausedReason: plan`; bật lại cần gói có automation.
+  - Workspace chỉ đọc không chạy automation: sự kiện mới bị bỏ qua và đếm như khi hết lượt.
+
+### ADR-035 — Gói dịch vụ, hạn mức và thanh toán
+
+- **Date:** 2026-11-14 · **Status:** Accepted
+- **Context:**
+  - Board 28–33 và ghi chú `phase4Decisions` ("Chưa chốt — không điền số giả"): giá, chu kỳ, hạn mức và chính sách trên board là chỗ trống.
+  - Chủ sản phẩm quyết định ngày 2026-11-14:
+    - bản đầu là gói và thanh toán (màn 28–29); marketplace (màn 30–33) để sau, khi đã chốt luật chơi của nó;
+    - thanh toán qua một cổng có adapter, bản đầu dùng adapter giả như AI ở ADR-031; cổng thật cắm vào khi có tài khoản merchant;
+    - quá hạn hay đã hủy: sau thời gian ân hạn, trang live và form lead vẫn chạy, admin chỉ đọc, không xóa dữ liệu;
+    - giá, chu kỳ và hạn mức là con số tạm trong một bảng gói sửa được mà không sửa code; chủ sản phẩm chỉnh trước khi phát hành.
+  - Giả định của ghi chú được lấy làm quyết định: gói tính theo workspace; chỉ Chủ sở hữu đổi gói, thanh toán và mua; Quản trị xem mức dùng; hạ gói không xóa dữ liệu.
+- **Decision:**
+  - **Bảng gói** (`plans.json`, schema Zod `planCatalogSchema` ở `@plp/contracts`):
+    - API đọc file ở `PLAN_CATALOG_FILE` (mặc định file đi kèm API) lúc khởi động và không khởi động khi file sai schema. Admin lấy bảng gói qua API, không đọc file.
+    - Một gói: `{ id, name, fit, prices { monthly, yearly }, limits { sites, members, aiUses, automationRuns, customDomains }, features { automation, customRoles } }`. Giá là số nguyên đồng (VND), đã gồm VAT.
+    - **Con số tạm** (chủ sản phẩm chỉnh trước khi phát hành, §6). Hạn mức của Agency lấy từ tỉ lệ vẽ trên board 28 và từ hạn mức hiện có:
+
+      | Gói                   | Cơ bản       | Agency     | Doanh nghiệp |
+      | --------------------- | ------------ | ---------- | ------------ |
+      | Giá tháng             | 199.000đ     | 599.000đ   | 1.490.000đ   |
+      | Giá năm               | 1.990.000đ   | 5.990.000đ | 14.900.000đ  |
+      | Site                  | 1            | 5          | 20           |
+      | Thành viên            | 3            | 10         | 30           |
+      | Lượt AI mỗi tháng     | 20           | 100        | 300          |
+      | Lượt automation/tháng | — (không có) | 2.000      | 10.000       |
+      | Tên miền riêng        | 1            | 10         | 40           |
+      | Vai trò tùy chỉnh     | —            | —          | Có           |
+
+    - Giới hạn cứng của ADR-014 (`MAX_SITES_PER_WORKSPACE` 100, 200 trang mỗi site) và 5 tên miền mỗi site (ADR-022) vẫn giữ; hạn mức của gói nằm dưới chúng.
+    - Board 28 vẽ hai thẻ AI ("Tạo trang", "Sửa"). Hạn mức AI vẫn là một bộ đếm chung như chủ sản phẩm chọn ở ADR-031, nên màn 28 có một thẻ "Lượt AI".
+  - **Gói của workspace** (`subscriptions` ở master, `_id` là `workspaceId`):
+    - Lưu sự kiện, không lưu trạng thái: `{ planId, cycle: monthly | yearly, trialEndsAt | null, periodStart, periodEnd, cancelAtPeriodEnd, scheduledChange { planId, cycle } | null, openInvoiceId | null, failedSince | null, paymentMethod { token, brand, last4, expMonth, expYear } | null, billingInfo | null, nextActionAt | null, lockedUntil | null, version }`.
+    - Nằm ở master vì sự kiện của cổng thanh toán đến mà chưa biết workspace, và hồ sơ thanh toán phải giữ lâu hơn dữ liệu của khách (§6).
+    - **Trạng thái suy ra** (§2 quy tắc 12) bằng một hàm thuần ở `@plp/contracts`, từ các mốc trên và thời điểm hiện tại. Tám trạng thái theo board 28, thêm `trial_expired` mà board chưa vẽ (`downgradePreview` của board là một dialog, không phải trạng thái):
+      - `trialing` ("Dùng thử · còn N ngày") và `trial_expired`;
+      - `active`, `expiring_soon` (còn ≤ 7 ngày mà không tự gia hạn được: chưa có phương thức, hoặc thẻ hết hạn trước kỳ sau);
+      - `past_due` (lần trừ tiền gia hạn lỗi), `pending_payment` (chờ xác nhận chuyển khoản);
+      - `cancel_scheduled` (dừng ở cuối kỳ), `canceled`.
+    - **Mức truy cập** suy ra cùng hàm: `read_only` khi `trial_expired`, `canceled`, hoặc `past_due` / `pending_payment` đã quá thời gian ân hạn 7 ngày kể từ `failedSince` (con số tạm); còn lại là `full`.
+    - Không có việc nền nào đổi trạng thái: trạng thái tự đổi khi thời gian trôi. Việc nền chỉ trừ tiền (bên dưới).
+  - **Dùng thử:** workspace mới có 14 ngày dùng thử Gói Agency (con số tạm), một lần mỗi workspace. Trong lúc dùng thử, đổi gói không trừ tiền. Hết hạn mà có phương thức thanh toán thì trừ tiền gói đang chọn; không có thì `trial_expired`.
+  - **Hạn mức và tính năng:** một `EntitlementsService` duy nhất trả gói, hạn mức, mức dùng và mức truy cập của workspace.
+    - **Site, thành viên, tên miền riêng:** kiểm tra trong transaction tạo mới, như giới hạn của ADR-014. Thành viên tính cả lời mời đang chờ. Tên miền riêng tính trên mọi site của workspace.
+    - **Lượt AI, lượt automation:** con số của gói thay `AI_MONTHLY_QUOTA` (ADR-031) và `AUTOMATION_RUNS_PER_MONTH` (ADR-034). Bộ đếm theo tháng giữ nguyên.
+    - **Tính năng:** gói không có automation thì không tạo hay bật được automation, và automation đang bật bị tạm dừng (`pausedReason: plan`) khi gói đổi. Gói không có vai trò tùy chỉnh thì không tạo hay sửa được vai trò tùy chỉnh; thành viên đang mang vai trò đó giữ nguyên quyền.
+    - **Lỗi:** 402 `plan_limit_reached` (kèm `limit` và `max`), 402 `plan_feature_required` (kèm `feature`), 402 `workspace_read_only`. 403 vẫn chỉ dành cho thiếu quyền. Admin hiện "Nâng cấp" hay "Theo gói" cho 402, khác với "Không có quyền" (ghi chú Phase 1).
+    - **Vượt hạn mức** sau khi hạ gói: không gỡ gì, chỉ chặn tạo mới.
+  - **Chỉ đọc** (`read_only`):
+    - Kiểm tra ở cùng lối vào với quyền (ADR-020): mỗi quyền được xếp là đọc hay ghi trong bảng quyền ở `@plp/contracts`, và `SitesService.access` / `AccessService.require` từ chối quyền ghi bằng 402 `workspace_read_only`.
+    - Bị chặn: `pages.edit`, `templates.manage`, `pages.publish`, `pages.requestPublish`, `publishApprovals.decide`, `leads.handle`, `sites.manage`, `domains.manage`, `privacy.manage`, `automations.manage`, mời thành viên, AI.
+    - Vẫn được: mọi quyền xem, `pages.manageLive` (rollback, hoàn tác, gỡ trang chỉ dời pointer), `leads.export`, `personalData.manage` (nghĩa vụ pháp lý, ADR-017), gỡ thành viên, chuyển quyền sở hữu và mọi thao tác thanh toán.
+    - Trang live, form lead và email thông báo lead vẫn chạy. Automation không chạy: sự kiện mới bị bỏ qua và đếm như khi hết lượt (ADR-034).
+  - **Đổi gói:**
+    - **Nâng gói** (giá cao hơn) có hiệu lực ngay: trừ phần chênh lệch cho thời gian còn lại của kỳ, làm tròn lên 1.000đ. Trừ tiền lỗi thì gói không đổi.
+    - **Hạ gói** và đổi chu kỳ có hiệu lực ở cuối kỳ (`scheduledChange`). Dialog của board 28 liệt kê tác động: phần vượt hạn mức, automation sẽ tạm dừng, hạn mức AI mới, thành viên giữ quyền.
+    - **Hủy** đặt `cancelAtPeriodEnd`; "Giữ lại gói" bỏ nó trước cuối kỳ. Không hoàn tiền phần còn lại của kỳ (chính sách hoàn tiền ở §6).
+  - **Cổng thanh toán** (`PaymentGateway`, như cổng AI của ADR-031):
+    - `startMethodSetup` trả địa chỉ trang của cổng để lưu phương thức. Cổng giữ thẻ, hệ thống chỉ nhận token, hãng thẻ, bốn số cuối và hạn thẻ.
+    - `charge({ token, amount, reference, idempotencyKey })` trả `succeeded`, `failed { code }` hoặc `pending`.
+    - `startTransfer({ reference, amount })` trả thông tin chuyển khoản (tài khoản, nội dung, mã QR).
+    - `parseWebhook(rawBody, headers)` kiểm tra chữ ký rồi trả sự kiện: phương thức đã lưu, trừ tiền thành công hay lỗi, đã nhận chuyển khoản.
+    - **Adapter giả** (`PAYMENT_PROVIDER=fake`): API phục vụ trang của cổng giả. Số thẻ thử quyết định kết quả: `4242 4242 4242 4242` thành công, `4000 0000 0000 0002` bị từ chối, `4000 0000 0000 9995` không đủ hạn mức. Chuyển khoản giả có nút "Xác nhận đã nhận tiền". Webhook giả được ký như cổng thật. API không khởi động với `fake` khi `NODE_ENV=production`.
+    - Cổng thật là một adapter mới và một lần bổ sung ADR này.
+  - **Hóa đơn** (`invoices` ở master):
+    - `{ number, workspaceId, kind: subscription | upgrade, planId, cycle, periodStart, periodEnd, amount, billingInfo, method: card | transfer, status: open | pending | paid | failed | void, attempts[{ at, outcome, code }], paidAt }`. Số hóa đơn `HD-{năm}-{số thứ tự 6 chữ số}`.
+    - Hóa đơn đã `paid` hay `void` bất biến. Thông tin xuất hóa đơn được chụp vào hóa đơn lúc tạo; sửa thông tin chỉ áp dụng cho hóa đơn sau.
+    - Mỗi lần trừ tiền có idempotency key là id hóa đơn và số lần thử. "Thanh toán lại" nhận header `Idempotency-Key` như publish.
+    - "Tải hóa đơn" của board 29 là biên nhận thanh toán (trang in được). Hóa đơn điện tử hợp lệ cần nhà cung cấp hóa đơn điện tử (§6).
+  - **Thông tin xuất hóa đơn:** tên đơn vị, mã số thuế (10 chữ số, hoặc 13 dạng `0123456789-001`; khoảng trắng được bỏ), địa chỉ, email nhận hóa đơn.
+  - **Gia hạn và trừ tiền lỗi:**
+    - `nextActionAt` là mốc việc kế tiếp của gói: cuối dùng thử, cuối kỳ, hay lần thử lại. Việc nền dùng cơ chế hẹn giờ của ADR-034: `job_wakeups` có thêm một mốc cho thanh toán, instance giành gói tới hạn bằng update có điều kiện (`lockedUntil`), tạo hóa đơn của kỳ mới rồi trừ tiền.
+    - Trừ tiền lỗi đặt `failedSince` và thử lại sau 2 và 5 ngày (con số tạm). Thành công thì kỳ mới bắt đầu từ cuối kỳ cũ, `failedSince` về `null`.
+    - Chuyển khoản tạo hóa đơn `pending`; webhook "đã nhận" đánh dấu `paid`.
+  - **Webhook của cổng** `POST /public/billing/webhooks/:provider`: đọc body thô, kiểm tra chữ ký, ghi `billing_events { provider, eventId }` (unique, TTL 90 ngày) trong cùng transaction áp dụng sự kiện, nên sự kiện đến lại không áp dụng hai lần. Định tuyến theo id hóa đơn hay workspace mà cổng gửi lại, không theo input khác của client.
+  - **Quyền** (nhóm THANH TOÁN của board 16):
+    - `billing.view` ("Xem gói và mức sử dụng"): Chủ sở hữu, Quản trị.
+    - `billing.manage` ("Đổi gói, thanh toán, tải hóa đơn"): chỉ Chủ sở hữu. Vai trò tùy chỉnh không chọn được (ADR-024).
+    - Quản trị mở "Thanh toán & hóa đơn" thấy trạng thái "Chỉ Chủ sở hữu xem được thanh toán" của board 29.
+  - **Admin:**
+    - Sidebar v2: mục "Gói & thanh toán" với `billing.view`; thẻ workspace ghi "Workspace · Gói {tên}"; mục của tính năng không có trong gói mang chip "Nâng cấp".
+    - Màn 28 ở `/workspaces/:id/billing`: gói hiện tại, trạng thái, banner theo trạng thái, mức dùng, so sánh gói, dialog đổi gói. Màn 29 ở `/workspaces/:id/billing/payments`.
+    - Màn 16 có nhóm Thanh toán và nhãn "Theo gói" ở các dòng automation; màn 25 có trạng thái "Cần gói có automation".
+    - Workspace chỉ đọc có banner ở mọi màn của workspace, dẫn tới màn 28.
+  - **Email** (tới Chủ sở hữu): sắp hết dùng thử, trừ tiền lỗi, sắp tới hạn mà không tự gia hạn được, đã chuyển sang chỉ đọc, biên nhận. Template ở đường SMTP; plp-mailer cần template cùng tên trước khi dùng đường SQS (§6).
+  - **Nhật ký thanh toán** (`billing_log` ở master): đổi gói, hạ gói theo lịch, hủy, giữ lại, đổi phương thức, sửa thông tin xuất hóa đơn; ai làm và lúc nào. Không có số thẻ hay token.
+- **Ngoài phạm vi:**
+  - marketplace và giấy phép template (màn 30–33);
+  - mua thêm lượt, mã giảm giá, nhiều tiền tệ, giá theo số thành viên;
+  - hoàn tiền trong hệ thống (bản đầu hoàn tiền ngoài hệ thống);
+  - hóa đơn điện tử, công cụ vận hành cho nhân viên Payload (xem mọi workspace, đổi gói tay).
+- **Reason:**
+  - Trạng thái suy ra từ mốc thời gian không cần việc nền để chuyển trạng thái, nên không có trạng thái lệch khi một việc nền lỡ hẹn.
+  - Kiểm tra chỉ đọc ở cùng lối vào với quyền thì một endpoint mới không thể quên kiểm tra.
+  - Cổng có adapter cho làm và kiểm thử toàn bộ luồng trước khi có hợp đồng merchant.
+  - Bảng gói là dữ liệu có schema: đổi giá hay hạn mức không đổi code, và một file sai làm API dừng ngay lúc khởi động.
+- **Consequences:**
+  - Thêm `subscriptions`, `invoices`, `billing_events`, `billing_log` và bộ đếm số hóa đơn ở master.
+  - Workspace đã có lúc triển khai T1 nhận một kỳ dùng thử mới (chưa có dữ liệu production, §6).
+  - Bảng quyền có thêm hai quyền và cờ đọc/ghi cho mọi quyền; `role-matrix.int.spec.ts` có thêm workspace chỉ đọc.
+  - Kiểm thử vòng đời dùng một đồng hồ dời được của API, chỉ bật ngoài production.
+- **Lát:** T1 gói, hạn mức, tính năng và chỉ đọc, màn 28 (phần gói và mức dùng); T2 cổng thanh toán, phương thức, hóa đơn, nâng gói, màn 29; T3 gia hạn, trừ tiền lỗi, ân hạn, chuyển khoản, hạ gói và hủy, email (§5).
 
 ---
 
@@ -3004,6 +3136,24 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 4. Webhook lỗi → thử lại → "Thử lại bước này" thành công, bước đã xong không chạy lại.
 5. Xóa dữ liệu người đó → hồ sơ, lead, cơ hội, công việc biến mất; lịch sử chạy không còn tên.
 
+**Phase 4 — Thương mại hóa** (chủ sản phẩm yêu cầu ngày 2026-11-14, ADR-035). Marketplace (màn 30–33) chưa có lát:
+
+| Lát | Nội dung                                                                                                                                                                       | Màn                    | Trạng thái |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ---------- |
+| T0  | Nhập board 28–33, ADR-035, bổ sung ADR-014, 020, 021, 022, 024, 025, 031, 034                                                                                                  | —                      | Xong       |
+| T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói" | 28, 16, 25, Sidebar v2 | Chưa làm   |
+| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Chưa làm   |
+| T3  | Gia hạn, trừ tiền lỗi và thử lại, ân hạn, chuyển khoản chờ xác nhận, hạ gói theo lịch, hủy và giữ lại, banner theo trạng thái, email                                           | 28, 29                 | Chưa làm   |
+
+**Hoàn thành Phase 4** khi một E2E chạy xanh toàn bộ chuỗi:
+
+1. Đăng ký → workspace dùng thử Gói Agency; màn 28 có "Dùng thử · còn 14 ngày" và mức dùng.
+2. Chuyển sang Gói Cơ bản trong lúc dùng thử → tạo site thứ hai bị chặn với "Nâng cấp"; màn 25 có "Cần gói có automation".
+3. Thêm thẻ ở cổng giả → nâng lên Gói Doanh nghiệp → hóa đơn đã thanh toán có trong lịch sử giao dịch, mở được biên nhận.
+4. Gia hạn bằng thẻ bị từ chối → banner quá hạn; hết ân hạn (đồng hồ thử) → workspace chỉ đọc: xuất bản bị chặn, trang live vẫn mở và form trên đó vẫn nhận lead.
+5. Thanh toán lại bằng thẻ hợp lệ → gói hoạt động lại, sửa và xuất bản được.
+6. Lên lịch hạ gói (dialog nêu tác động) → hủy gói → "Giữ lại gói".
+
 ## 6. Trước khi phát hành
 
 Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR quy định nó. Chưa đủ hết thì không đưa dữ liệu thật của khách vào.
@@ -3049,9 +3199,16 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - AI (ADR-031): đặt `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` cho dịch vụ AI của production. Không dùng `fake`.
   - Một job viết `AI_CONCURRENCY` section cùng lúc (mặc định 3). AI tự host xếp hàng các yêu cầu (Ollama mặc định), nên đặt cho nó xử lý song song ít nhất bằng số đó (`OLLAMA_NUM_PARALLEL`), hạ `AI_CONCURRENCY` (1 cho một Ollama không đặt `OLLAMA_NUM_PARALLEL`), hoặc tăng `AI_TIMEOUT_MS`: thời gian chờ trong hàng cũng tính vào hạn của mỗi yêu cầu.
 
+- Thanh toán (ADR-035):
+  - Một cổng thanh toán thật có hợp đồng merchant, adapter của nó và một lần bổ sung ADR-035. `PAYMENT_PROVIDER`, khóa của cổng và bí mật webhook sinh cho production; API không khởi động với `fake` ở production.
+  - Edge chuyển nguyên body của `POST /public/billing/webhooks/:provider` (chữ ký tính trên body thô).
+  - plp-mailer có các template email thanh toán nếu dùng `MAIL_TRANSPORT=sqs`.
+
 **Chủ sản phẩm cần quyết**
 
 - `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
+- Gói (ADR-035): giá thật, chu kỳ, giá đã gồm VAT hay chưa, hạn mức từng gói, thời gian dùng thử, thời gian ân hạn và lịch thử lại khi trừ tiền lỗi. Bảng gói hiện là con số tạm.
+- Marketplace: ai được bán, kiểm duyệt, giấy phép theo số site, chia doanh thu, hoàn tiền, trả tiền cho nhà cung cấp.
 - Dịch vụ AI của production (ADR-031): AI tự host, hay một nhà cung cấp bên ngoài. Bên ngoài thì cần adapter và bổ sung ADR.
 
 **Người phụ trách pháp lý cần xác nhận** (ADR-017)
@@ -3064,3 +3221,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Nguồn của khách hàng thêm tay (gọi điện, đến trực tiếp, nhắn tin) là đủ để ghi nhận dữ liệu.
   - Webhook gửi dữ liệu cá nhân của lead sang hệ thống do doanh nghiệp tự chọn, và dữ liệu đó không bị xóa theo.
 - Nếu AI của production không tự host (ADR-031): việc gửi brief và chữ của bản nháp (không có dữ liệu cá nhân) cho nhà cung cấp, và điều khoản xử lý dữ liệu của họ.
+- Thanh toán (ADR-035):
+  - Điều khoản dịch vụ, chính sách hoàn tiền, và cách xử lý workspace quá hạn hay đã hủy (trang live vẫn chạy, admin chỉ đọc, dữ liệu được giữ bao lâu).
+  - Hóa đơn điện tử theo quy định hiện hành qua một nhà cung cấp hóa đơn điện tử; bản đầu chỉ có biên nhận thanh toán.
+  - Thời gian lưu hồ sơ thanh toán (hóa đơn, nhật ký thanh toán) theo luật kế toán.

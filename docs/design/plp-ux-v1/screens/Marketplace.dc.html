@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Marketplace template</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="marketplace" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px; max-width: 640px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Marketplace</h1>
+          <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #3C424E">Template từ các nhà cung cấp đã được duyệt. Mẫu bạn nhận hoặc mua sẽ có trong Templates của workspace.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px">
+          <a href="Purchases.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: #15171C; font-size: 14px; font-weight: 600; text-decoration: none">Đã sở hữu · 8</a>
+          <a href="Vendor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; color: #15171C; font-size: 14px; font-weight: 600; text-decoration: none">Bán template của bạn</a>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 320px; min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+          <label for="mk-search" class="sr-only">Tìm trên marketplace</label>
+          <input id="mk-search" type="search" value="{{ query }}" placeholder="Tìm template, ngành, nhà cung cấp" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 14px; background: transparent">
+        </div>
+        <label for="mk-price" class="sr-only">Giá</label>
+        <select id="mk-price" style="min-height: 44px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Miễn phí và trả phí</option><option>Chỉ miễn phí</option><option>Chỉ trả phí</option></select>
+        <label for="mk-sort" class="sr-only">Sắp xếp</label>
+        <select id="mk-sort" style="min-height: 44px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Mới cập nhật</option><option>Được dùng nhiều</option></select>
+      </div>
+
+      <div role="group" aria-label="Danh mục" style="display: flex; flex-wrap: wrap; gap: 8px">
+        <sc-for list="{{ cats }}" as="c" hint-placeholder-count="7">
+          <button type="button" aria-pressed="{{ c.pressed }}" style="min-height: 36px; padding: 0 14px; border: 1px solid {{ c.border }}; border-radius: 999px; background: {{ c.bg }}; font: inherit; font-size: 13px; font-weight: {{ c.fw }}; color: {{ c.fg }}; cursor: pointer">{{ c.label }}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px">
+          <sc-for list="{{ items }}" as="t" hint-placeholder-count="8">
+            <article style="display: flex; flex-direction: column; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow: hidden">
+              <a href="MarketplaceItem.dc.html" style="display: block; height: 176px; background: #F0F2F5; padding: 12px 18px 0; box-sizing: border-box; overflow: hidden; border-bottom: 1px solid #EEF0F3">
+                <span style="display: block; height: 200px; border-radius: 8px 8px 0 0; overflow: hidden; box-shadow: 0 1px 2px rgba(21,23,28,0.08)">
+                  <dc-import name="TemplateThumb" variant="{{ t.v }}" label="Bản xem thu nhỏ: {{ t.name }}" hint-size="100%,200px"></dc-import>
+                </span>
+              </a>
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 16px; flex: 1">
+                <span style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+                  <span style="font-size: 12px; color: #5E6573">{{ t.cat }}</span>
+                  <span style="padding: 2px 8px; border-radius: 999px; background: {{ t.priceBg }}; color: {{ t.priceFg }}; font-size: 12px; font-weight: 700">{{ t.price }}</span>
+                </span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600"><a href="MarketplaceItem.dc.html" style="color: #15171C; text-decoration: none">{{ t.name }}</a></h2>
+                <span style="display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 13px; color: #3C424E">
+                  <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 6px; background: {{ t.vBg }}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700">{{ t.vIni }}</span>
+                  {{ t.vendor }}
+                  <sc-if value="{{ t.verified }}" hint-placeholder-val="{{ false }}"><svg role="img" aria-label="Nhà cung cấp đã xác minh" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4338CA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 1.8 3 .2.9 2.9 2.2 2-1 2.8.4 3-2.6 1.5-1.3 2.7-3-.5-2.9 1.1-2.2-2-3-.6-.4-3L2.7 10l1.9-2.4.4-3 2.9-.6z"></path><path d="M9 12l2 2 4-4"></path></svg></sc-if>
+                </span>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; text-align: center">
+          <span style="font-size: 17px; font-weight: 600">Không tìm thấy “thú y”</span>
+          <span style="max-width: 460px; font-size: 14px; line-height: 1.6; color: #3C424E">Chưa có nhà cung cấp nào bán mẫu cho ngành này. Mẫu “Ưu đãi dịch vụ” của hệ thống dùng tốt cho phòng khám thú y, hoặc tạo bằng AI.</span>
+          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding-top: 6px">
+            <a href="TemplateLibrary.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none">Xem mẫu hệ thống</a>
+            <a href="AiCreate.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none">Tạo bằng AI</a>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["browse","noResults"],"default":"browse"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'browse';
+    var cats = ['Tất cả', 'Y tế & nha khoa', 'Làm đẹp', 'Giáo dục', 'Bất động sản', 'Nhà hàng', 'Sự kiện'].map(function (c, i) {
+      var on = i === 0;
+      return { label: c, pressed: on ? 'true' : 'false', border: on ? '#4338CA' : '#CDD2DA', bg: on ? '#EEF0FF' : '#FFFFFF', fg: on ? '#3730A3' : '#15171C', fw: on ? 600 : 500 };
+    });
+    var V = { SL: ['Studio Lam', '#7A3E5B'], ND: ['Nha Design', '#1F4E99'], PL: ['Payload', '#4338CA'], BH: ['Bếp Hồng Studio', '#B4472A'] };
+    var I = [
+      ['Mở bán dự án căn hộ', 'Bất động sản', 3, 'ND', 'owned'],
+      ['Khai trương phòng tập', 'Sự kiện', 5, 'SL', 'paid'],
+      ['Khóa học tiếng Anh trẻ em', 'Giáo dục', 2, 'PL', 'free'],
+      ['Liệu trình trị mụn', 'Làm đẹp', 1, 'SL', 'paid'],
+      ['Thực đơn theo mùa', 'Nhà hàng', 4, 'BH', 'paid'],
+      ['Implant trả góp', 'Y tế & nha khoa', 0, 'ND', 'paid'],
+      ['Hội thảo đầu tư', 'Sự kiện', 2, 'ND', 'free'],
+      ['Spa ưu đãi ngày lễ', 'Làm đẹp', 1, 'SL', 'owned']
+    ];
+    var P = { owned: ['Đã sở hữu', '#E2F4EA', '#0B6B45'], paid: ['[GIÁ]', '#F0F2F5', '#15171C'], free: ['Miễn phí', '#EEF0FF', '#3730A3'] };
+    var items = I.map(function (x) {
+      var v = V[x[3]]; var p = P[x[4]];
+      return { name: x[0], cat: x[1], v: x[2], vendor: v[0], vBg: v[1], vIni: x[3], verified: x[3] !== 'BH', price: p[0], priceBg: p[1], priceFg: p[2] };
+    });
+    var none = s === 'noResults';
+    return { cats: cats, items: items, hasResults: !none, noResults: none, query: none ? 'thú y' : '' };
+  }
+}
+</script>
+</body>
+</html>

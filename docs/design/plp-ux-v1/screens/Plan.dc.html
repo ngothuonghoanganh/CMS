@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Gói dịch vụ và mức sử dụng</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="billing" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-direction: column; gap: 12px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Gói dịch vụ</h1>
+        <div role="tablist" aria-label="Gói và thanh toán" style="display: flex; gap: 4px; border-bottom: 1px solid #E2E5EA">
+          <a href="Plan.dc.html" role="tab" aria-selected="true" style="display: inline-flex; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 2px solid #4338CA; font-size: 14px; font-weight: 600; color: #3730A3; text-decoration: none">Gói &amp; mức dùng</a>
+          <a href="Billing.dc.html" role="tab" aria-selected="false" style="display: inline-flex; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; color: #3C424E; text-decoration: none">Thanh toán &amp; hóa đơn</a>
+        </div>
+      </header>
+
+      <sc-if value="{{ hasBanner }}" hint-placeholder-val="{{ false }}">
+        <div role="{{ banner.role }}" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 16px; border-radius: 12px; background: {{ banner.bg }}; border: 1px solid {{ banner.border }}; color: {{ banner.fg }}">
+          <span style="flex: 1 1 420px; font-size: 13px; line-height: 1.55"><strong style="font-size: 14px">{{ banner.title }}</strong> {{ banner.body }}</span>
+          <a href="{{ banner.href }}" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 10px; background: {{ banner.ctaBg }}; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none">{{ banner.cta }}</a>
+        </div>
+      </sc-if>
+
+      <section aria-labelledby="cur-h" style="display: flex; flex-wrap: wrap; gap: 20px; padding: 22px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+        <div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 8px">
+          <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+            <h2 id="cur-h" style="margin: 0; font-size: 20px; font-weight: 700">Gói {{ planName }}</h2>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: {{ st.bg }}; color: {{ st.fg }}; font-size: 12px; font-weight: 600"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: {{ st.dot }}"></span>{{ st.label }}</span>
+          </span>
+          <span style="font-size: 14px; color: #3C424E">[GIÁ GÓI] / [CHU KỲ] · tính cho cả workspace Mây Xanh Agency</span>
+          <span style="font-size: 13px; color: #5E6573">{{ periodLine }}</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px">
+            <button type="button" onClick="{{ openChange }}" style="min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Đổi gói</button>
+            <sc-if value="{{ canCancel }}" hint-placeholder-val="{{ true }}"><button type="button" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #B42318; cursor: pointer">Hủy gói</button></sc-if>
+          </div>
+        </div>
+        <div style="flex: 2 1 480px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px">
+          <sc-for list="{{ usage }}" as="u" hint-placeholder-count="6">
+            <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: #FAFBFC; border: 1px solid #EEF0F3">
+              <span style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><span style="font-weight: 600">{{ u.name }}</span><span style="font-family: 'JetBrains Mono', ui-monospace, monospace; color: {{ u.fg }}">{{ u.used }} / [HẠN MỨC]</span></span>
+              <span role="img" aria-label="{{ u.name }}: đã dùng {{ u.pct }} phần trăm" style="height: 6px; border-radius: 999px; background: #E2E5EA; overflow: hidden"><span style="display: block; height: 100%; width: {{ u.width }}; background: {{ u.bar }}"></span></span>
+              <span style="font-size: 12px; color: #5E6573">{{ u.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-labelledby="cmp-h" style="display: flex; flex-direction: column; gap: 12px">
+        <h2 id="cmp-h" style="margin: 0; font-size: 16px; font-weight: 700">So sánh gói</h2>
+        <div style="overflow-x: auto; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <div style="min-width: 760px">
+            <div style="display: grid; grid-template-columns: minmax(220px, 1.6fr) repeat(3, minmax(0, 1fr)); border-bottom: 1px solid #E2E5EA">
+              <span></span>
+              <sc-for list="{{ plans }}" as="p" hint-placeholder-count="3">
+                <div style="display: flex; flex-direction: column; gap: 4px; padding: 16px; background: {{ p.bg }}">
+                  <span style="display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700">{{ p.name }}<sc-if value="{{ p.current }}" hint-placeholder-val="{{ false }}"><span style="padding: 2px 7px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-size: 11px; font-weight: 700">HIỆN TẠI</span></sc-if></span>
+                  <span style="font-size: 13px; color: #3C424E">[GIÁ] / [CHU KỲ]</span>
+                  <span style="font-size: 12px; color: #5E6573">{{ p.fit }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <sc-for list="{{ features }}" as="f" hint-placeholder-count="7">
+              <div style="display: grid; grid-template-columns: minmax(220px, 1.6fr) repeat(3, minmax(0, 1fr)); align-items: center; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                <span style="padding: 11px 16px">{{ f.name }}</span>
+                <sc-for list="{{ f.cells }}" as="c" hint-placeholder-count="3"><span style="padding: 11px 16px; font-size: 13px; color: {{ c.fg }}; background: {{ c.bg }}">{{ c.v }}</span></sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <sc-if value="{{ showChange }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 90px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="chg-title" style="width: 100%; max-width: 600px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 id="chg-title" style="margin: 0; font-size: 18px; font-weight: 700">Chuyển xuống Gói Cơ bản từ 01/12?</h2>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Gói Agency giữ nguyên tới hết kỳ này. Không dữ liệu nào bị xóa; những gì vượt hạn mức chỉ bị chặn tạo mới.</p>
+        <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{ impacts }}" as="i" hint-placeholder-count="4">
+            <li style="display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: {{ i.bg }}; font-size: 13px; line-height: 1.55">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ i.icon }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+              <span><strong>{{ i.title }}</strong> {{ i.body }}</span>
+            </li>
+          </sc-for>
+        </ul>
+        <span style="font-size: 13px; color: #5E6573">Phí kỳ sau: [GIÁ GÓI CƠ BẢN]. Phần chênh lệch kỳ này: [CHÍNH SÁCH HOÀN TIỀN].</span>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Giữ Gói Agency</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #15171C; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Lên lịch hạ gói</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["active","trial","expiringSoon","pastDue","pendingPayment","cancelScheduled","canceled","downgradePreview"],"default":"active"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'active';
+    var dialog = this.state.dialog ?? (s === 'downgradePreview' ? 'change' : null);
+    var ST = {
+      active: ['Đang hoạt động', '#E2F4EA', '#0B6B45', '#12A06A'],
+      downgradePreview: ['Đang hoạt động', '#E2F4EA', '#0B6B45', '#12A06A'],
+      trial: ['Dùng thử · còn 9 ngày', '#EEF0FF', '#3730A3', '#4338CA'],
+      expiringSoon: ['Sắp hết hạn', '#FFF1D6', '#8A5300', '#E39A12'],
+      pastDue: ['Quá hạn', '#FDEBE9', '#7A1A12', '#B42318'],
+      pendingPayment: ['Chờ thanh toán', '#FFF1D6', '#8A5300', '#E39A12'],
+      cancelScheduled: ['Đã lên lịch hủy', '#ECEEF2', '#474E5C', '#8A91A0'],
+      canceled: ['Đã hủy', '#ECEEF2', '#474E5C', '#8A91A0']
+    }[s];
+    var B = {
+      trial: ['status', 'Bạn đang dùng thử Gói Agency.', 'Hết hạn 10/11. Thêm phương thức thanh toán để không gián đoạn; [CHÍNH SÁCH SAU DÙNG THỬ].', 'Thêm phương thức thanh toán', '#EEF0FF', '#E0E2FF', '#26208A', '#4338CA'],
+      expiringSoon: ['status', 'Gói hết hạn sau 3 ngày (04/11).', 'Thẻ đã lưu hết hạn tháng 10, nên không gia hạn tự động được.', 'Cập nhật thẻ', '#FFF8EB', '#F3E2BD', '#5C3D00', '#4338CA'],
+      pastDue: ['alert', 'Thanh toán kỳ 01/11 chưa thành công.', 'Trang live vẫn chạy trong thời gian ân hạn [SỐ NGÀY]. Sau đó: [CHÍNH SÁCH QUÁ HẠN — CẦN CHỐT].', 'Thanh toán ngay', '#FDEBE9', '#F6C9C4', '#7A1A12', '#B42318'],
+      pendingPayment: ['status', 'Đang chờ xác nhận chuyển khoản.', 'Hóa đơn HD-2026-1101 · [GIÁ]. Thường được xác nhận trong 1 ngày làm việc.', 'Xem hóa đơn', '#FFF8EB', '#F3E2BD', '#5C3D00', '#4338CA'],
+      cancelScheduled: ['status', 'Gói sẽ dừng vào 01/12.', 'Mọi thứ vẫn dùng bình thường tới hết kỳ. Bạn có thể giữ lại gói trước ngày đó.', 'Giữ lại gói', '#F0F2F5', '#E2E5EA', '#15171C', '#4338CA'],
+      canceled: ['status', 'Gói đã hủy từ 01/11.', 'Dữ liệu được giữ [THỜI HẠN GIỮ DỮ LIỆU]. Trang live: [CHÍNH SÁCH SAU KHI HỦY — CẦN CHỐT].', 'Chọn gói mới', '#F0F2F5', '#E2E5EA', '#15171C', '#4338CA']
+    }[s];
+    var banner = B ? { role: B[0], title: B[1], body: B[2], cta: B[3], bg: B[4], border: B[5], fg: B[6], ctaBg: B[7], href: 'Billing.dc.html' } : null;
+    var U = [
+      ['Site', '4', 0.8, 'Gần chạm hạn mức', true],
+      ['Thành viên', '7', 0.7, 'Lời mời đang chờ cũng được tính', false],
+      ['Tạo trang bằng AI', '2', 0.1, 'Làm mới 01/12', false],
+      ['Sửa bằng AI', '4', 0.08, 'Làm mới 01/12', false],
+      ['Lượt chạy automation', '1.240', 0.62, 'Làm mới 01/12', false],
+      ['Tên miền riêng', '4', 0.4, 'Tính trên mọi site', false]
+    ];
+    var usage = U.map(function (u) {
+      return { name: u[0], used: u[1], width: Math.round(u[2] * 100) + '%', pct: Math.round(u[2] * 100), note: u[3], bar: u[4] ? '#E39A12' : '#4338CA', fg: u[4] ? '#8A5300' : '#3C424E' };
+    });
+    var plans = [['Cơ bản', 'Một doanh nghiệp, vài trang', false], ['Agency', 'Nhiều site khách hàng', true], ['Doanh nghiệp', 'Đội lớn, cần kiểm soát', false]].map(function (p) {
+      return { name: p[0], fit: p[1], current: p[2], bg: p[2] ? '#F5F5FF' : '#FFFFFF' };
+    });
+    var F = [
+      ['Site', '[HẠN MỨC]', '[HẠN MỨC]', '[HẠN MỨC]'],
+      ['Thành viên', '[HẠN MỨC]', '[HẠN MỨC]', '[HẠN MỨC]'],
+      ['Tên miền riêng', 'Có', 'Có', 'Có'],
+      ['Leads, khách hàng, pipeline', 'Có', 'Có', 'Có'],
+      ['AI tạo và sửa trang', 'Giới hạn', 'Có', 'Có'],
+      ['Automation', '—', 'Có', 'Có'],
+      ['Vai trò tùy chỉnh', '—', '—', 'Có']
+    ];
+    var features = F.map(function (f) {
+      return { name: f[0], cells: [1, 2, 3].map(function (i) { return { v: f[i], fg: f[i] === '—' ? '#8A91A0' : '#15171C', bg: i === 2 ? '#F5F5FF' : 'transparent' }; }) };
+    });
+    var impacts = [
+      { title: '4 site, vượt hạn mức Gói Cơ bản.', body: 'Không site nào bị gỡ; bạn không tạo thêm site mới được.', bg: '#FFF8EB', icon: '#C27803' },
+      { title: '3 automation đang bật sẽ tạm dừng.', body: 'Thiết lập và lịch sử chạy được giữ lại để bật lại khi nâng gói.', bg: '#FFF8EB', icon: '#C27803' },
+      { title: 'AI giới hạn còn [HẠN MỨC] lượt mỗi tháng.', body: 'Bản nháp đã tạo bằng AI không bị ảnh hưởng.', bg: '#F0F2F5', icon: '#5E6573' },
+      { title: '7 thành viên giữ nguyên quyền.', body: 'Không mời thêm được nếu vượt hạn mức.', bg: '#F0F2F5', icon: '#5E6573' }
+    ];
+    var period = {
+      trial: 'Dùng thử từ 27/10 tới 10/11',
+      canceled: 'Đã dừng từ 01/11',
+      cancelScheduled: 'Kỳ hiện tại 01/11 – 30/11 · không gia hạn'
+    }[s] || 'Kỳ hiện tại 01/11 – 30/11 · gia hạn tự động 01/12';
+    return {
+      st: { label: ST[0], bg: ST[1], fg: ST[2], dot: ST[3] },
+      hasBanner: !!banner, banner: banner || {},
+      planName: 'Agency', periodLine: period,
+      canCancel: !(s === 'cancelScheduled' || s === 'canceled'),
+      usage: usage, plans: plans, features: features, impacts: impacts,
+      showChange: dialog === 'change',
+      openChange: function () { self.setState({ dialog: 'change' }); },
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
