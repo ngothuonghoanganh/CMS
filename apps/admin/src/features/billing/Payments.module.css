@@ -258,3 +258,74 @@
     padding: 16px;
   }
 }
+
+/*
+ * A phone: every invoice of the history is a block of its own (description and amount, date and
+ * status, then the receipt or "Thanh toán lại"), so nothing hides past the edge of the card.
+ */
+@media (max-width: 639px) {
+  .table {
+    display: block;
+    min-width: 0;
+  }
+
+  .head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .body {
+    display: block;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'desc amount'
+      'date status'
+      'action action';
+    gap: 6px 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .body .row:last-child {
+    border-bottom: 0;
+  }
+
+  .table .row > td {
+    display: block;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .cellDate {
+    grid-area: date;
+    font-size: var(--text-sm);
+    color: var(--color-muted);
+  }
+
+  .cellDesc {
+    grid-area: desc;
+  }
+
+  .row .amount {
+    grid-area: amount;
+    text-align: right;
+  }
+
+  .cellStatus {
+    grid-area: status;
+    justify-self: end;
+    text-align: right;
+  }
+
+  .cellAction {
+    grid-area: action;
+  }
+}
