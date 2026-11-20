@@ -289,7 +289,9 @@ export function Sidebar({
           <button type="button" className={styles.workspaceButton}>
             <Avatar name={workspace.name} shape="square" />
             <span className={styles.stack}>
-              <span className={styles.caption}>Workspace · Gói {plan.plan.name}</span>{' '}
+              <span className={styles.caption} title={`Workspace · Gói ${plan.plan.name}`}>
+                Workspace · Gói {plan.plan.name}
+              </span>{' '}
               <span className={styles.workspaceName}>{workspace.name}</span>
             </span>
             <VisuallyHidden>, đổi workspace</VisuallyHidden>

@@ -74,10 +74,14 @@
   min-width: 0;
 }
 
+/* One line whatever the plan's name ("Gói Doanh nghiệp"), so the button keeps its height. */
 .caption {
+  overflow: hidden;
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--color-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspaceName,
