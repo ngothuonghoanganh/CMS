@@ -11,6 +11,7 @@ import { Editor } from '../support/editor.js';
 import { waitForEmail } from '../support/mailpit.js';
 import {
   call,
+  changePlanViaApi,
   createPageViaApi,
   PASSWORD,
   promoPage,
@@ -64,6 +65,8 @@ test.describe('C5 · custom roles', () => {
     request,
   }) => {
     const { site } = await setUpSite(page.request);
+    // Custom roles come with Doanh nghiệp only (ADR-035); the trial lets the owner pick it.
+    await changePlanViaApi(page.request, site.workspaceId, 'business');
     await setUpLeadCaptureViaApi(page.request, site.id);
     const created = await createPageViaApi(
       page.request,
@@ -146,6 +149,7 @@ test.describe('C5 · custom roles', () => {
     test(`the custom role editor is accessible at ${viewport.width} px`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       const { site } = await setUpSite(page.request);
+      await changePlanViaApi(page.request, site.workspaceId, 'business');
       await page.goto(`/workspaces/${site.workspaceId}/roles`);
       await page.getByRole('button', { name: 'Vai trò tùy chỉnh' }).click();
       await page.getByRole('switch', { name: 'Xem lead, khách hàng, pipeline' }).click();

@@ -2,6 +2,9 @@ import { randomBytes } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import {
   accountEmailResponseSchema,
+  billingSummarySchema,
+  type BillingCycle,
+  type PlanId,
   confirmLeadRecipientResponseSchema,
   consentVersionSchema,
   type CreatePageRequest,
@@ -219,4 +222,17 @@ export function promoPage(slug: string, offer: string): CreatePageRequest {
       style: 'calm',
     },
   };
+}
+
+/** Switches the workspace's plan during its trial, as its owner does from "Đổi gói" (ADR-035). */
+export function changePlanViaApi(
+  request: APIRequestContext,
+  workspaceId: string,
+  planId: PlanId,
+  cycle: BillingCycle = 'monthly',
+) {
+  return call(request, 'POST', endpoints.changePlan.path(workspaceId), billingSummarySchema, {
+    planId,
+    cycle,
+  });
 }

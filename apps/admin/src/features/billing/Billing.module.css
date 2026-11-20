@@ -94,6 +94,8 @@
   font-size: var(--text-body-sm);
   font-variant-numeric: tabular-nums;
   color: var(--color-ink-2);
+  /* "6 / 2.000" never breaks at the slash; the name wraps instead. */
+  white-space: nowrap;
 }
 
 .track {
