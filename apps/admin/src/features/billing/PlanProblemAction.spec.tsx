@@ -100,4 +100,16 @@ describe('useProblemToast', () => {
     expect(await screen.findByText('Không có quyền')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Nâng cấp' })).toBeNull();
   });
+
+  it('leads a read-only workspace to "Xem gói & thanh toán", as the form callouts do', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Failing error={planError('workspace_read_only')} />);
+    await user.click(screen.getByRole('button', { name: 'Thử' }));
+    expect(await screen.findByText('Chưa tạo được')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing`,
+    );
+    expect(screen.queryByRole('link', { name: 'Nâng cấp' })).toBeNull();
+  });
 });
