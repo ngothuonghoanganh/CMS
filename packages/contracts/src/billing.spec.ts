@@ -171,7 +171,13 @@ describe('the state of a subscription (ADR-035)', () => {
       // The job that charges is due at the end of the trial and runs after it: until it records
       // an outcome, the trial is unpaid with the grace from its end, not read-only.
       const card = trial({
-        paymentMethod: { token: 'tok_1', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030 },
+        paymentMethod: {
+          token: 'tok_1',
+          brand: 'visa',
+          last4: '4242',
+          expMonth: 12,
+          expYear: 2030,
+        },
       });
       expect(statusAt(card, at(14, 1))).toEqual({
         state: 'past_due',
