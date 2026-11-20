@@ -4,7 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { loadPage } from '../../lib/page-load';
-import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import {
+  NO_LEADS,
+  siteFixture,
+  SITE_ID,
+  workspacePlanFixture,
+  WORKSPACE_ID,
+} from '../dashboard/test-fixtures';
 import { leadQueryKeys } from '../leads/queries';
 import { memberQueryKeys } from '../members/queries';
 import { type Leave, setScreenLeave } from './screen-leave';
@@ -79,6 +85,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}) {
       memberCount={7}
       leadCounts={NO_LEADS}
       addresses={null}
+      plan={workspacePlanFixture()}
       {...overrides}
     />,
   );
@@ -102,7 +109,7 @@ describe('Sidebar', () => {
     expect(nav).toHaveTextContent('Payload');
     // The switchers are named by the words they show first (WCAG 2.5.3), then what they do.
     expect(
-      screen.getByRole('button', { name: 'Workspace Mây Xanh Agency, đổi workspace' }),
+      screen.getByRole('button', { name: 'Workspace · Gói Agency Mây Xanh Agency, đổi workspace' }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', {
@@ -257,6 +264,7 @@ describe('Sidebar', () => {
       'Templates',
       'Thành viên 7 thành viên',
       'Vai trò & quyền',
+      'Gói & thanh toán',
       'Trang 6 trang',
       'Leads',
       'Khách hàng',
@@ -754,6 +762,50 @@ describe('Sidebar', () => {
 
       expect(outcome).toBe('leaving');
       expect(router.replace).toHaveBeenCalledWith('/login');
+    });
+  });
+
+  describe('the plan of the workspace (ADR-035)', () => {
+    const basicPlan = workspacePlanFixture({
+      plan: {
+        id: 'basic',
+        name: 'Cơ bản',
+        limits: { sites: 1, members: 3, aiUses: 30, automationRuns: 0, customDomains: 1 },
+        features: { automation: false, customRoles: false },
+      },
+    });
+
+    it('names the plan under "Workspace" and marks what it lacks with "Nâng cấp"', () => {
+      renderSidebar({ plan: basicPlan });
+
+      expect(
+        screen.getByRole('button', {
+          name: 'Workspace · Gói Cơ bản Mây Xanh Agency, đổi workspace',
+        }),
+      ).toBeInTheDocument();
+      const automation = screen.getByRole('link', { name: /^Automation/ });
+      expect(automation).toHaveTextContent('Nâng cấp');
+      // The section is still there: it explains the limit, as the board's planLimited state does.
+      expect(automation).toHaveAttribute('href', `/sites/${SITE_ID}/automations`);
+      expect(screen.getByRole('link', { name: 'Leads' })).not.toHaveTextContent('Nâng cấp');
+    });
+
+    it('has no "Nâng cấp" when the plan has the feature', () => {
+      renderSidebar();
+
+      expect(screen.getByRole('link', { name: 'Automation' })).not.toHaveTextContent('Nâng cấp');
+    });
+
+    it('lists "Gói & thanh toán" for who may view it, and for no one else', () => {
+      const { unmount } = renderSidebar();
+      expect(screen.getByRole('link', { name: 'Gói & thanh toán' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/billing`,
+      );
+      unmount();
+
+      renderSidebar({ membership: { ...agency, role: 'editor' } });
+      expect(screen.queryByRole('link', { name: 'Gói & thanh toán' })).not.toBeInTheDocument();
     });
   });
 });

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { type AiUsage, nextVnMonthStart, type VnMonth, vnMonthOf } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
+import { planLimitReached } from '../billing/plan-problems.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
@@ -18,15 +20,10 @@ export class AiClock {
   }
 }
 
-/** "dd/MM" of a day: "Lượt mới có vào 01/12". */
-function dayMonth(day: string): string {
-  return `${day.slice(8, 10)}/${day.slice(5, 7)}`;
-}
-
 const MINUTE_MS = 60_000;
 
 /**
- * The AI uses of a workspace per calendar month in Vietnam, and the AI requests of a user per
+ * The AI uses of a workspace per calendar month in Vietnam, as many as its plan gives (ADR-035), and the AI requests of a user per
  * minute (ADR-031). Creating a page with AI and the editor assistant both reserve a use before the
  * AI is asked and give it back when nothing is written.
  */
@@ -37,6 +34,7 @@ export class AiQuota {
     private readonly usage: AiUsageRepository,
     private readonly limits: LeadLimitsRepository,
     private readonly clock: AiClock,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   get enabled(): boolean {
@@ -60,7 +58,7 @@ export class AiQuota {
   async usageOf(ref: WorkspaceRef): Promise<AiUsage> {
     const month = this.currentMonth();
     const used = await this.usage.usedIn(ref, month);
-    const limit = this.env.AI_MONTHLY_QUOTA;
+    const limit = (await this.entitlements.of(ref)).plan.limits.aiUses;
     return {
       enabled: this.enabled,
       month,
@@ -96,22 +94,16 @@ export class AiQuota {
     return month;
   }
 
-  /** Takes one use of `month` in `tx`; 429 `ai_quota_exhausted` when none is left. */
+  /**
+   * Takes one use of `month` in `tx`. None left is the plan's limit (ADR-035): 402
+   * `plan_limit_reached` with `aiUses`, and the day the uses come back.
+   */
   async reserve(ref: WorkspaceRef, month: VnMonth, tx: Tx): Promise<void> {
-    const limit = this.env.AI_MONTHLY_QUOTA;
-    if (await this.usage.take(ref, month, limit, this.clock.now(), tx)) {
+    const { plan } = await this.entitlements.of(ref, tx);
+    if (await this.usage.take(ref, month, plan.limits.aiUses, this.clock.now(), tx)) {
       return;
     }
-    const resetsOn = nextVnMonthStart(month);
-    throw new AppError(
-      429,
-      'ai_quota_exhausted',
-      `Workspace đã dùng hết ${limit} lượt AI tháng này`,
-      {
-        detail: `Lượt mới có vào ${dayMonth(resetsOn)}.`,
-        context: { limit, resetsOn },
-      },
-    );
+    throw planLimitReached(plan, 'aiUses', nextVnMonthStart(month));
   }
 
   /** Gives back a use reserved in `month`, in the transaction that records why. */

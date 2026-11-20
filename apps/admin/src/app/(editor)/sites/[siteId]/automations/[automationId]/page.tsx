@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { AutomationEditor } from '../../../../../../features/automations/AutomationEditor';
+import { WorkspacePlanProvider } from '../../../../../../features/billing/plan-context';
 import { loadAutomationData } from '../../../../../../features/automations/load-automation';
 import { requireWorkspaceAddress } from '../../../../../../features/shell/current-address';
 import { ApiError } from '../../../../../../lib/api-core';
@@ -50,13 +51,21 @@ export default async function AutomationPage({ params }: AutomationPageProps) {
     notFound();
   }
   await requireWorkspaceAddress(membership.workspace);
+  // The plan's monthly runs, the read-only notice and the way to board 28 (ADR-035).
+  const plan = await serverApi(endpoints.getWorkspacePlan, [site.workspaceId]);
   return (
-    <AutomationEditor
-      key={loadedAt}
-      site={site}
-      initial={automation}
-      canManage={can(membership.role, 'automations.manage')}
-      loadedAt={loadedAt}
-    />
+    <WorkspacePlanProvider
+      workspaceId={site.workspaceId}
+      canViewBilling={can(membership.role, 'billing.view')}
+      plan={plan}
+    >
+      <AutomationEditor
+        key={loadedAt}
+        site={site}
+        initial={automation}
+        canManage={can(membership.role, 'automations.manage')}
+        loadedAt={loadedAt}
+      />
+    </WorkspacePlanProvider>
   );
 }

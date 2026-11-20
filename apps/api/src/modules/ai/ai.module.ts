@@ -3,6 +3,7 @@ import type { Env } from '../../config/env.js';
 import { ENV } from '../../shared/env.js';
 import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-databases.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
@@ -32,6 +33,8 @@ import { SectionWriter } from './section-writer.service.js';
   imports: [
     WorkspaceCollectionsModule.forFeature([AI_JOB_COLLECTION, AI_USAGE_COLLECTION]),
     AuthModule,
+    // The plan's AI uses (ADR-035).
+    BillingCoreModule,
     // The per-user request limit counts in the master's shared counters.
     LeadsCoreModule,
     PagesModule,

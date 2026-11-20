@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture } from '../dashboard/test-fixtures';
+import { WorkspacePlanProvider } from '../billing/plan-context';
+import { workspacePlanFixture } from '../dashboard/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { AutomationsScreen } from './AutomationsScreen';
 
@@ -11,7 +13,7 @@ const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => ({ useRouter: () => router, usePathname: () => '/sites/x' }));
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -115,7 +117,7 @@ afterEach(() => {
 describe('AutomationsScreen (board 25)', () => {
   it('lists each automation with its trigger, state, last run and month, as the board does', () => {
     render();
-    expect(screen.getByText('1.240 lượt chạy tháng này · hạn mức 2.000')).toBeInTheDocument();
+    expect(screen.getByText(/1\.240 lượt chạy tháng này · hạn mức 2\.000/)).toBeInTheDocument();
     const rows = within(screen.getByRole('region', { name: 'Automation của site' })).getAllByRole(
       'row',
     );
@@ -186,5 +188,85 @@ describe('AutomationsScreen (board 25)', () => {
     for (const toggle of screen.getAllByRole('switch')) {
       expect(toggle).toBeDisabled();
     }
+  });
+
+  describe('when the plan has no automation (ADR-035)', () => {
+    function renderLocked(canViewBilling: boolean) {
+      return renderWithProviders(
+        <WorkspacePlanProvider
+          workspaceId={site.workspaceId}
+          canViewBilling={canViewBilling}
+          plan={workspacePlanFixture({
+            plan: {
+              id: 'basic',
+              name: 'Cơ bản',
+              limits: { sites: 1, members: 3, aiUses: 30, automationRuns: 0, customDomains: 1 },
+              features: { automation: false, customRoles: false },
+            },
+          })}
+        >
+          <AutomationsScreen
+            site={site}
+            role="owner"
+            roleLabel="Chủ sở hữu"
+            initial={null}
+            loadedAt={LOADED_AT}
+          />
+        </WorkspacePlanProvider>,
+      );
+    }
+
+    it('says it is the plan, not the role, and leads to board 28 without reading the list', () => {
+      renderLocked(true);
+
+      expect(screen.getByText('CẦN GÓI CÓ AUTOMATION')).toBeInTheDocument();
+      expect(screen.getByText(/Gói Cơ bản hiện tại chưa có automation/)).toBeInTheDocument();
+      expect(screen.getByText(/không phải quyền của bạn/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'So sánh gói' })).toHaveAttribute(
+        'href',
+        `/workspaces/${site.workspaceId}/billing`,
+      );
+      expect(screen.queryByRole('button', { name: 'Tạo automation' })).toBeNull();
+      expect(apiMock).not.toHaveBeenCalled();
+    });
+
+    it('offers no link to a page the viewer cannot open', () => {
+      renderLocked(false);
+
+      expect(screen.getByText('CẦN GÓI CÓ AUTOMATION')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'So sánh gói' })).toBeNull();
+    });
+
+    it('says it is reading the list once the plan has automation again', () => {
+      // The page loaded on Cơ bản; the plan changed on board 28 since.
+      apiMock.mockReturnValue(new Promise(() => undefined));
+      renderWithProviders(
+        <WorkspacePlanProvider
+          workspaceId={site.workspaceId}
+          canViewBilling
+          plan={workspacePlanFixture()}
+        >
+          <AutomationsScreen
+            site={site}
+            role="owner"
+            roleLabel="Chủ sở hữu"
+            initial={null}
+            loadedAt={LOADED_AT}
+          />
+        </WorkspacePlanProvider>,
+      );
+
+      expect(screen.getByRole('status')).toHaveTextContent('Đang tải automation…');
+      expect(screen.queryByText('CẦN GÓI CÓ AUTOMATION')).toBeNull();
+    });
+  });
+
+  it('calls an automation the plan stopped "Tạm dừng theo gói"', () => {
+    render('owner', {
+      ...LIST,
+      items: [item({ state: 'paused', pausedReason: 'plan' })],
+    });
+
+    expect(screen.getByText('Tạm dừng theo gói')).toBeInTheDocument();
   });
 });

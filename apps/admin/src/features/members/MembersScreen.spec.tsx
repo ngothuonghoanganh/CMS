@@ -9,7 +9,8 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { WorkspacePlanProvider } from '../billing/plan-context';
+import { siteFixture, WORKSPACE_ID, workspacePlanFixture } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { MembersScreen, type MembersScreenProps } from './MembersScreen';
 
@@ -163,6 +164,33 @@ beforeEach(() => {
 });
 
 describe('MembersScreen', () => {
+  it('counts the seats against the plan, as board 28 does (ADR-035)', () => {
+    const business = workspacePlanFixture({
+      plan: {
+        id: 'business',
+        name: 'Doanh nghiệp',
+        limits: { sites: 20, members: 30, aiUses: 300, automationRuns: 10000, customDomains: 40 },
+        features: { automation: true, customRoles: true },
+      },
+    });
+    renderWithProviders(
+      <WorkspacePlanProvider workspaceId={WORKSPACE_ID} canViewBilling plan={business}>
+        <MembersScreen
+          workspace={{ id: WORKSPACE_ID, name: 'Mây Xanh Agency' }}
+          viewer={{ userId: owner.userId, role: 'owner' }}
+          sites={[smile, kitchen]}
+          initialCustomRoles={[]}
+          initialMembers={members}
+          initialInvitations={{ items: [invitation] }}
+          initialRequests={{ items: [request] }}
+          openRequestId={null}
+          loadedAt={LOADED_AT}
+        />
+      </WorkspacePlanProvider>,
+    );
+    expect(screen.getByText('Đang dùng 5/30 chỗ')).toBeInTheDocument();
+  });
+
   it('lists the members with their role, sites and what Chủ sở hữu may do', () => {
     renderScreen();
     expect(screen.getByText('Đang dùng 5/100 chỗ')).toBeInTheDocument();

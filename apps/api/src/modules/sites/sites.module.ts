@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { AssetsModule } from '../assets/assets.module.js';
 import { DomainsCoreModule } from '../domains/domains-core.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
@@ -20,6 +21,8 @@ import { SitesController } from './sites.controller.js';
  */
 @Module({
   imports: [
+    // The plan's site limit (ADR-035).
+    BillingCoreModule,
     SitesCoreModule,
     WorkspacesModule,
     ActivityModule,

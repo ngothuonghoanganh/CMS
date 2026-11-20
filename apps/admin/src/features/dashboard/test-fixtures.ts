@@ -5,6 +5,7 @@ import type {
   PageListResponse,
   PointerEvent,
   Site,
+  WorkspacePlan,
 } from '@plp/contracts';
 
 // Shared by the dashboard specs only.
@@ -29,6 +30,22 @@ export function siteFixture(overrides: Partial<Site> = {}): Site {
     privacyConfigured: false,
     confirmedLeadRecipients: 0,
     createdAt: '2026-10-01T03:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** Gói Agency during its trial, as the API's plan endpoint answers (ADR-035). */
+export function workspacePlanFixture(overrides: Partial<WorkspacePlan> = {}): WorkspacePlan {
+  return {
+    plan: {
+      id: 'agency',
+      name: 'Agency',
+      limits: { sites: 5, members: 10, aiUses: 300, automationRuns: 5000, customDomains: 10 },
+      features: { automation: true, customRoles: false },
+    },
+    state: 'active',
+    access: 'full',
+    trialDaysLeft: null,
     ...overrides,
   };
 }

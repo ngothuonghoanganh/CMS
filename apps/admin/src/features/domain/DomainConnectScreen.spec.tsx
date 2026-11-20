@@ -3,8 +3,9 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
+import { ApiError } from '../../lib/api-core';
 import { siteFixture } from '../dashboard/test-fixtures';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { DomainConnectScreen } from './DomainConnectScreen';
 import { domainFixture, domainList } from './test-fixtures';
 
@@ -93,6 +94,49 @@ describe('DomainConnectScreen', () => {
     expect(router.replace).toHaveBeenCalledWith(
       `/sites/${site.id}/domain/connect?domain=${waiting.id}`,
     );
+  });
+
+  it('marks a domain past the plan with "Theo gói" only while its message shows (ADR-035)', async () => {
+    const user = userEvent.setup();
+    answer('available');
+    const refused = apiError(402, 'plan_limit_reached', 'Đã dùng hết hạn mức của Gói Cơ bản');
+    apiMock.mockImplementation((endpoint, _args, options) => {
+      if (endpoint === endpoints.addDomain) {
+        return Promise.reject(
+          new ApiError(402, {
+            ...refused.problem,
+            detail:
+              'Gói Cơ bản có tối đa 1 tên miền riêng, tính trên mọi site. Nâng cấp gói để thêm.',
+            context: { limit: 'customDomains', max: 1 },
+          }),
+        );
+      }
+      const query = (options as { query?: { hostname?: string } } | undefined)?.query;
+      return Promise.resolve({
+        hostname: query?.hostname ?? '',
+        state: 'available',
+        reason: null,
+      } satisfies DomainAvailability);
+    });
+    renderScreen(null);
+    const field = screen.getByLabelText('Tên miền');
+    await user.type(field, 'uudai.smilecare.vn');
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    expect(await screen.findByText('Theo gói')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Nâng cấp' })).toBeInTheDocument();
+
+    // Editing the field takes the message away, and its mark with it.
+    await user.type(field, 'x');
+    expect(screen.queryByText('Theo gói')).toBeNull();
+    // A problem found in the browser never shows the plan's mark.
+    await user.clear(field);
+    await user.type(field, 'https://uudai.smilecare.vn/');
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    expect(
+      screen.getByText('Chỉ nhập tên miền, không kèm https://, cổng và dấu / ở cuối.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Theo gói')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Nâng cấp' })).toBeNull();
   });
 
   it('checks a typed domain and says at once that another site has it, never which', async () => {

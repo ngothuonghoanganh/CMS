@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { EmailModule } from '../notifications/email.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import {
@@ -36,6 +37,8 @@ import { UsersRepository } from './users.repository.js';
 @Module({
   imports: [
     WorkspacesModule,
+    // A new workspace starts its trial in the sign-up's transaction (ADR-035).
+    BillingCoreModule,
     EmailModule,
     MongooseModule.forFeature([
       { name: USER_MODEL, schema: userSchema },

@@ -118,6 +118,30 @@ export class AutomationsRepository {
   }
 
   /**
+   * A plan without automation pauses every enabled automation of the workspace, reason `plan`
+   * (ADR-035); drafts and paused ones stay as they are. Returns their ids, for their runs.
+   */
+  async pauseForPlan(ref: WorkspaceRef, at: Date, tx: Tx): Promise<ObjectId[]> {
+    const enabled = await this.automations(ref)
+      .find({ workspaceId: ref.workspaceId, state: 'on' }, { _id: 1 })
+      .session(tx)
+      .lean<{ _id: ObjectId }[]>()
+      .exec();
+    if (enabled.length === 0) {
+      return [];
+    }
+    const ids = enabled.map((automation) => automation._id);
+    await this.automations(ref)
+      .updateMany(
+        { workspaceId: ref.workspaceId, _id: { $in: ids }, state: 'on' },
+        { $set: { state: 'paused', pausedReason: 'plan', updatedAt: at } },
+      )
+      .session(tx)
+      .exec();
+    return ids;
+  }
+
+  /**
    * The autosave of board 26: each save is a new version, which new runs keep (ADR-034). Null
    * when the automation is gone.
    */

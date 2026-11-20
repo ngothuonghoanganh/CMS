@@ -26,6 +26,7 @@ import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useId, useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
   alsoChanged,
@@ -272,6 +273,7 @@ export function CustomRoleEditor({
       {formError !== null || save.isError ? (
         <Callout tone="danger" role="alert">
           {formError ?? problemMessage(save.error)}
+          {formError === null ? <PlanProblemAction error={save.error} /> : null}
         </Callout>
       ) : null}
 

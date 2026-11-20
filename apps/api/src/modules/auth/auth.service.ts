@@ -33,6 +33,9 @@ const LOGIN: PasswordCheckUse = {
     }),
 };
 
+/** A user's account, whatever the request: what `me` and a new session need. */
+type Account = Pick<AuthenticatedUser, 'id' | 'name' | 'email'>;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -117,7 +120,7 @@ export class AuthService {
     return this.me({ ...user, name });
   }
 
-  async me(user: AuthenticatedUser): Promise<MeResponse> {
+  async me(user: Account): Promise<MeResponse> {
     const memberships = await this.workspaces.listForUser(user.id);
     // The custom roles of the user's own memberships, with what they allow now (ADR-024).
     const roles = await this.customRoles.findByIds(
@@ -139,7 +142,7 @@ export class AuthService {
    * A new session of `user`, for the cookie, with what `/auth/me` answers. `credentialsVersion` is
    * the user's as read with the password that was proven, or set (ADR-026).
    */
-  async issueSession(user: AuthenticatedUser, credentialsVersion: number): Promise<IssuedSession> {
+  async issueSession(user: Account, credentialsVersion: number): Promise<IssuedSession> {
     const token = newSessionToken();
     const expiresAt = new Date(Date.now() + this.env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
     await this.sessions.create(

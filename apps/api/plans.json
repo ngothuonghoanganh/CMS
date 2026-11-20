@@ -1,0 +1,43 @@
+{
+  "trial": { "planId": "agency", "days": 14 },
+  "graceDays": 7,
+  "expiringSoonDays": 7,
+  "plans": [
+    {
+      "id": "basic",
+      "name": "Cơ bản",
+      "fit": "Một doanh nghiệp, vài trang",
+      "prices": { "monthly": 199000, "yearly": 1990000 },
+      "limits": { "sites": 1, "members": 3, "aiUses": 20, "automationRuns": 0, "customDomains": 1 },
+      "features": { "automation": false, "customRoles": false }
+    },
+    {
+      "id": "agency",
+      "name": "Agency",
+      "fit": "Nhiều site khách hàng",
+      "prices": { "monthly": 599000, "yearly": 5990000 },
+      "limits": {
+        "sites": 5,
+        "members": 10,
+        "aiUses": 100,
+        "automationRuns": 2000,
+        "customDomains": 10
+      },
+      "features": { "automation": true, "customRoles": false }
+    },
+    {
+      "id": "business",
+      "name": "Doanh nghiệp",
+      "fit": "Đội lớn, cần kiểm soát",
+      "prices": { "monthly": 1490000, "yearly": 14900000 },
+      "limits": {
+        "sites": 20,
+        "members": 30,
+        "aiUses": 300,
+        "automationRuns": 10000,
+        "customDomains": 40
+      },
+      "features": { "automation": true, "customRoles": true }
+    }
+  ]
+}

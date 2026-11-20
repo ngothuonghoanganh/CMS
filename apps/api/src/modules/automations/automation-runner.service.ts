@@ -2,11 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import {
   AUTOMATION_FAILURES_BEFORE_PAUSE,
-  AUTOMATION_RUNS_PER_MONTH,
   type AutomationAction,
   CONTACT_TAGS_MAX,
   SITE_CONTACT_TAGS_MAX,
-  vnMonthOf,
 } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
@@ -15,6 +13,7 @@ import { type Tx, TransactionRunner } from '../../shared/persistence/transaction
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import { ContactAssignees } from '../contacts/contact-assignees.service.js';
 import type { ContactRecord } from '../contacts/contact.schema.js';
 import { ContactRecordsRepository } from '../contacts/contact-records.repository.js';
@@ -108,6 +107,7 @@ export class AutomationRunner {
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
     private readonly webhooks: WebhookSender,
+    private readonly entitlements: EntitlementsService,
     @InjectEnv() private readonly env: Env,
   ) {}
 
@@ -161,9 +161,15 @@ export class AutomationRunner {
         await this.finish(ref, run, 'skipped', 'conditions', now);
         return;
       }
-      const month = vnMonthOf(now);
+      // The plan's runs, and no run at all while the workspace is read-only (ADR-035): an event
+      // passed over for either reason counts as one the quota had no room for.
+      const entitlements = await this.entitlements.of(ref);
+      const month = this.entitlements.currentMonth();
       await this.usage.ensureMonth(ref, month, now);
-      if (!(await this.usage.take(ref, month, AUTOMATION_RUNS_PER_MONTH, now))) {
+      if (
+        entitlements.status.access === 'read_only' ||
+        !(await this.usage.take(ref, month, entitlements.plan.limits.automationRuns, now))
+      ) {
         await this.automations.countSkippedForQuota(ref, automation._id, month);
         await this.finish(ref, run, 'skipped', 'quota', now);
         return;

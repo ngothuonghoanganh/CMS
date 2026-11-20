@@ -10,6 +10,7 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import { AccessService } from '../workspaces/access.service.js';
 import {
   CUSTOM_ROLE_NAME_INDEX,
@@ -61,7 +62,7 @@ function toCustomRoleDto(
 
 /**
  * Custom roles (board 16, ADR-024): Chủ sở hữu and Quản trị create them from a system role and
- * switch permissions; whoever holds one has the new permissions at their next request.
+ * switch permissions, on a plan that has them (ADR-035); whoever holds one has the new permissions at their next request.
  */
 @Injectable()
 export class CustomRolesService {
@@ -71,6 +72,7 @@ export class CustomRolesService {
     private readonly workspaces: WorkspacesRepository,
     private readonly invitations: InvitationsRepository,
     private readonly transactions: TransactionRunner,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   async list(user: AuthenticatedUser, workspaceId: string): Promise<CustomRoleListResponse> {
@@ -95,6 +97,7 @@ export class CustomRolesService {
     input: CustomRoleInput,
   ): Promise<CustomRole> {
     const scope = await this.manager(user, workspaceId);
+    await this.requireFeature(scope);
     const now = new Date();
     const role: CustomRoleRecord = {
       _id: newObjectId(),
@@ -139,6 +142,7 @@ export class CustomRolesService {
     input: CustomRoleInput,
   ): Promise<CustomRole> {
     const scope = await this.manager(user, workspaceId);
+    await this.requireFeature(scope);
     const id = toObjectId(roleId, CUSTOM_ROLE_NOT_FOUND);
     // One transaction with the check: a grant at the same moment holds the role and conflicts.
     const updated = await namingRole(() =>
@@ -210,6 +214,14 @@ export class CustomRolesService {
         throw notFound(CUSTOM_ROLE_NOT_FOUND);
       }
     });
+  }
+
+  /**
+   * Creating and editing roles is a feature of the plan (402, ADR-035). Listing and removing stay
+   * open, and members holding a role keep its rights after a downgrade: nothing is removed.
+   */
+  private async requireFeature(scope: WorkspaceScope): Promise<void> {
+    this.entitlements.requireFeature(await this.entitlements.of(scope), 'customRoles');
   }
 
   private async manager(user: AuthenticatedUser, workspaceId: string): Promise<WorkspaceScope> {

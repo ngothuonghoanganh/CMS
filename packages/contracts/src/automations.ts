@@ -12,8 +12,6 @@ import { leadStatusSchema } from './lead-inbox.js';
 export const AUTOMATIONS_PER_SITE_MAX = 20;
 export const AUTOMATION_CONDITIONS_MAX = 5;
 export const AUTOMATION_ACTIONS_MAX = 5;
-/** Runs a workspace may start each Vietnamese calendar month (ADR-034); Phase 4 ties it to plans. */
-export const AUTOMATION_RUNS_PER_MONTH = 2000;
 /** Failed runs in a row after which an automation pauses itself. */
 export const AUTOMATION_FAILURES_BEFORE_PAUSE = 20;
 export const AUTOMATION_NAME_MAX = 80;
@@ -28,7 +26,7 @@ export const automationStates = ['draft', 'on', 'paused'] as const;
 export const automationStateSchema = z.enum(automationStates);
 export type AutomationState = z.infer<typeof automationStateSchema>;
 
-export const automationPausedReasons = ['user', 'errors'] as const;
+export const automationPausedReasons = ['user', 'errors', 'plan'] as const;
 export const automationPausedReasonSchema = z.enum(automationPausedReasons);
 export type AutomationPausedReason = z.infer<typeof automationPausedReasonSchema>;
 
@@ -221,7 +219,8 @@ export type AutomationListItem = z.infer<typeof automationListItemSchema>;
 
 export const automationUsageSchema = z.object({
   used: z.number().int().nonnegative(),
-  limit: z.number().int().positive(),
+  /** 0 on a plan without automation (ADR-035). */
+  limit: z.number().int().nonnegative(),
   /** "2026-12-01": when the runs come back after they ran out. */
   resetsOn: z.iso.date(),
 });

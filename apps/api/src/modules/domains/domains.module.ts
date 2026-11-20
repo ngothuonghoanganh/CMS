@@ -3,6 +3,7 @@ import { type Env, tlsCheckEnabled } from '../../config/env.js';
 import { ENV } from '../../shared/env.js';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { EmailModule } from '../notifications/email.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { RevalidationModule } from '../revalidation/revalidation.module.js';
@@ -24,6 +25,8 @@ import { PublicDomainsService } from './public-domains.service.js';
     // Domain events in the site's activity; live pages for "Đặt làm chính" (boards 01, 13).
     ActivityModule,
     AuthModule,
+    // The plan's limit of custom domains (ADR-035).
+    BillingCoreModule,
     DomainsCoreModule,
     EmailModule,
     PagesModule,

@@ -7,7 +7,8 @@ import { InjectEnv } from './env.js';
 import { AppError } from './errors.js';
 import { SIGNED_BY_RENDERER } from './renderer-channel/renderer-request.js';
 
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Methods that change nothing (RFC 9110): no Origin check, and allowed in a read-only workspace. */
+export const SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
  * CSRF protection for the cookie session: a state-changing request must come from the admin, at

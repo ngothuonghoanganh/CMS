@@ -16,6 +16,7 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { PagesRepository } from '../pages/pages.repository.js';
@@ -24,6 +25,7 @@ import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { DomainChecker } from './domain-checker.service.js';
 import { DOMAIN_NOT_FOUND, toDomainDto } from './domain-dto.js';
 import {
@@ -56,6 +58,8 @@ export class DomainsService {
     private readonly checker: DomainChecker,
     private readonly revalidation: RevalidationClient,
     private readonly transactions: TransactionRunner,
+    private readonly workspaces: WorkspacesRepository,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<DomainListResponse> {
@@ -89,7 +93,8 @@ export class DomainsService {
 
   /**
    * Adds a domain and checks it at once. A domain another site owns is added too: its owner proves
-   * it is theirs with the TXT record, which then moves it here (ADR-022).
+   * it is theirs with the TXT record, which then moves it here (ADR-022). Each site holds at most
+   * `CUSTOM_DOMAINS_MAX`; the plan limits them across the workspace (402, ADR-035).
    */
   async add(user: AuthenticatedUser, siteId: string, input: AddDomainRequest): Promise<Domain> {
     const { scope, site } = await this.sitesService.access(user, siteId, 'domains.manage');
@@ -129,6 +134,14 @@ export class DomainsService {
             `Mỗi site có tối đa ${CUSTOM_DOMAINS_MAX} tên miền riêng`,
           );
         }
+        // The plan's limit counts every site of the workspace, so the write that serializes the
+        // count is the workspace's (ADR-035).
+        await this.workspaces.recordDomainCreation(scope, tx);
+        this.entitlements.requireRoom(
+          await this.entitlements.of(scope, tx),
+          'customDomains',
+          await this.domains.countForWorkspace(scope, tx),
+        );
         await this.domains.insert(scope, record, tx);
         await this.activity.record(
           scope,

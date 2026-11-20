@@ -1,11 +1,11 @@
-import type { Permission } from '@plp/contracts';
+import { type Permission, type PlanFeatureKey, planFeatureOf } from '@plp/contracts';
 
 /** Site sections in the sidebar, in the order of the design. */
 export type SiteNavKey =
   'pages' | 'leads' | 'contacts' | 'analytics' | 'automations' | 'domain' | 'settings' | 'privacy';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
-export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles';
+export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles' | 'billing';
 
 export interface NavItem<Key extends string> {
   key: Key;
@@ -13,6 +13,8 @@ export interface NavItem<Key extends string> {
   href: string;
   /** The sidebar shows the item only to roles that hold one of these (ADR-020). */
   permissions: readonly Permission[];
+  /** The plan feature the section needs: a plan without it shows "Nâng cấp" (ADR-035). */
+  feature?: PlanFeatureKey;
 }
 
 export type SiteNavItem = NavItem<SiteNavKey>;
@@ -49,6 +51,7 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
       label: 'Automation',
       href: automationsHref(siteId),
       permissions: ['automations.view'],
+      feature: planFeatureOf('automations.view') ?? 'automation',
     },
     {
       key: 'domain',
@@ -128,6 +131,11 @@ export function rolesHref(workspaceId: string): string {
   return `${workspaceHref(workspaceId)}/roles`;
 }
 
+/** "Gói & thanh toán" (board 28, ADR-035). */
+export function billingHref(workspaceId: string): string {
+  return `${workspaceHref(workspaceId)}/billing`;
+}
+
 /** "Thành viên" (board 15, ADR-021), optionally with a request open: `?request=`. */
 export function membersHref(workspaceId: string, search = ''): string {
   return `${workspaceHref(workspaceId)}/members${search}`;
@@ -158,6 +166,12 @@ export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
       label: 'Vai trò & quyền',
       href: rolesHref(workspaceId),
       permissions: ['members.manage'],
+    },
+    {
+      key: 'billing',
+      label: 'Gói & thanh toán',
+      href: billingHref(workspaceId),
+      permissions: ['billing.view'],
     },
   ];
 }

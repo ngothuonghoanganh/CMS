@@ -30,6 +30,9 @@ import {
   WarningTriangleIcon,
 } from '@plp/ui';
 import { type ReactNode, useRef } from 'react';
+import Link from 'next/link';
+import { useUpgradeHref } from '../billing/plan-context';
+import { planActionLabel } from '../billing/PlanProblemAction';
 import { useClientNow } from '../shell/use-now';
 import { useEditor, useEditorStoreApi } from './editor-context';
 import { GuardedLink } from './GuardedLink';
@@ -61,6 +64,8 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
   const saveState = useEditor((state) => state.saveState);
   const lastSavedAt = useEditor((state) => state.lastSavedAt);
   const saveError = useEditor((state) => state.saveError);
+  const workspaceId = useEditor((state) => state.site.workspaceId);
+  const upgradeHref = useUpgradeHref(workspaceId);
   const now = useClientNow();
   const view = saveStatusView(
     saveState,
@@ -83,6 +88,14 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
         {issue === null ? null : <span className={styles.saveIssue}> · {issue}</span>}
       </span>
       {view.time === null ? null : <span>· {view.time}</span>}
+      {saveState === 'error' && saveError?.kind === 'plan' && upgradeHref !== null ? (
+        <>
+          <span aria-hidden="true">·</span>
+          <Link href={upgradeHref} className={styles.retry}>
+            {planActionLabel(saveError.problem)}
+          </Link>
+        </>
+      ) : null}
       {view.canRetry ? (
         <>
           <span aria-hidden="true">·</span>

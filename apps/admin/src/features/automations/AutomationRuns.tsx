@@ -26,7 +26,8 @@ import { formatCount, formatTime } from '../../lib/format';
 import { cx } from '../shell/cx';
 import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { automationsHref } from '../shell/navigation';
-import { problemMessage } from '../shell/problem-message';
+import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { useProblemToast } from '../billing/use-problem-toast';
 import { serverFirstPage } from '../shell/server-render';
 import { useNow } from '../shell/use-now';
 import { AutomationTabs } from './AutomationEditor';
@@ -68,6 +69,7 @@ export function AutomationRuns({
   loadedAt,
 }: AutomationRunsProps) {
   const { toast } = useToast();
+  const problemToast = useProblemToast(site.workspaceId);
   const queryClient = useQueryClient();
   const now = useNow(loadedAt);
   const [automation, setAutomation] = useState(initialAutomation);
@@ -115,7 +117,7 @@ export function AutomationRuns({
       toast({ tone: 'success', title: 'Đã đưa lượt chạy vào hàng chờ thử lại' });
     },
     onError: (error) => {
-      toast({ tone: 'danger', title: 'Chưa thử lại được', description: problemMessage(error) });
+      problemToast('Chưa thử lại được', error);
     },
   });
 
@@ -127,7 +129,7 @@ export function AutomationRuns({
       toast({ tone: 'success', title: 'Đã bỏ qua lượt này' });
     },
     onError: (error) => {
-      toast({ tone: 'danger', title: 'Chưa bỏ qua được', description: problemMessage(error) });
+      problemToast('Chưa bỏ qua được', error);
     },
   });
 
@@ -155,7 +157,7 @@ export function AutomationRuns({
     },
     onError: (error) => {
       refresh();
-      toast({ tone: 'danger', title: 'Chưa bật lại được', description: problemMessage(error) });
+      problemToast('Chưa bật lại được', error);
     },
   });
 
@@ -190,6 +192,7 @@ export function AutomationRuns({
           30 ngày: {formatCount(counts.last30Days.runs)} lượt · {formatCount(counts.failed)} lỗi
         </span>
       </header>
+      <ReadOnlyBanner variant="strip" />
 
       <main className={styles.main}>
         <div className={styles.content}>

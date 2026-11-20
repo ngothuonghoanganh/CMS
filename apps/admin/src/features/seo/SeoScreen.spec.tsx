@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, type Mock, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { loadPage } from '../../lib/page-load';
-import { NO_LEADS, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { NO_LEADS, workspacePlanFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
 import { installHistoryGuard } from '../shell/history-guard';
 import { type LeaveOutcome, leaveScreen } from '../shell/screen-leave';
@@ -847,6 +847,7 @@ describe('SeoScreen', () => {
             memberCount={1}
             leadCounts={NO_LEADS}
             addresses={null}
+            plan={workspacePlanFixture()}
           />
           <SeoScreen
             initial={{ detail, site, assets: [], role: 'editor' }}

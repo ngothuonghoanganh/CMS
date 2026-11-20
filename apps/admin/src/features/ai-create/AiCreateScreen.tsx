@@ -54,6 +54,9 @@ import { PageSlugField } from '../onboarding/PageSlugField';
 import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { cx } from '../shell/cx';
 import { newPageHref, pageHref, siteHref, templatesHref } from '../shell/navigation';
+import { reachedLimitOf } from '../billing/plan-problem';
+import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanMark, PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
   addBlockedReason,
@@ -253,7 +256,13 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(aiCreateReducer, undefined, () => initialAiCreateState());
   const [run, setRun] = useState<Run>({ kind: 'idle' });
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblemText] = useState<string | null>(null);
+  // The failed request behind `problem`: a 402 of the plan adds "Nâng cấp" (ADR-035).
+  const [problemCause, setProblemCause] = useState<unknown>(null);
+  function setProblem(message: string | null, cause: unknown = null) {
+    setProblemText(message);
+    setProblemCause(cause);
+  }
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [progressNote, setProgressNote] = useState('');
@@ -467,7 +476,8 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   function refused(error: unknown) {
     setRun({ kind: 'idle' });
     reportUnexpected('Starting the AI job failed', error);
-    if (error instanceof ApiError && error.code === 'ai_quota_exhausted') {
+    // The month's uses are the plan's limit (ADR-035): the brief says so, with "Xem gói".
+    if (reachedLimitOf(error) === 'aiUses') {
       void queryClient.invalidateQueries({ queryKey: aiQueryKeys.usage(site.id) });
       dispatch({ type: 'step_changed', step: 'brief' });
       return;
@@ -482,7 +492,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
         return;
       }
     }
-    setProblem(problemMessage(error));
+    setProblem(problemMessage(error), error);
     dispatch({ type: 'step_changed', step: 'structure' });
   }
 
@@ -502,7 +512,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     } catch (error) {
       reportUnexpected('Retrying the AI job failed', error);
       setRun({ kind: 'partial', job });
-      setProblem(problemMessage(error));
+      setProblem(problemMessage(error), error);
     }
   }
 
@@ -516,7 +526,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
       setRun((previous) =>
         previous.kind === 'running' ? { ...previous, cancelling: false } : previous,
       );
-      setProblem(problemMessage(error));
+      setProblem(problemMessage(error), error);
     }
   }
 
@@ -532,7 +542,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     } catch (error) {
       reportUnexpected('Reading the AI job failed', error);
       setRun({ kind: 'lost', job: last, checking: false, stillRunning: false });
-      setProblem(problemMessage(error));
+      setProblem(problemMessage(error), error);
     }
   }
 
@@ -600,6 +610,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   return (
     <div className={styles.page}>
       <Header site={site} step={state.step} usage={usage} />
+      <ReadOnlyBanner variant="strip" />
       <main id="main-content" className={styles.main}>
         <section aria-labelledby="ai-title" className={styles.panel}>
           {state.step === 'brief' ? (
@@ -624,6 +635,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   }
                 >
                   Lượt mới có vào {dayMonth(usage.resetsOn)}. Brief bạn nhập vẫn được giữ lại.
+                  <PlanMark label="Xem gói" workspaceId={site.workspaceId} />
                 </Callout>
               ) : null}
               <Field
@@ -921,11 +933,13 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                 <Callout tone="warning" role="alert">
                   Workspace đã dùng hết {usage.limit} lượt AI tháng này. Lượt mới có vào{' '}
                   {dayMonth(usage.resetsOn)}.
+                  <PlanMark label="Xem gói" workspaceId={site.workspaceId} />
                 </Callout>
               ) : null}
               {problem === null ? null : (
                 <Callout tone="danger" role="alert">
                   {problem}
+                  <PlanProblemAction error={problemCause} workspaceId={site.workspaceId} />
                 </Callout>
               )}
               <div className={styles.actions}>
@@ -1031,6 +1045,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   {problem === null ? null : (
                     <Callout tone="danger" role="alert">
                       {problem}
+                      <PlanProblemAction error={problemCause} workspaceId={site.workspaceId} />
                     </Callout>
                   )}
                   <div className={styles.actionsEnd}>
@@ -1085,6 +1100,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   {problem === null ? null : (
                     <Callout tone="danger" role="alert">
                       {problem}
+                      <PlanProblemAction error={problemCause} workspaceId={site.workspaceId} />
                     </Callout>
                   )}
                   <div className={styles.actionGroup}>

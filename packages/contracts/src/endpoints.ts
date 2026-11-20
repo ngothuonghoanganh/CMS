@@ -8,6 +8,14 @@ import {
 } from './ai.js';
 import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
+  billingSummarySchema,
+  changePlanRequestSchema,
+  planCatalogResponseSchema,
+  setTestClockRequestSchema,
+  testClockSchema,
+  workspacePlanSchema,
+} from './billing.js';
+import {
   assetListQuerySchema,
   assetListResponseSchema,
   assetSchema,
@@ -381,6 +389,59 @@ export const endpoints = {
     request: null,
     query: null,
     response: roleCountsSchema,
+  }),
+
+  // Plans and billing (ADR-035)
+  /** Every signed-in user: the plans board 28 compares, and the trial a new workspace gets. */
+  getPlanCatalog: endpoint({
+    method: 'GET',
+    path: () => '/billing/plans',
+    request: null,
+    query: null,
+    response: planCatalogResponseSchema,
+  }),
+  /** Every member (`pages.view`): the plan's name, limits and features, and the access level. */
+  getWorkspacePlan: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/plan`,
+    request: null,
+    query: null,
+    response: workspacePlanSchema,
+  }),
+  /** `billing.view`: board 28, the plan, its state and the usage of every limit. */
+  getBillingSummary: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing`,
+    request: null,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /**
+   * `billing.manage`: during the trial the plan and cycle change at once, at no charge. Outside a
+   * trial 409 `plan_change_unavailable` until payments exist (T2).
+   */
+  changePlan: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/plan`,
+    request: changePlanRequestSchema,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /** Only with `BILLING_TEST_CLOCK=on`, never in production (404 otherwise); no session. */
+  getTestClock: endpoint({
+    method: 'GET',
+    path: () => '/testing/clock',
+    request: null,
+    query: null,
+    response: testClockSchema,
+  }),
+  /** Moves the billing clock of the whole API process; `{ now: null }` goes back to real time. */
+  setTestClock: endpoint({
+    method: 'PUT',
+    path: () => '/testing/clock',
+    request: setTestClockRequestSchema,
+    query: null,
+    response: testClockSchema,
   }),
 
   // Members (ADR-021): `members.manage`, except where noted
@@ -1523,7 +1584,8 @@ export const endpoints = {
    * "Viết nội dung": reserves one use and starts a job that writes the sections and creates the
    * draft. 200 with an NDJSON stream (`AI_JOB_STREAM_TYPE`), one `aiJobEventSchema` per line, until
    * the job ends; the job still ends when the client goes away. Refused before the stream starts:
-   * 409 `ai_disabled`, 429 `ai_quota_exhausted` or `rate_limited`, 409 `slug_taken`.
+   * 409 `ai_disabled`, 429 `rate_limited`, 402 `plan_limit_reached` (`aiUses`, ADR-035), 409
+   * `slug_taken`.
    */
   startAiPageJob: endpoint({
     method: 'POST',
@@ -1564,8 +1626,8 @@ export const endpoints = {
    * draft. 200 with an NDJSON stream (`AI_JOB_STREAM_TYPE`) of `aiSuggestionEventSchema` lines,
    * heartbeats then the result; one use is spent when at least one change came back, and given
    * back when the client goes away first ("Hủy"). Refused before the stream starts: 409
-   * `ai_disabled`, 429 `rate_limited` or `ai_quota_exhausted`, 422 for a path the AI may not write
-   * or nothing to write.
+   * `ai_disabled`, 429 `rate_limited`, 402 `plan_limit_reached` (`aiUses`, ADR-035), 422 for a path
+   * the AI may not write or nothing to write.
    */
   aiSuggestions: endpoint({
     method: 'POST',

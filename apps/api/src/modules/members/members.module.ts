@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { EmailModule } from '../notifications/email.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
@@ -15,7 +16,7 @@ import { MembersService } from './members.service.js';
 
 /** Members, invitations, access requests, custom roles and the ownership (ADR-021, ADR-024). */
 @Module({
-  imports: [AuthModule, EmailModule, SitesCoreModule, WorkspacesModule],
+  imports: [AuthModule, BillingCoreModule, EmailModule, SitesCoreModule, WorkspacesModule],
   controllers: [
     MembersController,
     InvitationsController,

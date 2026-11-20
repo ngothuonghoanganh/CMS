@@ -1,4 +1,4 @@
-import type { Access } from '@plp/contracts';
+import type { Access, AccessLevel, SubscriptionState } from '@plp/contracts';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 
 declare const scopeBrand: unique symbol;
@@ -15,4 +15,8 @@ export interface WorkspaceScope {
   readonly access: Access;
   /** Sites the member may open; null is the whole workspace (ADR-020). */
   readonly siteIds: readonly ObjectId[] | null;
+  /** The workspace's subscription now (ADR-035): `read_only` refuses write permissions. */
+  readonly subscription: { readonly state: SubscriptionState; readonly access: AccessLevel };
+  /** Whether the request changes data, as `AuthenticatedUser.writes`. */
+  readonly writes: boolean;
 }

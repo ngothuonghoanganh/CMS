@@ -18,7 +18,6 @@ import {
   type TestAutomationRequest,
   type TestAutomationResponse,
   type updateAutomationRequestSchema,
-  AUTOMATION_RUNS_PER_MONTH,
   AUTOMATIONS_PER_SITE_MAX,
   type AutomationListItem,
   type AutomationListResponse,
@@ -26,7 +25,6 @@ import {
   type CreateAutomationRequest,
   nextVnMonthStart,
   type SetAutomationStateRequest,
-  vnMonthOf,
 } from '@plp/contracts';
 import type { z } from 'zod';
 import { decodeCursor, encodeCursor } from '../../shared/cursor.js';
@@ -38,6 +36,7 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import { ContactAssignees } from '../contacts/contact-assignees.service.js';
 import { ContactsRepository } from '../contacts/contacts.repository.js';
 import { OpportunitiesRepository } from '../contacts/opportunities.repository.js';
@@ -141,15 +140,17 @@ export class AutomationsService {
     private readonly opportunities: OpportunitiesRepository,
     private readonly pages: PagesRepository,
     private readonly transactions: TransactionRunner,
+    private readonly entitlements: EntitlementsService,
     @InjectEnv() private readonly env: Env,
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<AutomationListResponse> {
     const { scope, site } = await this.sites.access(user, siteId, 'automations.view');
     const now = new Date();
-    const month = vnMonthOf(now);
+    const month = this.entitlements.currentMonth();
     const automations = await this.automations.listOfSite(scope, site._id);
-    const [stats, used, people] = await Promise.all([
+    const [entitlements, stats, used, people] = await Promise.all([
+      this.entitlements.of(scope),
       this.runs.stats(
         scope,
         automations.map((automation) => automation._id),
@@ -162,7 +163,11 @@ export class AutomationsService {
       items: automations.map((automation) =>
         toItem(automation, stats.get(automation._id.toHexString()), people, month),
       ),
-      usage: { used, limit: AUTOMATION_RUNS_PER_MONTH, resetsOn: nextVnMonthStart(month) },
+      usage: {
+        used,
+        limit: entitlements.plan.limits.automationRuns,
+        resetsOn: nextVnMonthStart(month),
+      },
     };
   }
 
@@ -173,6 +178,7 @@ export class AutomationsService {
     request: CreateAutomationRequest,
   ): Promise<AutomationListItem> {
     const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
+    await this.requireFeature(scope);
     await this.requireRoom(scope, site._id);
     const recipe = request.recipe ?? null;
     let draft: { name: string; definition: AutomationDefinition } = {
@@ -204,6 +210,7 @@ export class AutomationsService {
     automationId: string,
   ): Promise<AutomationListItem> {
     const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
+    await this.requireFeature(scope);
     const source = await this.find(scope, site._id, automationId);
     await this.requireRoom(scope, site._id);
     const copy = await this.automations.insert(scope, site._id, {
@@ -230,6 +237,8 @@ export class AutomationsService {
     const { scope, site } = await this.sites.access(user, siteId, 'automations.manage');
     const automation = await this.find(scope, site._id, automationId);
     if (request.state === 'on') {
+      // Enabling needs the feature even for an automation made on a plan that had it (ADR-035).
+      await this.requireFeature(scope);
       const missing = missingSteps(automation.definition);
       if (missing > 0) {
         throw validationFailed([
@@ -247,6 +256,11 @@ export class AutomationsService {
     const updated = await this.transactions.run(async (tx) => {
       if (!(await this.siteRecords.recordDataWrite(scope, site._id, tx))) {
         throw notFound(SITE_NOT_FOUND);
+      }
+      if (request.state === 'on') {
+        // Again under the plan this commits with: a change to a plan without automation at the
+        // same moment would not see this automation on, and leave it on (ADR-035).
+        await this.entitlements.requireFeatureIn(scope, 'automation', tx);
       }
       const changed = await this.automations.setState(
         scope,
@@ -811,6 +825,11 @@ export class AutomationsService {
     return automation;
   }
 
+  /** 402 `plan_feature_required` on a plan without automation (ADR-035). */
+  private async requireFeature(scope: WorkspaceScope): Promise<void> {
+    this.entitlements.requireFeature(await this.entitlements.of(scope), 'automation');
+  }
+
   private async requireRoom(scope: WorkspaceScope, siteId: ObjectId): Promise<void> {
     if ((await this.automations.countOfSite(scope, siteId)) >= AUTOMATIONS_PER_SITE_MAX) {
       throw validationFailed([
@@ -852,7 +871,7 @@ export class AutomationsService {
       automation,
       stats.get(automation._id.toHexString()),
       people,
-      vnMonthOf(new Date()),
+      this.entitlements.currentMonth(),
     );
   }
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { ContactsCoreModule } from '../contacts/contacts-core.module.js';
 import { ContactsModule } from '../contacts/contacts.module.js';
 import { LeadsCoreModule } from '../leads/leads-core.module.js';
@@ -8,6 +9,7 @@ import { EmailModule } from '../notifications/email.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
+import { AutomationPlanPause } from './automation-plan-pause.service.js';
 import { AutomationRunner } from './automation-runner.service.js';
 import { AutomationScheduler } from './automation-scheduler.service.js';
 import { AutomationsController } from './automations.controller.js';
@@ -21,6 +23,8 @@ import { WebhookSender } from './webhook-sender.js';
     ActivityModule,
     AuthModule,
     AutomationsCoreModule,
+    // The plan's automation feature and runs (ADR-035).
+    BillingCoreModule,
     ContactsCoreModule,
     ContactsModule,
     EmailModule,
@@ -30,7 +34,13 @@ import { WebhookSender } from './webhook-sender.js';
     WorkspacesModule,
   ],
   controllers: [AutomationsController],
-  providers: [AutomationsService, AutomationRunner, AutomationScheduler, WebhookSender],
+  providers: [
+    AutomationsService,
+    AutomationRunner,
+    AutomationScheduler,
+    AutomationPlanPause,
+    WebhookSender,
+  ],
   exports: [AutomationScheduler],
 })
 export class AutomationsModule {}

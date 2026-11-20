@@ -37,6 +37,36 @@ describe('TopBar', () => {
     expect(status).toHaveFocus();
   });
 
+  it('leads a save refused by a read-only workspace to board 28, without "Thử lại" (ADR-035)', () => {
+    const store = makeStore();
+    renderEditor(
+      <TopBar
+        siteId={SITE_ID}
+        pageId={PAGE_ID}
+        onRetrySave={vi.fn()}
+        onPreview={vi.fn()}
+        previewPending={false}
+        onOpenPublish={vi.fn()}
+        onTemplate={vi.fn()}
+      />,
+      { store },
+    );
+    act(() => {
+      store.getState().markSaveFailed({
+        kind: 'plan',
+        message: 'Workspace đang ở chế độ chỉ đọc',
+        problem: 'read_only',
+      });
+    });
+
+    expect(screen.getByText(/Workspace đang ở chế độ chỉ đọc/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+      'href',
+      '/workspaces/64b000000000000000000003/billing',
+    );
+  });
+
   it('lets a Cộng tác viên send the draft for approval, and shows when it waits (ADR-023)', () => {
     const detail = pageDetail(undefined, {
       approval: {

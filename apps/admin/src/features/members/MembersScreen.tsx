@@ -39,6 +39,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { formatDate, formatRelativeTime } from '../../lib/format';
+import { useWorkspacePlan } from '../billing/plan-context';
 import { rolesHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -204,6 +205,9 @@ export function MembersScreen({
   const shownInvitations = invitations.filter((invitation) => matchesFilters(invitation, filters));
   const admins = members.filter((member) => member.role === 'admin');
   const used = members.length + invitations.length;
+  // The plan's members, pending invitations counted (ADR-035), under the hard cap of ADR-021.
+  const planMembers = useWorkspacePlan()?.plan.plan.limits.members ?? MEMBERS_MAX;
+  const seats = Math.min(planMembers, MEMBERS_MAX);
   const memberOf = (userId: string) => members.find((member) => member.userId === userId);
 
   const tabs = [
@@ -227,7 +231,7 @@ export function MembersScreen({
         actions={
           <>
             <span className={styles.seats}>
-              Đang dùng {used}/{MEMBERS_MAX} chỗ
+              Đang dùng {used}/{seats} chỗ
             </span>
             <Button
               leadingIcon={<PlusIcon size={16} />}

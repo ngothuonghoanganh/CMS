@@ -478,6 +478,18 @@ test.describe('Design capture', () => {
     await capture(page, 'Roles');
   });
 
+  test('28 Plan', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.goto(`/workspaces/${board.site.workspaceId}/billing`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Gói dịch vụ' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Mức sử dụng' })).toBeVisible();
+    await capture(page, 'Plan');
+
+    await page.getByRole('button', { name: 'Đổi gói' }).click();
+    await expect(page.getByRole('dialog', { name: 'Đổi gói' })).toBeVisible();
+    await capture(page, 'Plan-change');
+  });
+
   test('20 AiCreate and 21 AiAssistant', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.goto(sitePath('/pages/new/ai'));

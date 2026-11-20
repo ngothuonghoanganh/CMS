@@ -458,7 +458,7 @@ describe('the AI assistant panel (board 21)', () => {
     expect(inPanel().getByText('Đang viết lại “Tiêu đề” của Hero…')).toBeInTheDocument();
   });
 
-  it('quota: actions off, when the uses come back, no plan link', async () => {
+  it('quota: actions off, when the uses come back, and "Xem gói" for the plan’s limit', async () => {
     serve(usage({ used: 100, remaining: 0 }));
     renderAssistant();
     expect(await screen.findByRole('button', { name: 'Viết lại' })).toBeDisabled();
@@ -467,7 +467,12 @@ describe('the AI assistant panel (board 21)', () => {
       screen.getByText(/Lượt mới có vào 01\/12\. Bạn vẫn sửa tay bình thường\./),
     ).toBeInTheDocument();
     expect(screen.getByText(/^Đã dùng 100\/100 lượt tháng này/)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Xem gói' })).not.toBeInTheDocument();
+    // The month's uses are the plan's (ADR-035): "Theo gói", and board 28 of the site's workspace.
+    expect(screen.getByText('Theo gói')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Xem gói' })).toHaveAttribute(
+      'href',
+      '/workspaces/64b000000000000000000003/billing',
+    );
   });
 
   it('AI off: an explanation instead of the panel', async () => {

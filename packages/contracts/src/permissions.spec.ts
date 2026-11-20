@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { roleCoversAllSites, roleSchema } from './auth.js';
+import { planFeatureOf } from './billing.js';
 import {
   can,
   holdersOf,
   onlyHoldersMessage,
+  type Permission,
   permissionGroups,
+  permissionKinds,
   permissionSchema,
+  refusedWhileReadOnly,
   rolesWith,
 } from './permissions.js';
 
@@ -30,6 +34,8 @@ const BOARD: Record<string, string> = {
   'members.manage': 'yynnnn',
   'accessRequests.decide': 'ynnnnn',
   'workspace.transferOwnership': 'ynnnnn',
+  'billing.view': 'yynnnn',
+  'billing.manage': 'ynnnnn',
 };
 
 describe('the role matrix', () => {
@@ -62,6 +68,65 @@ describe('the role matrix', () => {
 
   it('gives only Chủ sở hữu and Quản trị the whole workspace', () => {
     expect(roleSchema.options.filter(roleCoversAllSites)).toEqual(['owner', 'admin']);
+  });
+});
+
+describe('a read-only workspace (ADR-035)', () => {
+  /** "Bị chặn" of ADR-035; inviting is `members.manage`, as are changing roles and custom roles. */
+  const REFUSED: Permission[] = [
+    'pages.edit',
+    'templates.manage',
+    'pages.publish',
+    'pages.requestPublish',
+    'publishApprovals.decide',
+    'leads.handle',
+    'sites.manage',
+    'domains.manage',
+    'privacy.manage',
+    'automations.manage',
+    'members.manage',
+    'accessRequests.decide',
+  ];
+
+  it('refuses the writes ADR-035 blocks and keeps the others', () => {
+    expect(permissionSchema.options.filter(refusedWhileReadOnly).sort()).toEqual(
+      [...REFUSED].sort(),
+    );
+    // "Vẫn được": pointer moves, personal data duties, the ownership and every billing operation.
+    for (const permission of [
+      'pages.manageLive',
+      'leads.export',
+      'personalData.manage',
+      'workspace.transferOwnership',
+      'billing.manage',
+    ] as const) {
+      expect(refusedWhileReadOnly(permission), permission).toBe(false);
+    }
+  });
+
+  it('flags every permission, every view as a read', () => {
+    expect(Object.keys(permissionKinds).sort()).toEqual([...permissionSchema.options].sort());
+    for (const permission of [
+      'pages.view',
+      'leads.view',
+      'automations.view',
+      'billing.view',
+    ] as const) {
+      expect(permissionKinds[permission]).toBe('read');
+    }
+  });
+});
+
+describe('board 16 for plans (ADR-035)', () => {
+  it('keeps changing the plan and paying with Chủ sở hữu, and shows the plan to Quản trị', () => {
+    expect(rolesWith('billing.manage')).toEqual(['owner']);
+    expect(rolesWith('billing.view')).toEqual(['owner', 'admin']);
+  });
+
+  it('marks the automation rows "Theo gói"', () => {
+    const marked = permissionSchema.options.filter((permission) => planFeatureOf(permission));
+    expect(marked).toEqual(['automations.view', 'automations.manage']);
+    expect(planFeatureOf('automations.manage')).toBe('automation');
   });
 });
 

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { baseDomainOf, customDomainOrigin, parseEnv, siteOrigin, tlsCheckEnabled } from './env.js';
+import { existsSync } from 'node:fs';
+import {
+  BUNDLED_PLAN_CATALOG_FILE,
+  baseDomainOf,
+  customDomainOrigin,
+  parseEnv,
+  siteOrigin,
+  tlsCheckEnabled,
+} from './env.js';
 
 const valid = {
   MONGODB_URI: 'mongodb://localhost:27117/plp',
@@ -164,11 +172,10 @@ describe('parseEnv', () => {
       AI_MODEL: 'qwen3:4b-instruct',
     };
 
-    it('is off by default, with a minute per request and 100 uses a month', () => {
+    it('is off by default, with a minute per request', () => {
       const env = parseEnv(valid);
       expect(env.AI_PROVIDER).toBe('none');
       expect(env.AI_TIMEOUT_MS).toBe(60_000);
-      expect(env.AI_MONTHLY_QUOTA).toBe(100);
     });
 
     it('writes 3 sections at once by default, 1 to 8 when set', () => {
@@ -202,6 +209,30 @@ describe('parseEnv', () => {
           AI_PROVIDER: 'fake',
         }),
       ).toThrow('AI_PROVIDER=fake writes fixed text for tests');
+    });
+  });
+
+  describe('plans and billing (ADR-035)', () => {
+    it('reads the plan catalog that comes with the API unless told otherwise', () => {
+      expect(parseEnv(valid).PLAN_CATALOG_FILE).toBe(BUNDLED_PLAN_CATALOG_FILE);
+      expect(BUNDLED_PLAN_CATALOG_FILE).toMatch(/apps\/api\/plans\.json$/);
+      expect(existsSync(BUNDLED_PLAN_CATALOG_FILE)).toBe(true);
+      expect(
+        parseEnv({ ...valid, PLAN_CATALOG_FILE: '/etc/plp/plans.json' }).PLAN_CATALOG_FILE,
+      ).toBe('/etc/plp/plans.json');
+    });
+
+    it('moves the billing clock only outside production', () => {
+      expect(parseEnv(valid).BILLING_TEST_CLOCK).toBe('off');
+      expect(parseEnv({ ...valid, BILLING_TEST_CLOCK: 'on' }).BILLING_TEST_CLOCK).toBe('on');
+      expect(() =>
+        parseEnv({
+          ...valid,
+          NODE_ENV: 'production',
+          CUSTOM_DOMAIN_IPV4: '203.0.113.10',
+          BILLING_TEST_CLOCK: 'on',
+        }),
+      ).toThrow('BILLING_TEST_CLOCK=on moves the billing clock for tests');
     });
   });
 

@@ -6,17 +6,20 @@ import {
   type CustomRole,
   endpoints,
   permissionGroups,
+  planFeatureOf,
   type Role,
   roleLabels,
   roleSchema,
 } from '@plp/contracts';
 import { Button, CheckIcon, PlusIcon, useToast, VisuallyHidden } from '@plp/ui';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { ScrollRegion } from '../shell/ScrollRegion';
+import { useUpgradeHref, useWorkspacePlan } from '../billing/plan-context';
 import { memberQueryKeys } from '../members/queries';
 import { CustomRoleEditor } from './CustomRoleEditor';
 import styles from './RolesScreen.module.css';
@@ -58,6 +61,17 @@ export function RolesScreen({
     initialDataUpdatedAt: loadedAt,
   }).data.items;
   const full = customRoles.length >= CUSTOM_ROLES_MAX;
+  // Rows the plan, not the role, decides: "Theo gói" (ADR-035). Without a plan frame, none.
+  const plan = useWorkspacePlan()?.plan.plan ?? null;
+  const upgradeHref = useUpgradeHref();
+  const lacksCustomRoles = plan !== null && !plan.features.customRoles;
+  const byPlan = (permission: Parameters<typeof planFeatureOf>[0]) => {
+    const feature = planFeatureOf(permission);
+    return plan !== null && feature !== null && !plan.features[feature];
+  };
+  const showPlanLegend = permissionGroups.some((group) =>
+    group.rows.some((row) => byPlan(row.permission)),
+  );
   const focus = selection.kind === 'system' ? selection.role : null;
   const editing =
     selection.kind === 'custom'
@@ -82,6 +96,12 @@ export function RolesScreen({
               <span className={styles.request}>Yêu cầu</span>
               Phải được duyệt
             </li>
+            {showPlanLegend ? (
+              <li>
+                <span className={styles.request}>Theo gói</span>
+                Cần gói phù hợp, không phải quyền
+              </li>
+            ) : null}
           </ul>
         }
       />
@@ -144,7 +164,7 @@ export function RolesScreen({
               leadingIcon={<PlusIcon size={16} />}
               aria-pressed={selection.kind === 'new'}
               aria-describedby="custom-role-note"
-              disabled={full}
+              disabled={full || lacksCustomRoles}
               onClick={() => {
                 setSelection({ kind: 'new' });
               }}
@@ -152,9 +172,17 @@ export function RolesScreen({
               Vai trò tùy chỉnh
             </Button>
             <span id="custom-role-note" className={styles.roleKind}>
-              {full
-                ? `Đã đủ ${CUSTOM_ROLES_MAX} vai trò tùy chỉnh. Xóa một vai trò không dùng để tạo thêm.`
-                : 'Nhân bản từ vai trò có sẵn rồi bật/tắt quyền.'}
+              {lacksCustomRoles ? (
+                <>
+                  <span className={styles.request}>Theo gói</span> Gói {plan.name} chưa có vai trò
+                  tùy chỉnh.{' '}
+                  {upgradeHref === null ? null : <Link href={upgradeHref}>Nâng cấp</Link>}
+                </>
+              ) : full ? (
+                `Đã đủ ${CUSTOM_ROLES_MAX} vai trò tùy chỉnh. Xóa một vai trò không dùng để tạo thêm.`
+              ) : (
+                'Nhân bản từ vai trò có sẵn rồi bật/tắt quyền.'
+              )}
             </span>
           </div>
         </nav>
@@ -236,6 +264,12 @@ export function RolesScreen({
                       <tr key={row.permission}>
                         <th scope="row" className={styles.permission}>
                           {row.label}
+                          {byPlan(row.permission) ? (
+                            <>
+                              {' '}
+                              <span className={styles.request}>Theo gói</span>
+                            </>
+                          ) : null}
                         </th>
                         {roles.map((role) => (
                           <td key={role} className={styles.cell}>

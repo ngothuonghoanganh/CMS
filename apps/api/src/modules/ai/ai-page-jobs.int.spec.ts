@@ -26,6 +26,7 @@ import {
   untilAborted,
 } from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
+import { planCatalogFile } from '../../../test/plans.js';
 import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
 import { createSecondInstance } from '../../../test/instances.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
@@ -75,7 +76,11 @@ describe('creating a page with AI (ADR-031)', () => {
 
   beforeAll(async () => {
     t = await createTestApp('plp_test_ai_jobs', {
-      env: { AI_PROVIDER: 'fake', AI_MONTHLY_QUOTA: String(QUOTA) },
+      env: {
+        AI_PROVIDER: 'fake',
+        // The quota is the plan's (ADR-035): new workspaces start on the trial's Agency.
+        PLAN_CATALOG_FILE: planCatalogFile({ agency: { limits: { aiUses: QUOTA } } }),
+      },
       override: (builder) => builder.overrideProvider(AiClock).useValue(clock),
     });
     fake = fakeAi(t);
@@ -437,12 +442,14 @@ describe('creating a page with AI (ADR-031)', () => {
       ),
     );
     expect(responses.filter((response) => response.status === 200)).toHaveLength(QUOTA);
-    const refused = responses.filter((response) => response.status === 429);
+    // The month's uses are the plan's limit (ADR-035): 402, with the day they come back.
+    const refused = responses.filter((response) => response.status === 402);
     expect(refused).toHaveLength(3);
+    const { resetsOn } = await usage(client, site.id);
     for (const response of refused) {
       expect(problemSchema.parse(response.body)).toMatchObject({
-        code: 'ai_quota_exhausted',
-        title: `Workspace đã dùng hết ${QUOTA} lượt AI tháng này`,
+        code: 'plan_limit_reached',
+        context: { limit: 'aiUses', max: QUOTA, resetsOn },
       });
     }
     expect(await usage(client, site.id)).toMatchObject({ used: QUOTA, remaining: 0 });

@@ -10,6 +10,8 @@ import {
   type Permission,
   pointerMoveResponseSchema,
   problemSchema,
+  type ReadOnlyKeptAction,
+  refusedWhileReadOnly,
   type Role,
   roleCountsSchema,
   rolesWith,
@@ -29,6 +31,7 @@ import {
   scopeTextOf,
 } from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
+import { setReadOnly } from '../../../test/billing.js';
 import { heroSection } from '../../../test/compositions.js';
 import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
@@ -115,6 +118,15 @@ interface Row {
   scope: 'site' | 'workspace';
   /** The status of a call that works. */
   status: number;
+  /** The action a read-only workspace keeps although its permission is refused (ADR-035). */
+  keeps?: ReadOnlyKeptAction;
+  /** The status in a read-only workspace of a call it keeps, when it differs from `status`. */
+  readOnlyStatus?: number;
+  /**
+   * Refused in a read-only workspace although its permission is kept there: an action under
+   * `pages.manageLive` that removes data instead of moving the pointer (ADR-035).
+   */
+  refusedWhileReadOnly?: true;
   call: (client: TestClient, fixture: Fixture) => PromiseLike<Response>;
 }
 
@@ -215,6 +227,7 @@ const ROWS: Row[] = [
     permission: 'members.manage',
     scope: 'workspace',
     status: 204,
+    keeps: 'members.remove',
     call: (client, { workspaceId, elsewhereUserId }) =>
       client.delete(`/workspaces/${workspaceId}/members/${elsewhereUserId}`),
   },
@@ -254,6 +267,31 @@ const ROWS: Row[] = [
         toUserId: adminUserId,
         confirmName: workspaceName,
       }),
+  },
+  // Plans and billing (board 28, ADR-035)
+  {
+    action: 'Gói của workspace',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/plan`),
+  },
+  {
+    action: 'Gói và mức dùng',
+    permission: 'billing.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/billing`),
+  },
+  {
+    action: 'Đổi gói',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    // Kept, but once the trial is over a new plan needs a payment (T2).
+    readOnlyStatus: 409,
+    call: (client, { workspaceId }) =>
+      client.post(`/workspaces/${workspaceId}/billing/plan`, { planId: 'basic', cycle: 'yearly' }),
   },
   // Custom domains (board 13, ADR-022)
   // Custom roles (board 16, ADR-024)
@@ -716,6 +754,7 @@ const ROWS: Row[] = [
     permission: 'pages.manageLive',
     scope: 'site',
     status: 204,
+    refusedWhileReadOnly: true,
     call: (client, { site, draftPageId }) =>
       client.delete(`/sites/${site.id}/pages/${draftPageId}`),
   },
@@ -1339,6 +1378,8 @@ describe('the six roles on every endpoint', () => {
       customRoles,
       addresses,
       workspace,
+      subscription,
+      billingLog,
     ] = await Promise.all([
       // Every field of every event: a refused call must not edit one either.
       collection('activity'),
@@ -1350,6 +1391,14 @@ describe('the six roles on every endpoint', () => {
       ofWorkspace('custom_roles'),
       ofWorkspace('site_addresses'),
       t.connection.collection('workspaces').findOne({ _id: new Types.ObjectId(workspaceId) }),
+      // Its plan; the dates move when the test makes the workspace read-only (ADR-035).
+      t.connection
+        .collection('subscriptions')
+        .findOne(
+          { _id: new Types.ObjectId(workspaceId) },
+          { projection: { planId: 1, cycle: 1, version: 1 } },
+        ),
+      ofWorkspace('billing_log'),
     ]);
     return JSON.stringify({
       siteRecord,
@@ -1375,6 +1424,8 @@ describe('the six roles on every endpoint', () => {
       customRoles,
       addresses,
       workspace,
+      subscription,
+      billingLog,
     });
   }
 
@@ -1410,9 +1461,39 @@ describe('the six roles on every endpoint', () => {
       expect(await stateOf(target)).toBe(before);
     }
 
-    // The least powerful role that holds the permission gets the action done.
+    // A read-only workspace (ADR-035) refuses a request that changes data under a write
+    // permission, with 402 and before anything changes, after 404 and 403. Reads and what it
+    // keeps still work: there the least powerful holder gets the action done while read-only.
     const weakest = holders.at(-1) ?? 'owner';
-    expect((await row.call(clientOf(weakest, target), target)).status).toBe(row.status);
+    await setReadOnly(t, target.workspaceId, true);
+    const outsider = MEMBER_ROLES.find((item) => !holders.includes(item));
+    if (outsider !== undefined) {
+      const refused = await row.call(clientOf(outsider, target), target);
+      expect(refused.status, `${outsider}, read-only`).toBe(403);
+    }
+    const readOnly = await row.call(clientOf(weakest, target), target);
+    const writes = readOnly.request.method !== 'GET';
+    if (
+      writes &&
+      row.keeps === undefined &&
+      (row.refusedWhileReadOnly === true || refusedWhileReadOnly(row.permission))
+    ) {
+      expect(readOnly.status, 'read-only').toBe(402);
+      expect(problemSchema.parse(readOnly.body)).toMatchObject({
+        code: 'workspace_read_only',
+        context: { state: 'trial_expired' },
+      });
+      expect(await stateOf(target)).toBe(before);
+      await setReadOnly(t, target.workspaceId, false);
+      // The least powerful role that holds the permission gets the action done.
+      expect((await row.call(clientOf(weakest, target), target)).status).toBe(row.status);
+    } else {
+      expect(readOnly.status, 'read-only').toBe(row.readOnlyStatus ?? row.status);
+      await setReadOnly(t, target.workspaceId, false);
+      if (row.readOnlyStatus !== undefined) {
+        expect((await row.call(clientOf(weakest, target), target)).status).toBe(row.status);
+      }
+    }
 
     // And it is never refused what it holds. The fixture may have moved on, so the status may be
     // the action's own (a 404 for a request of someone else's), never a 403.

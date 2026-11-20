@@ -14,6 +14,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { AutomationsModule } from './modules/automations/automations.module.js';
+import { BillingModule } from './modules/billing/billing.module.js';
 import { ContactsModule } from './modules/contacts/contacts.module.js';
 import { DataRequestsModule } from './modules/data-requests/data-requests.module.js';
 import { LeadsModule } from './modules/leads/leads.module.js';
@@ -93,6 +94,7 @@ export class AppModule {
         PublicDeliveryModule,
         RevalidationModule,
         AiModule,
+        BillingModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemFilter },

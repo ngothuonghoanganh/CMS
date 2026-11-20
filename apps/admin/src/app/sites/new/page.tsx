@@ -121,6 +121,7 @@ export default async function NewSitePage({
           workspaceId={membership.workspace.id}
           originTemplate={env.PUBLIC_SITE_ORIGIN_TEMPLATE}
           cancelHref={backHref}
+          canViewBilling={can(membership.role, 'billing.view')}
         />
       </FormCard>
     </CenteredPage>
