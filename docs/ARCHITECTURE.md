@@ -3000,6 +3000,36 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Bảng quyền có thêm hai quyền và cờ đọc/ghi cho mọi quyền; `role-matrix.int.spec.ts` có thêm workspace chỉ đọc.
   - Kiểm thử vòng đời dùng một đồng hồ dời được của API, chỉ bật ngoài production.
 - **Lát:** T1 gói, hạn mức, tính năng và chỉ đọc, màn 28 (phần gói và mức dùng); T2 cổng thanh toán, phương thức, hóa đơn, nâng gói, màn 29; T3 gia hạn, trừ tiền lỗi, ân hạn, chuyển khoản, hạ gói và hủy, email (§5).
+- **Amended 2026-11-20 (T1, cách làm):**
+  - **Bảng gói** (`apps/api/plans.json`):
+    - Mã gói `basic`, `agency`, `business`.
+    - File có thêm `trial { planId, days }`, `graceDays` và `expiringSoonDays` (con số tạm 14, 7, 7), để mọi con số của vòng đời gói sửa được mà không sửa code.
+    - Schema còn kiểm: mã gói không trùng, gói dùng thử có trong bảng, site ≤ `MAX_SITES_PER_WORKSPACE`, thành viên ≤ 100, tên miền riêng ≤ 5 × số site, gói không có automation thì 0 lượt automation.
+    - Lúc khởi động, mọi gói mà một subscription đang dùng hay sẽ chuyển sang phải còn trong bảng; thiếu thì API không khởi động.
+  - **Dùng thử:**
+    - Subscription được tạo trong transaction đăng ký, cùng user, workspace và membership.
+    - Kỳ dùng thử là kỳ đầu: `periodStart` lúc tạo, `periodEnd`, `trialEndsAt` và `nextActionAt` là cuối dùng thử, chu kỳ `monthly`.
+    - Lúc khởi động, trước khi phục vụ, workspace chưa có subscription nhận một kỳ dùng thử mới (upsert theo `_id`: chạy lại được, nhiều instance cùng lúc được). Workspace không có subscription khi đang phục vụ là lỗi 500.
+  - **Hàm trạng thái** `subscriptionStatusOf(facts, policy, now)`:
+    - Còn dùng thử: `trialing`, số ngày còn lại làm tròn lên.
+    - Hết dùng thử: đã hủy trong lúc dùng thử thì `canceled`; có lần trừ tiền lỗi hay hóa đơn đang chờ thì quá hạn như kỳ trả phí; còn lại `trial_expired`.
+    - Kỳ trả phí: hết kỳ mà có `cancelAtPeriodEnd` thì `canceled`; có `failedSince` thì `past_due`; có `openInvoiceId` mà chưa lỗi thì `pending_payment`; hết kỳ mà chưa gia hạn (việc nền chưa chạy) cũng là `past_due`.
+    - Ân hạn tính từ `failedSince`, hoặc từ cuối kỳ (cuối dùng thử) khi chưa có lần trừ tiền lỗi, nên việc nền lỡ hẹn vẫn kết thúc ở chỉ đọc.
+    - Thẻ dùng được tới hết tháng hết hạn (giờ UTC). `expiring_soon` khi còn ≤ `expiringSoonDays` mà không có thẻ, hay thẻ hết hạn trước cuối kỳ.
+  - **Chỉ đọc:**
+    - `WorkspaceScope` mang trạng thái và mức truy cập của gói, đọc cùng membership ở mỗi request.
+    - `AccessService.require`, nên cả `SitesService.access`, trả 402 `workspace_read_only` (kèm `state`) sau 404 và 403, khi request thay đổi dữ liệu (mọi method trừ GET, HEAD, OPTIONS) và quyền là quyền ghi không được giữ. Nhờ vậy các danh sách sau một quyền ghi (thành viên, lời mời, tên miền, vai trò tùy chỉnh) vẫn mở.
+    - Cờ đọc/ghi ở `permissionKinds`: các quyền xem và `leads.export` là đọc. Quyền ghi được giữ: `pages.manageLive`, `personalData.manage`, `workspace.transferOwnership`, `billing.manage`.
+    - Trong `members.manage`, workspace chỉ đọc vẫn gỡ thành viên và thu hồi lời mời đang chờ (lời mời tính như thành viên), qua `readOnlyKeptActions`. Mời, gửi lại lời mời, đổi quyền, vai trò tùy chỉnh và duyệt yêu cầu đổi quyền bị chặn.
+    - Không cần quyền nên không bị chặn: thành viên gửi yêu cầu đổi quyền của mình, người được mời nhận lời mời (lời mời đã được tính vào hạn mức).
+  - **Đổi gói trong lúc dùng thử:**
+    - Có hiệu lực ngay, không trừ tiền, chỉ khi còn dùng thử và từ đúng `version` đã đọc (409 `conflict` nếu không).
+    - Trong cùng transaction: ghi `billing_log` (`plan_changed`, gói và chu kỳ trước và sau) và chạy `PlanChangeHooks`, nơi module khác (automation tạm dừng với `pausedReason: plan`) đăng ký việc của mình; hook lỗi thì gói không đổi.
+    - Chọn lại đúng gói và chu kỳ đang có thì không đổi gì. Ngoài dùng thử: 409 `plan_change_unavailable` cho tới T2.
+  - **Endpoint:** `GET /billing/plans` (người đã đăng nhập); `GET /workspaces/:id/plan` (`pages.view`: tên gói, hạn mức, tính năng, trạng thái và mức truy cập, cho Sidebar v2, chip "Nâng cấp" và banner chỉ đọc); `GET /workspaces/:id/billing` (`billing.view`); `POST /workspaces/:id/billing/plan` (`billing.manage`).
+  - **Mức dùng:** sáu truy vấn chạy cùng lúc trên index bắt đầu bằng `workspaceId`; `domains` có thêm index `{ workspaceId }`. Lượt AI và lượt automation tính theo tháng lịch Việt Nam của đồng hồ thanh toán.
+  - **Đồng hồ thử:** `BILLING_TEST_CLOCK=on` (API không khởi động với nó khi `NODE_ENV=production`) cho dời đồng hồ thanh toán của cả process qua `PUT /testing/clock { now }` (`null` về giờ thật) và `GET /testing/clock`, không cần session; tắt thì 404. Integration test gọi `BillingClock.set`. Bộ đếm lượt AI vẫn theo đồng hồ của nó (`AiClock`).
+  - **Board 16:** nhóm "Thanh toán" có trong `permissionGroups`; `planFeatureOf` đánh dấu "Theo gói" ở hai dòng automation.
 
 ---
 
