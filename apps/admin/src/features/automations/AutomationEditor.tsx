@@ -31,7 +31,7 @@ import {
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import { formatCount, formatRelativeTime } from '../../lib/format';
 import { useWorkspacePlan } from '../billing/plan-context';
 import { planProblemOf } from '../billing/plan-problem';
@@ -111,8 +111,9 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
   const [source, setSource] = useState<'latest' | 'sample'>('latest');
   const [test, setTest] = useState<TestAutomationResponse | null>(null);
   const [saving, setSaving] = useState<Saving>('saved');
-  // Why the last save failed when the plan refused it (ADR-035): retrying cannot work then.
-  const [savePlanError, setSavePlanError] = useState<unknown>(null);
+  // The last save the plan refused (ADR-035): retrying cannot work then. Its title is enough here;
+  // the read-only strip says the rest.
+  const [savePlanError, setSavePlanError] = useState<ApiError | null>(null);
   const [savedAt, setSavedAt] = useState(Date.parse(initial.updatedAt));
   const [activateOpen, setActivateOpen] = useState(false);
   // A webhook step's secret, shown once by the save that created it or by "Đổi bí mật".
@@ -147,7 +148,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
     },
     onError: (error) => {
       setSaving('failed');
-      setSavePlanError(planProblemOf(error) === null ? null : error);
+      setSavePlanError(error instanceof ApiError && planProblemOf(error) !== null ? error : null);
       reportUnexpected('Saving an automation failed', error);
     },
   });
@@ -347,7 +348,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
                 {saving === 'failed'
                   ? savePlanError === null
                     ? 'Chưa lưu được — sửa tiếp để thử lại'
-                    : `Chưa lưu được · ${problemMessage(savePlanError)}`
+                    : `Chưa lưu được · ${savePlanError.problem.title}`
                   : saving === 'saved'
                     ? `Đã lưu · ${formatRelativeTime(savedAt, Math.max(now, savedAt))}`
                     : 'Đang lưu…'}

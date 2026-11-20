@@ -335,7 +335,7 @@ describe('AutomationEditor (board 26)', () => {
         await vi.advanceTimersByTimeAsync(700);
       });
       expect(
-        await screen.findByText(/^Chưa lưu được · Thời gian dùng thử đã hết\./),
+        await screen.findByText('Chưa lưu được · Workspace đang ở chế độ chỉ đọc'),
       ).toBeInTheDocument();
       expect(screen.queryByText(/sửa tiếp để thử lại/)).toBeNull();
       expect(screen.getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(

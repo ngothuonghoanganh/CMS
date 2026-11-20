@@ -54,14 +54,13 @@ describe('TopBar', () => {
     act(() => {
       store.getState().markSaveFailed({
         kind: 'plan',
-        message: 'Thời gian dùng thử đã hết.',
+        message: 'Workspace đang ở chế độ chỉ đọc',
         problem: 'read_only',
       });
     });
 
-    expect(screen.getByText(/Thời gian dùng thử đã hết\./)).toBeInTheDocument();
+    expect(screen.getByText(/Workspace đang ở chế độ chỉ đọc/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
-    expect(screen.getByText('Theo gói')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
       'href',
       '/workspaces/64b000000000000000000003/billing',

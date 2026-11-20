@@ -69,13 +69,11 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
     if (error.status === 409 && error.code === 'revision_conflict') {
       return 'conflict';
     }
+    // The title only ("Workspace đang ở chế độ chỉ đọc"): the read-only strip under the top bar
+    // says the rest.
     const plan = planProblemOf(error);
     if (plan !== null) {
-      return {
-        kind: 'plan',
-        message: error.problem.detail ?? error.problem.title,
-        problem: plan.kind,
-      };
+      return { kind: 'plan', message: error.problem.title, problem: plan.kind };
     }
     if (error.status === 422) {
       return { kind: 'invalid', message: firstIssueMessage(error) };
