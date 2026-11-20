@@ -10,6 +10,8 @@ import { BillingEventsRepository } from './billing-events.repository.js';
 import { BillingController } from './billing.controller.js';
 import { BillingCoreModule } from './billing-core.module.js';
 import { BillingService } from './billing.service.js';
+import { FakeGatewayController } from './gateway/fake/fake-gateway.controller.js';
+import { FakeWebhookSender } from './gateway/fake/fake-webhook-sender.js';
 import { createPaymentGateway } from './gateway/create-payment-gateway.js';
 import { PaymentGateway } from './gateway/payment-gateway.js';
 import { PaymentGatewaySignatureGuard } from './gateway/payment-gateway-webhook.js';
@@ -49,6 +51,7 @@ import { TestClockController } from './test-clock.controller.js';
     BillingAccountController,
     InvoicesController,
     GatewayWebhookController,
+    FakeGatewayController,
     TestClockController,
   ],
   providers: [
@@ -61,6 +64,7 @@ import { TestClockController } from './test-clock.controller.js';
     InvoicesService,
     BillingEventsRepository,
     GatewayWebhookService,
+    FakeWebhookSender,
     PaymentGatewaySignatureGuard,
     SubscriptionBackfill,
   ],

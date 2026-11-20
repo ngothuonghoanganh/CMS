@@ -46,7 +46,7 @@ export class FakePaymentGateway extends PaymentGateway {
 
   constructor(private readonly options: FakePaymentGatewayOptions) {
     super();
-    this.now = options.now ?? Date.now;
+    this.now = options.now ?? (() => Date.now());
   }
 
   startMethodSetup(request: MethodSetupRequest): Promise<MethodSetup> {
