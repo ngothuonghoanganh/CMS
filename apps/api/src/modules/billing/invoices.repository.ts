@@ -124,16 +124,31 @@ export class InvoicesRepository {
   }
 
   /**
-   * Voids the unpaid invoices of earlier plan changes, which a new change replaces: none of them
-   * can be paid after it. How many it voided.
+   * The newest invoice of the workspace whose charge may have gone through without the API knowing
+   * (ADR-035): `open` after an unknown outcome, or after a charge the API never recorded. Only
+   * "Thanh toán lại" on it, with the same key at the gateway, decides it.
    */
-  async voidUnpaidChanges(ref: WorkspaceRef, at: Date, tx: Tx): Promise<number> {
+  findUndecided(ref: WorkspaceRef, tx: Tx): Promise<InvoiceRecord | null> {
+    return this.invoices
+      .findOne({ workspaceId: ref.workspaceId, status: 'open' })
+      .sort(NEWEST_FIRST)
+      .session(tx)
+      .lean<InvoiceRecord>()
+      .exec();
+  }
+
+  /**
+   * Voids the refused invoices of earlier plan changes, which a new change replaces: none of them
+   * can be paid after it. An undecided one (`open`) is never voided, since its charge may have
+   * gone through. How many it voided.
+   */
+  async voidRefusedChanges(ref: WorkspaceRef, at: Date, tx: Tx): Promise<number> {
     const result = await this.invoices
       .updateMany(
         {
           workspaceId: ref.workspaceId,
           from: { $ne: null },
-          status: changeableFrom(['open', 'failed']),
+          status: changeableFrom(['failed']),
         },
         { $set: { status: 'void', voidedAt: at, updatedAt: at } },
         { session: tx },

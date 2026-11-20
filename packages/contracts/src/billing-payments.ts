@@ -366,6 +366,17 @@ export type GatewayUnavailableProblemContext = z.infer<
   typeof gatewayUnavailableProblemContextSchema
 >;
 
+/**
+ * `context` of a 409 `payment_in_progress` when an invoice whose charge has an unknown outcome
+ * blocks the change ("Thanh toán lại" on it tells), and of a 409 `payment_not_applied` (the
+ * gateway took a payment for an invoice decided meanwhile): the invoice concerned.
+ */
+export const invoiceProblemContextSchema = z.object({
+  invoiceId: idSchema,
+  invoiceNumber: invoiceNumberSchema,
+});
+export type InvoiceProblemContext = z.infer<typeof invoiceProblemContextSchema>;
+
 /** `context` of a 409 `quote_changed`: what the change charges now, to confirm again. */
 export const quoteChangedProblemContextSchema = z.object({ quote: planChangeQuoteSchema });
 export type QuoteChangedProblemContext = z.infer<typeof quoteChangedProblemContextSchema>;

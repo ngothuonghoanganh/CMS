@@ -18,6 +18,7 @@ import {
   nextAttemptNumber,
 } from './domain/invoice-state.js';
 import type { PlanChange } from './domain/plan-change.js';
+import { chargeWithTimeout } from './gateway/charge-with-timeout.js';
 import { PaymentGateway, type ChargeResult } from './gateway/payment-gateway.js';
 import type { InvoiceAttemptRecord, InvoiceRecord } from './invoice.schema.js';
 import { InvoiceSettlement } from './invoice-settlement.service.js';
@@ -28,7 +29,9 @@ import {
   paymentFailed,
   paymentInProgress,
   paymentMethodRequired,
+  paymentNotApplied,
   paymentsDisabled,
+  paymentUndecided,
   subscriptionChanged,
 } from './payment-problems.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
@@ -38,6 +41,12 @@ import { SubscriptionsRepository } from './subscriptions.repository.js';
  * An API that stops while waiting leaves the hold to run out; nothing else is held.
  */
 export const CHARGE_HOLD_MS = 2 * 60_000;
+
+/**
+ * How long the API waits for the gateway to answer a charge: well within the hold, so a gateway
+ * that hangs ends as an unknown outcome before another charge of the workspace may start.
+ */
+export const CHARGE_TIMEOUT_MS = 60_000;
 
 /** What a charge became: `paid`, or `pending` while the gateway decides. */
 export interface ChargeAnswer {
@@ -112,8 +121,10 @@ export class InvoiceCharges {
 
   /**
    * Makes the invoice of a plan change and charges it, from the subscription's `version` that was
-   * read for the quote (409 `conflict` when it moved). It voids the unpaid invoices of earlier
-   * changes, which this one replaces.
+   * read for the quote (409 `conflict` when it moved). It voids the refused invoices of earlier
+   * changes, which this one replaces. An earlier charge whose outcome is unknown may have gone
+   * through, so it blocks the change (409 `payment_in_progress` with its invoice) until "Thanh
+   * toán lại" on that invoice decides it: voiding it and charging again could charge twice.
    */
   async checkout(
     scope: WorkspaceScope,
@@ -142,7 +153,11 @@ export class InvoiceCharges {
       if (await this.invoices.hasPending(scope, tx)) {
         throw paymentInProgress();
       }
-      await this.invoices.voidUnpaidChanges(scope, at, tx);
+      const undecided = await this.invoices.findUndecided(scope, tx);
+      if (undecided !== null) {
+        throw paymentUndecided(undecided);
+      }
+      await this.invoices.voidRefusedChanges(scope, at, tx);
       return this.invoices.create(
         {
           workspaceId: scope.workspaceId,
@@ -169,7 +184,9 @@ export class InvoiceCharges {
 
   /**
    * "Thanh toán lại": charges an unpaid invoice again with the saved card. A request whose
-   * `Idempotency-Key` made an attempt before gets that attempt's answer again, without a charge.
+   * `Idempotency-Key` made an attempt before gets that attempt's answer again, without a charge;
+   * the key is looked for again under the hold, where a request with the same key that was still
+   * running at the first look has recorded its attempt.
    */
   async payAgain(
     scope: WorkspaceScope,
@@ -187,9 +204,9 @@ export class InvoiceCharges {
     this.requireEnabled();
     const at = this.clock.now();
     const until = new Date(at.getTime() + CHARGE_HOLD_MS);
-    const { current, method } = await this.transactions.run(async (tx) => {
+    const next = await this.transactions.run(async (tx) => {
       const hold = await this.subscriptions.holdForCharge(scope, { at, until }, tx);
-      if (hold === 'busy' || (await this.invoices.hasPending(scope, tx))) {
+      if (hold === 'busy') {
         throw paymentInProgress();
       }
       // Read under the hold: no other charge of the workspace can change them before this one.
@@ -200,18 +217,29 @@ export class InvoiceCharges {
       if (fresh === null || facts === null) {
         throw new Error(`Invoice ${invoiceId.toHexString()} or its subscription disappeared`);
       }
+      const replayed = fresh.attempts.find((attempt) => attempt.requestKey === requestKey);
+      if (replayed !== undefined) {
+        await this.subscriptions.releaseCharge(scope, until, tx);
+        return { replay: { invoice: fresh, attempt: replayed } } as const;
+      }
+      if (await this.invoices.hasPending(scope, tx)) {
+        throw paymentInProgress();
+      }
       if (!invoicePayable(fresh, facts, at)) {
         throw invoiceNotPayable();
       }
-      return { current: fresh, method: chargeableMethod(facts, at) };
+      return { charge: { invoice: fresh, method: chargeableMethod(facts, at) } } as const;
     });
-    return this.charge(scope, current, method, until, requestKey);
+    if ('replay' in next) {
+      return answerOf(next.replay.invoice, next.replay.attempt);
+    }
+    return this.charge(scope, next.charge.invoice, next.charge.method, until, requestKey);
   }
 
   /**
    * Calls the gateway, then records the outcome and lets the next charge start in one
-   * transaction. A gateway that throws leaves the outcome unknown: the invoice stays open and the
-   * next attempt reuses this one's idempotency key.
+   * transaction. A gateway that throws, or does not answer within `CHARGE_TIMEOUT_MS`, leaves the
+   * outcome unknown: the invoice stays open and the next attempt reuses this one's idempotency key.
    */
   private async charge(
     scope: WorkspaceScope,
@@ -222,15 +250,27 @@ export class InvoiceCharges {
   ): Promise<ChargeAnswer> {
     const number = nextAttemptNumber(invoice.attempts);
     const invoiceId = invoice._id.toHexString();
+    const idempotencyKey = chargeIdempotencyKey(invoiceId, number);
     let result: ChargeResult | null = null;
     let failure: unknown = null;
     try {
-      result = await this.gateway.charge({
-        token: method.token,
-        amount: invoice.amount,
-        reference: invoiceId,
-        idempotencyKey: chargeIdempotencyKey(invoiceId, number),
-      });
+      result = await chargeWithTimeout(
+        this.gateway,
+        { token: method.token, amount: invoice.amount, reference: invoiceId, idempotencyKey },
+        CHARGE_TIMEOUT_MS,
+        (late) => {
+          // Recorded as unknown already: the next attempt asks again with this key.
+          this.logger.warn(
+            {
+              workspaceId: scope.workspaceId.toHexString(),
+              invoiceId,
+              attempt: number,
+              ...('result' in late ? { status: late.result.status } : { err: late.error }),
+            },
+            'The payment gateway answered a charge after its timeout',
+          );
+        },
+      );
     } catch (error) {
       failure = error;
     }
@@ -279,6 +319,20 @@ export class InvoiceCharges {
     // An event of the gateway may have decided the invoice first: its status is the answer.
     if (after.status === 'paid') {
       return { invoice: after, pending: false };
+    }
+    if (report.outcome === 'succeeded') {
+      // The invoice was decided while the gateway answered (a hold that ran out): the money is
+      // taken and nothing it pays for is applied.
+      this.logger.error(
+        {
+          workspaceId: scope.workspaceId.toHexString(),
+          invoiceId,
+          number: after.number,
+          status: after.status,
+        },
+        'A charge succeeded on an invoice decided before: refund it outside the system',
+      );
+      throw paymentNotApplied(after);
     }
     return answerOf(after, report, failure);
   }

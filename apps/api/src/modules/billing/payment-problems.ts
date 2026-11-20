@@ -1,5 +1,6 @@
 import {
   type GatewayUnavailableProblemContext,
+  type InvoiceProblemContext,
   type PaymentDeclineCode,
   paymentDeclineLabels,
   type PaymentFailedProblemContext,
@@ -63,6 +64,35 @@ export function gatewayUnavailable(invoice: InvoiceRef, cause: unknown): AppErro
 export function paymentInProgress(): AppError {
   return new AppError(409, 'payment_in_progress', 'Đang có một thanh toán chưa xong', {
     detail: 'Chờ thanh toán đó có kết quả rồi thử lại.',
+  });
+}
+
+/**
+ * 409 `payment_in_progress` with the invoice: an earlier charge's outcome is unknown, so it may have
+ * gone through. A new change would make a second charge; "Thanh toán lại" on that invoice asks
+ * the gateway about the first one with the same key, which never charges twice (ADR-035).
+ */
+export function paymentUndecided(invoice: InvoiceRef): AppError {
+  return new AppError(409, 'payment_in_progress', 'Chưa rõ kết quả một thanh toán', {
+    detail: `Chưa rõ hóa đơn ${invoice.number} đã được thanh toán hay chưa. Bấm "Thanh toán lại" ở hóa đơn đó để biết kết quả rồi chọn lại gói; tiền không bị trừ hai lần.`,
+    context: {
+      invoiceId: invoice._id.toHexString(),
+      invoiceNumber: invoice.number,
+    } satisfies InvoiceProblemContext,
+  });
+}
+
+/**
+ * 409 `payment_not_applied`: the gateway took the payment of an invoice that was decided while it
+ * answered, so nothing changed. The payment is reported for a refund outside the system (ADR-035).
+ */
+export function paymentNotApplied(invoice: InvoiceRef): AppError {
+  return new AppError(409, 'payment_not_applied', 'Thanh toán chưa được áp dụng', {
+    detail: `Cổng thanh toán đã trừ tiền cho hóa đơn ${invoice.number}, nhưng hóa đơn đã được xử lý trước đó nên gói không đổi. Khoản tiền này sẽ được hoàn lại.`,
+    context: {
+      invoiceId: invoice._id.toHexString(),
+      invoiceNumber: invoice.number,
+    } satisfies InvoiceProblemContext,
   });
 }
 

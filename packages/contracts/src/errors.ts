@@ -52,6 +52,7 @@ export const errorCodes = [
   'gateway_unavailable',
   'quote_changed',
   'invoice_not_payable',
+  'payment_not_applied',
   'payload_too_large',
   'unsupported_media_type',
   'origin_rejected',

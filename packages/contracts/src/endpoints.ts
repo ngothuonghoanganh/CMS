@@ -448,7 +448,9 @@ export const endpoints = {
    * quote (409 `quote_changed` otherwise) and a saved card (422 `payment_method_required`). 200
    * once applied; 202 while the gateway decides (the plan changes when it confirms). A refused
    * charge is 402 `payment_failed`, an unknown outcome 503 `gateway_unavailable`, another charge
-   * under way 409 `payment_in_progress`, anything else 409 `plan_change_unavailable` (`reason`).
+   * under way 409 `payment_in_progress` (with the invoice when an earlier charge's outcome is
+   * unknown: "Thanh toán lại" on it first), a payment the gateway took for an invoice decided
+   * meanwhile 409 `payment_not_applied`, anything else 409 `plan_change_unavailable` (`reason`).
    */
   changePlan: endpoint({
     method: 'POST',
@@ -522,7 +524,8 @@ export const endpoints = {
    * `billing.manage`, "Thanh toán lại" with the saved card. Requires the `Idempotency-Key`
    * header: the same key answers as the first time without charging again. 200 paid, 202 while
    * the gateway decides; 402 `payment_failed`, 503 `gateway_unavailable`, 409
-   * `payment_in_progress`, 409 `invoice_not_payable`, 422 `payment_method_required`.
+   * `payment_in_progress`, 409 `invoice_not_payable`, 409 `payment_not_applied`, 422
+   * `payment_method_required`.
    */
   payInvoice: endpoint({
     method: 'POST',

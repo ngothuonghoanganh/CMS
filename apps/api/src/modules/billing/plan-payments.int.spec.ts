@@ -11,6 +11,7 @@ import {
   planChangeQuoteSchema,
   problemSchema,
 } from '@plp/contracts';
+import { Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
@@ -441,6 +442,41 @@ describe('paying for plans (ADR-035, T2)', () => {
     });
   });
 
+  describe('"Thanh toán lại" with a key in use', () => {
+    it('answers a key that another request used meanwhile, from under the hold, without charging', async () => {
+      const { owner, workspaceId } = await trialing();
+      await addCard(t, owner, workspaceId, CARD_DECLINED);
+      const refused = await choose(owner, workspaceId, {
+        planId: 'agency',
+        cycle: 'monthly',
+        payNow: true,
+        expectedAmount: 599_000,
+      }).expect(402);
+      const invoiceId = String(problemSchema.parse(refused.body).context?.['invoiceId']);
+      await payInvoice(owner, workspaceId, invoiceId, 'cung-mot-khoa').expect(402);
+
+      // The same key again, read first as it was before that attempt was recorded: the request
+      // of a client that retried while the first one was still running.
+      const repository = t.app.get(InvoicesRepository);
+      const read = repository.findOfWorkspace.bind(repository);
+      vi.spyOn(repository, 'findOfWorkspace').mockImplementationOnce(async (ref, id, tx) => {
+        const found = await read(ref, id, tx);
+        return found === null
+          ? null
+          : {
+              ...found,
+              attempts: found.attempts.filter((item) => item.requestKey !== 'cung-mot-khoa'),
+            };
+      });
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      const again = await payInvoice(owner, workspaceId, invoiceId, 'cung-mot-khoa').expect(402);
+      expect(problemSchema.parse(again.body).code).toBe('payment_failed');
+      expect(charge).not.toHaveBeenCalled();
+      expect((await invoice(owner, workspaceId, invoiceId)).attempts).toHaveLength(2);
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ lockedUntil: null });
+    });
+  });
+
   describe('an upgrade of a paid period', () => {
     it('charges the difference for the days left and applies at once', async () => {
       const paid = await paying();
@@ -547,6 +583,49 @@ describe('paying for plans (ADR-035, T2)', () => {
     });
   });
 
+  describe('a refused upgrade', () => {
+    it('is paid again only on the day of its quote; later the plan is chosen again for the days left', async () => {
+      const paid = await paying();
+      const { owner, workspaceId } = paid;
+      await addCard(t, owner, workspaceId, CARD_DECLINED);
+      intoPeriod(paid, 1);
+      // 891.000đ × 29 / 30 = 861.300đ, rounded up to 1.000đ.
+      const refused = await choose(owner, workspaceId, {
+        planId: 'business',
+        cycle: 'monthly',
+        expectedAmount: 862_000,
+      }).expect(402);
+      const invoiceId = String(problemSchema.parse(refused.body).context?.['invoiceId']);
+      expect((await invoice(owner, workspaceId, invoiceId)).payable).toBe(true);
+
+      // 27 days later the same amount would pay for 2 days left.
+      await addCard(t, owner, workspaceId, CARD_OK);
+      intoPeriod(paid, 28);
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      expect(await invoice(owner, workspaceId, invoiceId)).toMatchObject({
+        status: 'failed',
+        payable: false,
+      });
+      const stale = await payInvoice(owner, workspaceId, invoiceId, 'ngay-thu-28').expect(409);
+      expect(problemSchema.parse(stale.body).code).toBe('invoice_not_payable');
+      expect(charge).not.toHaveBeenCalled();
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ planId: 'agency' });
+
+      // Chosen again: 891.000đ × 2 / 30 = 59.400đ, rounded up.
+      await choose(owner, workspaceId, {
+        planId: 'business',
+        cycle: 'monthly',
+        expectedAmount: 60_000,
+      }).expect(200);
+      const items = (await invoicesOf(owner, workspaceId)).items;
+      expect(items.map((item) => [item.kind, item.amount, item.status])).toEqual([
+        ['upgrade', 60_000, 'paid'],
+        ['upgrade', 862_000, 'void'],
+        ['subscription', 599_000, 'paid'],
+      ]);
+    });
+  });
+
   describe('one charge at a time', () => {
     it('charges two upgrades sent at once only once', async () => {
       const paid = await paying();
@@ -640,6 +719,47 @@ describe('paying for plans (ADR-035, T2)', () => {
       expect(await subscriptionOf(workspaceId)).toMatchObject({ planId: 'business' });
     });
 
+    it('blocks a new plan change until paying again tells the outcome, so it never charges twice', async () => {
+      const paid = await paying();
+      const { owner, workspaceId } = paid;
+      intoPeriod(paid, 18);
+      const charge = vi
+        .spyOn(fakeGateway(t), 'charge')
+        .mockRejectedValueOnce(new Error('socket hang up'));
+      const body = { planId: 'business', cycle: 'monthly' as const, expectedAmount: 357_000 };
+      const unknown = await choose(owner, workspaceId, body).expect(503);
+      const invoiceId = String(problemSchema.parse(unknown.body).context?.['invoiceId']);
+
+      // "Thanh toán ngay" again rather than "Thanh toán lại": the first charge may have gone
+      // through, so its invoice is neither voided nor followed by another charge.
+      const blocked = await choose(owner, workspaceId, body).expect(409);
+      const problem = problemSchema.parse(blocked.body);
+      expect(problem).toMatchObject({
+        code: 'payment_in_progress',
+        context: { invoiceId, invoiceNumber: expect.stringMatching(/^HD-\d{4}-\d{6}$/) as string },
+      });
+      expect(problem.detail).toContain('Thanh toán lại');
+      const upgrades = (await invoicesOf(owner, workspaceId)).items.filter(
+        (item) => item.kind === 'upgrade',
+      );
+      expect(upgrades.map((item) => [item.id, item.status])).toEqual([[invoiceId, 'open']]);
+      expect(charge.mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
+        `${invoiceId}-1`,
+      ]);
+      expect(await subscriptionOf(workspaceId)).toMatchObject({
+        planId: 'agency',
+        lockedUntil: null,
+      });
+
+      // Paying it again asks with the same key and settles it.
+      await payInvoice(owner, workspaceId, invoiceId).expect(200);
+      expect(charge.mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
+        `${invoiceId}-1`,
+        `${invoiceId}-1`,
+      ]);
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ planId: 'business' });
+    });
+
     it('applies a charge the API could not record when it is paid again, without a second charge', async () => {
       const paid = await paying();
       const { owner, workspaceId } = paid;
@@ -658,10 +778,66 @@ describe('paying for plans (ADR-035, T2)', () => {
       const [open] = (await invoicesOf(owner, workspaceId)).items;
       expect(open).toMatchObject({ kind: 'upgrade', status: 'open', lastAttempt: null });
 
+      // The gateway took the money: choosing the plan again must not void it and charge again.
+      const blocked = await choose(owner, workspaceId, {
+        planId: 'business',
+        cycle: 'monthly',
+        expectedAmount: 357_000,
+      }).expect(409);
+      expect(problemSchema.parse(blocked.body)).toMatchObject({
+        code: 'payment_in_progress',
+        context: { invoiceId: open?.id },
+      });
+      expect(charge).toHaveBeenCalledTimes(1);
+      expect(
+        (await invoicesOf(owner, workspaceId)).items.filter((item) => item.kind === 'upgrade'),
+      ).toHaveLength(1);
+
       await payInvoice(owner, workspaceId, open?.id ?? '').expect(200);
       const keys = charge.mock.calls.map(([request]) => request.idempotencyKey);
       expect(keys).toEqual([`${open?.id ?? ''}-1`, `${open?.id ?? ''}-1`]);
       expect(await subscriptionOf(workspaceId)).toMatchObject({ planId: 'business' });
+    });
+  });
+
+  describe('a charge decided while the gateway answered', () => {
+    it('reports a payment taken for an invoice voided meanwhile, and applies nothing', async () => {
+      const { owner, workspaceId } = await trialing();
+      await addCard(t, owner, workspaceId, CARD_OK);
+      const gateway = fakeGateway(t);
+      const real = gateway.charge.bind(gateway);
+      vi.spyOn(gateway, 'charge').mockImplementationOnce(async (request) => {
+        // The hold ran out while the gateway answered, and a newer change voided the invoice.
+        await t.connection
+          .collection('invoices')
+          .updateOne(
+            { _id: new Types.ObjectId(request.reference) },
+            { $set: { status: 'void', voidedAt: new Date() } },
+          );
+        return real(request);
+      });
+      const errors = vi.spyOn(Logger.prototype, 'error');
+      const before = await subscriptionOf(workspaceId);
+
+      const response = await choose(owner, workspaceId, {
+        planId: 'business',
+        cycle: 'monthly',
+        payNow: true,
+        expectedAmount: 1_490_000,
+      }).expect(409);
+      const problem = problemSchema.parse(response.body);
+      expect(problem.code).toBe('payment_not_applied');
+      const invoiceId = String(problem.context?.['invoiceId']);
+      expect(await invoice(owner, workspaceId, invoiceId)).toMatchObject({
+        status: 'void',
+        payable: false,
+      });
+      expect(await subscriptionOf(workspaceId)).toEqual(before);
+      expect(toldOf(workspaceId)).toEqual([]);
+      expect(errors).toHaveBeenCalledWith(
+        expect.objectContaining({ invoiceId }),
+        expect.stringContaining('refund it outside the system'),
+      );
     });
   });
 
@@ -793,7 +969,7 @@ describe('paying for plans (ADR-035, T2)', () => {
             ),
           ).rejects.toThrow('A paid or void invoice never changes');
           expect(
-            await repository.voidUnpaidChanges(
+            await repository.voidRefusedChanges(
               { workspaceId: new Types.ObjectId(workspaceId) },
               new Date(),
               session,
