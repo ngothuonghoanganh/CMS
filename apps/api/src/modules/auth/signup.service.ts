@@ -3,6 +3,7 @@ import {
   type AccountEmailRequest,
   type AccountEmailResponse,
   FORGOT_PASSWORD_PATH,
+  type PlanCatalog,
   SIGNUP_LINK_VALID_HOURS,
   SIGNUP_VERIFY_PATH,
   type SignupLookupRequest,
@@ -17,6 +18,10 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, type ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
+import { BillingClock } from '../billing/billing-clock.js';
+import { newTrial } from '../billing/domain/new-trial.js';
+import { InjectPlanCatalog } from '../billing/plan-catalog.js';
+import { SubscriptionsRepository } from '../billing/subscriptions.repository.js';
 import { accountExistsEmail, signupConfirmationEmail } from '../notifications/emails.js';
 import { slugBaseOf, slugCandidates } from '../workspaces/domain/workspace-slug.js';
 import { WORKSPACES_SLUG_INDEX } from '../workspaces/workspace.schema.js';
@@ -77,6 +82,9 @@ export class SignupService {
     private readonly emails: AccountEmails,
     private readonly transactions: TransactionRunner,
     private readonly databases: WorkspaceDatabases,
+    private readonly subscriptions: SubscriptionsRepository,
+    private readonly clock: BillingClock,
+    @InjectPlanCatalog() private readonly catalog: PlanCatalog,
   ) {}
 
   /**
@@ -186,10 +194,10 @@ export class SignupService {
   }
 
   /**
-   * The user, their workspace at the first free address its name asks for, and the owner
-   * membership, in one transaction that also takes the sign-up away. Another sign-up can take
-   * that address meanwhile: the unique index refuses the second, which then tries the next free
-   * one (ADR-025).
+   * The user, their workspace at the first free address its name asks for, the owner membership
+   * and the workspace's trial (ADR-035), in one transaction that also takes the sign-up away.
+   * Another sign-up can take that address meanwhile: the unique index refuses the second, which
+   * then tries the next free one (ADR-025).
    */
   private async createOwner(
     pending: PendingSignupRecord,
@@ -214,6 +222,8 @@ export class SignupService {
             user._id,
             tx,
           );
+          const now = this.clock.now();
+          await this.subscriptions.create(workspaceId, newTrial(this.catalog, now), now, tx);
           return user._id;
         });
       } catch (error) {

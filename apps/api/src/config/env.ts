@@ -1,9 +1,15 @@
+import { fileURLToPath } from 'node:url';
 import {
   isWorkspaceOriginTemplate,
   slugOfOrigin,
   WORKSPACE_SLUG_PLACEHOLDER,
 } from '@plp/contracts';
 import { z } from 'zod';
+
+/** The plan catalog that comes with the API (ADR-035), next to its package.json. */
+export const BUNDLED_PLAN_CATALOG_FILE = fileURLToPath(
+  new URL('../../plans.json', import.meta.url),
+);
 
 const secret = z.string().min(32, 'must be at least 32 characters');
 
@@ -165,6 +171,17 @@ const baseEnvSchema = z.object({
   AI_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(3),
   /** AI uses per workspace per calendar month in Vietnam. */
   AI_MONTHLY_QUOTA: z.coerce.number().int().min(0).max(100_000).default(100),
+
+  /**
+   * The plans, their prices and limits, the trial and the grace (ADR-035): a JSON file matching
+   * `planCatalogSchema`, read at startup. The API does not start when it does not match.
+   */
+  PLAN_CATALOG_FILE: z.string().min(1).default(BUNDLED_PLAN_CATALOG_FILE),
+  /**
+   * `on` lets lifecycle tests move the billing clock of the whole process (`PUT /testing/clock`):
+   * trials, grace and read-only follow it. Refused in production.
+   */
+  BILLING_TEST_CLOCK: z.enum(['on', 'off']).default('off'),
 });
 
 /** Emails go to an SMTP server (ADR-018), the default. */
@@ -213,6 +230,11 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   }
   checkWorkspaceAddresses(result.data);
   checkAi(result.data);
+  if (result.data.NODE_ENV === 'production' && result.data.BILLING_TEST_CLOCK === 'on') {
+    throw new Error(
+      'Invalid API environment:\nBILLING_TEST_CLOCK=on moves the billing clock for tests; production keeps real time',
+    );
+  }
   if (result.data.NODE_ENV === 'production' && result.data.WEBHOOK_TEST_RECEIVER !== undefined) {
     throw new Error(
       'Invalid API environment:\nWEBHOOK_TEST_RECEIVER sends webhooks to a test receiver; production calls the real addresses',

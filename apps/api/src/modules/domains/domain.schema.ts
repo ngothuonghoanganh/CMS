@@ -99,3 +99,5 @@ domainSchema.index(
   },
 );
 domainSchema.index({ nextCheckAt: 1 });
+// The custom domains of every site of a workspace, counted against its plan (ADR-035).
+domainSchema.index({ workspaceId: 1 });
