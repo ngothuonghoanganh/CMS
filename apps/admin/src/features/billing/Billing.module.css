@@ -2,6 +2,7 @@
 .card {
   display: flex;
   flex-direction: column;
+  container: plan-card / inline-size;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
@@ -68,6 +69,19 @@
   margin: 0;
   padding: 20px 24px 24px;
   list-style: none;
+}
+
+/* Five meters: three and two on a middle-sized card, one row on a wide one, never four and one. */
+@container plan-card (min-width: 640px) {
+  .meters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container plan-card (min-width: 1000px) {
+  .meters {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .meter {

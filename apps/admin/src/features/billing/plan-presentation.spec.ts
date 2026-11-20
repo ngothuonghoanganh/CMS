@@ -121,11 +121,30 @@ describe('usageMeters', () => {
     expect(meters[0]?.note).toBe('');
   });
 
-  it('fills a meter at its limit, and never past it', () => {
-    const [sites, , ai] = usageMeters(agency, { ...usage, sites: 9, aiUses: 300 }, '2026-12-01');
+  it('fills a meter at its limit', () => {
+    const [sites, , ai] = usageMeters(agency, { ...usage, sites: 5, aiUses: 300 }, '2026-12-01');
     expect(sites).toMatchObject({ percent: 100, tone: 'full', note: 'Đã dùng hết hạn mức' });
     expect(ai).toMatchObject({ percent: 100, tone: 'full' });
     expect(ai?.note).toBe('Hết lượt. Làm mới 01/12');
+  });
+
+  it('says a count past the limit after a smaller plan is over it, not just at it', () => {
+    const [sites, members, ai, , domains] = usageMeters(
+      basic,
+      { sites: 6, members: 9, aiUses: 45, automationRuns: 0, customDomains: 1 },
+      '2026-12-01',
+    );
+    expect(sites).toMatchObject({
+      text: '6 / 1',
+      percent: 100,
+      tone: 'over',
+      note: 'Vượt hạn mức, không tạo thêm được',
+      label: 'Site: vượt hạn mức, 6 trên 1',
+    });
+    expect(members?.tone).toBe('over');
+    expect(ai?.note).toBe('Vượt hạn mức. Làm mới 01/12');
+    // Exactly at the limit stays "used up".
+    expect(domains).toMatchObject({ tone: 'full', note: 'Đã dùng hết hạn mức' });
   });
 
   it('says a plan without automation has no runs, instead of dividing by zero', () => {

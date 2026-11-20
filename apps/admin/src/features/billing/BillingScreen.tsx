@@ -123,16 +123,12 @@ export function BillingScreen({
                 <span className={styles.meterName}>{meter.name}</span>
                 <span className={styles.meterValue}>{meter.text}</span>
               </span>
-              <span
-                role="img"
-                aria-label={`${meter.name}: đã dùng ${meter.percent} phần trăm`}
-                className={styles.track}
-              >
+              <span role="img" aria-label={meter.label} className={styles.track}>
                 <span
                   className={cx(
                     styles.fill,
                     meter.tone === 'near' && styles.fillNear,
-                    meter.tone === 'full' && styles.fillFull,
+                    (meter.tone === 'full' || meter.tone === 'over') && styles.fillFull,
                   )}
                   style={{ width: `${meter.percent}%` }}
                 />

@@ -162,10 +162,13 @@ export interface UsageMeter {
   max: number;
   /** Whole percent, never above 100. */
   percent: number;
-  tone: 'normal' | 'near' | 'full';
+  /** `over`: past the limit, after a change to a smaller plan (nothing is removed, ADR-035). */
+  tone: 'normal' | 'near' | 'full' | 'over';
   note: string;
   /** "4 / 5": the numbers the meter shows. */
   text: string;
+  /** What the bar says to a screen reader. */
+  label: string;
 }
 
 function meterNote(
@@ -178,7 +181,8 @@ function meterNote(
     return key === 'automationRuns' ? 'Gói này chưa có automation' : 'Gói này không có mục này';
   }
   if (MONTHLY.has(key)) {
-    return `${tone === 'full' ? 'Hết lượt. ' : ''}Làm mới ${formatDayMonth(`${resetsOn}T00:00:00+07:00`)}`;
+    const spent = tone === 'over' ? 'Vượt hạn mức. ' : tone === 'full' ? 'Hết lượt. ' : '';
+    return `${spent}Làm mới ${formatDayMonth(`${resetsOn}T00:00:00+07:00`)}`;
   }
   const hint =
     key === 'members'
@@ -186,6 +190,9 @@ function meterNote(
       : key === 'customDomains'
         ? 'Tính trên mọi site'
         : '';
+  if (tone === 'over') {
+    return 'Vượt hạn mức, không tạo thêm được';
+  }
   if (tone === 'full') {
     return 'Đã dùng hết hạn mức';
   }
@@ -202,17 +209,31 @@ export function usageMeters(
     const used = usage[key];
     const max = plan.limits[key];
     const ratio = max === 0 ? 0 : used / max;
-    const tone =
-      max === 0 ? 'normal' : ratio >= 1 ? 'full' : ratio >= NEAR_LIMIT ? 'near' : 'normal';
+    const tone: UsageMeter['tone'] =
+      max === 0
+        ? 'normal'
+        : ratio > 1
+          ? 'over'
+          : ratio === 1
+            ? 'full'
+            : ratio >= NEAR_LIMIT
+              ? 'near'
+              : 'normal';
+    const name = planLimitLabels[key];
+    const percent = Math.min(100, Math.round(ratio * 100));
     return {
       key,
-      name: planLimitLabels[key],
+      name,
       used,
       max,
-      percent: Math.min(100, Math.round(ratio * 100)),
+      percent,
       tone,
       note: meterNote(key, tone, max, resetsOn),
       text: `${formatCount(used)} / ${formatCount(max)}`,
+      label:
+        tone === 'over'
+          ? `${name}: vượt hạn mức, ${formatCount(used)} trên ${formatCount(max)}`
+          : `${name}: đã dùng ${percent} phần trăm`,
     };
   });
 }
