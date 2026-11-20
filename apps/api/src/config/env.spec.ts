@@ -172,11 +172,10 @@ describe('parseEnv', () => {
       AI_MODEL: 'qwen3:4b-instruct',
     };
 
-    it('is off by default, with a minute per request and 100 uses a month', () => {
+    it('is off by default, with a minute per request', () => {
       const env = parseEnv(valid);
       expect(env.AI_PROVIDER).toBe('none');
       expect(env.AI_TIMEOUT_MS).toBe(60_000);
-      expect(env.AI_MONTHLY_QUOTA).toBe(100);
     });
 
     it('writes 3 sections at once by default, 1 to 8 when set', () => {

@@ -169,8 +169,6 @@ const baseEnvSchema = z.object({
    * wait in its queue on their own timeout.
    */
   AI_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(3),
-  /** AI uses per workspace per calendar month in Vietnam. */
-  AI_MONTHLY_QUOTA: z.coerce.number().int().min(0).max(100_000).default(100),
 
   /**
    * The plans, their prices and limits, the trial and the grace (ADR-035): a JSON file matching

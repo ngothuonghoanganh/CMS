@@ -37,6 +37,13 @@ export class DomainsRepository {
       .exec();
   }
 
+  /** Every custom domain of the workspace, whichever site: the plan's limit counts them all. */
+  countForWorkspace(scope: WorkspaceScope, tx?: Tx): Promise<number> {
+    return this.domains
+      .countDocuments({ workspaceId: scope.workspaceId }, tx ? { session: tx } : {})
+      .exec();
+  }
+
   findForSite(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId): Promise<DomainRecord | null> {
     return this.domains
       .findOne({ _id: id, workspaceId: scope.workspaceId, siteId })

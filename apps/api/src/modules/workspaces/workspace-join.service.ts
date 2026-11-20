@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import type { InvitationRecord } from './invitation.schema.js';
 import { InvitationsRepository } from './invitations.repository.js';
 import { WorkspacesRepository } from './workspaces.repository.js';
@@ -11,7 +12,8 @@ export const INVITATION_UNAVAILABLE = 'Lời mời không còn hiệu lực';
 /**
  * Joins a workspace by an invitation, in the caller's transaction (ADR-021): the invitation closes
  * as accepted only while pending and not expired, so a link works once; then the membership is
- * added with the invitation's role and sites. Signing up from a link and accepting while signed in
+ * added with the invitation's role and sites. It may not take the workspace past its plan's member
+ * limit (ADR-035), which a downgrade can leave under the people already in. Signing up from a link and accepting while signed in
  * both go through here.
  */
 @Injectable()
@@ -19,6 +21,7 @@ export class WorkspaceJoin {
   constructor(
     private readonly invitations: InvitationsRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   async join(invitation: InvitationRecord, userId: ObjectId, now: Date, tx: Tx): Promise<void> {
@@ -31,7 +34,7 @@ export class WorkspaceJoin {
       });
     }
     // A member already keeps their role: an invitation never lowers or raises it.
-    await this.workspaces.joinByInvitation(
+    const joined = await this.workspaces.joinByInvitation(
       claimed.workspaceId,
       userId,
       {
@@ -42,5 +45,13 @@ export class WorkspaceJoin {
       now,
       tx,
     );
+    if (joined) {
+      // This invitation is closed and its member is in: the people now are the members and the
+      // invitations still out. Over the plan (a downgrade left it so), the join is refused.
+      const taken =
+        (await this.workspaces.countMembers(claimed, tx)) +
+        (await this.invitations.countPending(claimed, tx));
+      this.entitlements.requireRoom(await this.entitlements.of(claimed, tx), 'members', taken, 0);
+    }
   }
 }

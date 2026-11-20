@@ -28,7 +28,7 @@ export const automationStates = ['draft', 'on', 'paused'] as const;
 export const automationStateSchema = z.enum(automationStates);
 export type AutomationState = z.infer<typeof automationStateSchema>;
 
-export const automationPausedReasons = ['user', 'errors'] as const;
+export const automationPausedReasons = ['user', 'errors', 'plan'] as const;
 export const automationPausedReasonSchema = z.enum(automationPausedReasons);
 export type AutomationPausedReason = z.infer<typeof automationPausedReasonSchema>;
 
@@ -221,7 +221,8 @@ export type AutomationListItem = z.infer<typeof automationListItemSchema>;
 
 export const automationUsageSchema = z.object({
   used: z.number().int().nonnegative(),
-  limit: z.number().int().positive(),
+  /** 0 on a plan without automation (ADR-035). */
+  limit: z.number().int().nonnegative(),
   /** "2026-12-01": when the runs come back after they ran out. */
   resetsOn: z.iso.date(),
 });

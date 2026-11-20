@@ -13,6 +13,7 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
@@ -40,12 +41,14 @@ export class SiteManagementService {
     private readonly assets: AssetsRepository,
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   /**
    * Creates the site and its `site.created` activity in one transaction. The limit is checked
    * inside it, after a write to the workspace that serializes concurrent creations, so the 101st
-   * site is refused even when requests race (ADR-014).
+   * site is refused even when requests race (ADR-014). The plan's site limit (402) is checked in
+   * the same place; the hard cap stays above every plan (ADR-035).
    */
   async create(
     user: AuthenticatedUser,
@@ -58,9 +61,12 @@ export class SiteManagementService {
     try {
       site = await this.transactions.run(async (tx) => {
         await this.workspaces.recordSiteCreation(scope, tx);
-        if ((await this.sites.countForWorkspace(scope, tx)) >= MAX_SITES_PER_WORKSPACE) {
+        const used = await this.sites.countForWorkspace(scope, tx);
+        if (used >= MAX_SITES_PER_WORKSPACE) {
           throw new AppError(409, 'site_limit_reached', SITE_LIMIT_MESSAGE);
         }
+        // Below the hard cap: the plan's limit, counted in the same serialized transaction.
+        this.entitlements.requireRoom(await this.entitlements.of(scope, tx), 'sites', used);
         const created = await this.sites.create(scope, input, tx);
         await this.activity.record(scope, { siteId: created._id, type: 'site.created' }, tx);
         return created;

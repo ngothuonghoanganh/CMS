@@ -18,6 +18,7 @@ import {
   untilAborted,
 } from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
+import { planCatalogFile } from '../../../test/plans.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import {
   cleanSeo,
@@ -97,7 +98,11 @@ describe('the assistant of the editor (ADR-031, board 21)', () => {
 
   beforeAll(async () => {
     t = await createTestApp('plp_test_ai_suggestions', {
-      env: { AI_PROVIDER: 'fake', AI_MONTHLY_QUOTA: String(QUOTA) },
+      env: {
+        AI_PROVIDER: 'fake',
+        // The quota is the plan's (ADR-035): new workspaces start on the trial's Agency.
+        PLAN_CATALOG_FILE: planCatalogFile({ agency: { limits: { aiUses: QUOTA } } }),
+      },
     });
     fake = fakeAi(t);
   });

@@ -22,6 +22,7 @@ import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import type { CountedHit } from '../leads/lead-limits.repository.js';
 import { EmailQuota, type QuotaUse } from '../notifications/email-quota.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
@@ -99,6 +100,7 @@ export class InvitationsService {
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
     private readonly quota: EmailQuota,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   async list(user: AuthenticatedUser, workspaceId: string): Promise<InvitationListResponse> {
@@ -187,6 +189,15 @@ export class InvitationsService {
             {
               detail: `Đang có ${taken} người, tính cả lời mời đang chờ. Thu hồi lời mời cũ hoặc gỡ bớt thành viên.`,
             },
+          );
+        }
+        // The plan's limit, which is below the hard cap: pending invitations count (ADR-035).
+        if (toInvite.length > 0) {
+          this.entitlements.requireRoom(
+            await this.entitlements.of(scope, tx),
+            'members',
+            taken,
+            toInvite.length,
           );
         }
         const batch = toInvite.map((email) => {

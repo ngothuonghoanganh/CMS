@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { type AiUsage, nextVnMonthStart, type VnMonth, vnMonthOf } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
@@ -26,7 +27,7 @@ function dayMonth(day: string): string {
 const MINUTE_MS = 60_000;
 
 /**
- * The AI uses of a workspace per calendar month in Vietnam, and the AI requests of a user per
+ * The AI uses of a workspace per calendar month in Vietnam, as many as its plan gives (ADR-035), and the AI requests of a user per
  * minute (ADR-031). Creating a page with AI and the editor assistant both reserve a use before the
  * AI is asked and give it back when nothing is written.
  */
@@ -37,6 +38,7 @@ export class AiQuota {
     private readonly usage: AiUsageRepository,
     private readonly limits: LeadLimitsRepository,
     private readonly clock: AiClock,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   get enabled(): boolean {
@@ -60,7 +62,7 @@ export class AiQuota {
   async usageOf(ref: WorkspaceRef): Promise<AiUsage> {
     const month = this.currentMonth();
     const used = await this.usage.usedIn(ref, month);
-    const limit = this.env.AI_MONTHLY_QUOTA;
+    const limit = (await this.entitlements.of(ref)).plan.limits.aiUses;
     return {
       enabled: this.enabled,
       month,
@@ -98,7 +100,7 @@ export class AiQuota {
 
   /** Takes one use of `month` in `tx`; 429 `ai_quota_exhausted` when none is left. */
   async reserve(ref: WorkspaceRef, month: VnMonth, tx: Tx): Promise<void> {
-    const limit = this.env.AI_MONTHLY_QUOTA;
+    const limit = (await this.entitlements.of(ref, tx)).plan.limits.aiUses;
     if (await this.usage.take(ref, month, limit, this.clock.now(), tx)) {
       return;
     }

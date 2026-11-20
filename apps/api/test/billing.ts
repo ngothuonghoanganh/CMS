@@ -23,3 +23,16 @@ export async function setReadOnly(
     throw new Error(`Workspace ${workspaceId} has no subscription`);
   }
 }
+
+/**
+ * Puts the workspace on another plan of the catalog, as a payment would (T2): for tests of what a
+ * plan allows. No hooks run; use the billing endpoint to test those.
+ */
+export async function setPlan(t: TestApp, workspaceId: string, planId: string): Promise<void> {
+  const result = await t.connection
+    .collection('subscriptions')
+    .updateOne({ _id: new Types.ObjectId(workspaceId) }, { $set: { planId } });
+  if (result.matchedCount !== 1) {
+    throw new Error(`Workspace ${workspaceId} has no subscription`);
+  }
+}

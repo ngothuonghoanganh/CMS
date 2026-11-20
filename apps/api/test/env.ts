@@ -1,4 +1,5 @@
 import type { EnvInput } from '../src/config/env.js';
+import { hardCapPlanCatalogFile } from './plans.js';
 
 export const TEST_ADMIN_ORIGIN = 'http://localhost:3100';
 export const TEST_RENDERER_API_SECRET = 'test-renderer-api-secret-0123456789abcdef';
@@ -35,6 +36,8 @@ export function testEnvInput(
     CUSTOM_DOMAIN_IPV4: '203.0.113.10',
     DOMAIN_TLS_CHECK: 'on',
     DOMAIN_MONITOR_INTERVAL_MS: '0',
+    // Roomy plans: tests of a plan's own numbers name another catalog (test/plans.ts).
+    PLAN_CATALOG_FILE: hardCapPlanCatalogFile(),
   };
   const merged: Record<string, string | undefined> = { ...base };
   for (const [key, value] of Object.entries(overrides)) {

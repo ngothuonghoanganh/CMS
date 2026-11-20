@@ -26,6 +26,7 @@ import {
   untilAborted,
 } from '../../../test/ai.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
+import { planCatalogFile } from '../../../test/plans.js';
 import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
 import { createSecondInstance } from '../../../test/instances.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
@@ -75,7 +76,11 @@ describe('creating a page with AI (ADR-031)', () => {
 
   beforeAll(async () => {
     t = await createTestApp('plp_test_ai_jobs', {
-      env: { AI_PROVIDER: 'fake', AI_MONTHLY_QUOTA: String(QUOTA) },
+      env: {
+        AI_PROVIDER: 'fake',
+        // The quota is the plan's (ADR-035): new workspaces start on the trial's Agency.
+        PLAN_CATALOG_FILE: planCatalogFile({ agency: { limits: { aiUses: QUOTA } } }),
+      },
       override: (builder) => builder.overrideProvider(AiClock).useValue(clock),
     });
     fake = fakeAi(t);

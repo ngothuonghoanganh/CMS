@@ -32,6 +32,12 @@ export interface WorkspaceRecord {
    * in its transaction, so two at once count each other against the limit (ADR-030).
    */
   templateSeq?: number;
+  /**
+   * Custom domains added so far across the workspace's sites; each addition increments it in its
+   * transaction, so two at once on different sites count each other against the plan's limit
+   * (ADR-035). Absent on workspaces that never added one.
+   */
+  domainSeq?: number;
   createdBy: Types.ObjectId;
   createdAt: Date;
 }
@@ -44,6 +50,7 @@ export const workspaceSchema = new Schema<WorkspaceRecord>(
     inviteSeq: { type: Number, default: 0 },
     customRoleSeq: { type: Number, default: 0 },
     templateSeq: { type: Number, default: 0 },
+    domainSeq: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },
   },

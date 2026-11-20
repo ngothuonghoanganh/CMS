@@ -3029,6 +3029,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Endpoint:** `GET /billing/plans` (người đã đăng nhập); `GET /workspaces/:id/plan` (`pages.view`: tên gói, hạn mức, tính năng, trạng thái và mức truy cập, cho Sidebar v2, chip "Nâng cấp" và banner chỉ đọc); `GET /workspaces/:id/billing` (`billing.view`); `POST /workspaces/:id/billing/plan` (`billing.manage`).
   - **Mức dùng:** sáu truy vấn chạy cùng lúc trên index bắt đầu bằng `workspaceId`; `domains` có thêm index `{ workspaceId }`. Lượt AI và lượt automation tính theo tháng lịch Việt Nam của đồng hồ thanh toán.
   - **Đồng hồ thử:** `BILLING_TEST_CLOCK=on` (API không khởi động với nó khi `NODE_ENV=production`) cho dời đồng hồ thanh toán của cả process qua `PUT /testing/clock { now }` (`null` về giờ thật) và `GET /testing/clock`, không cần session; tắt thì 404. Integration test gọi `BillingClock.set`. Bộ đếm lượt AI vẫn theo đồng hồ của nó (`AiClock`).
+  - **Nối hạn mức và tính năng vào các module** (mọi kiểm tra qua `EntitlementsService`, trong transaction tạo mới):
+    - **Site:** sau giới hạn cứng 409 `site_limit_reached` của ADR-014 (vẫn trên mọi gói), tới giới hạn của gói: 402 `plan_limit_reached` `{ limit: 'sites', max }`.
+    - **Thành viên:** lời mời tính cả người đang có và lời mời đang chờ; giới hạn cứng 409 `member_limit_reached` kiểm trước, rồi tới giới hạn của gói. Nhận lời mời cũng kiểm lại sau khi đóng lời mời: số người sau khi nhận không được vượt gói (sau khi hạ gói, lời mời cũ có thể bị từ chối 402, vẫn ở trạng thái chờ).
+    - **Tên miền riêng:** 5 tên miền mỗi site (ADR-022) kiểm trước, rồi tên miền trên cả workspace so với gói. Hai site thêm cùng lúc được xếp hàng nhờ `domainSeq` trên workspace (cùng cách với `siteSeq`).
+    - **Lượt AI, lượt automation:** `AI_MONTHLY_QUOTA` bị bỏ khỏi env; con số là `plan.limits.aiUses` và `plan.limits.automationRuns`. `AUTOMATION_RUNS_PER_MONTH` không còn dùng trong API. Workspace chỉ đọc thì mọi sự kiện automation bị bỏ qua và tính như hết lượt (`skipped`, `quota`). Tháng của lượt automation theo đồng hồ thanh toán; lượt AI vẫn theo `AiClock`.
+    - **Automation:** tạo, nhân bản và bật đều 402 `plan_feature_required` `{ feature: 'automation' }` khi gói không có; đọc, tạm dừng và sửa vẫn được. Hook của `PlanChangeHooks` chuyển automation đang bật sang `paused` với `pausedReason: 'plan'` (thêm vào `automationPausedReasons`) và dừng các lượt đang chờ, trong transaction đổi gói.
+    - **Vai trò tùy chỉnh:** tạo và sửa 402 `plan_feature_required` `{ feature: 'customRoles' }`; liệt kê, xóa và quyền của người đang giữ không đổi.
   - **Board 16:** nhóm "Thanh toán" có trong `permissionGroups`; `planFeatureOf` đánh dấu "Theo gói" ở hai dòng automation.
 
 ---

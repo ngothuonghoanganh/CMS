@@ -146,6 +146,26 @@ export class AutomationRunsRepository {
       .exec();
   }
 
+  /** The same for many automations at once: the plan no longer has automation (ADR-035). */
+  async stopWaitingOf(
+    ref: WorkspaceRef,
+    automationIds: readonly ObjectId[],
+    at: Date,
+    tx: Tx,
+  ): Promise<void> {
+    await this.runs(ref)
+      .updateMany(
+        {
+          workspaceId: ref.workspaceId,
+          automationId: { $in: automationIds },
+          status: { $in: [...WAITING] },
+        },
+        { $set: { status: 'stopped', reason: 'paused', finishedAt: at }, $unset: { nextAt: 1 } },
+      )
+      .session(tx)
+      .exec();
+  }
+
   /**
    * The last run of each automation, and its counted and failed runs since `since`: one indexed
    * read per automation for the last, one pass over the window for the counts.

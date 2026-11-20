@@ -156,6 +156,20 @@ export class WorkspacesRepository {
     }
   }
 
+  /**
+   * Increments `domainSeq` in the transaction that adds a custom domain. The plan limits custom
+   * domains across every site of the workspace, so the write that serializes additions is the
+   * workspace's, not the site's (ADR-035).
+   */
+  async recordDomainCreation(scope: WorkspaceScope, tx: Tx): Promise<void> {
+    const result = await this.workspaces
+      .updateOne({ _id: scope.workspaceId }, { $inc: { domainSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Workspace ${scope.workspaceId.toHexString()} of the scope does not exist`);
+    }
+  }
+
   /** Increments `customRoleSeq` in the transaction that creates a custom role (ADR-024). */
   async recordCustomRole(scope: WorkspaceScope, tx: Tx): Promise<void> {
     const result = await this.workspaces
@@ -231,7 +245,7 @@ export class WorkspacesRepository {
     return members;
   }
 
-  countMembers(scope: WorkspaceScope, tx?: Tx): Promise<number> {
+  countMembers(scope: WorkspaceRef, tx?: Tx): Promise<number> {
     return this.memberships
       .countDocuments({ workspaceId: scope.workspaceId }, tx ? { session: tx } : {})
       .exec();

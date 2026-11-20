@@ -12,6 +12,7 @@ import {
   type InvitationRecord,
   type InvitationStatus,
 } from './invitation.schema.js';
+import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from './workspace-scope.js';
 
 @Injectable()
@@ -46,7 +47,7 @@ export class InvitationsRepository {
       .exec();
   }
 
-  countPending(scope: WorkspaceScope, tx?: Tx): Promise<number> {
+  countPending(scope: WorkspaceRef, tx?: Tx): Promise<number> {
     return this.invitations
       .countDocuments(
         { workspaceId: scope.workspaceId, status: 'pending' },

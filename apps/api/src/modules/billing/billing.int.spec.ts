@@ -10,6 +10,7 @@ import {
 } from '@plp/contracts';
 import { Types } from 'mongoose';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { BUNDLED_PLAN_CATALOG_FILE } from '../../config/env.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import {
   requestSignup,
@@ -39,7 +40,9 @@ describe('plans and billing (ADR-035)', () => {
   let failHook = false;
 
   beforeAll(async () => {
-    t = await createTestApp('plp_test_billing', { env: { BILLING_TEST_CLOCK: 'on' } });
+    t = await createTestApp('plp_test_billing', {
+      env: { BILLING_TEST_CLOCK: 'on', PLAN_CATALOG_FILE: BUNDLED_PLAN_CATALOG_FILE },
+    });
     clock = t.app.get(BillingClock);
     t.app.get(PlanChangeHooks).register((ref, change) => {
       if (failHook) {
