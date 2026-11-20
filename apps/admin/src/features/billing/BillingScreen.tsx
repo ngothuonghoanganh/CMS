@@ -1,15 +1,9 @@
 'use client';
 
-import {
-  type BillingSummary,
-  endpoints,
-  type PlanCatalogResponse,
-  type WorkspacePlan,
-} from '@plp/contracts';
+import { type BillingSummary, type PlanCatalogResponse, type WorkspacePlan } from '@plp/contracts';
 import { Badge, Button, Callout, useToast } from '@plp/ui';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { ScrollRegion } from '../shell/ScrollRegion';
@@ -22,7 +16,7 @@ import {
   stateChip,
   usageMeters,
 } from './plan-presentation';
-import { billingQueryKeys } from './queries';
+import { billingQueryKeys, useBillingSummary } from './queries';
 import styles from './Billing.module.css';
 
 export interface BillingScreenProps {
@@ -62,12 +56,7 @@ export function BillingScreen({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [changing, setChanging] = useState(false);
-  const summary = useQuery({
-    queryKey: billingQueryKeys.summary(workspaceId),
-    queryFn: ({ signal }) => api(endpoints.getBillingSummary, [workspaceId], { signal }),
-    initialData: initial,
-    initialDataUpdatedAt: loadedAt,
-  }).data;
+  const summary = useBillingSummary(workspaceId, initial, loadedAt);
 
   const chip = stateChip(summary.state, summary.trialDaysLeft);
   const banner = planBanner(summary);

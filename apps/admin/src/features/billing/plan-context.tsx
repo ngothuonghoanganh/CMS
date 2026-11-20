@@ -3,7 +3,7 @@
 import type { WorkspacePlan } from '@plp/contracts';
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
 import { billingHref } from '../shell/navigation';
-import { useLivePlan } from './queries';
+import { useLivePlan, usePlanOnEveryScreen } from './queries';
 
 interface PlanFrame {
   workspaceId: string;
@@ -29,6 +29,7 @@ export function WorkspacePlanProvider({
   children,
 }: WorkspacePlanProviderProps) {
   const live = useLivePlan(workspaceId, plan);
+  usePlanOnEveryScreen(workspaceId);
   const value = useMemo(
     () => ({ workspaceId, canViewBilling, plan: live }),
     [workspaceId, canViewBilling, live],
