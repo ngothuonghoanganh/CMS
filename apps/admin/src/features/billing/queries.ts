@@ -1,5 +1,6 @@
 'use client';
 
+import { INVOICE_PAGE_SIZE } from './payment-presentation';
 import {
   type BillingInfoResponse,
   type BillingSummary,
@@ -29,9 +30,6 @@ export const billingQueryKeys = {
   quote: (workspaceId: string, planId: string, cycle: string, payNow: boolean) =>
     ['workspaces', workspaceId, 'billing', 'quote', planId, cycle, payNow] as const,
 };
-
-/** Invoices per page of "Lịch sử giao dịch" ("Xem thêm" loads the next). */
-export const INVOICE_PAGE_SIZE = 10;
 
 /**
  * The workspace's plan, starting from what the server loaded with the frame. Changing the plan on

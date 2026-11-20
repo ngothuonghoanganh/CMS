@@ -155,7 +155,9 @@ export class FakeGatewayController {
         'Cache-Control': 'no-store',
         'Content-Security-Policy':
           "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
-        'Referrer-Policy': 'no-referrer',
+        // Not `no-referrer`: Chromium then posts the form with `Origin: null`, which OriginGuard
+        // rejects. `same-origin` keeps the Origin of the admin and sends no referrer elsewhere.
+        'Referrer-Policy': 'same-origin',
         'X-Robots-Tag': 'noindex',
       })
       .send(html);

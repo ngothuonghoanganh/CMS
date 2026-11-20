@@ -8,6 +8,12 @@ import {
 import type { BadgeTone } from '@plp/ui';
 import { formatDate, formatVnd } from '../../lib/format';
 
+/**
+ * Invoices per page of "Lịch sử giao dịch" ("Xem thêm" loads the next). It lives here, not in
+ * `queries.ts`: that file is a client module, and the server page reads it too.
+ */
+export const INVOICE_PAGE_SIZE = 10;
+
 const BRAND_NAMES: Readonly<Record<string, string>> = {
   visa: 'Visa',
   mastercard: 'Mastercard',

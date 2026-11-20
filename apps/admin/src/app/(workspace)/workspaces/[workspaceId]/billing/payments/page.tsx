@@ -8,7 +8,7 @@ import {
 } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { PaymentsDenied, PaymentsScreen } from '../../../../../../features/billing/PaymentsScreen';
-import { INVOICE_PAGE_SIZE } from '../../../../../../features/billing/queries';
+import { INVOICE_PAGE_SIZE } from '../../../../../../features/billing/payment-presentation';
 import { siteHref } from '../../../../../../features/shell/navigation';
 import { NoPermission } from '../../../../../../features/shell/NoPermission';
 import { loadWorkspaceContext } from '../../../../../../features/shell/workspace-context';
