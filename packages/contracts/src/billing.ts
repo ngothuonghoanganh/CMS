@@ -212,10 +212,13 @@ export const paymentMethodSchema = z.strictObject({
 });
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
-/** 10 digits, or 13 as `0123456789-001`; spaces are dropped. */
+/**
+ * 10 digits, or 13 as `0123456789-001`; spaces are dropped, and 13 digits typed without the dash
+ * get it, so one code is always stored the same way.
+ */
 export const taxCodeSchema = z
   .string()
-  .transform((value) => value.replace(/\s+/g, ''))
+  .transform((value) => value.replace(/\s+/g, '').replace(/^(\d{10})(\d{3})$/, '$1-$2'))
   .pipe(
     z.string().regex(/^\d{10}(-\d{3})?$/, 'Mã số thuế gồm 10 chữ số, hoặc 13 dạng 0123456789-001'),
   );
@@ -415,10 +418,16 @@ export const workspacePlanSchema = z.object({
 });
 export type WorkspacePlan = z.infer<typeof workspacePlanSchema>;
 
-/** "Đổi gói" (`billing.manage`). */
+/**
+ * "Đổi gói" (`billing.manage`). During the trial a change is free; `payNow` pays for the chosen
+ * plan at once instead, which ends the trial (ADR-035, T2). A change that charges (paying now, or
+ * an upgrade of a paid period) names the amount of the quote the owner confirmed.
+ */
 export const changePlanRequestSchema = z.strictObject({
   planId: planIdSchema,
   cycle: billingCycleSchema,
+  payNow: z.boolean().default(false),
+  expectedAmount: vndAmountSchema.optional(),
 });
 export type ChangePlanRequest = z.infer<typeof changePlanRequestSchema>;
 

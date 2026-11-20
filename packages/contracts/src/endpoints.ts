@@ -8,6 +8,7 @@ import {
 } from './ai.js';
 import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
+  billingInfoSchema,
   billingSummarySchema,
   changePlanRequestSchema,
   planCatalogResponseSchema,
@@ -15,6 +16,19 @@ import {
   testClockSchema,
   workspacePlanSchema,
 } from './billing.js';
+import {
+  billingInfoResponseSchema,
+  gatewayWebhookResponseSchema,
+  invoiceListResponseSchema,
+  invoiceReceiptSchema,
+  invoiceSchema,
+  methodSetupResponseSchema,
+  payInvoiceResponseSchema,
+  paymentMethodResponseSchema,
+  planChangeQuoteQuerySchema,
+  planChangeQuoteSchema,
+  startMethodSetupRequestSchema,
+} from './billing-payments.js';
 import {
   assetListQuerySchema,
   assetListResponseSchema,
@@ -417,8 +431,24 @@ export const endpoints = {
     response: billingSummarySchema,
   }),
   /**
-   * `billing.manage`: during the trial the plan and cycle change at once, at no charge. Outside a
-   * trial 409 `plan_change_unavailable` until payments exist (T2).
+   * `billing.manage`: what choosing a plan does now (`mode`), what it charges and which card pays,
+   * before the owner confirms. Never charges.
+   */
+  getPlanChangeQuote: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/plan/quote`,
+    request: null,
+    query: planChangeQuoteQuerySchema,
+    response: planChangeQuoteSchema,
+  }),
+  /**
+   * `billing.manage`, as the quote says (ADR-035, T2): during the trial a free change; with
+   * `payNow` during or after the trial, the first period charged in full; in a paid period an
+   * upgrade charged for the days left. A change that charges needs `expectedAmount` equal to the
+   * quote (409 `quote_changed` otherwise) and a saved card (422 `payment_method_required`). 200
+   * once applied; 202 while the gateway decides (the plan changes when it confirms). A refused
+   * charge is 402 `payment_failed`, an unknown outcome 503 `gateway_unavailable`, another charge
+   * under way 409 `payment_in_progress`, anything else 409 `plan_change_unavailable` (`reason`).
    */
   changePlan: endpoint({
     method: 'POST',
@@ -426,6 +456,93 @@ export const endpoints = {
     request: changePlanRequestSchema,
     query: null,
     response: billingSummarySchema,
+  }),
+  /** `billing.manage`: the saved card (never its token), and whether payments are on. */
+  getPaymentMethod: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/payment-method`,
+    request: null,
+    query: null,
+    response: paymentMethodResponseSchema,
+  }),
+  /**
+   * `billing.manage`: the gateway's page that saves a card ("Thêm phương thức", "Đổi thẻ"). The
+   * browser goes to `url`; the gateway leads back to the admin screen `returnTo` names, with
+   * `?paymentMethod=saved|canceled`. The card is stored when the gateway's event arrives.
+   */
+  startPaymentMethodSetup: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/payment-method/setup`,
+    request: startMethodSetupRequestSchema,
+    query: null,
+    response: methodSetupResponseSchema,
+  }),
+  /** `billing.manage`: "Thông tin xuất hóa đơn"; null until the owner fills it. */
+  getBillingInfo: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/info`,
+    request: null,
+    query: null,
+    response: billingInfoResponseSchema,
+  }),
+  /** `billing.manage`: applies to the invoices made from now on, never to earlier ones. */
+  updateBillingInfo: endpoint({
+    method: 'PUT',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/info`,
+    request: billingInfoSchema,
+    query: null,
+    response: billingInfoResponseSchema,
+  }),
+  /** `billing.manage`: "Lịch sử giao dịch", newest first. */
+  listInvoices: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/invoices`,
+    request: null,
+    query: cursorQuerySchema,
+    response: invoiceListResponseSchema,
+  }),
+  getInvoice: endpoint({
+    method: 'GET',
+    path: (workspaceId: string, invoiceId: string) =>
+      `/workspaces/${e(workspaceId)}/billing/invoices/${e(invoiceId)}`,
+    request: null,
+    query: null,
+    response: invoiceSchema,
+  }),
+  /** `billing.manage`: "Tải hóa đơn", the receipt of a paid invoice (404 for any other). */
+  getInvoiceReceipt: endpoint({
+    method: 'GET',
+    path: (workspaceId: string, invoiceId: string) =>
+      `/workspaces/${e(workspaceId)}/billing/invoices/${e(invoiceId)}/receipt`,
+    request: null,
+    query: null,
+    response: invoiceReceiptSchema,
+  }),
+  /**
+   * `billing.manage`, "Thanh toán lại" with the saved card. Requires the `Idempotency-Key`
+   * header: the same key answers as the first time without charging again. 200 paid, 202 while
+   * the gateway decides; 402 `payment_failed`, 503 `gateway_unavailable`, 409
+   * `payment_in_progress`, 409 `invoice_not_payable`, 422 `payment_method_required`.
+   */
+  payInvoice: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, invoiceId: string) =>
+      `/workspaces/${e(workspaceId)}/billing/invoices/${e(invoiceId)}/pay`,
+    request: null,
+    query: null,
+    response: payInvoiceResponseSchema,
+  }),
+  /**
+   * The payment gateway's events (no session, no Origin): the raw body, signed by the gateway.
+   * 401 for a bad signature, 400 for a body that is no event, 404 for another provider; 200 for
+   * every signed event, applied once, already applied or ignored.
+   */
+  paymentGatewayWebhook: endpoint({
+    method: 'POST',
+    path: (provider: string) => `/public/billing/webhooks/${e(provider)}`,
+    request: null,
+    query: null,
+    response: gatewayWebhookResponseSchema,
   }),
   /** Only with `BILLING_TEST_CLOCK=on`, never in production (404 otherwise); no session. */
   getTestClock: endpoint({
