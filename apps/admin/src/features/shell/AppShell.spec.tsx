@@ -2,7 +2,7 @@ import type { Membership } from '@plp/contracts';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   NO_LEADS,
   siteFixture,
@@ -17,9 +17,11 @@ const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
 }));
 
+const navigation = vi.hoisted(() => ({ pathname: '' }));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => router,
-  usePathname: () => `/sites/${SITE_ID}/domain`,
+  usePathname: () => navigation.pathname || `/sites/${SITE_ID}/domain`,
 }));
 
 beforeAll(() => {
@@ -126,6 +128,16 @@ describe('AppShell', () => {
       const banner = within(screen.getByRole('main')).getByRole('status');
       expect(banner).toHaveTextContent('Chủ sở hữu workspace cần chọn gói');
       expect(within(banner).queryByRole('link')).toBeNull();
+    });
+
+    it('leaves board 28 to its own banner, so the reason is not said twice', () => {
+      navigation.pathname = `/workspaces/${WORKSPACE_ID}/billing`;
+      onTestFinished(() => {
+        navigation.pathname = '';
+      });
+      renderShell(lapsed);
+
+      expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
     });
 
     it('shows nothing while the workspace has full access', () => {
