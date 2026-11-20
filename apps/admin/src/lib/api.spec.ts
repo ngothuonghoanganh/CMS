@@ -61,9 +61,9 @@ describe('streamEndpoint (ADR-031)', () => {
   it('throws the problem of a refused request before any line', async () => {
     const problem = {
       type: 'about:blank',
-      title: 'Workspace đã dùng hết 100 lượt AI tháng này',
+      title: 'Bạn gửi yêu cầu AI quá nhanh',
       status: 429,
-      code: 'ai_quota_exhausted',
+      code: 'rate_limited',
     };
     vi.stubGlobal(
       'fetch',
@@ -79,7 +79,7 @@ describe('streamEndpoint (ADR-031)', () => {
     const onEvent = vi.fn();
     await expect(
       streamEndpoint(endpoints.retryAiPageJob, [SITE_ID, JOB_ID], {}, aiJobEventSchema, onEvent),
-    ).rejects.toMatchObject({ code: 'ai_quota_exhausted' });
+    ).rejects.toMatchObject({ code: 'rate_limited' });
     expect(onEvent).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, streamEndpoint } from '../../lib/api';
+import { ApiError } from '../../lib/api-core';
 import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { apiError, renderWithProviders } from '../shell/test-utils';
 import { AiCreateScreen } from './AiCreateScreen';
@@ -40,6 +41,15 @@ function usage(overrides: Partial<AiUsage> = {}): AiUsage {
     resetsOn: '2026-12-01',
     ...overrides,
   };
+}
+
+/** The month's uses are the plan's limit (ADR-035). */
+function aiLimitReached(): ApiError {
+  const base = apiError(402, 'plan_limit_reached', 'Đã dùng hết hạn mức của Gói Agency');
+  return new ApiError(402, {
+    ...base.problem,
+    context: { limit: 'aiUses', max: 100, resetsOn: '2026-12-01' },
+  });
 }
 
 /** The job of the lead outline (7 sections), the footer left to the user. */
@@ -587,8 +597,12 @@ describe('AiCreateScreen (board 20)', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Workspace đã dùng hết 100 lượt AI tháng này.');
     expect(alert).toHaveTextContent('Lượt mới có vào 01/12. Brief bạn nhập vẫn được giữ lại.');
-    // No "Xem gói" before Phase 4.
-    expect(within(alert).queryByText('Xem gói')).not.toBeInTheDocument();
+    // The month's uses are the plan's limit (ADR-035): "Theo gói" and board 28.
+    expect(within(alert).getByText('Theo gói')).toBeInTheDocument();
+    expect(within(alert).getByRole('link', { name: 'Xem gói' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing`,
+    );
     expect(within(alert).getByRole('link', { name: 'Dùng template' })).toHaveAttribute(
       'href',
       `/workspaces/${WORKSPACE_ID}/templates?site=${SITE_ID}`,
@@ -604,15 +618,11 @@ describe('AiCreateScreen (board 20)', () => {
   it('goes back to the brief when the month ran out meanwhile', async () => {
     const user = userEvent.setup();
     serve();
-    streamMock.mockRejectedValue(
-      apiError(429, 'ai_quota_exhausted', 'Workspace đã dùng hết 100 lượt AI tháng này'),
-    );
+    streamMock.mockRejectedValue(aiLimitReached());
     renderScreen();
     await toStructure(user);
     serve([], usage({ used: 100, remaining: 0 }));
-    streamMock.mockRejectedValue(
-      apiError(429, 'ai_quota_exhausted', 'Workspace đã dùng hết 100 lượt AI tháng này'),
-    );
+    streamMock.mockRejectedValue(aiLimitReached());
     await user.click(screen.getByRole('button', { name: 'Viết nội dung · tốn 1 lượt' }));
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Kể cho AI về trang bạn cần' }),

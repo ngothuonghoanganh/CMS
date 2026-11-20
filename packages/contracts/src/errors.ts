@@ -41,7 +41,6 @@ export const errorCodes = [
   'page_not_live',
   'rate_limited',
   'ai_disabled',
-  'ai_quota_exhausted',
   'plan_limit_reached',
   'plan_feature_required',
   'workspace_read_only',

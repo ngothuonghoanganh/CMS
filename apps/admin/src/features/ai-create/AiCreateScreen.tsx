@@ -54,7 +54,8 @@ import { PageSlugField } from '../onboarding/PageSlugField';
 import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { cx } from '../shell/cx';
 import { newPageHref, pageHref, siteHref, templatesHref } from '../shell/navigation';
-import { PlanProblemAction } from '../billing/PlanProblemAction';
+import { reachedLimitOf } from '../billing/plan-problem';
+import { PlanMark, PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
   addBlockedReason,
@@ -474,7 +475,8 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   function refused(error: unknown) {
     setRun({ kind: 'idle' });
     reportUnexpected('Starting the AI job failed', error);
-    if (error instanceof ApiError && error.code === 'ai_quota_exhausted') {
+    // The month's uses are the plan's limit (ADR-035): the brief says so, with "Xem gói".
+    if (reachedLimitOf(error) === 'aiUses') {
       void queryClient.invalidateQueries({ queryKey: aiQueryKeys.usage(site.id) });
       dispatch({ type: 'step_changed', step: 'brief' });
       return;
@@ -631,6 +633,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   }
                 >
                   Lượt mới có vào {dayMonth(usage.resetsOn)}. Brief bạn nhập vẫn được giữ lại.
+                  <PlanMark label="Xem gói" workspaceId={site.workspaceId} />
                 </Callout>
               ) : null}
               <Field
@@ -928,6 +931,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                 <Callout tone="warning" role="alert">
                   Workspace đã dùng hết {usage.limit} lượt AI tháng này. Lượt mới có vào{' '}
                   {dayMonth(usage.resetsOn)}.
+                  <PlanMark label="Xem gói" workspaceId={site.workspaceId} />
                 </Callout>
               ) : null}
               {problem === null ? null : (

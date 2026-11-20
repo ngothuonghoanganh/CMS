@@ -23,12 +23,28 @@ const limitPhrases: Record<PlanLimitKey, (max: number) => string> = {
   customDomains: (max) => `${max} tên miền riêng, tính trên mọi site`,
 };
 
-/** 402 `plan_limit_reached`: creating one more would go past the plan's limit. */
-export function planLimitReached(plan: Plan, limit: PlanLimitKey): AppError {
+/** "dd/MM" of a "YYYY-MM-DD" day: "Lượt mới có vào 01/12". */
+function dayMonth(day: string): string {
+  return `${day.slice(8, 10)}/${day.slice(5, 7)}`;
+}
+
+/**
+ * 402 `plan_limit_reached`: creating one more would go past the plan's limit. A monthly limit
+ * passes `resetsOn`, the day its uses come back, which the detail and the context name.
+ */
+export function planLimitReached(plan: Plan, limit: PlanLimitKey, resetsOn?: string): AppError {
   const max = plan.limits[limit];
+  const allows = `Gói ${plan.name} có tối đa ${limitPhrases[limit](max)}.`;
   return new AppError(402, 'plan_limit_reached', `Đã dùng hết hạn mức của Gói ${plan.name}`, {
-    detail: `Gói ${plan.name} có tối đa ${limitPhrases[limit](max)}. Nâng cấp gói để thêm.`,
-    context: { limit, max } satisfies PlanLimitProblemContext,
+    detail:
+      resetsOn === undefined
+        ? `${allows} Nâng cấp gói để thêm.`
+        : `${allows} Lượt mới có vào ${dayMonth(resetsOn)}, hoặc nâng cấp gói để có thêm ngay.`,
+    context: {
+      limit,
+      max,
+      ...(resetsOn === undefined ? {} : { resetsOn }),
+    } satisfies PlanLimitProblemContext,
   });
 }
 

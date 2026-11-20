@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { ApiError, streamEndpoint } from '../../../lib/api';
 import { aiQueryKeys } from '../../ai-create/queries';
+import { reachedLimitOf } from '../../billing/plan-problem';
 import { problemMessage, reportUnexpected } from '../../shell/problem-message';
 import { useEditor } from '../editor-context';
 import { PROPERTIES_PANEL_ID } from '../focus-target';
@@ -260,8 +261,8 @@ export function AiAssistantProvider({
     (error: unknown): string => {
       reportUnexpected('The AI assistant request failed', error);
       if (
-        error instanceof ApiError &&
-        (error.code === 'ai_quota_exhausted' || error.code === 'ai_disabled')
+        reachedLimitOf(error) === 'aiUses' ||
+        (error instanceof ApiError && error.code === 'ai_disabled')
       ) {
         void queryClient.invalidateQueries({ queryKey: aiQueryKeys.usage(siteId) });
       }

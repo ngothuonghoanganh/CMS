@@ -1584,7 +1584,8 @@ export const endpoints = {
    * "Viết nội dung": reserves one use and starts a job that writes the sections and creates the
    * draft. 200 with an NDJSON stream (`AI_JOB_STREAM_TYPE`), one `aiJobEventSchema` per line, until
    * the job ends; the job still ends when the client goes away. Refused before the stream starts:
-   * 409 `ai_disabled`, 429 `ai_quota_exhausted` or `rate_limited`, 409 `slug_taken`.
+   * 409 `ai_disabled`, 429 `rate_limited`, 402 `plan_limit_reached` (`aiUses`, ADR-035), 409
+   * `slug_taken`.
    */
   startAiPageJob: endpoint({
     method: 'POST',
@@ -1625,8 +1626,8 @@ export const endpoints = {
    * draft. 200 with an NDJSON stream (`AI_JOB_STREAM_TYPE`) of `aiSuggestionEventSchema` lines,
    * heartbeats then the result; one use is spent when at least one change came back, and given
    * back when the client goes away first ("Hủy"). Refused before the stream starts: 409
-   * `ai_disabled`, 429 `rate_limited` or `ai_quota_exhausted`, 422 for a path the AI may not write
-   * or nothing to write.
+   * `ai_disabled`, 429 `rate_limited`, 402 `plan_limit_reached` (`aiUses`, ADR-035), 422 for a path
+   * the AI may not write or nothing to write.
    */
   aiSuggestions: endpoint({
     method: 'POST',

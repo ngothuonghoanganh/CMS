@@ -442,12 +442,14 @@ describe('creating a page with AI (ADR-031)', () => {
       ),
     );
     expect(responses.filter((response) => response.status === 200)).toHaveLength(QUOTA);
-    const refused = responses.filter((response) => response.status === 429);
+    // The month's uses are the plan's limit (ADR-035): 402, with the day they come back.
+    const refused = responses.filter((response) => response.status === 402);
     expect(refused).toHaveLength(3);
+    const { resetsOn } = await usage(client, site.id);
     for (const response of refused) {
       expect(problemSchema.parse(response.body)).toMatchObject({
-        code: 'ai_quota_exhausted',
-        title: `Workspace đã dùng hết ${QUOTA} lượt AI tháng này`,
+        code: 'plan_limit_reached',
+        context: { limit: 'aiUses', max: QUOTA, resetsOn },
       });
     }
     expect(await usage(client, site.id)).toMatchObject({ used: QUOTA, remaining: 0 });

@@ -2470,6 +2470,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Dữ liệu gửi đi là brief và danh sách loại, variant của section, không thêm gì.
   - "Thử lại N section" không chọn lại chuyển động. Trợ lý trong editor không đổi chuyển động.
 - **Amended 2026-11-14 (ADR-035):** hạn mức lượt AI mỗi tháng lấy từ gói của workspace, thay `AI_MONTHLY_QUOTA`. Bộ đếm, cách giữ và trả lượt không đổi. Màn 20 và 21 có "Xem gói" khi hết lượt, dẫn tới màn 28 với `billing.view`.
+- **Amended 2026-11-20 (ADR-035, T1):** hết lượt là hạn mức của gói, nên trả 402 `plan_limit_reached` `{ limit: 'aiUses', max, resetsOn }` thay 429 `ai_quota_exhausted` (mã này bị bỏ). 429 chỉ còn cho `rate_limited`.
 
 ### ADR-032 — Chuyển động: phong cách trang, hiệu ứng xuất hiện của section
 

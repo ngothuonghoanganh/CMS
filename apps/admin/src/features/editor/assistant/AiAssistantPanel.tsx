@@ -26,7 +26,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type KeyboardEvent, useId, useState } from 'react';
 import { api } from '../../../lib/api';
 import { aiQueryKeys } from '../../ai-create/queries';
-import { PlanProblemAction } from '../../billing/PlanProblemAction';
+import { PlanMark, PlanProblemAction } from '../../billing/PlanProblemAction';
 import { problemMessage } from '../../shell/problem-message';
 import { useEditor, useEditorServices } from '../editor-context';
 import { AI_PANEL_ID, type AssistConflict, useAiAssistant } from './ai-assistant-context';
@@ -350,6 +350,7 @@ export function AiAssistantPanel() {
         <p className={styles.quota}>
           <strong>Workspace đã dùng hết {usage.limit} lượt AI tháng này.</strong> Lượt mới có vào{' '}
           {dayMonthOf(usage.resetsOn)}. Bạn vẫn sửa tay bình thường.
+          <PlanMark label="Xem gói" workspaceId={workspaceId} />
         </p>
       ) : null}
 

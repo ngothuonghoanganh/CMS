@@ -17,6 +17,12 @@ export type PlanProblem =
   | { kind: 'feature'; feature: PlanFeatureKey | null }
   | { kind: 'read_only'; state: SubscriptionState | null };
 
+/** The limit a 402 `plan_limit_reached` names; null for any other error. */
+export function reachedLimitOf(error: unknown): PlanLimitKey | null {
+  const problem = planProblemOf(error);
+  return problem?.kind === 'limit' ? problem.limit : null;
+}
+
 export function planProblemOf(error: unknown): PlanProblem | null {
   if (!(error instanceof ApiError)) {
     return null;

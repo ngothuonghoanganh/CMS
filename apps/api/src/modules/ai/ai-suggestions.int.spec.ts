@@ -3,6 +3,7 @@ import {
   type AiSuggestionChange,
   type AiSuggestionRequest,
   aiUsageSchema,
+  nextVnMonthStart,
   problemSchema,
   type SectionInstance,
   type Site,
@@ -490,10 +491,11 @@ describe('the assistant of the editor (ADR-031, board 21)', () => {
         { $set: { used: QUOTA, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
         { upsert: true },
       );
-    const refused = await postSuggestion(f.client, f.site.id, f.pageId, heroRewrite(f)).expect(429);
+    // The plan's limit (ADR-035): 402, with the day the uses come back.
+    const refused = await postSuggestion(f.client, f.site.id, f.pageId, heroRewrite(f)).expect(402);
     expect(problemSchema.parse(refused.body)).toMatchObject({
-      code: 'ai_quota_exhausted',
-      context: { limit: QUOTA },
+      code: 'plan_limit_reached',
+      context: { limit: 'aiUses', max: QUOTA, resetsOn: nextVnMonthStart(month) },
     });
     expect(fake.requests).toHaveLength(0);
   });

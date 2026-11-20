@@ -422,10 +422,14 @@ export const changePlanRequestSchema = z.strictObject({
 });
 export type ChangePlanRequest = z.infer<typeof changePlanRequestSchema>;
 
-/** `context` of a 402 `plan_limit_reached`: which limit, and the plan's number. */
+/**
+ * `context` of a 402 `plan_limit_reached`: which limit, and the plan's number. A monthly limit
+ * (AI uses) adds the day its uses come back, the 1st of the next month in Vietnam.
+ */
 export const planLimitProblemContextSchema = z.object({
   limit: planLimitKeySchema,
   max: z.number().int().nonnegative(),
+  resetsOn: z.iso.date().optional(),
 });
 export type PlanLimitProblemContext = z.infer<typeof planLimitProblemContextSchema>;
 
