@@ -5,6 +5,7 @@ import {
   baseDomainOf,
   customDomainOrigin,
   parseEnv,
+  paymentProviderOf,
   siteOrigin,
   tlsCheckEnabled,
 } from './env.js';
@@ -234,6 +235,20 @@ describe('parseEnv', () => {
         }),
       ).toThrow('BILLING_TEST_CLOCK=on moves the billing clock for tests');
     });
+  });
+
+  it('pays with the fake gateway outside production only, and nothing by default there (ADR-035)', () => {
+    const production = { ...valid, NODE_ENV: 'production', CUSTOM_DOMAIN_IPV4: '203.0.113.10' };
+    expect(paymentProviderOf(parseEnv(valid))).toBe('fake');
+    expect(paymentProviderOf(parseEnv({ ...valid, PAYMENT_PROVIDER: 'none' }))).toBe('none');
+    expect(paymentProviderOf(parseEnv(production))).toBe('none');
+    expect(() => parseEnv({ ...production, PAYMENT_PROVIDER: 'fake' })).toThrow(
+      'PAYMENT_PROVIDER=fake takes test cards and charges nothing',
+    );
+    expect(() => parseEnv({ ...valid, PAYMENT_PROVIDER: 'stripe' })).toThrow(/PAYMENT_PROVIDER/);
+    expect(() => parseEnv({ ...valid, PAYMENT_WEBHOOK_SECRET: 'short' })).toThrow(
+      /PAYMENT_WEBHOOK_SECRET/,
+    );
   });
 
   it('refuses the webhook test receiver in production (ADR-034)', () => {

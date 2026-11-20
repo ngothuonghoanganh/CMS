@@ -4,6 +4,7 @@ import { hardCapPlanCatalogFile } from './plans.js';
 export const TEST_ADMIN_ORIGIN = 'http://localhost:3100';
 export const TEST_RENDERER_API_SECRET = 'test-renderer-api-secret-0123456789abcdef';
 export const TEST_LOGIN_ATTEMPT_SECRET = 'test-login-attempt-secret-0123456789abcdef';
+export const TEST_PAYMENT_WEBHOOK_SECRET = 'test-payment-webhook-secret-0123456789abcdef';
 
 /** Environment for integration tests; MONGODB_URI is set per test file by createTestApp. */
 export function testEnvInput(
@@ -38,6 +39,8 @@ export function testEnvInput(
     DOMAIN_MONITOR_INTERVAL_MS: '0',
     // Roomy plans: tests of a plan's own numbers name another catalog (test/plans.ts).
     PLAN_CATALOG_FILE: hardCapPlanCatalogFile(),
+    // The fake payment gateway (ADR-035) signs its webhooks with it (test/payments.ts).
+    PAYMENT_WEBHOOK_SECRET: TEST_PAYMENT_WEBHOOK_SECRET,
   };
   const merged: Record<string, string | undefined> = { ...base };
   for (const [key, value] of Object.entries(overrides)) {
