@@ -3039,6 +3039,47 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - **Automation:** tạo, nhân bản và bật đều 402 `plan_feature_required` `{ feature: 'automation' }` khi gói không có; đọc, tạm dừng và sửa vẫn được. Hook của `PlanChangeHooks` chuyển automation đang bật sang `paused` với `pausedReason: 'plan'` (thêm vào `automationPausedReasons`) và dừng các lượt đang chờ, trong transaction đổi gói.
     - **Vai trò tùy chỉnh:** tạo và sửa 402 `plan_feature_required` `{ feature: 'customRoles' }`; liệt kê, xóa và quyền của người đang giữ không đổi.
   - **Board 16:** nhóm "Thanh toán" có trong `permissionGroups`; `planFeatureOf` đánh dấu "Theo gói" ở hai dòng automation.
+- **Amended 2026-11-21 (T2, cách làm):**
+  - **Dùng thử và trả tiền** (bổ sung "Trong lúc dùng thử, đổi gói không trừ tiền"):
+    - Trong lúc dùng thử, đổi gói vẫn miễn phí như T1.
+    - "Thanh toán ngay" (`payNow`): có thẻ thì Chủ sở hữu trả ngay cho gói và chu kỳ đã chọn, trong lúc dùng thử hay sau khi hết. Trừ trọn giá của chu kỳ; dùng thử kết thúc và kỳ trả phí đầu bắt đầu lúc trừ tiền thành công, phần dùng thử còn lại không được giữ. Trừ tiền lỗi thì dùng thử và gói không đổi.
+    - Hết dùng thử mà chưa trả: chỉ "Thanh toán ngay" chọn được gói (409 `plan_change_unavailable`, `reason: payment_required`). Tự trừ tiền cuối dùng thử là việc của T3.
+    - Bước 3 của chuỗi E2E (§5) là "Thanh toán ngay" Gói Doanh nghiệp.
+  - **Nâng gói** trong kỳ trả phí: giá cao hơn trong cùng chu kỳ.
+    - Số tiền = chênh lệch giá × số ngày còn lại / số ngày của kỳ, làm tròn lên 1.000đ. Ngày đang dở tính một ngày, nên ngày cuối kỳ vẫn trừ ít nhất 1.000đ và báo giá giữ nguyên trong ngày.
+    - Giá thấp hơn hay bằng, hoặc đổi chu kỳ: 409 `plan_change_unavailable` `scheduled_change` (T3). Kỳ đã hết hay chưa trả: `unpaid`. 409 không còn cho mọi thay đổi ngoài dùng thử.
+  - **Kỳ:** một tháng hay một năm theo lịch Việt Nam, cùng ngày và giờ; tháng sau không có ngày đó thì lấy ngày cuối tháng (31/01 → 28/02).
+  - **Báo giá rồi xác nhận:**
+    - `GET /workspaces/:id/billing/plan/quote?planId&cycle&payNow` (`billing.manage`) trả `mode` (`unchanged`, `trial_change`, `start_paid`, `upgrade`, `unavailable`), số tiền, kỳ được trả, số ngày còn lại và thẻ sẽ bị trừ. Không trừ tiền.
+    - `POST /workspaces/:id/billing/plan` nhận thêm `payNow` và `expectedAmount`. Thay đổi có trừ tiền cần `expectedAmount` bằng báo giá (409 `quote_changed` kèm báo giá mới) và thẻ còn hạn (422 `payment_method_required`).
+    - Kết quả: 200 đã áp dụng; 202 cổng chưa quyết, gói đổi khi sự kiện đến; 402 `payment_failed` `{ invoiceId, invoiceNumber, code }`; 503 `gateway_unavailable` khi cổng không trả lời; 503 `payments_disabled` khi không có cổng.
+  - **Mỗi workspace một lần trừ tiền mỗi lúc:**
+    - Trừ tiền giữ subscription bằng `lockedUntil` (2 phút, như ADR-034) từ trước khi gọi cổng tới khi ghi kết quả. Đổi gói giữ nó từ đúng `version` đã đọc cho báo giá (409 `conflict` nếu đã đổi).
+    - Đang có người giữ, hay có hóa đơn `pending`: 409 `payment_in_progress`.
+    - Một lần đổi gói mới hủy (`void`) các hóa đơn đổi gói chưa trả trước đó.
+  - **Hóa đơn** thêm `planName`, `card { brand, last4 }`, `from { planId, cycle } | null`, `endsTrial`, `createdBy`, `voidedAt`, `createdAt`:
+    - `attempts[{ number, at, outcome: succeeded | failed | pending | unknown, code, requestKey }]`. Idempotency key của lần trừ tiền là `{invoiceId}-{number}`.
+    - `unknown`: cổng không trả lời nên có thể đã trừ. Hóa đơn ở `open`, và lần trừ sau dùng lại đúng key đó; lần trừ API chưa kịp ghi cũng vậy.
+    - Hóa đơn trả cho kỳ đầu lấy kỳ từ lúc trả thành công.
+    - Số hóa đơn đếm ở `invoice_counters { _id: 'HD-{năm}', seq }` của master, trong transaction tạo hóa đơn, theo năm Việt Nam.
+    - Mọi lệnh ghi của `InvoicesRepository` lọc theo trạng thái chưa quyết; không lệnh nào đổi được hóa đơn `paid` hay `void`.
+  - **Thanh toán xong**, trong cùng transaction: hóa đơn `paid`, gói đổi từ đúng gói, chu kỳ và kỳ đã báo giá, `billing_log` (`paid_plan_started` hay `plan_upgraded`, kèm `invoiceId` và `amount`) và `PlanChangeHooks`. Không còn áp dụng được (gói đã đổi trong lúc chờ cổng) thì hóa đơn vẫn ghi đã trả và log báo lỗi để hoàn tiền ngoài hệ thống.
+  - **"Thanh toán lại"** `POST /workspaces/:id/billing/invoices/:invoiceId/pay` với `Idempotency-Key`:
+    - Key đã dùng cho hóa đơn đó thì trả đúng kết quả lần ấy, không trừ tiền.
+    - Chỉ hóa đơn `open` hay `failed` mà điều nó trả còn áp dụng (`payable`): kết thúc dùng thử khi dùng thử còn chưa trả; nâng gói khi gói, chu kỳ và kỳ còn như lúc báo giá. Khác thì 409 `invoice_not_payable`.
+  - **Phương thức thanh toán:**
+    - `POST /workspaces/:id/billing/payment-method/setup { returnTo: payments | plan }` trả `url` trang của cổng. Reference là `ws_{workspaceId}_by_{userId}`. Địa chỉ quay về là admin của workspace với `?paymentMethod=saved|canceled`, không lấy từ request.
+    - Sự kiện `method_saved` thay thẻ cũ và ghi `payment_method_changed` cho người bắt đầu. `GET .../billing/payment-method` trả thẻ không có token, `expired` và `paymentsEnabled`.
+  - **Thông tin xuất hóa đơn:** `GET` và `PUT /workspaces/:id/billing/info`. 13 chữ số gõ không có gạch được thêm gạch. `billing_info_changed` không ghi nội dung.
+  - **Hóa đơn và biên nhận:** `GET .../billing/invoices` (keyset, tối đa 50 mỗi trang, mới nhất trước, có `payable`), `GET .../billing/invoices/:invoiceId` và `GET .../billing/invoices/:invoiceId/receipt` (chỉ hóa đơn `paid`, kèm tên workspace).
+  - **Webhook:**
+    - Body thô, bằng parser riêng cho `/public/billing/webhooks/`, tối đa 64 KB.
+    - Sai hay thiếu chữ ký 401, có chữ ký mà không phải sự kiện 400, provider khác 404. Mọi sự kiện có chữ ký đều được trả lời như nhau, 200 `{ received: true }`: đã áp dụng, đã áp dụng trước đó, hay bị bỏ qua (reference không biết, số tiền khác, hóa đơn đã quyết).
+    - `billing_events { provider, eventId, kind, receivedAt, expiresAt }`, xóa theo TTL ở `expiresAt` (90 ngày).
+    - `charge_failed` chỉ áp dụng cho lần trừ đang `pending`; `charge_succeeded` và `transfer_received` trả mọi hóa đơn chưa quyết.
+  - **Cổng giả:** chữ ký `x-plp-fake-signature: t={giây},v1={HMAC-SHA256 hex của "{t}.{body}"}`, lệch tối đa 5 phút, so sánh trong thời gian không đổi. Token `tok_fake_{kết quả}_{ngẫu nhiên}`, không chứa số thẻ. Trang thẻ ở `/public/billing/fake-gateway/setup?session=…`, phiên có chữ ký và hạn 30 phút.
+  - **Env:** `PAYMENT_PROVIDER` (`none` hay `fake`; mặc định `fake` ngoài production và `none` ở production; `fake` ở production bị từ chối). `PAYMENT_WEBHOOK_SECRET` (ít nhất 32 ký tự, sinh cho từng môi trường); thiếu thì cổng giả dùng bí mật ngẫu nhiên của process.
+  - **Quyền:** mọi endpoint mới cần `billing.manage`, kể cả ở workspace chỉ đọc; Quản trị nhận 403, workspace khác 404.
 
 ---
 
