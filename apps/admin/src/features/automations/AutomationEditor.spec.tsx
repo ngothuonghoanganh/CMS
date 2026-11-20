@@ -3,8 +3,10 @@ import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { siteFixture } from '../dashboard/test-fixtures';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { ApiError } from '../../lib/api-core';
+import { WorkspacePlanProvider } from '../billing/plan-context';
+import { siteFixture, workspacePlanFixture } from '../dashboard/test-fixtures';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { AutomationEditor } from './AutomationEditor';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
@@ -46,7 +48,8 @@ const DETAIL: AutomationDetail = {
   revealedSecrets: [],
 };
 
-function render(detail = DETAIL, canManage = true) {
+/** The API of board 26 for `detail`. */
+function serve(detail: AutomationDetail) {
   apiMock.mockImplementation((endpoint, _args, options) => {
     if (endpoint === endpoints.updateAutomation) {
       const body = (options as { body: { definition: AutomationDetail['definition'] } }).body;
@@ -72,6 +75,10 @@ function render(detail = DETAIL, canManage = true) {
     }
     return Promise.reject(new Error(`Unexpected call to ${endpoint.method}`));
   });
+}
+
+function render(detail = DETAIL, canManage = true) {
+  serve(detail);
   return renderWithProviders(
     <AutomationEditor site={site} initial={detail} canManage={canManage} loadedAt={LOADED_AT} />,
   );
@@ -246,6 +253,96 @@ describe('AutomationEditor (board 26)', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText(/Automation đang bật\. Tạm dừng để sửa các bước/)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /Tiêu đề/ })).toBeDisabled();
+  });
+
+  describe('and the plan (ADR-035)', () => {
+    const business = workspacePlanFixture({
+      plan: {
+        id: 'business',
+        name: 'Doanh nghiệp',
+        limits: { sites: 20, members: 30, aiUses: 300, automationRuns: 10000, customDomains: 40 },
+        features: { automation: true, customRoles: true },
+      },
+    });
+
+    function renderInPlan(detail: AutomationDetail) {
+      serve(detail);
+      return renderWithProviders(
+        <WorkspacePlanProvider workspaceId={site.workspaceId} canViewBilling plan={business}>
+          <AutomationEditor site={site} initial={detail} canManage loadedAt={LOADED_AT} />
+        </WorkspacePlanProvider>,
+      );
+    }
+
+    function withContext(error: ApiError, context: Record<string, unknown>, detail: string) {
+      return new ApiError(error.status, { ...error.problem, context, detail });
+    }
+
+    it('counts each run against the plan’s monthly runs, and marks a refusal of the plan', async () => {
+      const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+      renderInPlan({
+        ...DETAIL,
+        missing: 0,
+        definition: { ...DETAIL.definition, actions: DETAIL.definition.actions.slice(0, 2) },
+      });
+      await user.click(screen.getByRole('button', { name: 'Bật automation' }));
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Bật “Giao lead mới cho người trực”?',
+      });
+      expect(
+        await within(dialog).findByText(
+          'Bạn tạm dừng được bất cứ lúc nào. Mỗi lượt chạy tính vào hạn mức 10.000 lượt mỗi tháng của gói.',
+        ),
+      ).toBeInTheDocument();
+
+      apiMock.mockImplementation((endpoint) => {
+        if (endpoint === endpoints.automationActivation) {
+          return Promise.resolve({ leads: 312, recentUnassigned: 0, canIncludeRecent: true });
+        }
+        return Promise.reject(
+          withContext(
+            apiError(402, 'plan_feature_required', 'Gói Cơ bản chưa có automation'),
+            { feature: 'automation' },
+            'Nâng cấp lên gói có tính năng này ở "Gói & thanh toán".',
+          ),
+        );
+      });
+      await user.click(within(dialog).getByRole('button', { name: 'Bật automation' }));
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent('Nâng cấp lên gói có tính năng này');
+      expect(alert).toHaveTextContent('Theo gói');
+      expect(within(alert).getByRole('link', { name: 'Nâng cấp' })).toHaveAttribute(
+        'href',
+        `/workspaces/${site.workspaceId}/billing`,
+      );
+    });
+
+    it('says why a save of a read-only workspace failed, and where to go, not to try again', async () => {
+      const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+      renderInPlan(DETAIL);
+      apiMock.mockImplementation(() =>
+        Promise.reject(
+          withContext(
+            apiError(402, 'workspace_read_only', 'Workspace đang ở chế độ chỉ đọc'),
+            { state: 'trial_expired' },
+            'Thời gian dùng thử đã hết. Trang live và form vẫn chạy.',
+          ),
+        ),
+      );
+      const panel = screen.getByRole('complementary', { name: 'Bảng bên phải' });
+      await user.click(within(panel).getByRole('checkbox', { name: 'Ngọc Anh' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(700);
+      });
+      expect(
+        await screen.findByText(/^Chưa lưu được · Thời gian dùng thử đã hết\./),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/sửa tiếp để thử lại/)).toBeNull();
+      expect(screen.getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+        'href',
+        `/workspaces/${site.workspaceId}/billing`,
+      );
+    });
   });
 
   it('only shows the steps to a role that views', () => {
