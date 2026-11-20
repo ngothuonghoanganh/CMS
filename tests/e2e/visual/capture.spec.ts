@@ -5,6 +5,7 @@ import { animationsSettled } from '../support/axe.js';
 import { type Board, seedBoard } from '../support/board.js';
 import { Editor } from '../support/editor.js';
 import { accountLink, waitForEmail } from '../support/mailpit.js';
+import { CARD_OK, paymentsPath } from '../support/payments.js';
 import { uniqueId } from '../support/setup.js';
 import { WebhookReceiver } from '../support/webhook-receiver.js';
 import { siteOrigin } from '../urls.js';
@@ -548,5 +549,57 @@ test.describe('Design capture', () => {
     const library = page.getByRole('dialog', { name: 'Phong cách chuyển động' });
     await library.getByRole('button', { name: 'Chọn Sang trọng' }).click();
     await capture(page, 'StyleLibrary');
+  });
+
+  // After the motion screens: paying moves the workspace to Gói Doanh nghiệp, which the screens
+  // above draw on Gói Agency.
+  test('29 Billing, the receipt and the card page of the fake gateway', async ({
+    page,
+    context,
+  }) => {
+    const workspaceId = board.site.workspaceId;
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(paymentsPath(workspaceId));
+    await page.getByRole('button', { name: 'Thêm phương thức' }).click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Thêm phương thức thanh toán' }),
+    ).toBeVisible();
+    await capture(page, 'FakeGateway');
+    await page.getByLabel('Số thẻ').fill(CARD_OK);
+    await page.getByLabel('Hết hạn (MM/YY)').fill('12/35');
+    await page.getByLabel('CVC').fill('123');
+    await page.getByRole('button', { name: 'Lưu thẻ' }).click();
+    await expect(page.getByText('Đã lưu thẻ', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Nhập thông tin' }).click();
+    await page.getByLabel('Tên đơn vị').fill('Công ty TNHH Nha khoa Smile Care');
+    await page.getByLabel('Mã số thuế').fill('0312345678');
+    await page.getByLabel('Địa chỉ').fill('45 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh');
+    await page.getByLabel('Email nhận hóa đơn điện tử').fill('ketoan@smilecare.vn');
+    await page.getByRole('button', { name: 'Lưu', exact: true }).click();
+    await expect(page.getByText('Đã lưu thông tin xuất hóa đơn')).toBeVisible();
+
+    await page.goto(`/workspaces/${workspaceId}/billing`);
+    await page.getByRole('button', { name: 'Đổi gói' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Đổi gói' });
+    await dialog.getByRole('radio', { name: /^Gói Doanh nghiệp/ }).check();
+    await dialog.getByRole('button', { name: 'Theo tháng' }).click();
+    await dialog.getByRole('button', { name: 'Thanh toán ngay 1.490.000 ₫' }).click();
+    await expect(page.getByText('Đã đổi sang Gói Doanh nghiệp', { exact: true })).toBeVisible();
+
+    await page.goto(paymentsPath(workspaceId));
+    const history = page.getByRole('table', { name: 'Lịch sử giao dịch' });
+    await expect(history.getByText('Đã thanh toán')).toBeVisible();
+    await capture(page, 'Billing');
+
+    const [receipt] = await Promise.all([
+      context.waitForEvent('page'),
+      history.getByRole('link', { name: /^Tải hóa đơn HD-/ }).click(),
+    ]);
+    await receipt.setViewportSize({ width: 1000, height: 900 });
+    await expect(
+      receipt.getByRole('heading', { level: 1, name: 'Biên nhận thanh toán' }),
+    ).toBeVisible();
+    await capture(receipt, 'Receipt');
   });
 });
