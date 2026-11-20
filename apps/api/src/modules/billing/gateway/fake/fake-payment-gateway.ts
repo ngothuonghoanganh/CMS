@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { type GatewayEvent, gatewayEventSchema, type TransferInstructions } from '@plp/contracts';
 import {
   type ChargeRequest,
@@ -42,6 +43,8 @@ export interface FakePaymentGatewayOptions {
 export class FakePaymentGateway extends PaymentGateway {
   readonly provider = 'fake' as const;
   private readonly charges = new Map<string, ChargeResult>();
+  /** Ids of the setup sessions a card was saved with, until they expire (Unix seconds). */
+  private readonly usedSetups = new Map<string, number>();
   private readonly now: () => number;
 
   constructor(private readonly options: FakePaymentGatewayOptions) {
@@ -51,6 +54,7 @@ export class FakePaymentGateway extends PaymentGateway {
 
   startMethodSetup(request: MethodSetupRequest): Promise<MethodSetup> {
     const session = mintFakeSetupSession(this.options.secret, {
+      id: randomUUID(),
       reference: request.reference,
       returnUrl: request.returnUrl,
       cancelUrl: request.cancelUrl,
@@ -128,6 +132,34 @@ export class FakePaymentGateway extends PaymentGateway {
   /** The setup a card page was opened for; null when its link was changed or expired. */
   setupSession(token: string): FakeSetupSession | null {
     return readFakeSetupSession(this.options.secret, token, Math.floor(this.now() / 1000));
+  }
+
+  /**
+   * Takes the setup `session` for one card; false when a card was saved with it already. A
+   * session saves one card, as a real gateway's does, so its page reached again (the browser's
+   * Back) never takes a second one. `releaseSetup` gives it back when the card was not saved.
+   */
+  claimSetup(session: FakeSetupSession): boolean {
+    const now = Math.floor(this.now() / 1000);
+    for (const [used, expiresAt] of this.usedSetups) {
+      if (expiresAt <= now) {
+        this.usedSetups.delete(used);
+      }
+    }
+    if (this.usedSetups.has(session.id)) {
+      return false;
+    }
+    this.usedSetups.set(session.id, session.expiresAt);
+    return true;
+  }
+
+  releaseSetup(session: FakeSetupSession): void {
+    this.usedSetups.delete(session.id);
+  }
+
+  /** Whether a card was saved with this setup session. */
+  setupUsed(session: FakeSetupSession): boolean {
+    return this.usedSetups.has(session.id);
   }
 
   private decide(token: string): ChargeResult {

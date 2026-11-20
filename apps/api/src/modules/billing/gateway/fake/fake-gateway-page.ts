@@ -109,6 +109,16 @@ ${error}
   );
 }
 
+/** A setup whose card is saved, reached again (the browser's Back): no form, the way back. */
+export function renderSetupDone(returnUrl: string): string {
+  return layout(
+    'Đã lưu thẻ (cổng thanh toán thử)',
+    `<h1>Đã lưu thẻ</h1>
+<p>Thẻ của phiên này đã được lưu. Để đổi thẻ, bắt đầu lại từ trang thanh toán.</p>
+<p><a href="${escapeHtml(returnUrl)}">Quay lại trang thanh toán</a></p>`,
+  );
+}
+
 /** A page for a link that cannot be used: the session is expired, changed, or the card page is off. */
 export function renderGatewayError(message: string): string {
   return layout(

@@ -166,10 +166,32 @@ describe('the fake gateway’s card page (ADR-035)', () => {
     const { client: owner, workspaceId } = await signedUpClient(t.app);
     const first = await openSetup(owner, workspaceId);
     await submit(first.session, { number: CARD_OK }).expect(303);
-    await submit(first.session, { number: CARD_DECLINED }).expect(303);
+    const second = await openSetup(owner, workspaceId);
+    await submit(second.session, { number: CARD_DECLINED }).expect(303);
     const [a, b] = sent.slice(-2);
     expect(a?.eventId).not.toBe(b?.eventId);
     expect((await savedCard(owner, workspaceId))?.last4).toBe('0002');
+  });
+
+  it('saves one card per session: opened again, it says so and leads back, with no form', async () => {
+    const { client: owner, workspaceId } = await signedUpClient(t.app);
+    const { session } = await openSetup(owner, workspaceId);
+    const saved = await submit(session, { number: CARD_OK }).expect(303);
+    const back = String(saved.headers['location']);
+    const before = sent.length;
+
+    // The browser's Back shows the page again: the card is saved, nothing takes another one.
+    const again = await request(t.app.getHttpServer())
+      .get(SETUP_PATH)
+      .query({ session })
+      .expect(200);
+    expect(again.text).toContain('Đã lưu thẻ');
+    expect(again.text).toContain(`href="${back.replaceAll('&', '&amp;')}"`);
+    expect(again.text).not.toContain('<form');
+    const resent = await submit(session, { number: CARD_DECLINED }).expect(409);
+    expect(resent.text).toContain('Đã lưu thẻ');
+    expect(sent).toHaveLength(before);
+    expect((await savedCard(owner, workspaceId))?.last4).toBe('4242');
   });
 
   it('rejects a number that is not a test card, a bad expiry and a bad CVC, keeping the form', async () => {
@@ -218,6 +240,9 @@ describe('the fake gateway’s card page (ADR-035)', () => {
       sender.target(`http://127.0.0.1:${address.port}`, [5, 5]);
     }
     expect(await savedCard(owner, workspaceId)).toBeNull();
+    // Nothing was saved, so the same session takes the card when tried again.
+    await submit(session, { number: CARD_OK }).expect(303);
+    expect((await savedCard(owner, workspaceId))?.last4).toBe('4242');
   });
 
   it('lets the card decide the charge: it goes through, or is declined for the reason', async () => {
@@ -248,7 +273,8 @@ describe('the fake gateway’s card page (ADR-035)', () => {
     const { client: owner, workspaceId } = await signedUpClient(t.app);
     const { session } = await openSetup(owner, workspaceId);
     await submit(session, { number: CARD_OK, cvc: '7391' }).expect(303);
-    await submit(session, { number: '5555 5555 5555 4444', cvc: '7391' }).expect(422);
+    const another = await openSetup(owner, workspaceId);
+    await submit(another.session, { number: '5555 5555 5555 4444', cvc: '7391' }).expect(422);
     const dumps: string[] = [];
     const databases = [t.connection, t.workspaceDb(workspaceId)];
     for (const connection of databases) {

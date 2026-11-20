@@ -120,6 +120,8 @@ export function fakeWebhookRequest(
 
 /** What the card page of one setup needs; signed, so the browser cannot change it. */
 export interface FakeSetupSession {
+  /** Random: each setup is its own session, which saves one card. */
+  id: string;
   /** Echoed back in `method_saved`. */
   reference: string;
   returnUrl: string;
@@ -134,6 +136,7 @@ function isSetupSession(value: unknown): value is FakeSetupSession {
   }
   const fields = value as Record<string, unknown>;
   return (
+    typeof fields['id'] === 'string' &&
     typeof fields['reference'] === 'string' &&
     typeof fields['returnUrl'] === 'string' &&
     typeof fields['cancelUrl'] === 'string' &&

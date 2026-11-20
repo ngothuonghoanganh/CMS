@@ -8,7 +8,7 @@ import { ZodPipe } from '../../../../shared/zod.pipe.js';
 import { Public } from '../../../auth/public.decorator.js';
 import { PaymentGateway } from '../payment-gateway.js';
 import { fakeCardTokenFor, FAKE_GATEWAY_PATH } from './fake-gateway-protocol.js';
-import { renderGatewayError, renderSetupPage } from './fake-gateway-page.js';
+import { renderGatewayError, renderSetupDone, renderSetupPage } from './fake-gateway-page.js';
 import { FakePaymentGateway } from './fake-payment-gateway.js';
 import { FakeWebhookDeliveryFailed, FakeWebhookSender } from './fake-webhook-sender.js';
 
@@ -45,7 +45,7 @@ function expired(expiry: { expMonth: number; expYear: number }, now: Date): bool
  * `PAYMENT_PROVIDER=fake`; any other provider makes these routes 404. The browser reaches it
  * through the admin's `/api` proxy. A test card becomes a token and the number is dropped; the
  * `method_saved` event reaches the webhook before the browser is sent back, so the admin finds
- * the card there.
+ * the card there. A session saves one card: opened again, its page says so and leads back.
  */
 @Controller(FAKE_GATEWAY_PATH.replace(/^\//, ''))
 export class FakeGatewayController {
@@ -69,6 +69,10 @@ export class FakeGatewayController {
       this.page(response, 400, renderGatewayError(EXPIRED_MESSAGE));
       return;
     }
+    if (fake.setupUsed(session)) {
+      this.page(response, 200, renderSetupDone(session.returnUrl));
+      return;
+    }
     this.page(response, 200, renderSetupPage({ session: token, cancelUrl: session.cancelUrl }));
   }
 
@@ -82,6 +86,10 @@ export class FakeGatewayController {
     const session = fake.setupSession(form.session);
     if (session === null) {
       this.page(response, 400, renderGatewayError(EXPIRED_MESSAGE));
+      return;
+    }
+    if (fake.setupUsed(session)) {
+      this.page(response, 409, renderSetupDone(session.returnUrl));
       return;
     }
     const retry = (error: string): void => {
@@ -114,6 +122,11 @@ export class FakeGatewayController {
       retry('CVC gồm 3 hoặc 4 chữ số.');
       return;
     }
+    // Taken only now, so a mistyped card can be corrected; two posts at once save one card.
+    if (!fake.claimSetup(session)) {
+      this.page(response, 409, renderSetupDone(session.returnUrl));
+      return;
+    }
     const event: GatewayEvent = {
       kind: 'method_saved',
       eventId: `evt_fake_${randomUUID()}`,
@@ -124,6 +137,7 @@ export class FakeGatewayController {
     try {
       await this.sender.send(event);
     } catch (error) {
+      fake.releaseSetup(session);
       if (!(error instanceof FakeWebhookDeliveryFailed)) {
         throw error;
       }

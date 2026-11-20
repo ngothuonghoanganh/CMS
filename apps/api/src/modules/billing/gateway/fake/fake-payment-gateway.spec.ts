@@ -112,6 +112,40 @@ describe('the fake gateway’s card page', () => {
     // A changed session, or one past 30 minutes, opens nothing.
     expect(fake.setupSession(`x${session}`)).toBeNull();
     expect(gateway(() => NOW + 31 * 60_000).setupSession(session)).toBeNull();
+    // Each setup is a session of its own.
+    const other = new URL(
+      (
+        await fake.startMethodSetup({
+          reference: methodSaved.reference,
+          returnUrl: 'http://localhost:3100/workspaces/1/billing/payments?paymentMethod=saved',
+          cancelUrl: 'http://localhost:3100/workspaces/1/billing/payments?paymentMethod=canceled',
+        })
+      ).url,
+    ).searchParams.get('session');
+    expect(fake.setupSession(other ?? '')?.id).not.toBe(fake.setupSession(session)?.id);
+  });
+
+  it('saves one card per session, unless the card could not be saved', () => {
+    let now = NOW;
+    const fake = gateway(() => now);
+    const setup = (id: string) => ({
+      id,
+      reference: methodSaved.reference,
+      returnUrl: 'http://localhost:3100/workspaces/1/billing/payments?paymentMethod=saved',
+      cancelUrl: 'http://localhost:3100/workspaces/1/billing/payments?paymentMethod=canceled',
+      expiresAt: Math.floor(NOW / 1000) + 60,
+    });
+    expect(fake.setupUsed(setup('s1'))).toBe(false);
+    expect(fake.claimSetup(setup('s1'))).toBe(true);
+    expect(fake.setupUsed(setup('s1'))).toBe(true);
+    expect(fake.claimSetup(setup('s1'))).toBe(false);
+    expect(fake.claimSetup(setup('s2'))).toBe(true);
+    fake.releaseSetup(setup('s2'));
+    expect(fake.claimSetup(setup('s2'))).toBe(true);
+    // Forgotten once the session has expired, when it no longer opens anything anyway.
+    now += 61_000;
+    expect(fake.claimSetup(setup('s3'))).toBe(true);
+    expect(fake.setupUsed(setup('s1'))).toBe(false);
   });
 });
 
