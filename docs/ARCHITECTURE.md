@@ -3224,7 +3224,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ---------- |
 | T0  | Nhập board 28–33, ADR-035, bổ sung ADR-014, 020, 021, 022, 024, 025, 031, 034                                                                                                  | —                      | Xong       |
 | T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói" | 28, 16, 25, Sidebar v2 | Xong       |
-| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Chưa làm   |
+| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Xong       |
 | T3  | Gia hạn, trừ tiền lỗi và thử lại, ân hạn, chuyển khoản chờ xác nhận, hạ gói theo lịch, hủy và giữ lại, banner theo trạng thái, email                                           | 28, 29                 | Chưa làm   |
 
 **Hoàn thành Phase 4** khi một E2E chạy xanh toàn bộ chuỗi:
@@ -3260,7 +3260,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
-- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 15 template (14 template của PR plp-mailer#1 đã merge, và `automation-notice` của ADR-034 chưa có ở đó) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 15 template (14 template của PR plp-mailer#1 và `automation-notice` của ADR-034 ở PR plp-mailer#2, cả hai đã merge; template email thanh toán thì chưa có) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):
