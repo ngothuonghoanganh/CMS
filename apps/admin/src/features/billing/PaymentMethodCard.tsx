@@ -3,15 +3,18 @@
 import type { PaymentMethodResponse } from '@plp/contracts';
 import { Badge, Button, Callout } from '@plp/ui';
 import { cx } from '../shell/cx';
-import { problemMessage } from '../shell/problem-message';
 import { cardExpiryNote, cardLabel } from './payment-presentation';
+import { paymentsMessage } from './payment-problem';
 import { useMethodSetup } from './use-method-setup';
 import styles from './Payments.module.css';
 
 export interface PaymentMethodCardProps {
   workspaceId: string;
   method: PaymentMethodResponse;
-  /** The last charge was refused: the card is outlined in danger, as board 29's failed state. */
+  /**
+   * The last charge of this very card was refused: it is outlined in danger, as board 29's failed
+   * state. A card saved after that refusal is not.
+   */
   declined: boolean;
   /** Where the gateway leads back to: this screen, or board 28's dialog. */
   returnTo?: 'payments' | 'plan';
@@ -65,20 +68,18 @@ export function PaymentMethodCard({
       <div className={styles.actions}>
         <Button
           variant={card === null ? 'primary' : 'secondary'}
-          loading={setup.isPending}
+          loading={setup.busy}
           disabled={!method.paymentsEnabled}
-          onClick={() => {
-            setup.mutate();
-          }}
+          onClick={setup.start}
         >
           {card === null ? 'Thêm phương thức' : 'Đổi thẻ'}
         </Button>
       </div>
-      {setup.isError ? (
+      {setup.error === null ? null : (
         <Callout tone="danger" role="alert">
-          {problemMessage(setup.error)}
+          {paymentsMessage(setup.error)}
         </Callout>
-      ) : null}
+      )}
       <p className={styles.fine}>
         Hiện hỗ trợ thẻ quốc tế. Thông tin thẻ do cổng thanh toán lưu, Payload không lưu số thẻ.
       </p>

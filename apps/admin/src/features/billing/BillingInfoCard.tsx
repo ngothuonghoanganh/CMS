@@ -3,7 +3,7 @@
 import { type BillingInfo, billingInfoSchema, endpoints } from '@plp/contracts';
 import { Button, Callout, Field, Input, useToast } from '@plp/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type SubmitEvent, useRef, useState } from 'react';
+import { type KeyboardEvent, type SubmitEvent, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import { problemBesideFields, reportUnexpected } from '../shell/problem-message';
@@ -96,6 +96,11 @@ function BillingInfoForm({
   const form = useSchemaForm(billingInfoSchema, billingInfoValues(info));
   const [formError, setFormError] = useState<string | null>(null);
 
+  // The button that opened the form is gone: focus moves into the form, on its first field.
+  useEffect(() => {
+    document.getElementById(FIELD_IDS.companyName)?.focus();
+  }, []);
+
   const save = useMutation({
     mutationFn: (body: BillingInfo) => api(endpoints.updateBillingInfo, [workspaceId], { body }),
     onSuccess: (saved) => {
@@ -134,6 +139,14 @@ function BillingInfoForm({
     save.mutate(result.data);
   }
 
+  // Esc is "Hủy", as in a dialog: the form closes and focus goes back to the button.
+  function handleKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key === 'Escape' && !save.isPending) {
+      event.preventDefault();
+      onClose();
+    }
+  }
+
   function bind(field: (typeof FIELD_ORDER)[number]) {
     return {
       value: form.values[field],
@@ -147,7 +160,13 @@ function BillingInfoForm({
   }
 
   return (
-    <form noValidate className={styles.form} onSubmit={handleSubmit}>
+    <form
+      noValidate
+      aria-label="Thông tin xuất hóa đơn"
+      className={styles.form}
+      onSubmit={handleSubmit}
+      onKeyDown={handleKeyDown}
+    >
       <Field label="Tên đơn vị" id={FIELD_IDS.companyName} required error={form.errors.companyName}>
         <Input name="companyName" autoComplete="organization" {...bind('companyName')} />
       </Field>

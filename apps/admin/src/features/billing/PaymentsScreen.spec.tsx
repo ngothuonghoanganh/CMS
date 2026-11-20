@@ -144,6 +144,33 @@ describe('PaymentsScreen (board 29)', () => {
     expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
   });
 
+  it('says when the history could not be read, keeps the rows and reads again on request', async () => {
+    const user = userEvent.setup();
+    const older = invoiceSummaryFixture({
+      id: '64b0000000000000000000b3',
+      number: 'HD-2026-000000',
+      createdAt: '2026-10-21T03:00:00.000Z',
+      paidAt: '2026-10-21T03:00:05.000Z',
+    });
+    apiMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    renderPayments({ initial: initialOf({ invoices: { items: [paid], nextCursor: 'c1' } }) });
+
+    await user.click(screen.getByRole('button', { name: 'Xem thêm' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Chưa tải được thông tin mới nhất');
+    expect(alert).toHaveTextContent('Không kết nối được máy chủ');
+    expect(screen.getByText(/HD-2026-000001/)).toBeInTheDocument();
+    apiMock.mockResolvedValue({ items: [older], nextCursor: null });
+    await user.click(within(alert).getByRole('button', { name: 'Thử lại' }));
+
+    expect(await screen.findByText(/HD-2026-000000/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(lastCallTo(apiMock, endpoints.listInvoices).options).toMatchObject({
+      query: { cursor: 'c1' },
+    });
+  });
+
   describe('the card', () => {
     it('adds one through the gateway, which leads back to this screen', async () => {
       const user = userEvent.setup();
@@ -176,6 +203,44 @@ describe('PaymentsScreen (board 29)', () => {
 
       expect(screen.getByText('Thanh toán chưa được bật')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Thêm phương thức' })).toBeDisabled();
+    });
+
+    it('marks the card refused only when it is the card the gateway refused', () => {
+      const refusedOther = { ...failed, card: { brand: 'visa', last4: '0002' } };
+      const { unmount } = renderPayments({
+        initial: initialOf({ invoices: { items: [refusedOther, paid], nextCursor: null } }),
+      });
+
+      // A card saved after the refusal has not been tried yet.
+      expect(screen.queryByText('Lần thanh toán gần nhất bị từ chối')).toBeNull();
+      expect(screen.getByText('Hết hạn 08/2030')).toBeInTheDocument();
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent('Thẻ không đủ hạn mức •••• 0002.');
+      expect(alert).toHaveTextContent(
+        'Thẻ mới là Thẻ Visa •••• 4242: bấm "Thanh toán lại" để thanh toán bằng thẻ này.',
+      );
+      unmount();
+
+      renderPayments({
+        initial: initialOf({ invoices: { items: [failed, paid], nextCursor: null } }),
+      });
+      expect(screen.getByText('Lần thanh toán gần nhất bị từ chối')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Bạn có thể đổi thẻ rồi thanh toán lại.');
+    });
+
+    it('says why the gateway page could not be opened from the failed payment', async () => {
+      const user = userEvent.setup();
+      apiMock.mockRejectedValue(problem(503, 'payments_disabled', {}));
+      renderPayments({
+        initial: initialOf({ invoices: { items: [failed, paid], nextCursor: null } }),
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Đổi phương thức' }));
+
+      const alerts = await screen.findAllByRole('alert');
+      expect(alerts.at(-1)).toHaveTextContent('Chưa mở được trang của cổng thanh toán');
+      expect(alerts.at(-1)).toHaveTextContent('Thanh toán chưa được bật trên hệ thống này.');
+      expect(navigateTo).not.toHaveBeenCalled();
     });
 
     it('marks a card past its expiry', () => {
@@ -276,6 +341,24 @@ describe('PaymentsScreen (board 29)', () => {
       expect(screen.queryByRole('button', { name: 'Lưu' })).toBeNull();
     });
 
+    it('moves focus into the form when it opens, and Esc cancels it', async () => {
+      const user = userEvent.setup();
+      renderPayments({ initial: initialOf({ billingInfo: { billingInfo: info } }) });
+
+      await user.click(screen.getByRole('button', { name: 'Sửa' }));
+      expect(screen.getByRole('form', { name: 'Thông tin xuất hóa đơn' })).toBeInTheDocument();
+      await vi.waitFor(() => {
+        expect(screen.getByLabelText(/Tên đơn vị/)).toHaveFocus();
+      });
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('form', { name: 'Thông tin xuất hóa đơn' })).toBeNull();
+      expect(screen.getByText('Công ty TNHH Truyền thông Mây Xanh')).toBeInTheDocument();
+      await vi.waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Sửa' })).toHaveFocus();
+      });
+    });
+
     it("shows the API's message on the field it refused", async () => {
       const user = userEvent.setup();
       apiMock.mockRejectedValue(
@@ -331,6 +414,130 @@ describe('PaymentsScreen (board 29)', () => {
         lastCallTo(apiMock, endpoints.payInvoice).options as { headers: Record<string, string> }
       ).headers['Idempotency-Key'];
       expect(second).not.toBe(key);
+    });
+
+    it('sends the same key again after an answer that was lost, and says the outcome is unknown', async () => {
+      const user = userEvent.setup();
+      let calls = 0;
+      routePay([failed, paid], () => {
+        calls += 1;
+        if (calls === 1) {
+          throw new TypeError('Failed to fetch');
+        }
+        return {
+          invoice: {
+            ...paid,
+            id: failed.id,
+            number: failed.number,
+            attempts: [],
+            billingInfo: null,
+            from: null,
+            endsTrial: false,
+          },
+        };
+      });
+      renderPayments({
+        initial: initialOf({ invoices: { items: [failed, paid], nextCursor: null } }),
+      });
+      const keyOf = (index: number) =>
+        (
+          apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.payInvoice)[
+            index
+          ]?.[2] as {
+            headers: Record<string, string>;
+          }
+        ).headers['Idempotency-Key'];
+      const button = () =>
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000002' });
+
+      await user.click(button());
+      expect(await screen.findByText('Chưa biết kết quả thanh toán')).toBeInTheDocument();
+      expect(screen.queryByText('Thanh toán không thành công')).toBeNull();
+      await user.click(button());
+      expect(await screen.findByText('Đã thanh toán 1.490.000 ₫')).toBeInTheDocument();
+      // The same request again: the API answers it as the first time if it got there.
+      expect(keyOf(1)).toBe(keyOf(0));
+
+      await user.click(button());
+      expect(keyOf(2)).not.toBe(keyOf(1));
+    });
+
+    it('takes a refusal as an answer: the next click is a new attempt', async () => {
+      const user = userEvent.setup();
+      routePay([failed], () => {
+        throw problem(402, 'payment_failed', {
+          invoiceId: failed.id,
+          invoiceNumber: failed.number,
+          code: 'card_declined',
+        });
+      });
+      renderPayments({ initial: initialOf({ invoices: { items: [failed], nextCursor: null } }) });
+      const button = () =>
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000002' });
+
+      await user.click(button());
+      await screen.findByText('Thanh toán không thành công');
+      await user.click(button());
+      await vi.waitFor(() => {
+        expect(
+          apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.payInvoice),
+        ).toHaveLength(2);
+      });
+      const [first, second] = apiMock.mock.calls
+        .filter(([endpoint]) => endpoint === endpoints.payInvoice)
+        .map(([, , options]) => (options as { headers: Record<string, string> }).headers);
+      expect(second?.['Idempotency-Key']).not.toBe(first?.['Idempotency-Key']);
+    });
+
+    it('reads again what depends on the plan once an invoice is paid', async () => {
+      const user = userEvent.setup();
+      routePay([paid], () => ({
+        invoice: {
+          ...paid,
+          id: failed.id,
+          number: failed.number,
+          attempts: [],
+          billingInfo: null,
+          from: null,
+          endsTrial: false,
+        },
+      }));
+      const { queryClient } = renderPayments({
+        initial: initialOf({ invoices: { items: [failed, paid], nextCursor: null } }),
+      });
+      queryClient.setQueryData(['sites', 'site-1', 'automations'], []);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000002' }),
+      );
+
+      await screen.findByText('Đã thanh toán 1.490.000 ₫');
+      expect(queryClient.getQueryState(['sites', 'site-1', 'automations'])?.isInvalidated).toBe(
+        true,
+      );
+    });
+
+    it('drops "Đã lưu thẻ" once the owner pays', async () => {
+      const user = userEvent.setup();
+      routePay([failed], () => {
+        throw problem(402, 'payment_failed', {
+          invoiceId: failed.id,
+          invoiceNumber: failed.number,
+          code: 'card_declined',
+        });
+      });
+      renderPayments({
+        returned: 'saved',
+        initial: initialOf({ invoices: { items: [failed], nextCursor: null } }),
+      });
+      expect(screen.getByText('Đã lưu thẻ')).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000002' }),
+      );
+
+      expect(await screen.findByText('Thanh toán không thành công')).toBeInTheDocument();
+      expect(screen.queryByText('Đã lưu thẻ')).toBeNull();
     });
 
     it('is offered only for an invoice that can be paid', () => {

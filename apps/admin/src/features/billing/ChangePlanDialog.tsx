@@ -103,9 +103,12 @@ export function ChangePlanDialog({
   const target = plans.find((plan) => plan.id === planId) ?? summary.plan;
   const impacts = planImpacts(summary.plan, target, summary.usage);
   const setup = useMethodSetup(workspaceId, 'plan');
-  // The trial offers a free change and paying now; after it only paying; a paid period one change.
-  const inTrial = summary.state === 'trialing';
-  const trialOver = summary.state === 'trial_expired';
+  // The trial offers a free change and paying now; after it only paying, as the API decides from
+  // `trialEndsAt`, whatever the state says (past due with a card on file, or read-only after it);
+  // a paid period one change.
+  const unpaidTrial = summary.trialEndsAt !== null;
+  const inTrial = unpaidTrial && summary.state === 'trialing';
+  const trialOver = unpaidTrial && !inTrial;
 
   function quoteQuery(payNow: boolean, enabled: boolean) {
     return {
@@ -200,6 +203,22 @@ export function ChangePlanDialog({
         ? `Nâng cấp và thanh toán ${formatVnd(chargeOffer.quote.amount)}`
         : `Thanh toán ngay ${formatVnd(chargeOffer.quote.amount)}`;
   const problem = change.isError ? paymentProblemOf(change.error) : null;
+  // A problem that points to an invoice in the history.
+  const aboutInvoice =
+    problem?.kind === 'declined' ||
+    problem?.kind === 'unknown_outcome' ||
+    (problem?.kind === 'in_progress' && problem.invoiceNumber !== null);
+
+  // Another choice is another question: the answer to the last one no longer applies.
+  function choosePlan(next: string) {
+    change.reset();
+    setPlanId(next);
+  }
+
+  function chooseCycle(next: BillingCycle) {
+    change.reset();
+    setCycle(next);
+  }
 
   return (
     <Dialog
@@ -220,7 +239,7 @@ export function ChangePlanDialog({
         inTrial
           ? 'Trong thời gian dùng thử, bạn đổi gói miễn phí, hoặc thanh toán ngay để dùng tiếp không gián đoạn.'
           : trialOver
-            ? 'Thời gian dùng thử đã hết. Chọn gói và thanh toán để mở lại việc chỉnh sửa.'
+            ? `Thời gian dùng thử đã hết. Chọn gói và thanh toán ${summary.access === 'read_only' ? 'để mở lại việc chỉnh sửa' : 'để dùng tiếp không gián đoạn'}.`
             : 'Chọn gói và chu kỳ thanh toán.'
       }
       footer={
@@ -286,7 +305,7 @@ export function ChangePlanDialog({
               label: value === 'monthly' ? 'Theo tháng' : 'Theo năm',
             }))}
             value={cycle}
-            onChange={setCycle}
+            onChange={chooseCycle}
           />
           <RadioCardGroup<string>
             legend="Gói dịch vụ"
@@ -296,7 +315,7 @@ export function ChangePlanDialog({
               description: `${priceLabel(plan, cycle)} · ${plan.fit}`,
             }))}
             value={planId}
-            onChange={setPlanId}
+            onChange={choosePlan}
             minColumnWidth={200}
           />
           {impacts.length === 0 ? null : <ImpactList impacts={impacts} />}
@@ -312,14 +331,7 @@ export function ChangePlanDialog({
                 {chargeQuote.paymentMethod === null ? (
                   <p className={styles.quoteLine}>
                     Chưa có thẻ dùng được.{' '}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      loading={setup.isPending}
-                      onClick={() => {
-                        setup.mutate();
-                      }}
-                    >
+                    <Button variant="ghost" size="sm" loading={setup.busy} onClick={setup.start}>
                       Thêm thẻ
                     </Button>
                   </p>
@@ -339,6 +351,11 @@ export function ChangePlanDialog({
                 {paymentsMessage(free.error ?? paid.error)}
               </Callout>
             ) : null}
+            {setup.error === null ? null : (
+              <Callout tone="danger" role="alert" title="Chưa mở được trang của cổng thanh toán">
+                {paymentsMessage(setup.error)}
+              </Callout>
+            )}
           </div>
           <p className={styles.fine}>
             Giá đã gồm VAT, tính cho cả workspace theo {billingCycleLabels[cycle]}.
@@ -346,7 +363,7 @@ export function ChangePlanDialog({
           {change.isError ? (
             <Callout tone="danger" role="alert">
               {paymentsMessage(change.error)}
-              {problem?.kind === 'declined' || problem?.kind === 'unknown_outcome' ? (
+              {aboutInvoice ? (
                 <>
                   {' '}
                   <Link href={paymentsHref(workspaceId)}>Xem lịch sử giao dịch</Link>

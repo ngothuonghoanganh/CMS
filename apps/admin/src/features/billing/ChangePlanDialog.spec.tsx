@@ -161,6 +161,40 @@ describe('"Đổi gói" in the trial', () => {
     await vi.waitFor(() => {
       expect(navigateTo).toHaveBeenCalledWith('https://gateway.test/setup?session=abc');
     });
+    // Busy until the page is left: a second click opens no second session.
+    const add = within(dialog).getByRole('button', { name: 'Thêm thẻ' });
+    expect(add).toHaveAttribute('aria-busy', 'true');
+    await user.click(add);
+    expect(
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.startPaymentMethodSetup),
+    ).toHaveLength(1);
+  });
+
+  it('says why the gateway page could not be opened', async () => {
+    const user = userEvent.setup();
+    route({
+      free: quoteFixture({ planId: 'business' }),
+      paid: { ...PAY_QUOTE, paymentMethod: null, paymentMethodRequired: true },
+    });
+    const routed = apiMock.getMockImplementation();
+    apiMock.mockImplementation((endpoint, args, options) =>
+      endpoint === endpoints.startPaymentMethodSetup
+        ? Promise.reject(problem(503, 'payments_disabled'))
+        : (routed?.(endpoint, args, options) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    renderBilling();
+
+    const dialog = await openDialog(user);
+    await user.click(within(dialog).getByRole('radio', { name: /Gói Doanh nghiệp/ }));
+    await user.click(await within(dialog).findByRole('button', { name: 'Thêm thẻ' }));
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent('Chưa mở được trang của cổng thanh toán');
+    expect(alert).toHaveTextContent('Thanh toán chưa được bật trên hệ thống này.');
+    expect(within(dialog).getByRole('button', { name: 'Thêm thẻ' })).not.toHaveAttribute(
+      'aria-busy',
+    );
+    expect(navigateTo).not.toHaveBeenCalled();
   });
 
   it('shows the gateway reason when the card is refused, and where the invoice is', async () => {
@@ -189,6 +223,55 @@ describe('"Đổi gói" in the trial', () => {
     // Not a plan problem: nothing offers "Nâng cấp".
     expect(within(dialog).queryByText(/Nâng cấp/)).toBeNull();
     expect(screen.queryByText(/Đã đổi sang/)).toBeNull();
+  });
+
+  it('points to the invoice whose outcome is unknown instead of charging again', async () => {
+    const user = userEvent.setup();
+    route({ free: quoteFixture({ planId: 'business' }), paid: PAY_QUOTE }, () => {
+      throw problem(409, 'payment_in_progress', {
+        invoiceId: INVOICE_ID,
+        invoiceNumber: 'HD-2026-000001',
+      });
+    });
+    renderBilling();
+
+    const dialog = await openDialog(user);
+    await user.click(within(dialog).getByRole('radio', { name: /Gói Doanh nghiệp/ }));
+    await user.click(await within(dialog).findByRole('button', { name: /Thanh toán ngay/ }));
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'Chưa biết kết quả thanh toán hóa đơn HD-2026-000001. Bấm "Thanh toán lại" ở hóa đơn đó',
+    );
+    expect(within(alert).getByRole('link', { name: 'Xem lịch sử giao dịch' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing/payments`,
+    );
+  });
+
+  it('drops the answer to the last choice once another plan or cycle is chosen', async () => {
+    const user = userEvent.setup();
+    route({ free: quoteFixture({ planId: 'business' }), paid: PAY_QUOTE }, () => {
+      throw problem(402, 'payment_failed', {
+        invoiceId: INVOICE_ID,
+        invoiceNumber: 'HD-2026-000001',
+        code: 'card_declined',
+      });
+    });
+    renderBilling();
+
+    const dialog = await openDialog(user);
+    await user.click(within(dialog).getByRole('radio', { name: /Gói Doanh nghiệp/ }));
+    await user.click(await within(dialog).findByRole('button', { name: /Thanh toán ngay/ }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Ngân hàng từ chối thẻ');
+
+    await user.click(within(dialog).getByRole('radio', { name: /Gói Cơ bản/ }));
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    await user.click(within(dialog).getByRole('radio', { name: /Gói Doanh nghiệp/ }));
+    await user.click(await within(dialog).findByRole('button', { name: /Thanh toán ngay/ }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Ngân hàng từ chối thẻ');
+    await user.click(within(dialog).getByRole('button', { name: 'Theo năm' }));
+    expect(within(dialog).queryByRole('alert')).toBeNull();
   });
 
   it('shows the new amount when the quote changed, and confirms that one', async () => {
@@ -244,6 +327,24 @@ describe('"Đổi gói" in the trial', () => {
   });
 });
 
+describe('coming back from the gateway', () => {
+  it('drops "Đã lưu thẻ" once the owner goes on to choose a plan', async () => {
+    const user = userEvent.setup();
+    route({ free: quoteFixture({ planId: 'business' }), paid: PAY_QUOTE });
+    const routed = apiMock.getMockImplementation();
+    apiMock.mockImplementation((endpoint, args, options) =>
+      endpoint === endpoints.getPaymentMethod
+        ? Promise.resolve({ paymentMethod: visaCard, paymentsEnabled: true })
+        : (routed?.(endpoint, args, options) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    renderBilling({ returned: 'saved' });
+
+    expect(await screen.findByText('Đã lưu thẻ')).toBeInTheDocument();
+    await openDialog(user);
+    expect(screen.queryByText('Đã lưu thẻ')).toBeNull();
+  });
+});
+
 describe('"Đổi gói" after the trial', () => {
   it('offers only paying now', async () => {
     const user = userEvent.setup();
@@ -262,6 +363,42 @@ describe('"Đổi gói" after the trial', () => {
     expect(lastCallTo(apiMock, endpoints.changePlan).options).toMatchObject({
       body: { planId: 'agency', payNow: true, expectedAmount: 599_000 },
     });
+  });
+});
+
+describe('"Đổi gói" once the trial ended unpaid with a card on file (past due)', () => {
+  it('offers paying now, as for an ended trial', async () => {
+    const user = userEvent.setup();
+    route({ paid: { ...PAY_QUOTE, planId: 'agency', amount: 599_000 } }, () =>
+      summaryFixture({ state: 'active', trialDaysLeft: null, trialEndsAt: null }),
+    );
+    renderBilling({
+      initial: summaryFixture({
+        state: 'past_due',
+        access: 'read_only',
+        trialDaysLeft: null,
+        graceEndsAt: '2026-12-11T03:00:00.000Z',
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Chọn gói và thanh toán' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
+    expect(dialog).toHaveAccessibleDescription(/Thời gian dùng thử đã hết/);
+    expect(within(dialog).queryByRole('button', { name: 'Đổi miễn phí' })).toBeNull();
+    await user.click(await within(dialog).findByRole('button', { name: /Thanh toán ngay 599/ }));
+
+    expect(lastCallTo(apiMock, endpoints.changePlan).options).toMatchObject({
+      body: { planId: 'agency', payNow: true, expectedAmount: 599_000 },
+    });
+    // Only paying is asked about: a free change is not offered after the trial.
+    const quotes = apiMock.mock.calls.filter(
+      ([endpoint]) => endpoint === endpoints.getPlanChangeQuote,
+    );
+    expect(
+      quotes.every(
+        ([, , options]) => (options as { query: { payNow: string } }).query.payNow === 'true',
+      ),
+    ).toBe(true);
   });
 });
 

@@ -9,7 +9,12 @@ import {
   type PaymentMethodResponse,
   type WorkspacePlan,
 } from '@plp/contracts';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type QueryClient,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { api } from '../../lib/api';
@@ -30,6 +35,15 @@ export const billingQueryKeys = {
   quote: (workspaceId: string, planId: string, cycle: string, payNow: boolean) =>
     ['workspaces', workspaceId, 'billing', 'quote', planId, cycle, payNow] as const,
 };
+
+/**
+ * What else reads again once the plan changed, from the dialog or an invoice paid on board 29:
+ * automations and custom roles depend on the plan, and the charge made or settled an invoice.
+ */
+export function invalidateAfterPlanChange(queryClient: QueryClient, workspaceId: string): void {
+  void queryClient.invalidateQueries({ queryKey: ['sites'] });
+  void queryClient.invalidateQueries({ queryKey: billingQueryKeys.invoices(workspaceId) });
+}
 
 /**
  * The workspace's plan, starting from what the server loaded with the frame. Changing the plan on
@@ -103,6 +117,15 @@ export interface PaymentsInitial {
   billingInfo: BillingInfoResponse;
   invoices: InvoiceListResponse;
   loadedAt: number;
+}
+
+/** The saved card, read for the notice of a return from the gateway to board 28. */
+export function usePaymentMethod(workspaceId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: billingQueryKeys.paymentMethod(workspaceId),
+    queryFn: ({ signal }) => api(endpoints.getPaymentMethod, [workspaceId], { signal }),
+    enabled,
+  });
 }
 
 /**

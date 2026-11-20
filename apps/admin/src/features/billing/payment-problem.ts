@@ -1,5 +1,6 @@
 import {
   gatewayUnavailableProblemContextSchema,
+  invoiceProblemContextSchema,
   type PaymentDeclineCode,
   paymentDeclineLabels,
   paymentFailedProblemContextSchema,
@@ -18,7 +19,8 @@ import { problemMessage } from '../shell/problem-message';
 export type PaymentProblem =
   | { kind: 'declined'; code: PaymentDeclineCode | null; invoiceNumber: string | null }
   | { kind: 'unknown_outcome'; invoiceNumber: string | null }
-  | { kind: 'in_progress' }
+  /** Another charge is under way; or, with its number, an earlier charge's outcome is unknown. */
+  | { kind: 'in_progress'; invoiceNumber: string | null }
   | { kind: 'card_required' }
   | { kind: 'disabled' }
   | { kind: 'not_payable' }
@@ -46,8 +48,13 @@ export function paymentProblemOf(error: unknown): PaymentProblem | null {
         invoiceNumber: parsed.success ? parsed.data.invoiceNumber : null,
       };
     }
-    case 'payment_in_progress':
-      return { kind: 'in_progress' };
+    case 'payment_in_progress': {
+      const parsed = invoiceProblemContextSchema.safeParse(context);
+      return {
+        kind: 'in_progress',
+        invoiceNumber: parsed.success ? parsed.data.invoiceNumber : null,
+      };
+    }
     case 'payment_method_required':
       return { kind: 'card_required' };
     case 'payments_disabled':
@@ -90,7 +97,9 @@ export function paymentProblemText(problem: PaymentProblem): string {
     case 'unknown_outcome':
       return `Chưa biết kết quả thanh toán${problem.invoiceNumber === null ? '' : ` hóa đơn ${problem.invoiceNumber}`}: cổng thanh toán chưa trả lời. Xem lịch sử giao dịch trước khi thử lại.`;
     case 'in_progress':
-      return 'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.';
+      return problem.invoiceNumber === null
+        ? 'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.'
+        : `Chưa biết kết quả thanh toán hóa đơn ${problem.invoiceNumber}. Bấm "Thanh toán lại" ở hóa đơn đó trong lịch sử giao dịch để biết kết quả, rồi chọn lại gói.`;
     case 'card_required':
       return 'Chưa có thẻ dùng được. Thêm thẻ rồi thử lại.';
     case 'disabled':

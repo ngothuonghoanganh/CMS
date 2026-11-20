@@ -31,6 +31,14 @@ export function cardLabel(card: Pick<PaymentMethodView, 'brand' | 'last4'>): str
   return `Thẻ ${brandName(card.brand)} •••• ${card.last4}`;
 }
 
+/** Whether two cards are the same as far as the owner sees them: brand and last four digits. */
+export function sameCard(
+  a: Pick<PaymentMethodView, 'brand' | 'last4'>,
+  b: Pick<PaymentMethodView, 'brand' | 'last4'>,
+): boolean {
+  return a.brand === b.brand && a.last4 === b.last4;
+}
+
 /** "Hết hạn 08/2028", or "Đã hết hạn 08/2026" for a card that cannot be charged. */
 export function cardExpiryNote(card: PaymentMethodView): { text: string; danger: boolean } {
   const date = `${String(card.expMonth).padStart(2, '0')}/${card.expYear}`;

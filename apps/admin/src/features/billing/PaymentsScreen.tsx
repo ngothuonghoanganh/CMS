@@ -10,7 +10,9 @@ import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { BillingInfoCard } from './BillingInfoCard';
 import { BillingTabs } from './BillingTabs';
 import { InvoiceHistory } from './InvoiceHistory';
-import { cardLabel } from './payment-presentation';
+import { MethodSetupNotice } from './MethodSetupNotice';
+import { cardLabel, sameCard } from './payment-presentation';
+import { paymentsMessage } from './payment-problem';
 import { PaymentMethodCard } from './PaymentMethodCard';
 import { type PaymentsInitial, usePaymentsData } from './queries';
 import { useMethodSetup } from './use-method-setup';
@@ -39,8 +41,8 @@ export function PaymentsScreen({
   const { paymentMethod, billingInfo, invoices } = usePaymentsData(workspaceId, initial);
   const pay = usePayInvoice(workspaceId);
   const setup = useMethodSetup(workspaceId, 'payments');
-  // Kept in state: the address loses its parameter below, the message stays until the next visit.
-  const [notice] = useState(returned);
+  // Kept in state: the address loses its parameter below. It goes once the owner acts again.
+  const [notice, setNotice] = useState(returned);
 
   // The address the gateway led back to is not kept: a reload says nothing of the card twice.
   useEffect(() => {
@@ -55,6 +57,29 @@ export function PaymentsScreen({
   const failed = items.find((invoice) => invoice.status === 'failed' && invoice.payable) ?? null;
   const failedCode = failed?.lastAttempt?.code ?? null;
   const saved = method.paymentMethod;
+  // The refusal was of the card saved now; one saved since has not been tried yet.
+  const savedWasRefused =
+    failed !== null && saved !== null && (failed.card === null || sameCard(failed.card, saved));
+  const readFailed = invoices.isError || paymentMethod.isError || billingInfo.isError;
+
+  function payInvoice(invoiceId: string) {
+    setNotice(null);
+    pay.mutate(invoiceId);
+  }
+
+  function readAgain() {
+    if (invoices.isFetchNextPageError) {
+      void fetchNextPageAfterRead(invoices);
+    } else if (invoices.isError) {
+      void invoices.refetch();
+    }
+    if (paymentMethod.isError) {
+      void paymentMethod.refetch();
+    }
+    if (billingInfo.isError) {
+      void billingInfo.refetch();
+    }
+  }
 
   return (
     <PageContainer>
@@ -64,35 +89,33 @@ export function PaymentsScreen({
       />
       <BillingTabs workspaceId={workspaceId} current="payments" />
 
-      {notice === 'canceled' ? (
-        <Callout tone="info" role="status" title="Chưa thêm thẻ">
-          Bạn đã rời trang của cổng thanh toán, nên thẻ chưa được lưu.
-        </Callout>
-      ) : null}
-      {notice === 'saved' && saved !== null ? (
-        <Callout tone="success" role="status" title="Đã lưu thẻ">
-          {cardLabel(saved)} là phương thức thanh toán mặc định.
-        </Callout>
-      ) : null}
-      {notice === 'saved' && saved === null ? (
+      <MethodSetupNotice
+        notice={notice}
+        method={saved}
+        error={null}
+        reloading={paymentMethod.isFetching}
+        onReload={() => {
+          void paymentMethod.refetch();
+        }}
+      />
+      {readFailed ? (
         <Callout
-          tone="warning"
-          role="status"
-          title="Đang chờ cổng thanh toán xác nhận thẻ"
+          tone="danger"
+          role="alert"
+          title="Chưa tải được thông tin mới nhất"
           action={
             <Button
               variant="secondary"
               size="sm"
-              loading={paymentMethod.isFetching}
-              onClick={() => {
-                void paymentMethod.refetch();
-              }}
+              loading={invoices.isFetching || paymentMethod.isFetching || billingInfo.isFetching}
+              onClick={readAgain}
             >
-              Tải lại
+              Thử lại
             </Button>
           }
         >
-          Thẻ sẽ hiện ở đây khi cổng thanh toán báo về. Bạn chưa bị tính phí.
+          {paymentsMessage(invoices.error ?? paymentMethod.error ?? billingInfo.error)} Thông tin
+          bên dưới có thể chưa cập nhật.
         </Callout>
       ) : null}
 
@@ -106,9 +129,10 @@ export function PaymentsScreen({
               <Button
                 variant="secondary"
                 size="sm"
-                loading={setup.isPending}
+                loading={setup.busy}
                 onClick={() => {
-                  setup.mutate();
+                  setNotice(null);
+                  setup.start();
                 }}
               >
                 Đổi phương thức
@@ -119,7 +143,7 @@ export function PaymentsScreen({
                 loading={pay.isPending && pay.variables === failed.id}
                 disabled={pay.isPending && pay.variables !== failed.id}
                 onClick={() => {
-                  pay.mutate(failed.id);
+                  payInvoice(failed.id);
                 }}
               >
                 Thanh toán lại
@@ -130,13 +154,20 @@ export function PaymentsScreen({
           {failedCode === null
             ? 'Cổng thanh toán từ chối giao dịch'
             : paymentDeclineLabels[failedCode]}
-          {failed.card === null ? '' : ` •••• ${failed.card.last4}`}. Bạn có thể đổi thẻ rồi thanh
-          toán lại.
+          {failed.card === null ? '' : ` •••• ${failed.card.last4}`}.{' '}
+          {saved !== null && !savedWasRefused
+            ? `Thẻ mới là ${cardLabel(saved)}: bấm "Thanh toán lại" để thanh toán bằng thẻ này.`
+            : 'Bạn có thể đổi thẻ rồi thanh toán lại.'}
+        </Callout>
+      )}
+      {setup.error === null ? null : (
+        <Callout tone="danger" role="alert" title="Chưa mở được trang của cổng thanh toán">
+          {paymentsMessage(setup.error)}
         </Callout>
       )}
 
       <div className={styles.cards}>
-        <PaymentMethodCard workspaceId={workspaceId} method={method} declined={failed !== null} />
+        <PaymentMethodCard workspaceId={workspaceId} method={method} declined={savedWasRefused} />
         <BillingInfoCard workspaceId={workspaceId} info={billingInfo.data.billingInfo} />
       </div>
 
@@ -149,9 +180,7 @@ export function PaymentsScreen({
           void fetchNextPageAfterRead(invoices);
         }}
         payingId={pay.isPending ? pay.variables : null}
-        onPay={(invoiceId) => {
-          pay.mutate(invoiceId);
-        }}
+        onPay={payInvoice}
       />
     </PageContainer>
   );

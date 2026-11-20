@@ -1,9 +1,10 @@
+import { endpoints } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { renderWithProviders } from '../shell/test-utils';
 import { BillingScreen, type BillingScreenProps } from './BillingScreen';
-import { catalog, summaryFixture } from './test-fixtures';
+import { catalog, summaryFixture, visaCard } from './test-fixtures';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -100,12 +101,46 @@ describe('BillingScreen (board 28)', () => {
     );
   });
 
-  it('says what the gateway did when it leads back from adding a card', () => {
+  it('says what the gateway did when it leads back from adding a card', async () => {
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.getPaymentMethod
+        ? Promise.resolve({ paymentMethod: visaCard, paymentsEnabled: true })
+        : Promise.reject(new Error('unexpected call')),
+    );
     const { unmount } = renderBilling({ returned: 'saved' });
-    expect(screen.getByText('Đã lưu thẻ')).toBeInTheDocument();
+    expect(await screen.findByText('Đã lưu thẻ')).toBeInTheDocument();
+    expect(screen.getByText(/Thẻ Visa •••• 4242 là phương thức thanh toán mặc định/)).toBeVisible();
     unmount();
     renderBilling({ returned: 'canceled' });
     expect(screen.getByText('Chưa thêm thẻ')).toBeInTheDocument();
+  });
+
+  it('claims a saved card only when the card is there', async () => {
+    // An address typed by hand, or a gateway event still on its way.
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.getPaymentMethod
+        ? Promise.resolve({ paymentMethod: null, paymentsEnabled: true })
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderBilling({ returned: 'saved' });
+
+    expect(await screen.findByText('Đang chờ cổng thanh toán xác nhận thẻ')).toBeInTheDocument();
+    expect(screen.queryByText('Đã lưu thẻ')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tải lại' })).toBeEnabled();
+  });
+
+  it('leads a trial that ended unpaid to paying, also past due with a card on file', () => {
+    renderBilling({
+      initial: summaryFixture({
+        state: 'past_due',
+        access: 'full',
+        trialDaysLeft: null,
+        graceEndsAt: '2026-12-11T03:00:00.000Z',
+      }),
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Thanh toán kỳ này chưa thành công.');
+    expect(screen.getByRole('button', { name: 'Chọn gói và thanh toán' })).toBeEnabled();
   });
 
   it('shows a banner of the state, as an alert when work has stopped', () => {

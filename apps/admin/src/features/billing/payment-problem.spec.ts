@@ -61,6 +61,24 @@ describe('paymentProblemOf', () => {
     expect(paymentsMessage(error)).toContain('Chưa biết kết quả thanh toán hóa đơn HD-2026-000001');
   });
 
+  it('points to the invoice whose unknown outcome blocks a new charge', () => {
+    const blocked = problem(409, 'payment_in_progress', {
+      invoiceId: '64b0000000000000000000b1',
+      invoiceNumber: 'HD-2026-000001',
+    });
+
+    expect(paymentProblemOf(blocked)).toEqual({
+      kind: 'in_progress',
+      invoiceNumber: 'HD-2026-000001',
+    });
+    expect(paymentsMessage(blocked)).toBe(
+      'Chưa biết kết quả thanh toán hóa đơn HD-2026-000001. Bấm "Thanh toán lại" ở hóa đơn đó trong lịch sử giao dịch để biết kết quả, rồi chọn lại gói.',
+    );
+    expect(paymentsMessage(problem(409, 'payment_in_progress'))).toBe(
+      'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.',
+    );
+  });
+
   it('carries the quote of a changed amount', () => {
     const error = problem(409, 'quote_changed', { quote: { not: 'a quote' } });
 

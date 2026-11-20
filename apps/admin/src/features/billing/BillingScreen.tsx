@@ -17,6 +17,7 @@ import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { ScrollRegion } from '../shell/ScrollRegion';
 import { BillingTabs } from './BillingTabs';
 import { ChangePlanDialog } from './ChangePlanDialog';
+import { MethodSetupNotice } from './MethodSetupNotice';
 import {
   comparisonRows,
   periodLine,
@@ -25,7 +26,12 @@ import {
   stateChip,
   usageMeters,
 } from './plan-presentation';
-import { billingQueryKeys, useBillingSummary } from './queries';
+import {
+  billingQueryKeys,
+  invalidateAfterPlanChange,
+  useBillingSummary,
+  usePaymentMethod,
+} from './queries';
 import styles from './Billing.module.css';
 
 export interface BillingScreenProps {
@@ -68,8 +74,11 @@ export function BillingScreen({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [changing, setChanging] = useState(false);
-  const [notice] = useState(returned);
+  // Only Chủ sở hữu adds a card. Kept in state: the address loses its parameter below.
+  const [notice, setNotice] = useState(canManage ? returned : null);
   const summary = useBillingSummary(workspaceId, initial, loadedAt);
+  // "Đã lưu thẻ" once the card is there, not because the address says so.
+  const savedCard = usePaymentMethod(workspaceId, notice === 'saved');
 
   const chip = stateChip(summary.state, summary.trialDaysLeft);
   const banner = planBanner(summary);
@@ -83,19 +92,19 @@ export function BillingScreen({
     }
   }, [returned, workspaceId]);
 
-  // Board 28's banner CTAs: the trial leads to the card, an ended trial to choosing a plan.
+  function openDialog() {
+    setNotice(null);
+    setChanging(true);
+  }
+
+  // Board 28's banner CTAs: the trial leads to the card; a trial that ended unpaid, read-only or
+  // past due with a card on file, to choosing a plan and paying for it.
   const bannerAction = !canManage ? null : summary.state === 'trialing' ? (
     <ButtonLink as={Link} href={paymentsHref(workspaceId)} variant="secondary" size="sm">
       Thêm phương thức thanh toán
     </ButtonLink>
-  ) : summary.state === 'trial_expired' ? (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={() => {
-        setChanging(true);
-      }}
-    >
+  ) : summary.trialEndsAt !== null ? (
+    <Button variant="secondary" size="sm" onClick={openDialog}>
       Chọn gói và thanh toán
     </Button>
   ) : null;
@@ -104,10 +113,7 @@ export function BillingScreen({
     queryClient.setQueryData(billingQueryKeys.summary(workspaceId), next);
     // The sidebar, the banner and the "Nâng cấp" chips follow at once.
     queryClient.setQueryData(billingQueryKeys.plan(workspaceId), workspacePlanOf(next));
-    // Automations and custom roles depend on the plan; their screens read again.
-    void queryClient.invalidateQueries({ queryKey: ['sites'] });
-    // A charge made an invoice, and a card in use shows on board 29.
-    void queryClient.invalidateQueries({ queryKey: billingQueryKeys.invoices(workspaceId) });
+    invalidateAfterPlanChange(queryClient, workspaceId);
     setChanging(false);
     toast({
       tone: 'success',
@@ -128,16 +134,16 @@ export function BillingScreen({
         description={`Gói và mức sử dụng của workspace ${workspaceName}.`}
       />
       <BillingTabs workspaceId={workspaceId} current="plan" />
-      {notice === 'saved' ? (
-        <Callout tone="success" role="status" title="Đã lưu thẻ">
-          Chọn gói rồi thanh toán bằng thẻ vừa lưu.
-        </Callout>
-      ) : null}
-      {notice === 'canceled' ? (
-        <Callout tone="info" role="status" title="Chưa thêm thẻ">
-          Bạn đã rời trang của cổng thanh toán, nên thẻ chưa được lưu.
-        </Callout>
-      ) : null}
+      <MethodSetupNotice
+        notice={notice}
+        method={savedCard.data?.paymentMethod}
+        error={savedCard.error}
+        reloading={savedCard.isFetching}
+        onReload={() => {
+          void savedCard.refetch();
+        }}
+        next="Chọn gói rồi thanh toán bằng thẻ này."
+      />
       {banner === null ? null : (
         <Callout tone={banner.tone} role={banner.role} title={banner.title} action={bannerAction}>
           {banner.body}
@@ -162,12 +168,7 @@ export function BillingScreen({
           </div>
           {canManage ? (
             <div className={styles.currentActions}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setChanging(true);
-                }}
-              >
+              <Button variant="secondary" onClick={openDialog}>
                 Đổi gói
               </Button>
             </div>
