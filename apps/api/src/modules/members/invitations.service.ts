@@ -299,9 +299,10 @@ export class InvitationsService {
     return toInvitationDto({ ...renewed, sentAt }, user.name, access);
   }
 
+  /** Kept by a read-only workspace: a pending invitation counts as a member (ADR-035). */
   async revoke(user: AuthenticatedUser, workspaceId: string, invitationId: string): Promise<void> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
-    this.access.require(scope, 'members.manage');
+    this.access.require(scope, 'members.manage', 'invitations.revoke');
     const id = toObjectId(invitationId, INVITATION_NOT_FOUND);
     if (!(await this.invitations.revoke(scope, id, new Date()))) {
       throw notFound(INVITATION_NOT_FOUND);

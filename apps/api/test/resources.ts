@@ -114,12 +114,16 @@ export function addEditor(
   return addMember(t, workspaceId, 'editor');
 }
 
-/** The `WorkspaceScope` of a signed-up user, built the only legitimate way (AccessService). */
+/**
+ * The `WorkspaceScope` of a signed-up user, built the only legitimate way (AccessService), as for
+ * a request that changes data.
+ */
 export function scopeOf(t: TestApp, me: MeResponse, workspaceId: string): Promise<WorkspaceScope> {
   const user: AuthenticatedUser = {
     id: new Types.ObjectId(me.user.id),
     name: me.user.name,
     email: me.user.email,
+    writes: true,
   };
   return t.app.get(AccessService).scopeFor(user, new Types.ObjectId(workspaceId));
 }

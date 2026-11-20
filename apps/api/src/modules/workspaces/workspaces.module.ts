@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { ACCESS_REQUEST_MODEL, accessRequestSchema } from './access-request.schema.js';
 import { AccessRequestsRepository } from './access-requests.repository.js';
 import { AccessService } from './access.service.js';
@@ -20,6 +21,8 @@ import { WorkspaceLinks } from './workspace-links.js';
 
 @Module({
   imports: [
+    // The subscription's access level, which `AccessService.require` checks (ADR-035).
+    BillingCoreModule,
     MongooseModule.forFeature([
       { name: WORKSPACE_MODEL, schema: workspaceSchema },
       { name: MEMBERSHIP_MODEL, schema: membershipSchema },

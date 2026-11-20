@@ -97,10 +97,13 @@ export class MembersService {
     return this.dto(scope, updated);
   }
 
-  /** Removes a member with their pending access request and invitations; never Chủ sở hữu. */
+  /**
+   * Removes a member with their pending access request and invitations; never Chủ sở hữu. A
+   * read-only workspace keeps it (ADR-035).
+   */
   async remove(user: AuthenticatedUser, workspaceId: string, userId: string): Promise<void> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
-    this.access.require(scope, 'members.manage');
+    this.access.require(scope, 'members.manage', 'members.remove');
     const id = toObjectId(userId, MEMBER_NOT_FOUND);
     const target = await this.workspaces.findMember(scope, id);
     if (!target) {

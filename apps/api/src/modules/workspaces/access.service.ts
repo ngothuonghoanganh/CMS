@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { can, onlyHoldersMessage, type Permission } from '@plp/contracts';
+import {
+  can,
+  onlyHoldersMessage,
+  type Permission,
+  type ReadOnlyKeptAction,
+  refusedWhileReadOnly,
+} from '@plp/contracts';
 import { forbidden, notFound } from '../../shared/errors.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
+import { workspaceReadOnly } from '../billing/plan-problems.js';
 import { CustomRolesRepository } from './custom-roles.repository.js';
 import { accessOf } from './domain/member-access.js';
 import type { WorkspaceScope } from './workspace-scope.js';
@@ -15,22 +23,38 @@ export class AccessService {
   constructor(
     private readonly workspaces: WorkspacesRepository,
     private readonly customRoles: CustomRolesRepository,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   /**
    * Scope for a workspace the user belongs to. Non-members get 404, the same answer as a missing
-   * resource, so ids from other workspaces cannot be probed.
+   * resource, so ids from other workspaces cannot be probed. It carries the subscription's state
+   * and access level now (ADR-035), which `require` checks.
    */
   async scopeFor(
     user: AuthenticatedUser,
     workspaceId: ObjectId,
     notFoundTitle?: string,
   ): Promise<WorkspaceScope> {
-    const member = await this.memberAccess(workspaceId, user.id);
+    // Read together; nothing of the subscription leaves this method for a non-member.
+    const [member, entitlements] = await Promise.all([
+      this.memberAccess(workspaceId, user.id),
+      this.entitlements.find({ workspaceId }),
+    ]);
     if (!member) {
       throw notFound(notFoundTitle);
     }
-    return { workspaceId, userId: user.id, ...member } as WorkspaceScope;
+    if (!entitlements) {
+      throw new Error(`Workspace ${workspaceId.toHexString()} has no subscription (ADR-035)`);
+    }
+    const { state, access } = entitlements.status;
+    return {
+      workspaceId,
+      userId: user.id,
+      ...member,
+      subscription: { state, access },
+      writes: user.writes,
+    } as WorkspaceScope;
   }
 
   /**
@@ -66,10 +90,23 @@ export class AccessService {
     return scope.siteIds === null || scope.siteIds.some((id) => id.equals(siteId));
   }
 
-  /** Refuses with 403 when the member's role does not hold the permission (ADR-020). */
-  require(scope: WorkspaceScope, permission: Permission): void {
+  /**
+   * Refuses with 403 when the member's role does not hold the permission (ADR-020), then with 402
+   * `workspace_read_only` when the workspace is read-only, the request changes data and the
+   * permission writes (ADR-035). `kept` names one of the few actions a read-only workspace keeps
+   * although their permission is refused (removing a member).
+   */
+  require(scope: WorkspaceScope, permission: Permission, kept?: ReadOnlyKeptAction): void {
     if (!can(scope.access, permission)) {
       throw forbidden(onlyHoldersMessage(permission));
+    }
+    if (
+      scope.writes &&
+      scope.subscription.access === 'read_only' &&
+      kept === undefined &&
+      refusedWhileReadOnly(permission)
+    ) {
+      throw workspaceReadOnly(scope.subscription.state);
     }
   }
 }

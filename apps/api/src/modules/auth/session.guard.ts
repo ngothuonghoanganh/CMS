@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
+import { SAFE_METHODS } from '../../shared/origin.guard.js';
 import type { RequestWithUser } from './current-user.decorator.js';
 import { IS_PUBLIC } from './public.decorator.js';
 import { sessionTokensOf } from './session-cookie.js';
@@ -50,7 +51,12 @@ export class SessionGuard implements CanActivate {
     if (!user || credentialsVersionOf(session) !== credentialsVersionOf(user)) {
       throw unauthenticated();
     }
-    request.user = { id: user._id, name: user.name, email: user.email };
+    request.user = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      writes: !SAFE_METHODS.has(request.method),
+    };
     request.sessionId = session._id;
     return true;
   }
