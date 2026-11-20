@@ -3180,7 +3180,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                                                                                       | Màn                    | Trạng thái |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ---------- |
 | T0  | Nhập board 28–33, ADR-035, bổ sung ADR-014, 020, 021, 022, 024, 025, 031, 034                                                                                                  | —                      | Xong       |
-| T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói" | 28, 16, 25, Sidebar v2 | Chưa làm   |
+| T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói" | 28, 16, 25, Sidebar v2 | Xong       |
 | T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Chưa làm   |
 | T3  | Gia hạn, trừ tiền lỗi và thử lại, ân hạn, chuyển khoản chờ xác nhận, hạ gói theo lịch, hủy và giữ lại, banner theo trạng thái, email                                           | 28, 29                 | Chưa làm   |
 
