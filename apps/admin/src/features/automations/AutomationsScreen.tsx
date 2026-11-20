@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   IconButton,
   MoreHorizontalIcon,
+  Spinner,
   useToast,
 } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -178,7 +179,10 @@ export function AutomationsScreen({
           <Callout tone="danger" role="alert">
             {problemMessage(list.error)} <PlanProblemAction error={list.error} />
           </Callout>
-        ) : null}
+        ) : (
+          // The list is read once the plan has automation again (a change from board 28).
+          <Spinner label="Đang tải automation…" />
+        )}
       </PageContainer>
     );
   }

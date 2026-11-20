@@ -13,7 +13,7 @@ const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => ({ useRouter: () => router, usePathname: () => '/sites/x' }));
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -235,6 +235,29 @@ describe('AutomationsScreen (board 25)', () => {
 
       expect(screen.getByText('CẦN GÓI CÓ AUTOMATION')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'So sánh gói' })).toBeNull();
+    });
+
+    it('says it is reading the list once the plan has automation again', () => {
+      // The page loaded on Cơ bản; the plan changed on board 28 since.
+      apiMock.mockReturnValue(new Promise(() => undefined));
+      renderWithProviders(
+        <WorkspacePlanProvider
+          workspaceId={site.workspaceId}
+          canViewBilling
+          plan={workspacePlanFixture()}
+        >
+          <AutomationsScreen
+            site={site}
+            role="owner"
+            roleLabel="Chủ sở hữu"
+            initial={null}
+            loadedAt={LOADED_AT}
+          />
+        </WorkspacePlanProvider>,
+      );
+
+      expect(screen.getByRole('status')).toHaveTextContent('Đang tải automation…');
+      expect(screen.queryByText('CẦN GÓI CÓ AUTOMATION')).toBeNull();
     });
   });
 
