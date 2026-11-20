@@ -139,9 +139,13 @@ function HostnameForm({
   onAdded: (domain: Domain) => void;
 }) {
   const [value, setValue] = useState('');
-  const [problem, setProblem] = useState<{ message: string; suggestion: string | null } | null>(
-    null,
-  );
+  // `cause`: the refused request behind the message, so a 402 of the plan (ADR-035) shows its way
+  // to board 28 only beside that message, and goes with it once the field changes.
+  const [problem, setProblem] = useState<{
+    message: string;
+    suggestion: string | null;
+    cause: unknown;
+  } | null>(null);
   const availability = useDomainAvailability(site.id, value, baseDomain);
   const taken = availability.kind === 'taken';
   const refused = availabilityError(availability);
@@ -151,7 +155,7 @@ function HostnameForm({
     onError: (error) => {
       reportUnexpected('Adding a domain failed', error);
       const field = error instanceof ApiError ? error.fieldErrors()['hostname'] : undefined;
-      setProblem({ message: field ?? problemMessage(error), suggestion: null });
+      setProblem({ message: field ?? problemMessage(error), suggestion: null, cause: error });
     },
   });
   const checked = value.trim() === '' ? null : normalizeHostname(value, baseDomain);
@@ -160,7 +164,7 @@ function HostnameForm({
     event.preventDefault();
     const result = normalizeHostname(value, baseDomain);
     if (!result.ok) {
-      setProblem({ message: result.message, suggestion: result.suggestion });
+      setProblem({ message: result.message, suggestion: result.suggestion, cause: null });
       return;
     }
     setProblem(null);
@@ -193,7 +197,7 @@ function HostnameForm({
           }}
         />
       </Field>
-      {add.isError ? <PlanProblemAction error={add.error} workspaceId={site.workspaceId} /> : null}
+      <PlanProblemAction error={problem?.cause} workspaceId={site.workspaceId} />
       {problem?.suggestion ? (
         <Button
           variant="secondary"
