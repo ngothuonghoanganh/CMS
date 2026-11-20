@@ -122,6 +122,11 @@ interface Row {
   keeps?: ReadOnlyKeptAction;
   /** The status in a read-only workspace of a call it keeps, when it differs from `status`. */
   readOnlyStatus?: number;
+  /**
+   * Refused in a read-only workspace although its permission is kept there: an action under
+   * `pages.manageLive` that removes data instead of moving the pointer (ADR-035).
+   */
+  refusedWhileReadOnly?: true;
   call: (client: TestClient, fixture: Fixture) => PromiseLike<Response>;
 }
 
@@ -749,6 +754,7 @@ const ROWS: Row[] = [
     permission: 'pages.manageLive',
     scope: 'site',
     status: 204,
+    refusedWhileReadOnly: true,
     call: (client, { site, draftPageId }) =>
       client.delete(`/sites/${site.id}/pages/${draftPageId}`),
   },
@@ -1467,7 +1473,11 @@ describe('the six roles on every endpoint', () => {
     }
     const readOnly = await row.call(clientOf(weakest, target), target);
     const writes = readOnly.request.method !== 'GET';
-    if (writes && row.keeps === undefined && refusedWhileReadOnly(row.permission)) {
+    if (
+      writes &&
+      row.keeps === undefined &&
+      (row.refusedWhileReadOnly === true || refusedWhileReadOnly(row.permission))
+    ) {
       expect(readOnly.status, 'read-only').toBe(402);
       expect(problemSchema.parse(readOnly.body)).toMatchObject({
         code: 'workspace_read_only',

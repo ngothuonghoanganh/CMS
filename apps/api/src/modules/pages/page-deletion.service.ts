@@ -7,6 +7,7 @@ import { LeadsRepository } from '../leads/leads.repository.js';
 import { ApprovalsRepository } from '../publishing/approvals.repository.js';
 import { RedirectsRepository } from '../publishing/redirects.repository.js';
 import { ReleaseErasureRepository } from '../publishing/release-erasure.repository.js';
+import { requireWritable } from '../workspaces/access.service.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
 import { PagesRepository } from './pages.repository.js';
 
@@ -44,6 +45,9 @@ export class PageDeletionService {
    * 4. the `page.deleted` activity, with the title and slug.
    * Leads, "Hiệu quả" and the page's earlier activity stay. Nothing was live, so nothing is
    * revalidated.
+   *
+   * A read-only workspace keeps `pages.manageLive` for moving the pointer only: deleting removes
+   * data, so it is refused there with 402 (ADR-035).
    */
   async delete(user: AuthenticatedUser, siteId: string, pageId: string): Promise<void> {
     const { scope, site, page } = await this.pageAccess.access(
@@ -52,6 +56,7 @@ export class PageDeletionService {
       pageId,
       'pages.manageLive',
     );
+    requireWritable(scope);
     if (page.publishedReleaseId !== null) {
       throw pageLive();
     }

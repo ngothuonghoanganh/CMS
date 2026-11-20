@@ -3021,6 +3021,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `AccessService.require`, nên cả `SitesService.access`, trả 402 `workspace_read_only` (kèm `state`) sau 404 và 403, khi request thay đổi dữ liệu (mọi method trừ GET, HEAD, OPTIONS) và quyền là quyền ghi không được giữ. Nhờ vậy các danh sách sau một quyền ghi (thành viên, lời mời, tên miền, vai trò tùy chỉnh) vẫn mở.
     - Cờ đọc/ghi ở `permissionKinds`: các quyền xem và `leads.export` là đọc. Quyền ghi được giữ: `pages.manageLive`, `personalData.manage`, `workspace.transferOwnership`, `billing.manage`.
     - Trong `members.manage`, workspace chỉ đọc vẫn gỡ thành viên và thu hồi lời mời đang chờ (lời mời tính như thành viên), qua `readOnlyKeptActions`. Mời, gửi lại lời mời, đổi quyền, vai trò tùy chỉnh và duyệt yêu cầu đổi quyền bị chặn.
+    - `pages.manageLive` được giữ cho việc dời pointer (rollback, hoàn tác, gỡ trang). "Xóa trang" cũng nằm dưới quyền này nhưng xóa dữ liệu, nên workspace chỉ đọc vẫn từ chối nó bằng 402 (`requireWritable`).
     - Không cần quyền nên không bị chặn: thành viên gửi yêu cầu đổi quyền của mình, người được mời nhận lời mời (lời mời đã được tính vào hạn mức).
   - **Đổi gói trong lúc dùng thử:**
     - Có hiệu lực ngay, không trừ tiền, chỉ khi còn dùng thử và từ đúng `version` đã đọc (409 `conflict` nếu không).

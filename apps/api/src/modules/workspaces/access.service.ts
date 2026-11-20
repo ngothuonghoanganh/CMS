@@ -18,6 +18,17 @@ import { WorkspacesRepository } from './workspaces.repository.js';
 
 export const WORKSPACE_NOT_FOUND = 'Không tìm thấy workspace';
 
+/**
+ * 402 `workspace_read_only` for a request that changes the data of a read-only workspace,
+ * whatever its permission (ADR-035). `AccessService.require` calls it for write permissions; an
+ * action under a kept permission that is more than a pointer move (deleting a page) calls it too.
+ */
+export function requireWritable(scope: WorkspaceScope): void {
+  if (scope.writes && scope.subscription.access === 'read_only') {
+    throw workspaceReadOnly(scope.subscription.state);
+  }
+}
+
 @Injectable()
 export class AccessService {
   constructor(
@@ -100,13 +111,8 @@ export class AccessService {
     if (!can(scope.access, permission)) {
       throw forbidden(onlyHoldersMessage(permission));
     }
-    if (
-      scope.writes &&
-      scope.subscription.access === 'read_only' &&
-      kept === undefined &&
-      refusedWhileReadOnly(permission)
-    ) {
-      throw workspaceReadOnly(scope.subscription.state);
+    if (kept === undefined && refusedWhileReadOnly(permission)) {
+      requireWritable(scope);
     }
   }
 }
