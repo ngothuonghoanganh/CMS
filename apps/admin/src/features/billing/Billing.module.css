@@ -84,15 +84,19 @@
   }
 }
 
+/* Its name, bar and note sit on the rows of the list, so a name on two lines keeps the bars of
+   one row level. */
 .meter {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 6px;
   min-width: 0;
 }
 
 .meterHead {
   display: flex;
+  align-self: end;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
