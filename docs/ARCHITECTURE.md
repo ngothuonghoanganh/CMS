@@ -224,14 +224,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
   | pnpm · turbo                                                                      | 12.15.0 · 2.11.10                                                   |
   | TypeScript                                                                        | 6.0.3 (ngoại lệ, xem bên dưới)                                      |
-  | next · react · react-dom                                                          | 16.4.3 · 19.3.1 · 19.3.1                                            |
+  | next · react · react-dom                                                          | 16.4.6 · 19.3.1 · 19.3.1                                            |
   | @nestjs/core · common · platform-express · testing · cli                          | 12.2.0 · 12.2.0 · 12.2.0 · 12.2.0 · 12.0.10                         |
-  | @nestjs/mongoose · mongoose · mongodb driver                                      | 12.0.0 · 9.11.3 · 7.7.0                                             |
+  | @nestjs/mongoose · mongoose · mongodb driver                                      | 12.0.0 · 9.12.2 · 7.8.0                                             |
   | zod                                                                               | 4.6.7                                                               |
   | pino · pino-http · nestjs-pino                                                    | 10.4.0 · 11.0.0 · 5.3.1                                             |
   | vitest · unplugin-swc · @swc/core                                                 | 5.0.5 · 2.0.0 · 1.16.20                                             |
   | @playwright/test · supertest                                                      | 1.64.1 · 7.3.1                                                      |
-  | eslint · typescript-eslint · @next/eslint-plugin-next · eslint-plugin-react-hooks | 10.13.0 · 8.72.0 · 16.4.3 · 7.1.1                                   |
+  | eslint · typescript-eslint · @next/eslint-plugin-next · eslint-plugin-react-hooks | 10.13.0 · 8.72.0 · 16.4.6 · 7.1.1                                   |
   | prettier · dependency-cruiser                                                     | 3.9.10 · 18.7.0                                                     |
   | MongoDB server                                                                    | `mongo:9.0.4` (replica set một node)                                |
   | S3-compatible storage (dev/CI)                                                    | `rustfs/rustfs:1.0.3`; khởi tạo bucket bằng `amazon/aws-cli:2.38.5` |
@@ -244,7 +244,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
 - **Reason và ngoại lệ:**
   - **TypeScript 6.0.3, không 7.0.2.** TS 7 là bản native port; typescript-eslint 8.72 khai báo peer `typescript <6.1.0`. Tắt lint có type thì vi phạm quality gate.
-  - **mongoose 9.11.3, không 9.11.4.** Chính sách supply-chain mặc định của pnpm 12 giữ lại bản phát hành dưới 24 giờ.
+  - **mongoose 9.12.2.** Bản dưới 9.11.4 có advisory (sanitizeFilter, prototype pollution), nên 9.12.2 là bản vá. Chính sách supply-chain mặc định của pnpm 12 giữ lại bản phát hành dưới 24 giờ; 9.12.2 đã qua mốc này.
   - **RustFS thay MinIO.** Image `minio/minio` không còn được phát hành trên Docker Hub. RustFS 1.0.3 (Apache-2.0) tương thích S3 và đã được kiểm tra bucket policy chỉ cho đọc công khai prefix `public/`.
   - **MongoDB 9.0.4** là bản stable mới nhất; integration test xác nhận replica set `rs0`.
 - **Consequences:**

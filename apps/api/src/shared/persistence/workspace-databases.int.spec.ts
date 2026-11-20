@@ -406,6 +406,7 @@ describe('workspace databases', () => {
             name: LEADS_SUBMISSION_INDEX,
             partialFilterExpression: { submissionId: { $type: 'string' } },
           },
+          undefined,
         );
       }
     });
