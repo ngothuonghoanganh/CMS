@@ -33,6 +33,12 @@ export interface SubscriptionRecord {
   lockedUntil: Date | null;
   /** Goes up with every change; each write is guarded by the version it read. */
   version: number;
+  /**
+   * Goes up in a transaction that relies on what the plan allows until it commits (enabling an
+   * automation): the write makes it conflict with a plan change at the same moment, so one of
+   * the two runs again after the other. Not a fact of the subscription.
+   */
+  holdSeq?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -83,6 +89,7 @@ export const subscriptionSchema = new Schema<SubscriptionRecord>(
     nextActionAt: { type: Date, default: null },
     lockedUntil: { type: Date, default: null },
     version: { type: Number, required: true, min: 0 },
+    holdSeq: { type: Number, default: 0 },
     createdAt: { type: Date, required: true },
     updatedAt: { type: Date, required: true },
   },

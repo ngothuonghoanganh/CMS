@@ -257,6 +257,11 @@ export class AutomationsService {
       if (!(await this.siteRecords.recordDataWrite(scope, site._id, tx))) {
         throw notFound(SITE_NOT_FOUND);
       }
+      if (request.state === 'on') {
+        // Again under the plan this commits with: a change to a plan without automation at the
+        // same moment would not see this automation on, and leave it on (ADR-035).
+        await this.entitlements.requireFeatureIn(scope, 'automation', tx);
+      }
       const changed = await this.automations.setState(
         scope,
         site._id,

@@ -88,6 +88,17 @@ export class EntitlementsService {
   }
 
   /**
+   * `requireFeature` for a transaction that relies on the feature until it commits (enabling an
+   * automation). It holds the subscription first, so a plan change at the same moment conflicts
+   * with `tx` and one of them runs again after the other: the plan read here is the plan `tx`
+   * commits under, and a change to a plan without the feature never misses what `tx` wrote.
+   */
+  async requireFeatureIn(ref: WorkspaceRef, feature: PlanFeatureKey, tx: Tx): Promise<void> {
+    await this.subscriptions.hold(ref, tx);
+    this.requireFeature(await this.of(ref, tx), feature);
+  }
+
+  /**
    * 402 `plan_limit_reached` when `adding` more would go past the plan's limit, `used` being what
    * the workspace has now (counted in the same transaction as the creation, ADR-014).
    */

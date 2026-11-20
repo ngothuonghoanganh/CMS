@@ -116,6 +116,20 @@ export class SubscriptionsRepository {
   }
 
   /**
+   * Writes the subscription in `tx` without changing its facts (`holdSeq`), so that `tx` and any
+   * change of the subscription at the same moment cannot both commit: what `tx` reads of the plan
+   * after it stays true until it commits.
+   */
+  async hold(ref: WorkspaceRef, tx: Tx): Promise<void> {
+    const result = await this.subscriptions
+      .updateOne({ _id: ref.workspaceId }, { $inc: { holdSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount !== 1) {
+      throw new Error(`Workspace ${ref.workspaceId.toHexString()} has no subscription (ADR-035)`);
+    }
+  }
+
+  /**
    * Changes the plan of a trial (ADR-035), only while the trial lasts and only from the version
    * that was read: false when the trial ended or something else changed it meanwhile.
    */

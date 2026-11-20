@@ -438,6 +438,43 @@ describe('plan limits and features (ADR-035)', () => {
         .expect(200);
     });
 
+    it('stay off when enabling one meets a change to a plan without them', async () => {
+      const { client, workspaceId } = await workspace();
+      const { site } = await formSite(client, workspaceId);
+      const automation = await create(client, site, 'assign_new_leads');
+      // A change to Cơ bản is under way: its transaction moved the subscription and paused what
+      // was on (nothing yet), and has not committed.
+      const session = await t.connection.startSession();
+      try {
+        session.startTransaction();
+        await t.connection
+          .collection('subscriptions')
+          .updateOne(
+            { _id: new Types.ObjectId(workspaceId) },
+            { $set: { planId: 'basic' }, $inc: { version: 1 } },
+            { session },
+          );
+        const enabling = client
+          .post(`/sites/${site.id}/automations/${automation.id}/state`, { state: 'on' })
+          .then((response) => response);
+        // Long enough for the request to pass the check made before its transaction.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await session.commitTransaction();
+        const refused = await enabling;
+        expect(refused.status).toBe(402);
+        expect(limitOf(refused.body)).toMatchObject({
+          code: 'plan_feature_required',
+          context: { feature: 'automation' },
+        });
+      } finally {
+        await session.endSession();
+      }
+      const list = automationListResponseSchema.parse(
+        (await client.get(`/sites/${site.id}/automations`).expect(200)).body,
+      );
+      expect(list.items[0]).toMatchObject({ id: automation.id, state: 'draft' });
+    });
+
     it('run as many times a month as the plan gives, and count what it passed over', async () => {
       const { client, workspaceId } = await workspace();
       const form = await formSite(client, workspaceId);
