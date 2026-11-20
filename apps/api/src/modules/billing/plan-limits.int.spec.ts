@@ -207,6 +207,34 @@ describe('plan limits and features (ADR-035)', () => {
         .expect(201);
       expect(meResponseSchema.parse(signup.body).memberships).toHaveLength(1);
     });
+
+    it('refuses signing up from an invitation sent before a downgrade, and creates nobody', async () => {
+      const { client, workspaceId } = await workspace();
+      const email = newEmail('sau-ha-goi');
+      const token = await invite(t, client, workspaceId, email);
+      await invite(t, client, workspaceId, newEmail());
+      await invite(t, client, workspaceId, newEmail());
+      // Four people with the pending invitations. Basic holds three.
+      await setPlan(t, workspaceId, 'basic');
+      const refused = await new TestClient(t.app)
+        .post('/auth/signup/invited', { token, name: 'Bảo Ngọc', password: PASSWORD })
+        .expect(402);
+      expect(limitOf(refused.body)).toMatchObject({
+        code: 'plan_limit_reached',
+        context: { limit: 'members', max: 3 },
+      });
+      // Rolled back whole: no account, the invitation still pending, nobody joined.
+      expect(await t.connection.collection('users').countDocuments({ email })).toBe(0);
+      const pending = (
+        (await client.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body as {
+          items: { email: string }[];
+        }
+      ).items;
+      expect(pending).toHaveLength(3);
+      expect(pending.map((item) => item.email)).toContain(email);
+      const members = await client.get(`/workspaces/${workspaceId}/members`).expect(200);
+      expect((members.body as { items: unknown[] }).items).toHaveLength(1);
+    });
   });
 
   describe('custom domains', () => {
