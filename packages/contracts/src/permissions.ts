@@ -26,11 +26,20 @@ export const permissionSchema = z.enum([
   'members.manage',
   'accessRequests.decide',
   'workspace.transferOwnership',
+  'billing.view',
+  'billing.manage',
 ]);
 export type Permission = z.infer<typeof permissionSchema>;
 
-/** Duyệt yêu cầu đổi quyền and the ownership stay with Chủ sở hữu (ADR-021). */
-const ownerOnly: readonly Permission[] = ['accessRequests.decide', 'workspace.transferOwnership'];
+/**
+ * Duyệt yêu cầu đổi quyền and the ownership stay with Chủ sở hữu (ADR-021), and so do changing
+ * the plan and paying (ADR-035).
+ */
+const ownerOnly: readonly Permission[] = [
+  'accessRequests.decide',
+  'workspace.transferOwnership',
+  'billing.manage',
+];
 
 /** Asking to publish is for roles that cannot publish themselves (ADR-023). */
 const askOnly: readonly Permission[] = ['pages.requestPublish'];
@@ -64,6 +73,61 @@ export type CustomAccess = z.infer<typeof customAccessSchema>;
 /** What a member may do: one of the six roles of board 16, or a custom role (ADR-024). */
 export const accessSchema = z.union([roleSchema, customAccessSchema]);
 export type Access = z.infer<typeof accessSchema>;
+
+/**
+ * Whether a permission only reads or also changes data (ADR-035). A read-only workspace refuses
+ * the write permissions to requests that change data, except those it keeps.
+ */
+export type PermissionKind = 'read' | 'write';
+
+export const permissionKinds: Record<Permission, PermissionKind> = {
+  'pages.view': 'read',
+  'pages.edit': 'write',
+  'templates.manage': 'write',
+  'pages.publish': 'write',
+  'pages.requestPublish': 'write',
+  'publishApprovals.decide': 'write',
+  'pages.manageLive': 'write',
+  'leads.view': 'read',
+  'leads.handle': 'write',
+  // A copy of the leads; nothing in the workspace changes.
+  'leads.export': 'read',
+  'personalData.manage': 'write',
+  'privacy.manage': 'write',
+  'sites.manage': 'write',
+  'domains.manage': 'write',
+  'automations.view': 'read',
+  'automations.manage': 'write',
+  'members.manage': 'write',
+  'accessRequests.decide': 'write',
+  'workspace.transferOwnership': 'write',
+  'billing.view': 'read',
+  'billing.manage': 'write',
+};
+
+/**
+ * Writes a read-only workspace still allows (ADR-035): rollback, undo and unpublishing only move
+ * the pointer; personal data requests are a legal duty (ADR-017); handing over the workspace and
+ * paying are how it gets out of read-only.
+ */
+const keptWhileReadOnly: readonly Permission[] = [
+  'pages.manageLive',
+  'personalData.manage',
+  'workspace.transferOwnership',
+  'billing.manage',
+];
+
+/** Whether a read-only workspace refuses the permission to a request that changes data. */
+export function refusedWhileReadOnly(permission: Permission): boolean {
+  return permissionKinds[permission] === 'write' && !keptWhileReadOnly.includes(permission);
+}
+
+/**
+ * Actions a read-only workspace keeps although their permission is refused (ADR-035): removing a
+ * member, and taking back a pending invitation, which counts as a member.
+ */
+export const readOnlyKeptActions = ['members.remove', 'invitations.revoke'] as const;
+export type ReadOnlyKeptAction = (typeof readOnlyKeptActions)[number];
 
 export function can(access: Access, permission: Permission): boolean {
   return typeof access === 'string'
@@ -170,6 +234,13 @@ export const permissionGroups: readonly PermissionGroup[] = [
       { permission: 'members.manage', label: 'Mời, đổi quyền, gỡ thành viên; xem vai trò & quyền' },
       { permission: 'accessRequests.decide', label: 'Duyệt yêu cầu đổi quyền' },
       { permission: 'workspace.transferOwnership', label: 'Chuyển quyền sở hữu workspace' },
+    ],
+  },
+  {
+    title: 'Thanh toán',
+    rows: [
+      { permission: 'billing.view', label: 'Xem gói và mức sử dụng' },
+      { permission: 'billing.manage', label: 'Đổi gói, thanh toán, tải hóa đơn' },
     ],
   },
 ];

@@ -8,6 +8,14 @@ import {
 } from './ai.js';
 import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
+  billingSummarySchema,
+  changePlanRequestSchema,
+  planCatalogResponseSchema,
+  setTestClockRequestSchema,
+  testClockSchema,
+  workspacePlanSchema,
+} from './billing.js';
+import {
   assetListQuerySchema,
   assetListResponseSchema,
   assetSchema,
@@ -381,6 +389,59 @@ export const endpoints = {
     request: null,
     query: null,
     response: roleCountsSchema,
+  }),
+
+  // Plans and billing (ADR-035)
+  /** Every signed-in user: the plans board 28 compares, and the trial a new workspace gets. */
+  getPlanCatalog: endpoint({
+    method: 'GET',
+    path: () => '/billing/plans',
+    request: null,
+    query: null,
+    response: planCatalogResponseSchema,
+  }),
+  /** Every member (`pages.view`): the plan's name, limits and features, and the access level. */
+  getWorkspacePlan: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/plan`,
+    request: null,
+    query: null,
+    response: workspacePlanSchema,
+  }),
+  /** `billing.view`: board 28, the plan, its state and the usage of every limit. */
+  getBillingSummary: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing`,
+    request: null,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /**
+   * `billing.manage`: during the trial the plan and cycle change at once, at no charge. Outside a
+   * trial 409 `plan_change_unavailable` until payments exist (T2).
+   */
+  changePlan: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/plan`,
+    request: changePlanRequestSchema,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /** Only with `BILLING_TEST_CLOCK=on`, never in production (404 otherwise); no session. */
+  getTestClock: endpoint({
+    method: 'GET',
+    path: () => '/testing/clock',
+    request: null,
+    query: null,
+    response: testClockSchema,
+  }),
+  /** Moves the billing clock of the whole API process; `{ now: null }` goes back to real time. */
+  setTestClock: endpoint({
+    method: 'PUT',
+    path: () => '/testing/clock',
+    request: setTestClockRequestSchema,
+    query: null,
+    response: testClockSchema,
   }),
 
   // Members (ADR-021): `members.manage`, except where noted

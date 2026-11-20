@@ -64,6 +64,13 @@ describe('custom roles (ADR-024)', () => {
       customRoleInputSchema.safeParse({ ...input, name: 'X', permissions: ['members.manage'] })
         .success,
     ).toBe(false);
+    // Plans and payments stay with Chủ sở hữu and Quản trị (ADR-035).
+    for (const permission of ['billing.view', 'billing.manage']) {
+      expect(
+        customRoleInputSchema.safeParse({ ...input, name: 'X', permissions: [permission] }).success,
+        permission,
+      ).toBe(false);
+    }
   });
 
   it('is chosen as custom:{id} next to the system roles', () => {
