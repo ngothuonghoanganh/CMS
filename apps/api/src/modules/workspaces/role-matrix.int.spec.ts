@@ -288,10 +288,64 @@ const ROWS: Row[] = [
     permission: 'billing.manage',
     scope: 'workspace',
     status: 200,
-    // Kept, but once the trial is over a new plan needs a payment (T2).
+    // Kept, but once the trial is over only paying now chooses a plan (T2).
     readOnlyStatus: 409,
     call: (client, { workspaceId }) =>
       client.post(`/workspaces/${workspaceId}/billing/plan`, { planId: 'basic', cycle: 'yearly' }),
+  },
+  // Payments (board 29, ADR-035 T2): the owner's, also while read-only.
+  {
+    action: 'Báo giá đổi gói',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client
+        .get(`/workspaces/${workspaceId}/billing/plan/quote`)
+        .query({ planId: 'business', cycle: 'monthly', payNow: 'true' }),
+  },
+  {
+    action: 'Phương thức thanh toán',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.get(`/workspaces/${workspaceId}/billing/payment-method`),
+  },
+  {
+    action: 'Thêm phương thức',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.post(`/workspaces/${workspaceId}/billing/payment-method/setup`, {}),
+  },
+  {
+    action: 'Xem thông tin xuất hóa đơn',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/billing/info`),
+  },
+  {
+    action: 'Sửa thông tin xuất hóa đơn',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.put(`/workspaces/${workspaceId}/billing/info`, {
+        companyName: 'Công ty TNHH Truyền thông Mây Xanh',
+        taxCode: '0315123456',
+        address: '12 Nguyễn Đình Chiểu, TP. Hồ Chí Minh',
+        email: 'ketoan@mayxanh.vn',
+      }),
+  },
+  {
+    action: 'Lịch sử giao dịch',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/billing/invoices`),
   },
   // Custom domains (board 13, ADR-022)
   // Custom roles (board 16, ADR-024)

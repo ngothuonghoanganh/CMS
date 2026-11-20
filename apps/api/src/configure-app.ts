@@ -1,7 +1,12 @@
+import type { IncomingMessage } from 'node:http';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import type { Env } from './config/env.js';
+import { PAYMENT_GATEWAY_WEBHOOK_PREFIX } from './shared/payment-gateway-route.js';
+
+/** The payment gateway's webhooks take a small body, whatever its type, kept as raw bytes. */
+const GATEWAY_WEBHOOK_BODY_LIMIT = '64kb';
 
 /**
  * Options for creating the Nest application, shared by the server and integration tests.
@@ -25,5 +30,12 @@ export function configureApp(
     next();
   });
   app.use(cookieParser());
+  // Before the JSON parser: the gateway signs the exact bytes, which reach its guard unparsed
+  // (ADR-035). Every other route keeps the JSON parser, which skips a body already read.
+  app.useBodyParser('raw', {
+    type: (request: IncomingMessage) =>
+      request.url?.startsWith(PAYMENT_GATEWAY_WEBHOOK_PREFIX) === true,
+    limit: GATEWAY_WEBHOOK_BODY_LIMIT,
+  });
   app.useBodyParser('json', { limit: '1mb' });
 }
