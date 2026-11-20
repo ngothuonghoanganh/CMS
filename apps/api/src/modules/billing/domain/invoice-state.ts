@@ -1,4 +1,5 @@
 import type { BillingCycle, ChargeOutcome, InvoiceStatus, SubscriptionFacts } from '@plp/contracts';
+import { daysLeftOf } from './proration.js';
 
 /** A paid or void invoice never changes again (ADR-035, §2 rule 12). */
 export const FINAL_INVOICE_STATUSES: readonly InvoiceStatus[] = ['paid', 'void'];
@@ -59,6 +60,8 @@ export interface InvoicePurpose {
   from: { planId: string; cycle: BillingCycle } | null;
   /** Paying it ends the trial. */
   endsTrial: boolean;
+  /** For an upgrade, when it was quoted: its amount pays for the days left from then. */
+  periodStart: Date;
   periodEnd: Date;
 }
 
@@ -67,6 +70,12 @@ export interface InvoicePurpose {
  * it pays for still applies. Paying for the end of a trial needs the trial still unpaid; an
  * upgrade needs the subscription still on the plan and period it was priced for. A renewal (T3)
  * stays payable until it is paid.
+ *
+ * An upgrade is priced for the days left when it was quoted. One the gateway refused (`failed`) is
+ * paid again only while that count is unchanged, the day of the quote: later it would charge for
+ * days already gone, so choosing the plan again gives the new amount. One whose outcome is unknown
+ * (`open`) stays payable for its whole period: paying it again asks the gateway about that same
+ * charge with the same key, and is how the owner learns whether it went through.
  */
 export function invoicePayable(
   invoice: InvoicePurpose,
@@ -87,6 +96,8 @@ export function invoicePayable(
     facts.planId === invoice.from.planId &&
     facts.cycle === invoice.from.cycle &&
     facts.periodEnd.getTime() === invoice.periodEnd.getTime() &&
-    now.getTime() < invoice.periodEnd.getTime()
+    now.getTime() < invoice.periodEnd.getTime() &&
+    (invoice.status === 'open' ||
+      daysLeftOf(invoice.periodEnd, invoice.periodStart) === daysLeftOf(invoice.periodEnd, now))
   );
 }

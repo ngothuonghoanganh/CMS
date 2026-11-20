@@ -20,10 +20,12 @@ const paidPeriod = {
   trialEndsAt: null,
   periodEnd: PERIOD_END,
 };
+/** Quoted at NOW for the 10 days left of the period. */
 const upgrade: InvoicePurpose = {
   status: 'failed',
   from: { planId: 'agency', cycle: 'monthly' },
   endsTrial: false,
+  periodStart: NOW,
   periodEnd: PERIOD_END,
 };
 
@@ -86,6 +88,21 @@ describe('invoicePayable', () => {
       ),
     ).toBe(false);
     expect(invoicePayable(upgrade, paidPeriod, PERIOD_END)).toBe(false);
+  });
+
+  it('pays a refused upgrade again only while it charges for the days left now', () => {
+    // Still 10 days left, counting the started one: the amount is the quote's.
+    expect(invoicePayable(upgrade, paidPeriod, new Date(NOW.getTime() + DAY - 60_000))).toBe(true);
+    // A day later it would charge for a day already gone.
+    expect(invoicePayable(upgrade, paidPeriod, new Date(NOW.getTime() + DAY))).toBe(false);
+    expect(invoicePayable(upgrade, paidPeriod, new Date(NOW.getTime() + 8 * DAY))).toBe(false);
+  });
+
+  it('keeps an upgrade of unknown outcome payable for its period, to learn that outcome', () => {
+    const unknown: InvoicePurpose = { ...upgrade, status: 'open' };
+    expect(invoicePayable(unknown, paidPeriod, new Date(NOW.getTime() + 8 * DAY))).toBe(true);
+    expect(invoicePayable(unknown, paidPeriod, PERIOD_END)).toBe(false);
+    expect(invoicePayable(unknown, { ...paidPeriod, planId: 'business' }, NOW)).toBe(false);
   });
 
   it('pays the end of a trial again while the trial is unpaid', () => {

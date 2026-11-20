@@ -12,6 +12,12 @@ export interface UpgradeProration {
   periodDays: number;
 }
 
+/** Whole days left of a period at `now`, a started day counting whole; 0 once it ended. */
+export function daysLeftOf(periodEnd: Date, now: Date): number {
+  const left = periodEnd.getTime() - now.getTime();
+  return left <= 0 ? 0 : Math.ceil(left / DAY_MS);
+}
+
 /**
  * What an upgrade charges at `now` (ADR-035): the difference between the two prices of the cycle,
  * for the share of the period left, rounded up to 1.000đ. Days count whole: the last day of the
@@ -29,8 +35,7 @@ export function prorateUpgrade(input: {
     1,
     Math.round((input.periodEnd.getTime() - input.periodStart.getTime()) / DAY_MS),
   );
-  const left = input.periodEnd.getTime() - input.now.getTime();
-  const remainingDays = left <= 0 ? 0 : Math.min(periodDays, Math.ceil(left / DAY_MS));
+  const remainingDays = Math.min(periodDays, daysLeftOf(input.periodEnd, input.now));
   const difference = input.toPrice - input.fromPrice;
   if (difference <= 0 || remainingDays === 0) {
     return { amount: 0, remainingDays, periodDays };

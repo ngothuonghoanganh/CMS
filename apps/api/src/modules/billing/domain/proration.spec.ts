@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { periodEndOf } from './billing-period.js';
-import { prorateUpgrade } from './proration.js';
+import { daysLeftOf, prorateUpgrade } from './proration.js';
 
 const DAY = 86_400_000;
 const START = new Date('2026-11-01T03:00:00.000Z');
@@ -40,6 +40,13 @@ describe('prorateUpgrade', () => {
       now: at(30, -1),
     });
     expect(tiny.amount).toBe(1000);
+  });
+
+  it('counts the days left as the quote does, a started day whole', () => {
+    expect(daysLeftOf(MONTH_END, at(18))).toBe(12);
+    expect(daysLeftOf(MONTH_END, at(18, -60_000))).toBe(13);
+    expect(daysLeftOf(MONTH_END, MONTH_END)).toBe(0);
+    expect(daysLeftOf(MONTH_END, at(31))).toBe(0);
   });
 
   it('charges nothing once the period is over', () => {
