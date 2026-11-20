@@ -289,8 +289,10 @@ export function cardValidAt(
  * The state and access level of a subscription at `now` (ADR-035, §2 rule 12). Nothing stores
  * them: they change as time passes, so a job that runs late never leaves a stale state.
  *
- * - A trial is `trialing` until `trialEndsAt`; after it, without a payment under way, the
- *   workspace is `trial_expired` and read-only.
+ * - A trial is `trialing` until `trialEndsAt`. After it, a trial with a payment method is being
+ *   charged: unpaid with the grace (`past_due`) until the charge job records the outcome, never
+ *   read-only at once because the job runs after the trial's end. Without a payment method or a
+ *   payment under way, the workspace is `trial_expired` and read-only.
  * - A paid period that ends with `cancelAtPeriodEnd` is `canceled` and read-only.
  * - A period (or trial) that ended unpaid, or a failed charge, is `past_due`; an invoice waiting
  *   without a failure (a transfer to confirm) is `pending_payment`. Either keeps full access for
@@ -324,6 +326,8 @@ export function subscriptionStatusOf(
     };
   };
   const paymentUnderWay = facts.failedSince !== null || facts.openInvoiceId !== null;
+  // A saved method is charged at the end of the trial (ADR-035), by a job that runs after it.
+  const charged = paymentUnderWay || facts.paymentMethod !== null;
 
   if (facts.trialEndsAt !== null) {
     const trialEnd = facts.trialEndsAt.getTime();
@@ -336,7 +340,7 @@ export function subscriptionStatusOf(
     if (facts.cancelAtPeriodEnd) {
       return status('canceled', 'read_only');
     }
-    return paymentUnderWay ? unpaid(facts.trialEndsAt) : status('trial_expired', 'read_only');
+    return charged ? unpaid(facts.trialEndsAt) : status('trial_expired', 'read_only');
   }
   if (at >= facts.periodEnd.getTime()) {
     return facts.cancelAtPeriodEnd ? status('canceled', 'read_only') : unpaid(facts.periodEnd);

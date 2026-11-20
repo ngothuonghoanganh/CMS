@@ -3012,7 +3012,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Lúc khởi động, trước khi phục vụ, workspace chưa có subscription nhận một kỳ dùng thử mới (upsert theo `_id`: chạy lại được, nhiều instance cùng lúc được). Workspace không có subscription khi đang phục vụ là lỗi 500.
   - **Hàm trạng thái** `subscriptionStatusOf(facts, policy, now)`:
     - Còn dùng thử: `trialing`, số ngày còn lại làm tròn lên.
-    - Hết dùng thử: đã hủy trong lúc dùng thử thì `canceled`; có lần trừ tiền lỗi hay hóa đơn đang chờ thì quá hạn như kỳ trả phí; còn lại `trial_expired`.
+    - Hết dùng thử: đã hủy trong lúc dùng thử thì `canceled`; có phương thức thanh toán, lần trừ tiền lỗi hay hóa đơn đang chờ thì quá hạn như kỳ trả phí (việc trừ tiền chạy sau mốc cuối dùng thử, nên trong lúc chờ nó workspace có ân hạn, không chỉ đọc ngay); còn lại `trial_expired`.
     - Kỳ trả phí: hết kỳ mà có `cancelAtPeriodEnd` thì `canceled`; có `failedSince` thì `past_due`; có `openInvoiceId` mà chưa lỗi thì `pending_payment`; hết kỳ mà chưa gia hạn (việc nền chưa chạy) cũng là `past_due`.
     - Ân hạn tính từ `failedSince`, hoặc từ cuối kỳ (cuối dùng thử) khi chưa có lần trừ tiền lỗi, nên việc nền lỡ hẹn vẫn kết thúc ở chỉ đọc.
     - Thẻ dùng được tới hết tháng hết hạn (giờ UTC). `expiring_soon` khi còn ≤ `expiringSoonDays` mà không có thẻ, hay thẻ hết hạn trước cuối kỳ.
