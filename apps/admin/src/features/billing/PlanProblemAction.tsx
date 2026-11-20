@@ -15,18 +15,20 @@ export function planActionLabel(kind: PlanProblem['kind']): string {
 }
 
 export interface PlanMarkProps {
-  /** The link's words; the plan problem's own by default. */
+  /** The link's words. */
   label: string;
-  /** For a screen outside the shell, which has no plan frame. */
+  /** For a screen without a plan frame. */
   workspaceId?: string | undefined;
+  /** Without a plan frame: whether the viewer holds `billing.view`. */
+  canViewBilling?: boolean | undefined;
 }
 
 /**
  * "Theo gói" beside a limit of the plan, not a missing permission, and the link to board 28 for
  * who may open it; the others are told who can.
  */
-export function PlanMark({ label, workspaceId }: PlanMarkProps) {
-  const href = useUpgradeHref(workspaceId);
+export function PlanMark({ label, workspaceId, canViewBilling }: PlanMarkProps) {
+  const href = useUpgradeHref(workspaceId, canViewBilling);
   return (
     <span className={styles.action}>
       <Badge tone="primary" size="sm">
@@ -45,18 +47,26 @@ export function PlanMark({ label, workspaceId }: PlanMarkProps) {
 
 export interface PlanProblemActionProps {
   error: unknown;
-  /** For a screen outside the shell, which has no plan frame. */
+  /** For a screen without a plan frame. */
   workspaceId?: string | undefined;
+  /** Without a plan frame: whether the viewer holds `billing.view`. */
+  canViewBilling?: boolean | undefined;
 }
 
 /**
  * What follows a 402 message of ADR-035: "Theo gói" marks it as the plan's limit, not a missing
  * permission, and "Nâng cấp" opens board 28 for who may. Nothing for any other error.
  */
-export function PlanProblemAction({ error, workspaceId }: PlanProblemActionProps) {
+export function PlanProblemAction({ error, workspaceId, canViewBilling }: PlanProblemActionProps) {
   const problem = planProblemOf(error);
   if (problem === null) {
     return null;
   }
-  return <PlanMark label={planActionLabel(problem.kind)} workspaceId={workspaceId} />;
+  return (
+    <PlanMark
+      label={planActionLabel(problem.kind)}
+      workspaceId={workspaceId}
+      canViewBilling={canViewBilling}
+    />
+  );
 }

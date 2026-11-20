@@ -30,9 +30,14 @@ function availability(subdomain: string, available: boolean, message: string | n
   };
 }
 
-function renderForm() {
+function renderForm(canViewBilling = true) {
   return renderWithProviders(
-    <CreateSiteForm workspaceId={WORKSPACE_ID} originTemplate={TEMPLATE} cancelHref="/sites/x" />,
+    <CreateSiteForm
+      workspaceId={WORKSPACE_ID}
+      originTemplate={TEMPLATE}
+      cancelHref="/sites/x"
+      canViewBilling={canViewBilling}
+    />,
   );
 }
 
@@ -180,4 +185,29 @@ describe('CreateSiteForm', () => {
     );
     expect(alert).not.toHaveTextContent('Không có quyền');
   });
+
+  it('names who can upgrade instead of linking a role without billing.view to board 28', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValueOnce(availability('smile-care', true));
+    apiMock.mockRejectedValueOnce(
+      withContext(apiError(402, 'plan_limit_reached', 'Đã dùng hết hạn mức của Gói Cơ bản'), {
+        limit: 'sites',
+        max: 1,
+      }),
+    );
+    renderForm(false);
+
+    await user.type(screen.getByRole('textbox', { name: 'Tên site' }), 'Smile Care');
+    await screen.findByText('Tên miền con này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo site' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Theo gói');
+    expect(alert).toHaveTextContent('Chủ sở hữu workspace nâng cấp được.');
+    expect(within(alert).queryByRole('link')).toBeNull();
+  });
 });
+
+function withContext(error: ApiError, context: Record<string, unknown>): ApiError {
+  return new ApiError(error.status, { ...error.problem, context });
+}

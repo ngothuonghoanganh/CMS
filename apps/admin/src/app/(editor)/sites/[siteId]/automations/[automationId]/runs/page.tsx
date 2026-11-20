@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { AutomationRuns } from '../../../../../../../features/automations/AutomationRuns';
+import { WorkspacePlanProvider } from '../../../../../../../features/billing/plan-context';
 import { loadAutomationRunsData } from '../../../../../../../features/automations/load-automation';
 import { requireWorkspaceAddress } from '../../../../../../../features/shell/current-address';
 import { ApiError } from '../../../../../../../lib/api-core';
@@ -50,14 +51,22 @@ export default async function AutomationRunsPage({ params }: AutomationRunsPageP
     notFound();
   }
   await requireWorkspaceAddress(membership.workspace);
+  // The read-only notice and the way to board 28 of a refused retry (ADR-035).
+  const plan = await serverApi(endpoints.getWorkspacePlan, [site.workspaceId]);
   return (
-    <AutomationRuns
-      key={loadedAt}
-      site={site}
-      automation={automation}
-      initial={runs}
-      canManage={can(membership.role, 'automations.manage')}
-      loadedAt={loadedAt}
-    />
+    <WorkspacePlanProvider
+      workspaceId={site.workspaceId}
+      canViewBilling={can(membership.role, 'billing.view')}
+      plan={plan}
+    >
+      <AutomationRuns
+        key={loadedAt}
+        site={site}
+        automation={automation}
+        initial={runs}
+        canManage={can(membership.role, 'automations.manage')}
+        loadedAt={loadedAt}
+      />
+    </WorkspacePlanProvider>
   );
 }

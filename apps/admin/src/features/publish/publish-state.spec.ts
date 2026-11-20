@@ -261,6 +261,7 @@ describe('publishReducer', () => {
     const failed = publishReducer(publishReducer(review(checks()), { type: 'submit_started' }), {
       type: 'submit_failed',
       message: 'Máy chủ đang gặp sự cố',
+      cause: null,
     });
     expect(failed.submitting).toBe(false);
     expect(failed.error).toBe('Máy chủ đang gặp sự cố');

@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
+import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
 import { leadRecipientsHref, privacyHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { MotionStyleLibraryDialog } from '../motion/MotionStyleLibraryDialog';
@@ -294,6 +295,7 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
             }}
           />
           <DraftNotice ensureSaved={ensureSaved} />
+          <ReadOnlyBanner variant="strip" />
           <main className={styles.workspace}>
             <StructurePanel
               onOpenTheme={() => {

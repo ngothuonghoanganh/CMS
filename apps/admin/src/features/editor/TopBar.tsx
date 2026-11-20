@@ -30,6 +30,7 @@ import {
   WarningTriangleIcon,
 } from '@plp/ui';
 import { type ReactNode, useRef } from 'react';
+import { PlanMark, planActionLabel } from '../billing/PlanProblemAction';
 import { useClientNow } from '../shell/use-now';
 import { useEditor, useEditorStoreApi } from './editor-context';
 import { GuardedLink } from './GuardedLink';
@@ -61,6 +62,7 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
   const saveState = useEditor((state) => state.saveState);
   const lastSavedAt = useEditor((state) => state.lastSavedAt);
   const saveError = useEditor((state) => state.saveError);
+  const workspaceId = useEditor((state) => state.site.workspaceId);
   const now = useClientNow();
   const view = saveStatusView(
     saveState,
@@ -83,6 +85,9 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
         {issue === null ? null : <span className={styles.saveIssue}> · {issue}</span>}
       </span>
       {view.time === null ? null : <span>· {view.time}</span>}
+      {saveState === 'error' && saveError?.kind === 'plan' ? (
+        <PlanMark label={planActionLabel(saveError.problem)} workspaceId={workspaceId} />
+      ) : null}
       {view.canRetry ? (
         <>
           <span aria-hidden="true">·</span>

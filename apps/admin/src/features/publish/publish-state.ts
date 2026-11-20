@@ -63,18 +63,23 @@ export interface PublishState {
   notice: PublishNotice | null;
   /** Actionable error of the last attempt (preparing or publishing). */
   error: string | null;
+  /**
+   * The failed request behind `error`, set with it: a 402 of the plan (a read-only workspace)
+   * adds the way to board 28 (ADR-035).
+   */
+  errorCause: unknown;
   published: PublishedResult | null;
 }
 
 export type PublishAction =
   | { type: 'prepare_started'; notice?: PublishNotice | null }
   | { type: 'prepared'; prepared: PreparedPublish }
-  | { type: 'prepare_failed'; message: string }
+  | { type: 'prepare_failed'; message: string; cause: unknown }
   | { type: 'stale' }
   | { type: 'warning_toggled'; fingerprint: string }
   | { type: 'note_changed'; note: string }
   | { type: 'submit_started' }
-  | { type: 'submit_failed'; message: string }
+  | { type: 'submit_failed'; message: string; cause: unknown }
   | { type: 'checks_refreshed'; checks: ChecksResult; notice: PublishNotice }
   | { type: 'published'; result: PublishedResult }
   | { type: 'requested'; page: PageSummary }
@@ -89,6 +94,7 @@ export const initialPublishState: PublishState = {
   submitting: false,
   notice: null,
   error: null,
+  errorCause: null,
   published: null,
 };
 
@@ -125,7 +131,13 @@ export function publishReducer(state: PublishState, action: PublishAction): Publ
         error: null,
       };
     case 'prepare_failed':
-      return { ...state, phase: 'failed', submitting: false, error: action.message };
+      return {
+        ...state,
+        phase: 'failed',
+        submitting: false,
+        error: action.message,
+        errorCause: action.cause,
+      };
     case 'stale':
       return { ...state, phase: 'stale', submitting: false, error: null };
     case 'warning_toggled': {
@@ -142,7 +154,7 @@ export function publishReducer(state: PublishState, action: PublishAction): Publ
     case 'submit_started':
       return state.phase === 'review' ? { ...state, submitting: true, error: null } : state;
     case 'submit_failed':
-      return { ...state, submitting: false, error: action.message };
+      return { ...state, submitting: false, error: action.message, errorCause: action.cause };
     case 'checks_refreshed': {
       if (state.prepared === null) {
         return state;

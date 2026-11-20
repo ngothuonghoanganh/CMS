@@ -58,6 +58,7 @@ import {
   withFreshSectionIds,
 } from '@plp/sections/schema';
 import { type Draft, produce } from 'immer';
+import type { PlanProblem } from '../billing/plan-problem';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import {
   canWriteAt,
@@ -92,11 +93,21 @@ export interface Selection {
   fieldPath: string | null;
 }
 
-export interface SaveFailure {
-  /** `invalid`: the server rejected the draft (422); `retryable`: network or server error. */
-  kind: 'invalid' | 'retryable' | 'other';
-  message: string;
-}
+export type SaveFailure =
+  | {
+      /** `invalid`: the server rejected the draft (422); `retryable`: network or server error. */
+      kind: 'invalid' | 'retryable' | 'other';
+      message: string;
+    }
+  | {
+      /**
+       * The plan refused it (402, ADR-035), a read-only workspace above all: trying again cannot
+       * work until the plan changes, so the way to board 28 replaces "Thử lại".
+       */
+      kind: 'plan';
+      message: string;
+      problem: PlanProblem['kind'];
+    };
 
 export const MAX_HISTORY = 100;
 

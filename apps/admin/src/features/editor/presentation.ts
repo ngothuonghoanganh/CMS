@@ -107,12 +107,13 @@ export function saveStatusView(
         canRetry: false,
       };
     case 'error':
-      // A rejected draft (422) needs a fix, not another attempt.
+      // A rejected draft (422) needs a fix, and a refusal of the plan (402) a new plan, not
+      // another attempt.
       return {
         tone: 'danger',
         text: 'Chưa lưu được',
         time: null,
-        canRetry: saveError?.kind !== 'invalid',
+        canRetry: saveError?.kind !== 'invalid' && saveError?.kind !== 'plan',
       };
   }
 }

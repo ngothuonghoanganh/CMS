@@ -44,13 +44,14 @@ export function useWorkspacePlan(): PlanFrame | null {
 
 /**
  * Where "Nâng cấp" goes for this viewer: board 28, or null when they cannot open it. A screen
- * outside the shell (the editor) names its workspace; board 28 then answers for itself.
+ * without a plan frame (creating a site) names its workspace and whether the viewer holds
+ * `billing.view`, so a role that would only meet "Bạn chưa có quyền" there gets no link.
  */
-export function useUpgradeHref(workspaceId?: string): string | null {
+export function useUpgradeHref(workspaceId?: string, canViewBilling?: boolean): string | null {
   const frame = useContext(PlanContext);
   const id = workspaceId ?? frame?.workspaceId;
   if (id === undefined) {
     return null;
   }
-  return frame?.canViewBilling === false ? null : billingHref(id);
+  return (frame?.canViewBilling ?? canViewBilling) === false ? null : billingHref(id);
 }

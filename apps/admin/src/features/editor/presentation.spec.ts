@@ -68,6 +68,11 @@ describe('editor presentation', () => {
     expect(saveStatusView('error', null, { kind: 'invalid', message: 'x' }, NOW).canRetry).toBe(
       false,
     );
+    // A read-only workspace refuses every save until its plan changes.
+    expect(
+      saveStatusView('error', null, { kind: 'plan', message: 'x', problem: 'read_only' }, NOW)
+        .canRetry,
+    ).toBe(false);
     expect(saveStatusView('conflict', null, null, NOW).tone).toBe('danger');
   });
 

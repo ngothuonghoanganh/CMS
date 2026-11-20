@@ -41,6 +41,7 @@ import { CopyAddressButton } from '../domain/CopyAddressButton';
 import { DraftConflictError, type PublishDialogRenderProps } from '../editor';
 import { cx } from '../shell/cx';
 import { pageHref } from '../shell/navigation';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
   approvalLine,
@@ -239,7 +240,7 @@ function PublishSession({
         return;
       }
       reportUnexpected('Preparing to publish failed', error);
-      dispatch({ type: 'prepare_failed', message: problemMessage(error) });
+      dispatch({ type: 'prepare_failed', message: problemMessage(error), cause: error });
     }
   }
 
@@ -294,7 +295,7 @@ function PublishSession({
         return;
       }
       reportUnexpected('Publishing failed', error);
-      dispatch({ type: 'submit_failed', message: problemMessage(error) });
+      dispatch({ type: 'submit_failed', message: problemMessage(error), cause: error });
     }
   }
 
@@ -358,7 +359,7 @@ function PublishSession({
         return;
       }
       reportUnexpected('Sending a request to publish failed', error);
-      dispatch({ type: 'submit_failed', message: problemMessage(error) });
+      dispatch({ type: 'submit_failed', message: problemMessage(error), cause: error });
     }
   }
 
@@ -375,7 +376,7 @@ function PublishSession({
         return;
       }
       reportUnexpected('Withdrawing a request to publish failed', error);
-      dispatch({ type: 'submit_failed', message: problemMessage(error) });
+      dispatch({ type: 'submit_failed', message: problemMessage(error), cause: error });
     }
   }
 
@@ -621,6 +622,7 @@ function PublishSession({
       >
         <Callout tone="danger" role="alert" title="Không lưu hoặc kiểm tra được bản nháp">
           {state.error}
+          <PlanProblemAction error={state.errorCause} />
         </Callout>
       </Dialog>
     );
@@ -877,6 +879,7 @@ function PublishSession({
             title={mode === 'request' ? 'Chưa gửi được yêu cầu' : 'Chưa xuất bản được'}
           >
             {state.error}
+            <PlanProblemAction error={state.errorCause} />
           </Callout>
         )}
       </div>

@@ -45,6 +45,8 @@ export interface CreateSiteFormProps {
   originTemplate: string;
   /** Where "Hủy" goes; null when the workspace has no site to go back to. */
   cancelHref: string | null;
+  /** Holds `billing.view`: a site past the plan's limit leads to board 28 (ADR-035). */
+  canViewBilling: boolean;
 }
 
 function availabilityStatus(state: SubdomainAvailabilityState): ReactNode {
@@ -74,7 +76,12 @@ function availabilityStatus(state: SubdomainAvailabilityState): ReactNode {
 }
 
 /** "Tạo site khách hàng": name, default subdomain with a live availability check, and theme. */
-export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: CreateSiteFormProps) {
+export function CreateSiteForm({
+  workspaceId,
+  originTemplate,
+  cancelHref,
+  canViewBilling,
+}: CreateSiteFormProps) {
   const router = useRouter();
   const form = useSchemaForm(createSiteRequestSchema, {
     name: '',
@@ -215,7 +222,11 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
       {formError === null ? null : (
         <Callout tone="danger" role="alert">
           {formError}
-          <PlanProblemAction error={formCause} workspaceId={workspaceId} />
+          <PlanProblemAction
+            error={formCause}
+            workspaceId={workspaceId}
+            canViewBilling={canViewBilling}
+          />
         </Callout>
       )}
 

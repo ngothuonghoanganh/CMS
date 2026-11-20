@@ -4,6 +4,7 @@ import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import { planProblemOf } from '../billing/plan-problem';
 import type { Leave, LeaveOutcome } from '../shell/screen-leave';
 import { markPageScreensStale } from './stale-screens';
 import {
@@ -67,6 +68,14 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
   if (error instanceof ApiError) {
     if (error.status === 409 && error.code === 'revision_conflict') {
       return 'conflict';
+    }
+    const plan = planProblemOf(error);
+    if (plan !== null) {
+      return {
+        kind: 'plan',
+        message: error.problem.detail ?? error.problem.title,
+        problem: plan.kind,
+      };
     }
     if (error.status === 422) {
       return { kind: 'invalid', message: firstIssueMessage(error) };

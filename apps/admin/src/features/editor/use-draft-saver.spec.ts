@@ -657,4 +657,17 @@ describe('describeSaveFailure', () => {
       expect(describeSaveFailure(problem(status, 'forbidden'))).toMatchObject({ kind: 'other' });
     }
   });
+
+  it('calls a refusal of the plan by its kind, with the reason the API gave', () => {
+    const readOnly = problem(402, 'workspace_read_only', {
+      title: 'Workspace đang ở chế độ chỉ đọc',
+      detail: 'Thời gian dùng thử đã hết. Trang live và form vẫn chạy.',
+      context: { state: 'trial_expired' },
+    });
+    expect(describeSaveFailure(readOnly)).toEqual({
+      kind: 'plan',
+      message: 'Thời gian dùng thử đã hết. Trang live và form vẫn chạy.',
+      problem: 'read_only',
+    });
+  });
 });

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
 import { loadAssetsByIds } from '../../../../../../../features/assets';
+import { WorkspacePlanProvider } from '../../../../../../../features/billing/plan-context';
 import { LIST_LIMIT, loadAllPages, referencedAssetIds } from '../../../../../../../features/editor';
 import { leadCaptureViewOf } from '../../../../../../../features/privacy/privacy-presentation';
 import { EditorWithPublish } from '../../../../../../../features/publish/EditorWithPublish';
@@ -67,22 +68,31 @@ export default async function EditPage({ params }: EditPageProps) {
   if (!can(membership.role, 'pages.edit')) {
     redirect(pageHref(siteId, pageId, 'history'));
   }
-  const assets = await loadAssetsByIds(
-    referencedAssetIds(detail.draft.composition, detail.draft.seo, site),
-    (ids) => serverApi(endpoints.listAssets, [siteId], { query: { ids } }),
-  );
+  const [assets, plan] = await Promise.all([
+    loadAssetsByIds(referencedAssetIds(detail.draft.composition, detail.draft.seo, site), (ids) =>
+      serverApi(endpoints.listAssets, [siteId], { query: { ids } }),
+    ),
+    // The read-only notice and the way to board 28 of a refused save (ADR-035).
+    serverApi(endpoints.getWorkspacePlan, [site.workspaceId]),
+  ]);
 
   return (
-    <EditorWithPublish
-      initial={{
-        detail,
-        site,
-        assets,
-        pages,
-        role: membership.role,
-        userId: me.user.id,
-        leadCapture: leadCaptureViewOf(privacy),
-      }}
-    />
+    <WorkspacePlanProvider
+      workspaceId={site.workspaceId}
+      canViewBilling={can(membership.role, 'billing.view')}
+      plan={plan}
+    >
+      <EditorWithPublish
+        initial={{
+          detail,
+          site,
+          assets,
+          pages,
+          role: membership.role,
+          userId: me.user.id,
+          leadCapture: leadCaptureViewOf(privacy),
+        }}
+      />
+    </WorkspacePlanProvider>
   );
 }
