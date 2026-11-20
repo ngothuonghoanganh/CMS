@@ -1,4 +1,12 @@
-import type { BillingSummary, Plan, PlanCatalogResponse } from '@plp/contracts';
+import type {
+  BillingSummary,
+  Invoice,
+  InvoiceSummary,
+  PaymentMethodView,
+  Plan,
+  PlanCatalogResponse,
+  PlanChangeQuote,
+} from '@plp/contracts';
 
 // Shared by the billing specs only.
 
@@ -48,6 +56,64 @@ export function summaryFixture(overrides: Partial<BillingSummary> = {}): Billing
     usage: { sites: 4, members: 7, aiUses: 12, automationRuns: 1240, customDomains: 4 },
     usageMonth: '2026-11',
     usageResetsOn: '2026-12-01',
+    ...overrides,
+  };
+}
+
+export const visaCard: PaymentMethodView = {
+  brand: 'visa',
+  last4: '4242',
+  expMonth: 8,
+  expYear: 2030,
+  expired: false,
+};
+
+export function quoteFixture(overrides: Partial<PlanChangeQuote> = {}): PlanChangeQuote {
+  return {
+    mode: 'trial_change',
+    planId: 'agency',
+    cycle: 'monthly',
+    amount: 0,
+    periodStart: null,
+    periodEnd: null,
+    remainingDays: null,
+    periodDays: null,
+    paymentMethod: null,
+    paymentMethodRequired: false,
+    unavailableReason: null,
+    ...overrides,
+  };
+}
+
+export function invoiceSummaryFixture(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
+  return {
+    id: '64b0000000000000000000b1',
+    number: 'HD-2026-000001',
+    kind: 'subscription',
+    planId: 'business',
+    planName: 'Doanh nghiệp',
+    cycle: 'monthly',
+    periodStart: '2026-11-21T03:00:00.000Z',
+    periodEnd: '2026-12-21T03:00:00.000Z',
+    amount: 1_490_000,
+    method: 'card',
+    card: { brand: 'visa', last4: '4242' },
+    status: 'paid',
+    createdAt: '2026-11-21T03:00:00.000Z',
+    paidAt: '2026-11-21T03:00:05.000Z',
+    payable: false,
+    lastAttempt: { number: 1, at: '2026-11-21T03:00:05.000Z', outcome: 'succeeded', code: null },
+    ...overrides,
+  };
+}
+
+export function invoiceFixture(overrides: Partial<Invoice> = {}): Invoice {
+  return {
+    ...invoiceSummaryFixture(),
+    attempts: [{ number: 1, at: '2026-11-21T03:00:05.000Z', outcome: 'succeeded', code: null }],
+    billingInfo: null,
+    from: { planId: 'agency', cycle: 'monthly' },
+    endsTrial: true,
     ...overrides,
   };
 }

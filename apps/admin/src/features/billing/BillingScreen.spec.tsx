@@ -1,12 +1,9 @@
-import { endpoints } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { renderWithProviders } from '../shell/test-utils';
 import { BillingScreen, type BillingScreenProps } from './BillingScreen';
-import { billingQueryKeys } from './queries';
-import { basic, catalog, summaryFixture } from './test-fixtures';
+import { catalog, summaryFixture } from './test-fixtures';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -79,11 +76,36 @@ describe('BillingScreen (board 28)', () => {
     ).toEqual(['— (không có)', '— (không có)', 'Có']);
   });
 
-  it('offers no payment or lifecycle action before they exist', () => {
+  it('offers no lifecycle action before it exists, and leads the trial to the card', () => {
     renderBilling();
 
-    expect(screen.queryByRole('button', { name: /Hủy gói|Thanh toán|phương thức/ })).toBeNull();
-    expect(screen.queryByRole('link', { name: /hóa đơn/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Hủy gói/ })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Thêm phương thức thanh toán' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing/payments`,
+    );
+  });
+
+  it('has the two tabs of boards 28 and 29', () => {
+    renderBilling();
+
+    const tabs = screen.getByRole('navigation', { name: 'Gói và thanh toán' });
+    expect(within(tabs).getByRole('link', { name: 'Gói & mức dùng' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(tabs).getByRole('link', { name: 'Thanh toán & hóa đơn' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing/payments`,
+    );
+  });
+
+  it('says what the gateway did when it leads back from adding a card', () => {
+    const { unmount } = renderBilling({ returned: 'saved' });
+    expect(screen.getByText('Đã lưu thẻ')).toBeInTheDocument();
+    unmount();
+    renderBilling({ returned: 'canceled' });
+    expect(screen.getByText('Chưa thêm thẻ')).toBeInTheDocument();
   });
 
   it('shows a banner of the state, as an alert when work has stopped', () => {
@@ -100,70 +122,5 @@ describe('BillingScreen (board 28)', () => {
 
     expect(screen.queryByRole('button', { name: 'Đổi gói' })).toBeNull();
     expect(screen.getByText('Chủ sở hữu workspace đổi được gói.')).toBeInTheDocument();
-  });
-
-  describe('"Đổi gói"', () => {
-    it('changes the plan during the trial and updates what the sidebar reads', async () => {
-      const user = userEvent.setup();
-      const changed = summaryFixture({ plan: basic, usage: summaryFixture().usage });
-      apiMock.mockResolvedValue(changed);
-      const { queryClient } = renderBilling();
-
-      await user.click(screen.getByRole('button', { name: 'Đổi gói' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
-      expect(within(dialog).getByRole('button', { name: 'Đổi sang Gói Agency' })).toBeDisabled();
-
-      await user.click(within(dialog).getByRole('radio', { name: /Gói Cơ bản/ })); // What goes over the smaller plan is said before it is chosen.
-      expect(within(dialog).getByText(/4 site, vượt hạn mức Gói Cơ bản/)).toBeInTheDocument();
-      expect(within(dialog).getByText(/Automation đang bật sẽ tạm dừng/)).toBeInTheDocument();
-      await user.click(within(dialog).getByRole('button', { name: 'Đổi sang Gói Cơ bản' }));
-
-      expect(lastCallTo(apiMock, endpoints.changePlan)).toEqual({
-        args: [WORKSPACE_ID],
-        options: { body: { planId: 'basic', cycle: 'monthly' } },
-      });
-      expect(await screen.findByText('Đã đổi sang Gói Cơ bản')).toBeInTheDocument();
-      expect(screen.queryByRole('dialog')).toBeNull();
-      expect(queryClient.getQueryData(billingQueryKeys.plan(WORKSPACE_ID))).toMatchObject({
-        plan: { id: 'basic', features: { automation: false } },
-        access: 'full',
-      });
-      expect(screen.getByRole('heading', { name: 'Gói Cơ bản' })).toBeInTheDocument();
-    });
-
-    it('changes the cycle of the same plan', async () => {
-      const user = userEvent.setup();
-      apiMock.mockResolvedValue(summaryFixture({ cycle: 'yearly' }));
-      renderBilling();
-
-      await user.click(screen.getByRole('button', { name: 'Đổi gói' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
-      await user.click(within(dialog).getByRole('button', { name: 'Theo năm' }));
-      expect(within(dialog).getByText(/5\.990\.000 ₫ \/ năm/)).toBeInTheDocument();
-      await user.click(within(dialog).getByRole('button', { name: 'Đổi sang Gói Agency' }));
-
-      expect(lastCallTo(apiMock, endpoints.changePlan).options).toEqual({
-        body: { planId: 'agency', cycle: 'yearly' },
-      });
-    });
-
-    it('shows the API message when the plan cannot change yet, and keeps the dialog', async () => {
-      const user = userEvent.setup();
-      apiMock.mockRejectedValue(
-        apiError(409, 'plan_change_unavailable', 'Chưa đổi được gói lúc này'),
-      );
-      renderBilling({ initial: summaryFixture({ state: 'active', trialDaysLeft: null }) });
-
-      await user.click(screen.getByRole('button', { name: 'Đổi gói' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
-      await user.click(within(dialog).getByRole('radio', { name: /Gói Doanh nghiệp/ }));
-      await user.click(within(dialog).getByRole('button', { name: 'Đổi sang Gói Doanh nghiệp' }));
-
-      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-        'Chưa đổi được gói lúc này',
-      );
-      // The dialog is modal, so the page behind it is hidden from the tree.
-      expect(screen.getByRole('heading', { name: 'Gói Agency', hidden: true })).toBeInTheDocument();
-    });
   });
 });

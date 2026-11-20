@@ -1,4 +1,10 @@
-import { can, endpoints, holdersOf } from '@plp/contracts';
+import {
+  can,
+  endpoints,
+  holdersOf,
+  METHOD_SETUP_RESULT_PARAM,
+  methodSetupResultSchema,
+} from '@plp/contracts';
 import type { Metadata } from 'next';
 import { BillingScreen } from '../../../../../features/billing/BillingScreen';
 import { siteHref } from '../../../../../features/shell/navigation';
@@ -8,6 +14,7 @@ import { serverApi } from '../../../../../lib/server-api';
 
 interface BillingPageProps {
   params: Promise<{ workspaceId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: BillingPageProps): Promise<Metadata> {
@@ -25,7 +32,7 @@ async function loadBilling(workspaceId: string) {
 }
 
 /** Board 28: the plan, its state, the usage of each limit and the comparison of plans (ADR-035). */
-export default async function BillingPage({ params }: BillingPageProps) {
+export default async function BillingPage({ params, searchParams }: BillingPageProps) {
   const { workspaceId } = await params;
   const { membership, site } = await loadWorkspaceContext(workspaceId);
   if (!can(membership.role, 'billing.view')) {
@@ -44,6 +51,9 @@ export default async function BillingPage({ params }: BillingPageProps) {
     );
   }
   const { summary, catalog, loadedAt } = await loadBilling(workspaceId);
+  const returned = methodSetupResultSchema.safeParse(
+    (await searchParams)[METHOD_SETUP_RESULT_PARAM],
+  );
   return (
     <BillingScreen
       workspaceId={workspaceId}
@@ -52,6 +62,7 @@ export default async function BillingPage({ params }: BillingPageProps) {
       initial={summary}
       catalog={catalog}
       loadedAt={loadedAt}
+      returned={returned.success ? returned.data : null}
     />
   );
 }

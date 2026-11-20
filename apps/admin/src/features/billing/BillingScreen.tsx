@@ -1,12 +1,21 @@
 'use client';
 
-import { type BillingSummary, type PlanCatalogResponse, type WorkspacePlan } from '@plp/contracts';
-import { Badge, Button, Callout, useToast } from '@plp/ui';
+import {
+  type BillingSummary,
+  type MethodSetupResult,
+  type PlanCatalogResponse,
+  type WorkspacePlan,
+} from '@plp/contracts';
+import { Badge, Button, ButtonLink, Callout, useToast } from '@plp/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { formatVnd } from '../../lib/format';
 import { cx } from '../shell/cx';
+import { billingHref, paymentsHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { ScrollRegion } from '../shell/ScrollRegion';
+import { BillingTabs } from './BillingTabs';
 import { ChangePlanDialog } from './ChangePlanDialog';
 import {
   comparisonRows,
@@ -27,6 +36,8 @@ export interface BillingScreenProps {
   initial: BillingSummary;
   catalog: PlanCatalogResponse;
   loadedAt: number;
+  /** `?paymentMethod=` of the address the gateway led back to from the plan dialog. */
+  returned?: MethodSetupResult | null;
 }
 
 /** What the member-level plan keeps of a summary. */
@@ -41,9 +52,9 @@ function workspacePlanOf(summary: BillingSummary): WorkspacePlan {
 }
 
 /**
- * Screen 28 "Gói dịch vụ" (ADR-035, T1): the plan, its state, what the workspace uses of each limit
- * and how the plans compare. Payment methods, invoices and the subscription's lifecycle come
- * later, so there is no button for them.
+ * Screen 28 "Gói dịch vụ" (ADR-035, T1, T2): the plan, its state, what the workspace uses of each
+ * limit and how the plans compare, and "Đổi gói" with its payment. Cards and invoices are board
+ * 29, one tab over; the subscription's lifecycle (cancel, renewal) comes later.
  */
 export function BillingScreen({
   workspaceId,
@@ -52,10 +63,12 @@ export function BillingScreen({
   initial,
   catalog,
   loadedAt,
+  returned = null,
 }: BillingScreenProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [changing, setChanging] = useState(false);
+  const [notice] = useState(returned);
   const summary = useBillingSummary(workspaceId, initial, loadedAt);
 
   const chip = stateChip(summary.state, summary.trialDaysLeft);
@@ -63,14 +76,49 @@ export function BillingScreen({
   const meters = usageMeters(summary.plan, summary.usage, summary.usageResetsOn);
   const rows = comparisonRows(catalog.plans);
 
-  function changed(next: BillingSummary) {
+  // The address the gateway led back to is not kept: a reload says nothing of the card twice.
+  useEffect(() => {
+    if (returned !== null) {
+      window.history.replaceState(window.history.state, '', billingHref(workspaceId));
+    }
+  }, [returned, workspaceId]);
+
+  // Board 28's banner CTAs: the trial leads to the card, an ended trial to choosing a plan.
+  const bannerAction = !canManage ? null : summary.state === 'trialing' ? (
+    <ButtonLink as={Link} href={paymentsHref(workspaceId)} variant="secondary" size="sm">
+      Thêm phương thức thanh toán
+    </ButtonLink>
+  ) : summary.state === 'trial_expired' ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => {
+        setChanging(true);
+      }}
+    >
+      Chọn gói và thanh toán
+    </Button>
+  ) : null;
+
+  function changed(next: BillingSummary, charged: number | null) {
     queryClient.setQueryData(billingQueryKeys.summary(workspaceId), next);
     // The sidebar, the banner and the "Nâng cấp" chips follow at once.
     queryClient.setQueryData(billingQueryKeys.plan(workspaceId), workspacePlanOf(next));
     // Automations and custom roles depend on the plan; their screens read again.
     void queryClient.invalidateQueries({ queryKey: ['sites'] });
+    // A charge made an invoice, and a card in use shows on board 29.
+    void queryClient.invalidateQueries({ queryKey: billingQueryKeys.invoices(workspaceId) });
     setChanging(false);
-    toast({ tone: 'success', title: `Đã đổi sang Gói ${next.plan.name}` });
+    toast({
+      tone: 'success',
+      title: `Đã đổi sang Gói ${next.plan.name}`,
+      ...(charged === null ? {} : { description: `Đã thanh toán ${formatVnd(charged)}.` }),
+    });
+  }
+
+  function pending() {
+    // The plan follows the gateway's answer: read it again when it may have come.
+    void queryClient.invalidateQueries({ queryKey: billingQueryKeys.all(workspaceId) });
   }
 
   return (
@@ -79,8 +127,19 @@ export function BillingScreen({
         title="Gói dịch vụ"
         description={`Gói và mức sử dụng của workspace ${workspaceName}.`}
       />
+      <BillingTabs workspaceId={workspaceId} current="plan" />
+      {notice === 'saved' ? (
+        <Callout tone="success" role="status" title="Đã lưu thẻ">
+          Chọn gói rồi thanh toán bằng thẻ vừa lưu.
+        </Callout>
+      ) : null}
+      {notice === 'canceled' ? (
+        <Callout tone="info" role="status" title="Chưa thêm thẻ">
+          Bạn đã rời trang của cổng thanh toán, nên thẻ chưa được lưu.
+        </Callout>
+      ) : null}
       {banner === null ? null : (
-        <Callout tone={banner.tone} role={banner.role} title={banner.title}>
+        <Callout tone={banner.tone} role={banner.role} title={banner.title} action={bannerAction}>
           {banner.body}
         </Callout>
       )}
@@ -215,6 +274,7 @@ export function BillingScreen({
           open
           onOpenChange={setChanging}
           onChanged={changed}
+          onPending={pending}
         />
       ) : null}
     </PageContainer>

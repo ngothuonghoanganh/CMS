@@ -8,6 +8,8 @@ import {
   newPageHref,
   openPageHref,
   pageHref,
+  paymentsHref,
+  receiptHref,
   siteNavItems,
   templateHref,
   workspaceNavItems,
@@ -189,5 +191,15 @@ describe('page routes', () => {
     expect(leadsHref(siteId, '?folder=spam')).toBe(`/sites/${siteId}/leads?folder=spam`);
     expect(newLeadsHref(siteId)).toBe(`/sites/${siteId}/leads?status=new&range=all`);
     expect(leadRecipientsHref(siteId)).toBe(`/sites/${siteId}/leads?recipients=open`);
+  });
+});
+
+describe('billing addresses', () => {
+  it('opens board 29 and a receipt under the billing section', () => {
+    expect(paymentsHref('w1')).toBe('/workspaces/w1/billing/payments');
+    expect(paymentsHref('w1', '?paymentMethod=saved')).toBe(
+      '/workspaces/w1/billing/payments?paymentMethod=saved',
+    );
+    expect(receiptHref('w1', 'i1')).toBe('/workspaces/w1/billing/receipts/i1');
   });
 });
