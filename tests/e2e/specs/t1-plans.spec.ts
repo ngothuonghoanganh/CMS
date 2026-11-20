@@ -167,15 +167,36 @@ test.describe('T1 · plans, limits and read-only', () => {
     }
     await dialog.getByRole('button', { name: 'Xuất bản v2', exact: true }).click();
     await expect(dialog.getByText(/Thời gian dùng thử đã hết\./).first()).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'Xem gói & thanh toán' })).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'v2 đã live' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
-    // The workspace screens carry the read-only banner, with the way to pick a plan.
+    // The editor says so under its top bar, and a change is refused with the way to board 28,
+    // not "Thử lại", which could never work.
+    const strip = page.getByRole('status').filter({ hasText: 'Workspace đang ở chế độ chỉ đọc' });
+    await expect(strip).toContainText('Thay đổi ở đây chưa lưu được.');
+    await editor.heroRow.click();
+    await editor.heroHeadingField.fill('Ưu đãi niềng răng tháng 1');
+    await editor.heroHeadingField.blur();
+    await expect(editor.topBar.getByText(/Chưa lưu được/)).toBeVisible();
+    await expect(editor.topBar.getByRole('link', { name: 'Xem gói & thanh toán' })).toBeVisible();
+    await expect(editor.topBar.getByRole('button', { name: 'Thử lại' })).toHaveCount(0);
+
+    // The workspace screens carry the read-only banner, with the way to pick a plan. The refused
+    // change is left behind: the browser asks before leaving it.
+    page.once('dialog', (leave) => {
+      void leave.accept();
+    });
     await page.goto(`/sites/${site.id}`);
     const banner = page.getByRole('status').filter({ hasText: 'Workspace đang ở chế độ chỉ đọc' });
     await expect(banner).toContainText('Trang live và form vẫn chạy.');
     await expect(banner.getByRole('link', { name: 'Xem gói & thanh toán' })).toBeVisible();
     await page.goto(`/workspaces/${site.workspaceId}/billing`);
     await expect(page.getByText('Hết dùng thử').first()).toBeVisible();
+    // Board 28 says it once, in its own banner.
+    await expect(
+      page.getByRole('main').getByText('Trang live và form vẫn chạy.', { exact: false }),
+    ).toHaveCount(1);
 
     // The live page still opens, with the version published before, and takes a lead.
     const pageUrl = `${siteOrigin(site.subdomain)}/${slug}`;
