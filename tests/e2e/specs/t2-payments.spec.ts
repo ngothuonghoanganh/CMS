@@ -44,6 +44,12 @@ test.describe('T2 · cards, billing information, paid plan and receipts', () => 
     await expect(page).toHaveURL(new RegExp(`${paymentsPath(workspaceId)}$`));
     await expect(page.getByText('Chưa có phương thức thanh toán.')).toBeVisible();
     await addCardViaGateway(page, workspaceId, CARD_OK);
+    // The browser's Back shows the gateway's page again: it says the card is saved, with no form.
+    await page.goBack();
+    await expect(page.getByRole('heading', { level: 1, name: 'Đã lưu thẻ' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Lưu thẻ' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Quay lại trang thanh toán' }).click();
+    await expect(page.getByText('Đã lưu thẻ', { exact: true })).toBeVisible();
     await expect(page.getByText('Thẻ Visa •••• 4242', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('MẶC ĐỊNH', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đổi thẻ' })).toBeVisible();
@@ -100,6 +106,23 @@ test.describe('T2 · cards, billing information, paid plan and receipts', () => 
     ).toBeVisible();
     await expect(receipt.getByRole('button', { name: 'In hoặc lưu PDF' })).toBeVisible();
     await receipt.close();
+
+    // A phone: the amount, the status and the receipt of an invoice show without scrolling the
+    // history sideways.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    const phoneRow = page
+      .getByRole('table', { name: 'Lịch sử giao dịch' })
+      .getByRole('row')
+      .filter({ hasText: INVOICE_NUMBER });
+    await phoneRow.getByRole('cell').first().scrollIntoViewIfNeeded();
+    for (const part of [
+      phoneRow.getByText('1.490.000 ₫'),
+      phoneRow.getByText('Đã thanh toán'),
+      phoneRow.getByRole('link', { name: /^Tải hóa đơn HD-/ }),
+    ]) {
+      await expect(part).toBeInViewport({ ratio: 1 });
+    }
   });
 
   test('a declined card fails the upgrade with its reason; the invoice is paid again with a valid card', async ({
