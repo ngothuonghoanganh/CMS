@@ -12,8 +12,6 @@ import { leadStatusSchema } from './lead-inbox.js';
 export const AUTOMATIONS_PER_SITE_MAX = 20;
 export const AUTOMATION_CONDITIONS_MAX = 5;
 export const AUTOMATION_ACTIONS_MAX = 5;
-/** Runs a workspace may start each Vietnamese calendar month (ADR-034); Phase 4 ties it to plans. */
-export const AUTOMATION_RUNS_PER_MONTH = 2000;
 /** Failed runs in a row after which an automation pauses itself. */
 export const AUTOMATION_FAILURES_BEFORE_PAUSE = 20;
 export const AUTOMATION_NAME_MAX = 80;

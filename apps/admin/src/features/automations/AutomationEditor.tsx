@@ -3,7 +3,6 @@
 import {
   AUTOMATION_ACTIONS_MAX,
   AUTOMATION_CONDITIONS_MAX,
-  AUTOMATION_RUNS_PER_MONTH,
   type AutomationAction,
   type AutomationCondition,
   type AutomationDefinition,
@@ -34,6 +33,11 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatCount, formatRelativeTime } from '../../lib/format';
+import { useWorkspacePlan } from '../billing/plan-context';
+import { planProblemOf } from '../billing/plan-problem';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
+import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { useProblemToast } from '../billing/use-problem-toast';
 import { automationHref, automationRunsHref, automationsHref } from '../shell/navigation';
 import { cx } from '../shell/cx';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -92,6 +96,7 @@ function same(a: StepRef, b: StepRef): boolean {
  */
 export function AutomationEditor({ site, initial, canManage, loadedAt }: AutomationEditorProps) {
   const { toast } = useToast();
+  const problemToast = useProblemToast(site.workspaceId);
   const now = useNow(loadedAt);
   const nameId = useId();
   const [detail, setDetail] = useState(initial);
@@ -106,6 +111,8 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
   const [source, setSource] = useState<'latest' | 'sample'>('latest');
   const [test, setTest] = useState<TestAutomationResponse | null>(null);
   const [saving, setSaving] = useState<Saving>('saved');
+  // Why the last save failed when the plan refused it (ADR-035): retrying cannot work then.
+  const [savePlanError, setSavePlanError] = useState<unknown>(null);
   const [savedAt, setSavedAt] = useState(Date.parse(initial.updatedAt));
   const [activateOpen, setActivateOpen] = useState(false);
   // A webhook step's secret, shown once by the save that created it or by "Đổi bí mật".
@@ -120,6 +127,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
       api(endpoints.updateAutomation, [site.id, detail.id], { body }),
     onMutate: () => {
       setSaving('saving');
+      setSavePlanError(null);
     },
     onSuccess: (saved, body) => {
       setDetail(saved);
@@ -139,6 +147,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
     },
     onError: (error) => {
       setSaving('failed');
+      setSavePlanError(planProblemOf(error) === null ? null : error);
       reportUnexpected('Saving an automation failed', error);
     },
   });
@@ -183,7 +192,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
     onSuccess: setTest,
     onError: (error) => {
       reportUnexpected('Testing an automation failed', error);
-      toast({ tone: 'danger', title: 'Chưa chạy thử được', description: problemMessage(error) });
+      problemToast('Chưa chạy thử được', error);
     },
   });
 
@@ -199,7 +208,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
       });
     },
     onError: (error) => {
-      toast({ tone: 'danger', title: 'Chưa đổi được bí mật', description: problemMessage(error) });
+      problemToast('Chưa đổi được bí mật', error);
     },
   });
 
@@ -211,7 +220,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
       toast({ tone: 'success', title: `Đã tạm dừng “${item.name}”` });
     },
     onError: (error) => {
-      toast({ tone: 'danger', title: 'Chưa tạm dừng được', description: problemMessage(error) });
+      problemToast('Chưa tạm dừng được', error);
     },
   });
 
@@ -336,11 +345,16 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
               </Badge>
               <span role="status">
                 {saving === 'failed'
-                  ? 'Chưa lưu được — sửa tiếp để thử lại'
+                  ? savePlanError === null
+                    ? 'Chưa lưu được — sửa tiếp để thử lại'
+                    : `Chưa lưu được · ${problemMessage(savePlanError)}`
                   : saving === 'saved'
                     ? `Đã lưu · ${formatRelativeTime(savedAt, Math.max(now, savedAt))}`
                     : 'Đang lưu…'}
               </span>
+              {saving === 'failed' ? (
+                <PlanProblemAction error={savePlanError} workspaceId={site.workspaceId} />
+              ) : null}
             </span>
           </div>
         </div>
@@ -384,6 +398,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
           ) : null}
         </div>
       </header>
+      <ReadOnlyBanner variant="strip" />
 
       <div className={styles.body}>
         <section aria-label="Các bước" className={styles.stepsColumn}>
@@ -605,6 +620,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
       {activateOpen ? (
         <ActivateDialog
           siteId={site.id}
+          workspaceId={site.workspaceId}
           automation={detail}
           onClose={() => {
             setActivateOpen(false);
@@ -677,13 +693,24 @@ export function AutomationTabs({
 
 interface ActivateDialogProps {
   siteId: string;
+  workspaceId: string;
   automation: AutomationDetail;
   onClose: () => void;
   onEnabled: (item: AutomationListItem) => void;
 }
 
-/** "Bật …?": what changes from now, and the recent leads it may pick up (ADR-034). */
-function ActivateDialog({ siteId, automation, onClose, onEnabled }: ActivateDialogProps) {
+/**
+ * "Bật …?": what changes from now, the recent leads it may pick up (ADR-034), and the plan's
+ * monthly runs every run counts against (ADR-035).
+ */
+function ActivateDialog({
+  siteId,
+  workspaceId,
+  automation,
+  onClose,
+  onEnabled,
+}: ActivateDialogProps) {
+  const runsPerMonth = useWorkspacePlan()?.plan.plan.limits.automationRuns ?? null;
   const [includeRecent, setIncludeRecent] = useState(false);
   const numbers = useQuery({
     queryKey: ['sites', siteId, 'automations', automation.id, 'activation'],
@@ -746,14 +773,16 @@ function ActivateDialog({ siteId, automation, onClose, onEnabled }: ActivateDial
               />
             ) : null}
             <span className={styles.note}>
-              Bạn tạm dừng được bất cứ lúc nào. Mỗi lượt chạy tính vào hạn mức{' '}
-              {formatCount(AUTOMATION_RUNS_PER_MONTH)} lượt mỗi tháng của workspace.
+              {runsPerMonth === null
+                ? 'Bạn tạm dừng được bất cứ lúc nào. Mỗi lượt chạy tính vào hạn mức lượt automation mỗi tháng của gói.'
+                : `Bạn tạm dừng được bất cứ lúc nào. Mỗi lượt chạy tính vào hạn mức ${formatCount(runsPerMonth)} lượt mỗi tháng của gói.`}
             </span>
           </>
         )}
         {enable.isError ? (
           <span role="alert" className={styles.fieldError}>
             {problemMessage(enable.error)}
+            <PlanProblemAction error={enable.error} workspaceId={workspaceId} />
           </span>
         ) : null}
       </div>
