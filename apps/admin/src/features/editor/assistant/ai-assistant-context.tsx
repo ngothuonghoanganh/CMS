@@ -62,7 +62,11 @@ export type AssistPhase =
       retrying: string | null;
       retryNote: string | null;
     } & SentAsk)
-  | ({ kind: 'failed'; reason: string } & SentAsk)
+  | ({
+      kind: 'failed';
+      reason: string;
+      /** The failed request, when a 402 of the plan can be told from it. */ cause?: unknown;
+    } & SentAsk)
   | { kind: 'applied'; count: number; draft: DraftSnapshot };
 
 export interface AiAssistant {
@@ -318,7 +322,14 @@ export function AiAssistantProvider({
           if (request.signal.aborted) {
             return;
           }
-          setPhase({ kind: 'failed', ask: input, sent, title, reason: describeFailure(error) });
+          setPhase({
+            kind: 'failed',
+            ask: input,
+            sent,
+            title,
+            reason: describeFailure(error),
+            cause: error,
+          });
           focusSoon(AI_FOCUS.failed);
         },
       );

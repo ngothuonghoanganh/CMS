@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: AutomationsPageProps): Promis
 
 /** Screen 25: the automations of the site (ADR-034). */
 export default async function AutomationsPage({ params }: AutomationsPageProps) {
-  const { site, membership } = await loadSiteContext((await params).siteId);
+  const { site, membership, plan } = await loadSiteContext((await params).siteId);
   if (!can(membership.role, 'automations.view')) {
     return (
       <NoPermission
@@ -29,7 +29,9 @@ export default async function AutomationsPage({ params }: AutomationsPageProps) 
       />
     );
   }
-  const data = await loadAutomationsData(site.id);
+  // A plan without automation has no list to read; the screen says so and, once the plan changes,
+  // reads the list itself.
+  const data = await loadAutomationsData(site.id, plan.plan.features.automation);
   return (
     <AutomationsScreen
       key={data.loadedAt}

@@ -3,7 +3,13 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import {
+  NO_LEADS,
+  siteFixture,
+  SITE_ID,
+  workspacePlanFixture,
+  WORKSPACE_ID,
+} from '../dashboard/test-fixtures';
 import { AppShell } from './AppShell';
 import { createTestQueryClient } from './test-utils';
 
@@ -29,10 +35,10 @@ beforeAll(() => {
   });
 });
 
-function renderShell() {
+function renderShell(plan = workspacePlanFixture(), role: Membership['role'] = 'owner') {
   const membership: Membership = {
     workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency', slug: 'may-xanh-agency' },
-    role: 'owner',
+    role,
     siteIds: null,
   };
   const site = siteFixture();
@@ -49,6 +55,7 @@ function renderShell() {
         memberCount={1}
         leadCounts={NO_LEADS}
         addresses={null}
+        plan={plan}
       >
         <h1>Tên miền</h1>
       </AppShell>
@@ -95,5 +102,36 @@ describe('AppShell', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mở menu điều hướng' })).toHaveFocus();
+  });
+
+  describe('a workspace whose plan has lapsed (ADR-035)', () => {
+    const lapsed = workspacePlanFixture({ state: 'trial_expired', access: 'read_only' });
+
+    it('says it is read-only on the screen, with the way to board 28 for who may open it', () => {
+      renderShell(lapsed);
+
+      const banner = within(screen.getByRole('main')).getByRole('status');
+      expect(banner).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
+      expect(banner).toHaveTextContent('Thời gian dùng thử đã hết.');
+      expect(banner).toHaveTextContent('Trang live và form vẫn chạy.');
+      expect(within(banner).getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/billing`,
+      );
+    });
+
+    it('sends the others to Chủ sở hữu instead of a page they cannot open', () => {
+      renderShell(lapsed, 'editor');
+
+      const banner = within(screen.getByRole('main')).getByRole('status');
+      expect(banner).toHaveTextContent('Chủ sở hữu workspace cần chọn gói');
+      expect(within(banner).queryByRole('link')).toBeNull();
+    });
+
+    it('shows nothing while the workspace has full access', () => {
+      renderShell(workspacePlanFixture({ state: 'past_due' }));
+
+      expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
+    });
   });
 });

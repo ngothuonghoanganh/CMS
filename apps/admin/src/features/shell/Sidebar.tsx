@@ -6,6 +6,7 @@ import {
   type Membership,
   type SessionUser,
   type Site,
+  type WorkspacePlan,
   accessLabel,
 } from '@plp/contracts';
 import {
@@ -17,6 +18,7 @@ import {
   ChevronUpDownIcon,
   BoltIcon,
   ContactCardIcon,
+  CreditCardIcon,
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -44,6 +46,7 @@ import { loadPage } from '../../lib/page-load';
 import { hostOf } from '../../lib/site-url';
 import { newLeadsBadge } from '../leads/lead-presentation';
 import { useLeadCounts } from '../leads/queries';
+import { useLivePlan } from '../billing/queries';
 import { useMemberCount } from '../members/queries';
 import { Brand } from './Brand';
 import {
@@ -77,6 +80,7 @@ const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   templates: GridIcon,
   members: UsersIcon,
   roles: LockIcon,
+  billing: CreditCardIcon,
 };
 
 export interface SidebarProps {
@@ -98,6 +102,8 @@ export interface SidebarProps {
   leadCounts: LeadCounts | null;
   /** How workspace addresses are made (ADR-025); null when every workspace opens at one address. */
   addresses: WorkspaceAddresses | null;
+  /** The workspace's plan: its name under the workspace, and "Nâng cấp" on what it lacks. */
+  plan: WorkspacePlan;
   /** Called before navigating, so the mobile drawer can close. */
   onNavigate?: (() => void) | undefined;
 }
@@ -122,6 +128,8 @@ interface NavLinkProps {
   onNavigate: (() => void) | undefined;
   /** Overrides the item's address, e.g. the new leads behind the badge. */
   href?: string;
+  /** The plan lacks the feature of the section: "Nâng cấp" (Sidebar v2, planLimited). */
+  locked?: boolean;
   children?: ReactNode;
 }
 
@@ -137,7 +145,14 @@ function NavCount({ count, noun }: { count: number; noun: string }) {
   );
 }
 
-function NavLink({ item, pathname, onNavigate, href = item.href, children }: NavLinkProps) {
+function NavLink({
+  item,
+  pathname,
+  onNavigate,
+  href = item.href,
+  locked = false,
+  children,
+}: NavLinkProps) {
   const Icon = navIcons[item.key];
   return (
     <Link
@@ -148,6 +163,12 @@ function NavLink({ item, pathname, onNavigate, href = item.href, children }: Nav
     >
       <Icon size={18} />
       <span className={styles.navLabel}>{item.label}</span>
+      {locked ? (
+        <span className={styles.upgradeChip}>
+          <LockIcon size={11} strokeWidth={2.4} />
+          Nâng cấp
+        </span>
+      ) : null}
       {children}
     </Link>
   );
@@ -205,12 +226,16 @@ export function Sidebar({
   memberCount,
   leadCounts,
   addresses,
+  plan: initialPlan,
   onNavigate,
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const logout = useLogout();
   const workspace = membership.workspace;
+  const plan = useLivePlan(workspace.id, initialPlan);
+  const lacksFeature = <Key extends string>(item: NavItem<Key>) =>
+    item.feature !== undefined && !plan.plan.features[item.feature];
   const allowed = <Key extends string>(items: NavItem<Key>[]) =>
     items.filter((item) => item.permissions.some((permission) => can(membership.role, permission)));
   const workspaceItems = allowed(workspaceNavItems(workspace.id));
@@ -264,7 +289,7 @@ export function Sidebar({
           <button type="button" className={styles.workspaceButton}>
             <Avatar name={workspace.name} shape="square" />
             <span className={styles.stack}>
-              <span className={styles.caption}>Workspace</span>{' '}
+              <span className={styles.caption}>Workspace · Gói {plan.plan.name}</span>{' '}
               <span className={styles.workspaceName}>{workspace.name}</span>
             </span>
             <VisuallyHidden>, đổi workspace</VisuallyHidden>
@@ -429,7 +454,12 @@ export function Sidebar({
                   leadCounts={leadCounts}
                 />
               ) : (
-                <NavLink item={item} pathname={pathname} onNavigate={onNavigate}>
+                <NavLink
+                  item={item}
+                  pathname={pathname}
+                  onNavigate={onNavigate}
+                  locked={lacksFeature(item)}
+                >
                   {item.key === 'pages' ? <NavCount count={pageCount} noun="trang" /> : null}
                 </NavLink>
               )}

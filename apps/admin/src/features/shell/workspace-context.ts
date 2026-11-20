@@ -7,6 +7,7 @@ import {
   type Membership,
   type Site,
   type SiteListItem,
+  type WorkspacePlan,
 } from '@plp/contracts';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -27,6 +28,8 @@ export interface WorkspaceContext {
   pageCount: number;
   /** Members of the workspace for "Thành viên"; null for roles that do not manage members. */
   memberCount: number | null;
+  /** The workspace's plan and access level, for the sidebar and the read-only banner (ADR-035). */
+  plan: WorkspacePlan;
   /** Null without a site, and for roles that do not see leads (ADR-020). */
   leadCounts: LeadCounts | null;
 }
@@ -57,18 +60,28 @@ export const loadWorkspaceContext = cache(
       notFound();
     }
     await requireWorkspaceAddress(membership.workspace);
-    const [{ items: sites }, memberCount] = await Promise.all([
+    const [{ items: sites }, memberCount, plan] = await Promise.all([
       serverApi(endpoints.listSites, [workspaceId]),
       loadMemberCount(membership),
+      serverApi(endpoints.getWorkspacePlan, [workspaceId]),
     ]);
     const site = pickSite(sites, (await cookies()).get(SITE_PREFERENCE_COOKIE)?.value);
     if (site === null) {
-      return { me, membership, sites, site, pageCount: 0, memberCount, leadCounts: null };
+      return { me, membership, sites, site, pageCount: 0, memberCount, plan, leadCounts: null };
     }
     const [pageCount, leadCounts] = await Promise.all([
       serverApi(endpoints.countPages, [site.id]),
       can(membership.role, 'leads.view') ? serverApi(endpoints.leadCounts, [site.id]) : null,
     ]);
-    return { me, membership, sites, site, pageCount: pageCount.count, memberCount, leadCounts };
+    return {
+      me,
+      membership,
+      sites,
+      site,
+      pageCount: pageCount.count,
+      memberCount,
+      plan,
+      leadCounts,
+    };
   },
 );

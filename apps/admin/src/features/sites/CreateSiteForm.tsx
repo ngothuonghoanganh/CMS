@@ -16,6 +16,7 @@ import { type SubmitEvent, type ReactNode, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { defaultHostPreview } from '../../lib/site-url';
 import { siteHref } from '../shell/navigation';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import { ThemePicker } from '../theme';
@@ -83,6 +84,7 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
   // The subdomain follows the name until the user edits it.
   const [subdomainEdited, setSubdomainEdited] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formCause, setFormCause] = useState<unknown>(null);
   const availability = useSubdomainAvailability(form.values.subdomain);
 
   const create = useMutation({
@@ -102,6 +104,7 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
         return;
       }
       setFormError(problemMessage(error));
+      setFormCause(error);
     },
   });
 
@@ -212,6 +215,7 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
       {formError === null ? null : (
         <Callout tone="danger" role="alert">
           {formError}
+          <PlanProblemAction error={formCause} workspaceId={workspaceId} />
         </Callout>
       )}
 

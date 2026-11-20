@@ -14,6 +14,7 @@ import { Button, Callout, Dialog, Field, RadioCardGroup } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
 import { api } from '../../lib/api';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { PermissionSummary, SiteScopeFields } from './ChangeAccessDialog';
 import { EmailChips, type EmailChipsValue } from './EmailChips';
@@ -211,6 +212,7 @@ export function InviteDialog({
         {send.isError ? (
           <Callout tone="danger" role="alert">
             {problemMessage(send.error)}
+            <PlanProblemAction error={send.error} workspaceId={workspaceId} />
           </Callout>
         ) : null}
       </form>

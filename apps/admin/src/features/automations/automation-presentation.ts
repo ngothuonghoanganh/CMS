@@ -41,8 +41,12 @@ export function stateBadge(item: AutomationListItem): { label: string; tone: Bad
     case 'draft':
       return { label: 'Bản nháp', tone: 'neutral' };
     case 'paused':
-      return item.pausedReason === 'errors'
-        ? { label: 'Tự tạm dừng', tone: 'danger' }
+      if (item.pausedReason === 'errors') {
+        return { label: 'Tự tạm dừng', tone: 'danger' };
+      }
+      // The plan stopped it (ADR-035): a limit of the plan, which upgrading lifts.
+      return item.pausedReason === 'plan'
+        ? { label: 'Tạm dừng theo gói', tone: 'warning' }
         : { label: 'Tạm dừng', tone: 'neutral' };
     case 'on':
       return item.lastRun?.status === 'failed'

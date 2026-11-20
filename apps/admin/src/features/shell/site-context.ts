@@ -6,6 +6,7 @@ import {
   type MeResponse,
   type Membership,
   type Site,
+  type WorkspacePlan,
 } from '@plp/contracts';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
@@ -27,6 +28,8 @@ export interface SiteContext {
   pageCount: number;
   /** Members of the workspace for "Thành viên"; null for roles that do not manage members. */
   memberCount: number | null;
+  /** The workspace's plan and access level, for the sidebar and the read-only banner (ADR-035). */
+  plan: WorkspacePlan;
   /**
    * "N mới" in the sidebar and the lead card of the dashboard (ADR-018); null for roles that do
    * not see leads (ADR-020).
@@ -62,10 +65,11 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
   }
   await requireWorkspaceAddress(membership.workspace);
   // The count endpoint skips the page evaluation that `listPages` runs for statuses and checks.
-  const [siteList, pageCount, memberCount, leadCounts] = await Promise.all([
+  const [siteList, pageCount, memberCount, plan, leadCounts] = await Promise.all([
     serverApi(endpoints.listSites, [site.workspaceId]),
     serverApi(endpoints.countPages, [site.id]),
     loadMemberCount(membership),
+    serverApi(endpoints.getWorkspacePlan, [site.workspaceId]),
     can(membership.role, 'leads.view') ? serverApi(endpoints.leadCounts, [site.id]) : null,
   ]);
   return {
@@ -75,6 +79,7 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
     sites: siteList.items,
     pageCount: pageCount.count,
     memberCount,
+    plan,
     leadCounts,
   };
 });

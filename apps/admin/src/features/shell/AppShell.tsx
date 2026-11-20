@@ -3,6 +3,9 @@
 import { CloseIcon, IconButton, MenuIcon, ToastProvider, VisuallyHidden } from '@plp/ui';
 import { Dialog as RadixDialog } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
+import { can } from '@plp/contracts';
+import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { WorkspacePlanProvider } from '../billing/plan-context';
 import { Brand } from './Brand';
 import { Sidebar, type SidebarProps } from './Sidebar';
 import { sitePreferenceCookie } from './site-preference';
@@ -45,49 +48,59 @@ export function AppShell({ children, ...sidebar }: AppShellProps) {
 
   return (
     <ToastProvider>
-      <a href="#main-content" className={styles.skipLink}>
-        Bỏ qua điều hướng
-      </a>
-      <div className={styles.shell}>
-        <header className={styles.topBar}>
-          <RadixDialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <RadixDialog.Trigger asChild>
-              <IconButton aria-label="Mở menu điều hướng" icon={<MenuIcon size={22} />} />
-            </RadixDialog.Trigger>
-            <RadixDialog.Portal>
-              <RadixDialog.Overlay className={styles.overlay} />
-              <RadixDialog.Content className={styles.drawer} aria-describedby={undefined}>
-                <RadixDialog.Title asChild>
-                  <VisuallyHidden>Menu điều hướng</VisuallyHidden>
-                </RadixDialog.Title>
-                <div className={styles.drawerClose}>
-                  <RadixDialog.Close asChild>
-                    <IconButton aria-label="Đóng menu điều hướng" icon={<CloseIcon size={20} />} />
-                  </RadixDialog.Close>
-                </div>
-                <Sidebar
-                  {...sidebar}
-                  onNavigate={() => {
-                    setDrawerOpen(false);
-                  }}
-                />
-              </RadixDialog.Content>
-            </RadixDialog.Portal>
-          </RadixDialog.Root>
-          <Brand />
-          <span className={styles.topBarSite}>
-            {sidebar.site?.name ?? sidebar.membership.workspace.name}
-          </span>
-        </header>
-        <aside className={styles.sidebar}>
-          <div className={styles.sidebarInner}>
-            <Sidebar {...sidebar} />
-          </div>
-        </aside>
-        <main id="main-content" tabIndex={-1} className={styles.main}>
-          {children}
-        </main>
-      </div>
+      <WorkspacePlanProvider
+        workspaceId={sidebar.membership.workspace.id}
+        canViewBilling={can(sidebar.membership.role, 'billing.view')}
+        plan={sidebar.plan}
+      >
+        <a href="#main-content" className={styles.skipLink}>
+          Bỏ qua điều hướng
+        </a>
+        <div className={styles.shell}>
+          <header className={styles.topBar}>
+            <RadixDialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+              <RadixDialog.Trigger asChild>
+                <IconButton aria-label="Mở menu điều hướng" icon={<MenuIcon size={22} />} />
+              </RadixDialog.Trigger>
+              <RadixDialog.Portal>
+                <RadixDialog.Overlay className={styles.overlay} />
+                <RadixDialog.Content className={styles.drawer} aria-describedby={undefined}>
+                  <RadixDialog.Title asChild>
+                    <VisuallyHidden>Menu điều hướng</VisuallyHidden>
+                  </RadixDialog.Title>
+                  <div className={styles.drawerClose}>
+                    <RadixDialog.Close asChild>
+                      <IconButton
+                        aria-label="Đóng menu điều hướng"
+                        icon={<CloseIcon size={20} />}
+                      />
+                    </RadixDialog.Close>
+                  </div>
+                  <Sidebar
+                    {...sidebar}
+                    onNavigate={() => {
+                      setDrawerOpen(false);
+                    }}
+                  />
+                </RadixDialog.Content>
+              </RadixDialog.Portal>
+            </RadixDialog.Root>
+            <Brand />
+            <span className={styles.topBarSite}>
+              {sidebar.site?.name ?? sidebar.membership.workspace.name}
+            </span>
+          </header>
+          <aside className={styles.sidebar}>
+            <div className={styles.sidebarInner}>
+              <Sidebar {...sidebar} />
+            </div>
+          </aside>
+          <main id="main-content" tabIndex={-1} className={styles.main}>
+            <ReadOnlyBanner />
+            {children}
+          </main>
+        </div>
+      </WorkspacePlanProvider>
     </ToastProvider>
   );
 }

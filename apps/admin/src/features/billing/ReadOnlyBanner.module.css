@@ -1,0 +1,11 @@
+/* As wide as the page's container, so the banner lines up with the title below it. */
+.banner {
+  max-width: 1120px;
+  margin: 0 auto 16px;
+}
+
+.link {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-primary-ink);
+}

@@ -44,6 +44,7 @@ describe('siteNavItems', () => {
         label: 'Automation',
         href: `/sites/${siteId}/automations`,
         permissions: ['automations.view'],
+        feature: 'automation',
       },
       {
         key: 'domain',
@@ -91,6 +92,12 @@ describe('siteNavItems', () => {
         label: 'Vai trò & quyền',
         href: '/workspaces/64b0000000000000000000aa/roles',
         permissions: ['members.manage'],
+      },
+      {
+        key: 'billing',
+        label: 'Gói & thanh toán',
+        href: '/workspaces/64b0000000000000000000aa/billing',
+        permissions: ['billing.view'],
       },
     ]);
   });

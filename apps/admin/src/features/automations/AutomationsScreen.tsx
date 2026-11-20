@@ -28,6 +28,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '../../lib/api';
+import { useUpgradeHref, useWorkspacePlan } from '../billing/plan-context';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
+import { useProblemToast } from '../billing/use-problem-toast';
 import { formatDateTime } from '../../lib/format';
 import { automationHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
@@ -42,6 +45,7 @@ import {
   triggerLabel,
   usageLine,
 } from './automation-presentation';
+import { AutomationsLocked } from './AutomationsLocked';
 import { automationQueryKeys } from './queries';
 import styles from './Automations.module.css';
 
@@ -49,7 +53,8 @@ export interface AutomationsScreenProps {
   site: Site;
   role: Access;
   roleLabel: string;
-  initial: AutomationListResponse;
+  /** Null when the plan had no automation as the page loaded: the list is read once it has. */
+  initial: AutomationListResponse | null;
   loadedAt: number;
 }
 
@@ -68,14 +73,19 @@ export function AutomationsScreen({
   const router = useRouter();
   const { toast } = useToast();
   const now = useNow(loadedAt);
+  const problemToast = useProblemToast(site.workspaceId);
+  const upgradeHref = useUpgradeHref(site.workspaceId);
+  const plan = useWorkspacePlan()?.plan.plan ?? null;
+  // "Cần gói có automation": the plan's limit, not a permission (ADR-035).
+  const locked = plan !== null && !plan.features.automation;
   const canManage = can(role, 'automations.manage');
   const listKey = automationQueryKeys.list(site.id);
 
   const list = useQuery({
     queryKey: listKey,
     queryFn: ({ signal }) => api(endpoints.listAutomations, [site.id], { signal }),
-    initialData: initial,
-    initialDataUpdatedAt: loadedAt,
+    ...(initial === null ? {} : { initialData: initial, initialDataUpdatedAt: loadedAt }),
+    enabled: !locked,
   });
 
   function adopt(item: AutomationListItem) {
@@ -106,7 +116,7 @@ export function AutomationsScreen({
     },
     onError: (error) => {
       reportUnexpected('Creating an automation failed', error);
-      toast({ tone: 'danger', title: 'Chưa tạo được', description: problemMessage(error) });
+      problemToast('Chưa tạo được', error);
     },
   });
 
@@ -120,7 +130,7 @@ export function AutomationsScreen({
     },
     onError: (error) => {
       reportUnexpected('Creating an automation failed', error);
-      toast({ tone: 'danger', title: 'Chưa tạo được', description: problemMessage(error) });
+      problemToast('Chưa tạo được', error);
     },
   });
 
@@ -141,7 +151,7 @@ export function AutomationsScreen({
     },
     onError: (error) => {
       reportUnexpected('Changing an automation failed', error);
-      toast({ tone: 'danger', title: 'Chưa đổi được', description: problemMessage(error) });
+      problemToast('Chưa đổi được', error);
     },
   });
 
@@ -153,10 +163,25 @@ export function AutomationsScreen({
     },
     onError: (error) => {
       reportUnexpected('Copying an automation failed', error);
-      toast({ tone: 'danger', title: 'Chưa nhân bản được', description: problemMessage(error) });
+      problemToast('Chưa nhân bản được', error);
     },
   });
 
+  if (locked) {
+    return <AutomationsLocked site={site} planName={plan.name} />;
+  }
+  if (list.data === undefined) {
+    return (
+      <PageContainer>
+        <PageHeader title="Automation" />
+        {list.isError ? (
+          <Callout tone="danger" role="alert">
+            {problemMessage(list.error)} <PlanProblemAction error={list.error} />
+          </Callout>
+        ) : null}
+      </PageContainer>
+    );
+  }
   const { items, usage } = list.data;
   const notice = quotaNotice(usage);
 
@@ -167,7 +192,15 @@ export function AutomationsScreen({
         description={`Tự giao lead, nhắc việc và báo tin khi có sự kiện ở ${site.name}.`}
         actions={
           <span className={styles.usage}>
-            {usageLine(usage)}
+            <span>
+              {usageLine(usage)}
+              {upgradeHref === null ? null : (
+                <>
+                  {' · '}
+                  <Link href={upgradeHref}>Theo gói</Link>
+                </>
+              )}
+            </span>
             {canManage ? (
               <Button
                 leadingIcon={<PlusIcon size={16} />}

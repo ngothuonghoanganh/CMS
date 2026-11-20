@@ -54,6 +54,7 @@ import { PageSlugField } from '../onboarding/PageSlugField';
 import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { cx } from '../shell/cx';
 import { newPageHref, pageHref, siteHref, templatesHref } from '../shell/navigation';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
   addBlockedReason,
@@ -253,7 +254,13 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(aiCreateReducer, undefined, () => initialAiCreateState());
   const [run, setRun] = useState<Run>({ kind: 'idle' });
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblemText] = useState<string | null>(null);
+  // The failed request behind `problem`: a 402 of the plan adds "Nâng cấp" (ADR-035).
+  const [problemCause, setProblemCause] = useState<unknown>(null);
+  function setProblem(message: string | null, cause: unknown = null) {
+    setProblemText(message);
+    setProblemCause(cause);
+  }
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [progressNote, setProgressNote] = useState('');
@@ -482,7 +489,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
         return;
       }
     }
-    setProblem(problemMessage(error));
+    setProblem(problemMessage(error), error);
     dispatch({ type: 'step_changed', step: 'structure' });
   }
 
@@ -502,7 +509,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     } catch (error) {
       reportUnexpected('Retrying the AI job failed', error);
       setRun({ kind: 'partial', job });
-      setProblem(problemMessage(error));
+      setProblem(problemMessage(error), error);
     }
   }
 
@@ -516,7 +523,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
       setRun((previous) =>
         previous.kind === 'running' ? { ...previous, cancelling: false } : previous,
       );
-      setProblem(problemMessage(error));
+      setProblem(problemMessage(error), error);
     }
   }
 
@@ -532,7 +539,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
     } catch (error) {
       reportUnexpected('Reading the AI job failed', error);
       setRun({ kind: 'lost', job: last, checking: false, stillRunning: false });
-      setProblem(problemMessage(error));
+      setProblem(problemMessage(error), error);
     }
   }
 
@@ -926,6 +933,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
               {problem === null ? null : (
                 <Callout tone="danger" role="alert">
                   {problem}
+                  <PlanProblemAction error={problemCause} workspaceId={site.workspaceId} />
                 </Callout>
               )}
               <div className={styles.actions}>
@@ -1031,6 +1039,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   {problem === null ? null : (
                     <Callout tone="danger" role="alert">
                       {problem}
+                      <PlanProblemAction error={problemCause} workspaceId={site.workspaceId} />
                     </Callout>
                   )}
                   <div className={styles.actionsEnd}>
@@ -1085,6 +1094,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
                   {problem === null ? null : (
                     <Callout tone="danger" role="alert">
                       {problem}
+                      <PlanProblemAction error={problemCause} workspaceId={site.workspaceId} />
                     </Callout>
                   )}
                   <div className={styles.actionGroup}>

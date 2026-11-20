@@ -176,3 +176,68 @@
   font-size: var(--text-body);
   color: var(--color-muted);
 }
+
+/* Board 25, "Cần gói có automation". */
+.locked {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.lockedText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lockedEyebrow {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-ink);
+}
+
+.lockedTitle {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.lockedBody {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--color-ink-2);
+}
+
+.lockedRecipes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lockedRecipe {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-body-sm);
+  color: var(--color-ink);
+}
+
+@media (max-width: 899px) {
+  .locked {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+}

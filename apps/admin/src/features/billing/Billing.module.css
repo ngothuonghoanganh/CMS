@@ -1,0 +1,285 @@
+/* Board 28 "Gói dịch vụ". */
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.currentText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.planName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.planTitle {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.price {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.period {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.currentActions {
+  display: flex;
+  gap: 8px;
+}
+
+.ownerNote {
+  margin: 0;
+  max-width: 260px;
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px 28px;
+  margin: 0;
+  padding: 20px 24px 24px;
+  list-style: none;
+}
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meterHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.meterName {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.meterValue {
+  font-size: var(--text-body-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-2);
+}
+
+.track {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-neutral-badge-bg);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+}
+
+.fillNear {
+  background: var(--color-warning);
+}
+
+.fillFull {
+  background: var(--color-danger);
+}
+
+.meterNote {
+  min-height: 1.2em;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.meterNoteWarn {
+  font-weight: 600;
+  color: var(--color-warning-strong-ink);
+}
+
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.table {
+  width: 100%;
+  min-width: 640px;
+  border: 1px solid var(--color-border);
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.table th,
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.corner {
+  width: 24%;
+}
+
+.planHead {
+  font-weight: 400;
+}
+
+.planHeadName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.planHeadPrice {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.planHeadFit {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.rowHead {
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--color-ink-2);
+}
+
+.cell {
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.cellNo {
+  color: var(--color-muted);
+}
+
+.currentColumn {
+  background: var(--color-primary-tint);
+}
+
+.fine {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.impacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.impact,
+.impactWarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-sm);
+  color: var(--color-ink);
+}
+
+.impact {
+  background: var(--color-surface-subtle);
+}
+
+.impactWarn {
+  background: var(--color-warning-soft);
+}
+
+.impact svg,
+.impactWarn svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.impactWarn svg {
+  color: var(--color-warning-icon);
+}
+
+@media (max-width: 899px) {
+  .current,
+  .meters {
+    padding-inline: 16px;
+  }
+}

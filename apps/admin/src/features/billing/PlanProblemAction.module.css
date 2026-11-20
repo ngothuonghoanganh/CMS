@@ -1,0 +1,17 @@
+.action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+}
+
+.link {
+  font-weight: 600;
+  color: var(--color-primary-ink);
+}
+
+.hint {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}

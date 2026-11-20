@@ -300,3 +300,6 @@ export const GridIcon = createIcon(
   'grid',
   <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
 );
+
+/** A payment card: "Gói & thanh toán" (Sidebar v2). */
+export const CreditCardIcon = createIcon('credit-card', <path d="M3 6h18v12H3zM3 10h18M7 15h3" />);

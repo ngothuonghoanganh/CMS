@@ -26,6 +26,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type KeyboardEvent, useId, useState } from 'react';
 import { api } from '../../../lib/api';
 import { aiQueryKeys } from '../../ai-create/queries';
+import { PlanProblemAction } from '../../billing/PlanProblemAction';
 import { problemMessage } from '../../shell/problem-message';
 import { useEditor, useEditorServices } from '../editor-context';
 import { AI_PANEL_ID, type AssistConflict, useAiAssistant } from './ai-assistant-context';
@@ -257,6 +258,7 @@ function Change({
 export function AiAssistantPanel() {
   const assistant = useAiAssistant();
   const { siteId } = useEditorServices();
+  const workspaceId = useEditor((state) => state.site.workspaceId);
   const sections = useEditor((state) => state.draft.composition.sections);
   const selectedId = useEditor((state) => state.selection.sectionId);
   const [choice, setChoice] = useState<ScopeKind>('section');
@@ -373,7 +375,10 @@ export function AiAssistantPanel() {
           <h3 className={styles.boxTitle} tabIndex={-1} data-ai-focus="failed">
             {failedTitleOf(phase.ask.action, phase.title)}
           </h3>
-          <span>{phase.reason} Bản nháp không đổi và lượt này không bị tính.</span>
+          <span>
+            {phase.reason} Bản nháp không đổi và lượt này không bị tính.{' '}
+            <PlanProblemAction error={phase.cause} workspaceId={workspaceId} />
+          </span>
           <span className={styles.boxActions}>
             <Button size="sm" variant="danger" disabled={exhausted} onClick={assistant.askAgain}>
               Thử lại

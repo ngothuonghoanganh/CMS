@@ -3,6 +3,8 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
+import { WorkspacePlanProvider } from '../billing/plan-context';
+import { workspacePlanFixture } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { RolesScreen } from './RolesScreen';
 
@@ -270,5 +272,66 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
     expect(
       screen.getByText('Đã đủ 10 vai trò tùy chỉnh. Xóa một vai trò không dùng để tạo thêm.'),
     ).toBeInTheDocument();
+  });
+
+  describe('a plan without automation or custom roles (ADR-035)', () => {
+    function renderOnPlan(canViewBilling = true) {
+      return renderWithProviders(
+        <WorkspacePlanProvider
+          workspaceId={WORKSPACE_ID}
+          canViewBilling={canViewBilling}
+          plan={workspacePlanFixture({
+            plan: {
+              id: 'basic',
+              name: 'Cơ bản',
+              limits: { sites: 1, members: 3, aiUses: 30, automationRuns: 0, customDomains: 1 },
+              features: { automation: false, customRoles: false },
+            },
+          })}
+        >
+          <RolesScreen
+            workspaceId={WORKSPACE_ID}
+            counts={counts}
+            initialCustomRoles={[]}
+            loadedAt={Date.now()}
+          />
+        </WorkspacePlanProvider>,
+      );
+    }
+
+    it('marks the automation rows "Theo gói", which a role cannot change, and explains the mark', () => {
+      renderOnPlan();
+
+      for (const label of ['Xem automation và lịch sử chạy', 'Tạo, bật, tạm dừng automation']) {
+        const row = screen.getByRole('rowheader', { name: new RegExp(label) });
+        expect(row).toHaveTextContent('Theo gói');
+      }
+      expect(
+        screen.getByRole('rowheader', { name: 'Xem lead, khách hàng, pipeline' }),
+      ).not.toHaveTextContent('Theo gói');
+      expect(screen.getByText('Cần gói phù hợp, không phải quyền')).toBeInTheDocument();
+    });
+
+    it('shows the billing rows in their own group', () => {
+      renderOnPlan();
+
+      expect(screen.getByRole('rowheader', { name: 'THANH TOÁN' })).toBeInTheDocument();
+      expect(rowOf('Xem gói và mức sử dụng')).toBe('yynnnn');
+      expect(rowOf('Đổi gói, thanh toán, tải hóa đơn')).toBe('ynnnnn');
+    });
+
+    it('leaves custom roles to a better plan, with the way to board 28 for who may open it', () => {
+      const { unmount } = renderOnPlan();
+      expect(screen.getByRole('button', { name: 'Vai trò tùy chỉnh' })).toBeDisabled();
+      expect(screen.getByText(/Gói Cơ bản chưa có vai trò tùy chỉnh/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Nâng cấp' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/billing`,
+      );
+      unmount();
+
+      renderOnPlan(false);
+      expect(screen.queryByRole('link', { name: 'Nâng cấp' })).toBeNull();
+    });
   });
 });

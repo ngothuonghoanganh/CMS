@@ -1,8 +1,8 @@
 import { endpoints } from '@plp/contracts';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { CreateSiteForm } from './CreateSiteForm';
 
@@ -152,5 +152,32 @@ describe('CreateSiteForm', () => {
       );
     });
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('says a site limit of the plan with "Theo gói" and "Nâng cấp", not as a missing permission', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValueOnce(availability('smile-care', true));
+    const refused = apiError(402, 'plan_limit_reached', 'Đã dùng hết hạn mức của Gói Cơ bản');
+    apiMock.mockRejectedValueOnce(
+      new ApiError(402, {
+        ...refused.problem,
+        detail: 'Gói Cơ bản có tối đa 1 site. Nâng cấp gói để thêm.',
+        context: { limit: 'sites', max: 1 },
+      }),
+    );
+    renderForm();
+
+    await user.type(screen.getByRole('textbox', { name: 'Tên site' }), 'Smile Care');
+    await screen.findByText('Tên miền con này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo site' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Gói Cơ bản có tối đa 1 site');
+    expect(alert).toHaveTextContent('Theo gói');
+    expect(within(alert).getByRole('link', { name: 'Nâng cấp' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing`,
+    );
+    expect(alert).not.toHaveTextContent('Không có quyền');
   });
 });

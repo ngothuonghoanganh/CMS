@@ -214,6 +214,19 @@
   flex: 1;
 }
 
+.upgradeChip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-primary-ink);
+}
+
 .navCount {
   font-size: var(--text-sm);
   font-weight: 500;

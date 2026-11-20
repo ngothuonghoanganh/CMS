@@ -32,6 +32,7 @@ import { ApiError, api } from '../../lib/api';
 import { formatRelativeTime } from '../../lib/format';
 import { siteHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ScrollRegion } from '../shell/ScrollRegion';
 import { useNow } from '../shell/use-now';
@@ -192,6 +193,7 @@ function HostnameForm({
           }}
         />
       </Field>
+      {add.isError ? <PlanProblemAction error={add.error} workspaceId={site.workspaceId} /> : null}
       {problem?.suggestion ? (
         <Button
           variant="secondary"

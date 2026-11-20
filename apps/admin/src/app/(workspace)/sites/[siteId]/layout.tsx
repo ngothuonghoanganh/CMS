@@ -15,7 +15,7 @@ export default async function SiteLayout({
   params: Promise<{ siteId: string }>;
 }) {
   const { siteId } = await params;
-  const { me, membership, site, sites, pageCount, memberCount, leadCounts } =
+  const { me, membership, site, sites, pageCount, memberCount, plan, leadCounts } =
     await loadSiteContext(siteId);
   return (
     <AppShell
@@ -27,6 +27,7 @@ export default async function SiteLayout({
       pageCount={pageCount}
       memberCount={memberCount}
       leadCounts={leadCounts}
+      plan={plan}
       addresses={workspaceAddresses()}
     >
       {children}
