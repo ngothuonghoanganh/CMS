@@ -39,4 +39,14 @@ describe('callEndpoint', () => {
       expect.objectContaining({ method: 'GET' }),
     );
   });
+
+  it('reports the status of a successful answer, so a 202 is told from a 200', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(Response.json({ received: true }, { status: 202 }))),
+    );
+    const onStatus = vi.fn();
+    await callEndpoint('/api', endpoints.paymentGatewayWebhook, ['fake'], { onStatus });
+    expect(onStatus).toHaveBeenCalledExactlyOnceWith(202);
+  });
 });

@@ -57,6 +57,11 @@ export interface CallOptions<E> {
   query?: RequestQuery<E>;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Called with the HTTP status of a successful answer, for the few calls whose 200 and 202 mean
+   * different things (a payment that is applied, or still being decided).
+   */
+  onStatus?: (status: number) => void;
 }
 
 /**
@@ -138,6 +143,7 @@ export async function callEndpoint<
   if (!response.ok) {
     throw await toApiError(response);
   }
+  options.onStatus?.(response.status);
   if (endpoint.response === null) {
     return undefined as ResponseOf<E>;
   }

@@ -1,5 +1,7 @@
 import {
   type Plan,
+  type PlanChangeUnavailableProblemContext,
+  type PlanChangeUnavailableReason,
   type PlanFeatureKey,
   type PlanFeatureProblemContext,
   planFeatureLabels,
@@ -82,10 +84,18 @@ export function workspaceReadOnly(state: SubscriptionState): AppError {
   });
 }
 
-/** 409 `plan_change_unavailable`: outside the trial, a new plan needs a payment (T2). */
-export function planChangeUnavailable(): AppError {
+const unavailableDetails: Record<PlanChangeUnavailableReason, string> = {
+  payment_required:
+    'Thời gian dùng thử đã hết. Chọn "Thanh toán ngay" để trả cho gói đã chọn và dùng tiếp.',
+  unpaid: 'Kỳ này chưa được thanh toán. Thanh toán kỳ này trước, rồi đổi gói.',
+  scheduled_change:
+    'Hạ gói, chuyển sang gói cùng giá hay đổi chu kỳ có hiệu lực ở cuối kỳ, sẽ có trong bản cập nhật tới. Gói hiện tại vẫn giữ nguyên.',
+};
+
+/** 409 `plan_change_unavailable`: the choice cannot apply now, for `reason`. */
+export function planChangeUnavailable(reason: PlanChangeUnavailableReason): AppError {
   return new AppError(409, 'plan_change_unavailable', 'Chưa đổi được gói lúc này', {
-    detail:
-      'Ngoài thời gian dùng thử, đổi gói cần thanh toán qua cổng thanh toán, sẽ có trong bản cập nhật tới. Gói hiện tại vẫn giữ nguyên.',
+    detail: unavailableDetails[reason],
+    context: { reason } satisfies PlanChangeUnavailableProblemContext,
   });
 }

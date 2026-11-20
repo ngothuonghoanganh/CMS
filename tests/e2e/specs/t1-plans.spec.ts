@@ -1,17 +1,10 @@
-import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test';
-import { createInvitationsResponseSchema, endpoints, meResponseSchema } from '@plp/contracts';
+import { expect, type Page, test } from '@playwright/test';
+import { endpoints } from '@plp/contracts';
 import { setBillingClock } from '../support/billing-clock.js';
 import { Editor } from '../support/editor.js';
-import { waitForEmail } from '../support/mailpit.js';
+import { joinAs } from '../support/members.js';
 import { fetchPublic } from '../support/public-site.js';
-import {
-  call,
-  createPageViaApi,
-  PASSWORD,
-  setUpLeadCaptureViaApi,
-  setUpSite,
-  uniqueId,
-} from '../support/setup.js';
+import { createPageViaApi, setUpLeadCaptureViaApi, setUpSite, uniqueId } from '../support/setup.js';
 import { sendLead } from '../support/visitor.js';
 import { siteOrigin, urls } from '../urls.js';
 
@@ -26,38 +19,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function sidebar(page: Page) {
   return page.getByRole('navigation', { name: 'Điều hướng chính' });
-}
-
-/** Invites `role` into the workspace and signs the invited person up from the email's link. */
-async function joinAs(
-  owner: APIRequestContext,
-  browser: Browser,
-  mail: APIRequestContext,
-  workspaceId: string,
-  role: 'admin' | 'support',
-  siteIds: string[] = [],
-): Promise<Page> {
-  const email = `${role}-${uniqueId()}@example.com`;
-  await call(
-    owner,
-    'POST',
-    endpoints.createInvitations.path(workspaceId),
-    createInvitationsResponseSchema,
-    { emails: [email], role, siteIds: role === 'admin' ? null : siteIds },
-  );
-  const invitation = await waitForEmail(mail, email, 'mời bạn vào');
-  const token = /#token=([A-Za-z0-9_-]{43})/.exec(invitation.Text)?.[1];
-  if (token === undefined) {
-    throw new Error('No invitation link in the email');
-  }
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await call(page.request, 'POST', endpoints.signupInvited.path(), meResponseSchema, {
-    token,
-    name: 'Bảo Ngọc',
-    password: PASSWORD,
-  });
-  return page;
 }
 
 test.describe('T1 · plans, limits and read-only', () => {
@@ -88,7 +49,7 @@ test.describe('T1 · plans, limits and read-only', () => {
     await page.getByRole('button', { name: 'Đổi gói' }).click();
     const dialog = page.getByRole('dialog', { name: 'Đổi gói' });
     await dialog.getByRole('radio', { name: /^Gói Cơ bản/ }).check();
-    await dialog.getByRole('button', { name: 'Đổi sang Gói Cơ bản' }).click();
+    await dialog.getByRole('button', { name: 'Đổi miễn phí' }).click();
     await expect(page.getByText('Đã đổi sang Gói Cơ bản', { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Gói Cơ bản' })).toBeVisible();
     await expect(

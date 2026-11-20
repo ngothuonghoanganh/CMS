@@ -17,7 +17,6 @@ import {
   cursorQuerySchema,
   type HistoryResponse,
   IDEMPOTENCY_KEY_HEADER,
-  idempotencyKeySchema,
   type PointerMoveRequest,
   pointerMoveRequestSchema,
   type PointerMoveResponse,
@@ -30,35 +29,12 @@ import {
   requestApprovalSchema,
 } from '@plp/contracts';
 import type { Response } from 'express';
-import { validationFailed } from '../../shared/errors.js';
-import { toProblemIssues, ZodPipe } from '../../shared/zod.pipe.js';
+import { parseIdempotencyKey } from '../../shared/idempotency-key.js';
+import { ZodPipe } from '../../shared/zod.pipe.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ApprovalsService } from './approvals.service.js';
 import { PublishingService } from './publishing.service.js';
-
-/** The `Idempotency-Key` header is required on publish; missing or malformed is a 422. */
-export function parseIdempotencyKey(value: unknown): string {
-  if (value === undefined) {
-    throw validationFailed([
-      {
-        path: ['headers', IDEMPOTENCY_KEY_HEADER],
-        code: 'required',
-        message: 'Thiếu header Idempotency-Key',
-      },
-    ]);
-  }
-  const result = idempotencyKeySchema.safeParse(value);
-  if (!result.success) {
-    throw validationFailed(
-      toProblemIssues(result.error).map((issue) => ({
-        ...issue,
-        path: ['headers', IDEMPOTENCY_KEY_HEADER, ...issue.path],
-      })),
-    );
-  }
-  return result.data;
-}
 
 @Controller()
 export class PublishingController {

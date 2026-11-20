@@ -318,4 +318,20 @@ describe('billing info', () => {
     );
     expect(billingInfoSchema.safeParse({ ...info, taxCode: '031234567' }).success).toBe(false);
   });
+
+  it('stores 13 digits typed without the dash with it, and refuses other lengths', () => {
+    const info = {
+      companyName: 'Công ty TNHH Mây Xanh',
+      taxCode: '0312 345 678 001',
+      address: '12 Nguyễn Huệ, Quận 1, TP.HCM',
+      email: 'ketoan@mayxanh.vn',
+    };
+    expect(billingInfoSchema.parse(info).taxCode).toBe('0312345678-001');
+    expect(billingInfoSchema.parse({ ...info, taxCode: '0312345678001' }).taxCode).toBe(
+      '0312345678-001',
+    );
+    for (const taxCode of ['03123456780', '031234567800', '03123456780012', '0312345678-01', '']) {
+      expect(billingInfoSchema.safeParse({ ...info, taxCode }).success).toBe(false);
+    }
+  });
 });

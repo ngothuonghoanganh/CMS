@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import {
   isWorkspaceOriginTemplate,
+  type PaymentProvider,
+  paymentProviderSchema,
   slugOfOrigin,
   WORKSPACE_SLUG_PLACEHOLDER,
 } from '@plp/contracts';
@@ -180,6 +182,16 @@ const baseEnvSchema = z.object({
    * trials, grace and read-only follow it. Refused in production.
    */
   BILLING_TEST_CLOCK: z.enum(['on', 'off']).default('off'),
+  /**
+   * The payment gateway (ADR-035): `fake` serves its own test pages and is refused in production,
+   * `none` turns payments off. Unset, it is `fake` outside production and `none` in production.
+   */
+  PAYMENT_PROVIDER: paymentProviderSchema.optional(),
+  /**
+   * Signs and checks the gateway's webhooks; generated for each environment and never logged.
+   * Unset, the fake gateway signs with a random secret of the process.
+   */
+  PAYMENT_WEBHOOK_SECRET: secret.optional(),
 });
 
 /** Emails go to an SMTP server (ADR-018), the default. */
@@ -233,6 +245,7 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
       'Invalid API environment:\nBILLING_TEST_CLOCK=on moves the billing clock for tests; production keeps real time',
     );
   }
+  checkPayments(result.data);
   if (result.data.NODE_ENV === 'production' && result.data.WEBHOOK_TEST_RECEIVER !== undefined) {
     throw new Error(
       'Invalid API environment:\nWEBHOOK_TEST_RECEIVER sends webhooks to a test receiver; production calls the real addresses',
@@ -257,6 +270,25 @@ function checkAi(env: Env): void {
   if (missing.length > 0) {
     throw new Error(
       `Invalid API environment:\nAI_PROVIDER=openai-compatible needs ${missing.join(', ')}`,
+    );
+  }
+}
+
+/** The payment gateway `PAYMENT_PROVIDER` names, or its default for the environment. */
+export function paymentProviderOf(
+  env: Pick<Env, 'PAYMENT_PROVIDER' | 'NODE_ENV'>,
+): PaymentProvider {
+  return env.PAYMENT_PROVIDER ?? (env.NODE_ENV === 'production' ? 'none' : 'fake');
+}
+
+/**
+ * No fake payments in production (ADR-035). A real gateway's adapter adds what it needs here,
+ * its keys and `PAYMENT_WEBHOOK_SECRET`.
+ */
+function checkPayments(env: Env): void {
+  if (env.NODE_ENV === 'production' && paymentProviderOf(env) === 'fake') {
+    throw new Error(
+      'Invalid API environment:\nPAYMENT_PROVIDER=fake takes test cards and charges nothing; production needs a real payment gateway, or none',
     );
   }
 }

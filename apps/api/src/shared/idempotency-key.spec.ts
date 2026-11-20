@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AppError } from '../../shared/errors.js';
-import { parseIdempotencyKey } from './publishing.controller.js';
+import { AppError } from './errors.js';
+import { parseIdempotencyKey } from './idempotency-key.js';
 
 function failure(value: unknown): AppError {
   try {

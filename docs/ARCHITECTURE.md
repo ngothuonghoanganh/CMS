@@ -224,14 +224,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
   | pnpm · turbo                                                                      | 12.15.0 · 2.11.10                                                   |
   | TypeScript                                                                        | 6.0.3 (ngoại lệ, xem bên dưới)                                      |
-  | next · react · react-dom                                                          | 16.4.3 · 19.3.1 · 19.3.1                                            |
+  | next · react · react-dom                                                          | 16.4.6 · 19.3.1 · 19.3.1                                            |
   | @nestjs/core · common · platform-express · testing · cli                          | 12.2.0 · 12.2.0 · 12.2.0 · 12.2.0 · 12.0.10                         |
-  | @nestjs/mongoose · mongoose · mongodb driver                                      | 12.0.0 · 9.11.3 · 7.7.0                                             |
+  | @nestjs/mongoose · mongoose · mongodb driver                                      | 12.0.0 · 9.12.2 · 7.8.0                                             |
   | zod                                                                               | 4.6.7                                                               |
   | pino · pino-http · nestjs-pino                                                    | 10.4.0 · 11.0.0 · 5.3.1                                             |
   | vitest · unplugin-swc · @swc/core                                                 | 5.0.5 · 2.0.0 · 1.16.20                                             |
   | @playwright/test · supertest                                                      | 1.64.1 · 7.3.1                                                      |
-  | eslint · typescript-eslint · @next/eslint-plugin-next · eslint-plugin-react-hooks | 10.13.0 · 8.72.0 · 16.4.3 · 7.1.1                                   |
+  | eslint · typescript-eslint · @next/eslint-plugin-next · eslint-plugin-react-hooks | 10.13.0 · 8.72.0 · 16.4.6 · 7.1.1                                   |
   | prettier · dependency-cruiser                                                     | 3.9.10 · 18.7.0                                                     |
   | MongoDB server                                                                    | `mongo:9.0.4` (replica set một node)                                |
   | S3-compatible storage (dev/CI)                                                    | `rustfs/rustfs:1.0.3`; khởi tạo bucket bằng `amazon/aws-cli:2.38.5` |
@@ -244,7 +244,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
 - **Reason và ngoại lệ:**
   - **TypeScript 6.0.3, không 7.0.2.** TS 7 là bản native port; typescript-eslint 8.72 khai báo peer `typescript <6.1.0`. Tắt lint có type thì vi phạm quality gate.
-  - **mongoose 9.11.3, không 9.11.4.** Chính sách supply-chain mặc định của pnpm 12 giữ lại bản phát hành dưới 24 giờ.
+  - **mongoose 9.12.2.** Bản dưới 9.11.4 có advisory (sanitizeFilter, prototype pollution), nên 9.12.2 là bản vá. Chính sách supply-chain mặc định của pnpm 12 giữ lại bản phát hành dưới 24 giờ; 9.12.2 đã qua mốc này.
   - **RustFS thay MinIO.** Image `minio/minio` không còn được phát hành trên Docker Hub. RustFS 1.0.3 (Apache-2.0) tương thích S3 và đã được kiểm tra bucket policy chỉ cho đọc công khai prefix `public/`.
   - **MongoDB 9.0.4** là bản stable mới nhất; integration test xác nhận replica set `rs0`.
 - **Consequences:**
@@ -3039,6 +3039,49 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - **Automation:** tạo, nhân bản và bật đều 402 `plan_feature_required` `{ feature: 'automation' }` khi gói không có; đọc, tạm dừng và sửa vẫn được. Hook của `PlanChangeHooks` chuyển automation đang bật sang `paused` với `pausedReason: 'plan'` (thêm vào `automationPausedReasons`) và dừng các lượt đang chờ, trong transaction đổi gói.
     - **Vai trò tùy chỉnh:** tạo và sửa 402 `plan_feature_required` `{ feature: 'customRoles' }`; liệt kê, xóa và quyền của người đang giữ không đổi.
   - **Board 16:** nhóm "Thanh toán" có trong `permissionGroups`; `planFeatureOf` đánh dấu "Theo gói" ở hai dòng automation.
+- **Amended 2026-11-21 (T2, cách làm):**
+  - **Dùng thử và trả tiền** (bổ sung "Trong lúc dùng thử, đổi gói không trừ tiền"):
+    - Trong lúc dùng thử, đổi gói vẫn miễn phí như T1.
+    - "Thanh toán ngay" (`payNow`): có thẻ thì Chủ sở hữu trả ngay cho gói và chu kỳ đã chọn, trong lúc dùng thử hay sau khi hết. Trừ trọn giá của chu kỳ; dùng thử kết thúc và kỳ trả phí đầu bắt đầu lúc trừ tiền thành công, phần dùng thử còn lại không được giữ. Trừ tiền lỗi thì dùng thử và gói không đổi.
+    - Hết dùng thử mà chưa trả: chỉ "Thanh toán ngay" chọn được gói (409 `plan_change_unavailable`, `reason: payment_required`). Tự trừ tiền cuối dùng thử là việc của T3.
+    - Bước 3 của chuỗi E2E (§5) là "Thanh toán ngay" Gói Doanh nghiệp.
+  - **Nâng gói** trong kỳ trả phí: giá cao hơn trong cùng chu kỳ.
+    - Số tiền = chênh lệch giá × số ngày còn lại / số ngày của kỳ, làm tròn lên 1.000đ. Ngày đang dở tính một ngày, nên ngày cuối kỳ vẫn trừ ít nhất 1.000đ và báo giá giữ nguyên trong ngày.
+    - Giá thấp hơn hay bằng, hoặc đổi chu kỳ: 409 `plan_change_unavailable` `scheduled_change` (T3). Kỳ đã hết hay chưa trả: `unpaid`. 409 không còn cho mọi thay đổi ngoài dùng thử.
+  - **Kỳ:** một tháng hay một năm theo lịch Việt Nam, cùng ngày và giờ; tháng sau không có ngày đó thì lấy ngày cuối tháng (31/01 → 28/02).
+  - **Báo giá rồi xác nhận:**
+    - `GET /workspaces/:id/billing/plan/quote?planId&cycle&payNow` (`billing.manage`) trả `mode` (`unchanged`, `trial_change`, `start_paid`, `upgrade`, `unavailable`), số tiền, kỳ được trả, số ngày còn lại và thẻ sẽ bị trừ. Không trừ tiền.
+    - `POST /workspaces/:id/billing/plan` nhận thêm `payNow` và `expectedAmount`. Thay đổi có trừ tiền cần `expectedAmount` bằng báo giá (409 `quote_changed` kèm báo giá mới) và thẻ còn hạn (422 `payment_method_required`).
+    - Kết quả: 200 đã áp dụng; 202 cổng chưa quyết, gói đổi khi sự kiện đến; 402 `payment_failed` `{ invoiceId, invoiceNumber, code }`; 503 `gateway_unavailable` khi cổng không trả lời; 503 `payments_disabled` khi không có cổng.
+  - **Mỗi workspace một lần trừ tiền mỗi lúc:**
+    - Trừ tiền giữ subscription bằng `lockedUntil` (2 phút, như ADR-034) từ trước khi gọi cổng tới khi ghi kết quả. Đổi gói giữ nó từ đúng `version` đã đọc cho báo giá (409 `conflict` nếu đã đổi).
+    - API chờ cổng trả lời một lần trừ tiền tối đa 60 giây, trong thời gian giữ; quá hạn là `unknown`.
+    - Đang có người giữ, hay có hóa đơn `pending`: 409 `payment_in_progress`.
+    - Một lần đổi gói mới hủy (`void`) các hóa đơn đổi gói bị từ chối (`failed`) trước đó. Hóa đơn `open` (chưa rõ kết quả, có thể đã trừ tiền) không bị hủy: nó chặn lần đổi gói có trừ tiền bằng 409 `payment_in_progress` kèm `{ invoiceId, invoiceNumber }`, tới khi "Thanh toán lại" hóa đơn đó (cùng key ở cổng) biết kết quả.
+  - **Hóa đơn** thêm `planName`, `card { brand, last4 }`, `from { planId, cycle } | null`, `endsTrial`, `createdBy`, `voidedAt`, `createdAt`:
+    - `attempts[{ number, at, outcome: succeeded | failed | pending | unknown, code, requestKey }]`. Idempotency key của lần trừ tiền là `{invoiceId}-{number}`.
+    - `unknown`: cổng không trả lời nên có thể đã trừ. Hóa đơn ở `open`, và lần trừ sau dùng lại đúng key đó; lần trừ API chưa kịp ghi cũng vậy.
+    - Hóa đơn trả cho kỳ đầu lấy kỳ từ lúc trả thành công.
+    - Số hóa đơn đếm ở `invoice_counters { _id: 'HD-{năm}', seq }` của master, trong transaction tạo hóa đơn, theo năm Việt Nam.
+    - Mọi lệnh ghi của `InvoicesRepository` lọc theo trạng thái chưa quyết; không lệnh nào đổi được hóa đơn `paid` hay `void`.
+  - **Thanh toán xong**, trong cùng transaction: hóa đơn `paid`, gói đổi từ đúng gói, chu kỳ và kỳ đã báo giá, `billing_log` (`paid_plan_started` hay `plan_upgraded`, kèm `invoiceId` và `amount`) và `PlanChangeHooks`. Không còn áp dụng được (gói đã đổi trong lúc chờ cổng) thì hóa đơn vẫn ghi đã trả và log báo lỗi để hoàn tiền ngoài hệ thống. Cổng báo trừ tiền thành công cho hóa đơn đã được quyết trong lúc chờ (đã `void`) thì không gì đổi: log báo lỗi để hoàn tiền ngoài hệ thống, và API trả 409 `payment_not_applied`.
+  - **"Thanh toán lại"** `POST /workspaces/:id/billing/invoices/:invoiceId/pay` với `Idempotency-Key`:
+    - Key đã dùng cho hóa đơn đó thì trả đúng kết quả lần ấy, không trừ tiền. Key được tìm lại sau khi giữ subscription, nên hai request cùng key gửi gần nhau chỉ trừ một lần.
+    - Chỉ hóa đơn `open` hay `failed` mà điều nó trả còn áp dụng (`payable`): kết thúc dùng thử khi dùng thử còn chưa trả; nâng gói khi gói, chu kỳ và kỳ còn như lúc báo giá. Khác thì 409 `invoice_not_payable`.
+    - Số tiền nâng gói tính cho số ngày còn lại lúc báo giá. Hóa đơn nâng gói bị từ chối (`failed`) chỉ trả lại được khi số ngày còn lại chưa đổi (trong ngày báo giá); sau đó Chủ sở hữu chọn lại gói để có số tiền mới. Hóa đơn `open` trả lại được tới hết kỳ, vì lần trả lại hỏi cổng về chính lần trừ trước bằng cùng key.
+  - **Phương thức thanh toán:**
+    - `POST /workspaces/:id/billing/payment-method/setup { returnTo: payments | plan }` trả `url` trang của cổng. Reference là `ws_{workspaceId}_by_{userId}`. Địa chỉ quay về là admin của workspace với `?paymentMethod=saved|canceled`, không lấy từ request.
+    - Sự kiện `method_saved` thay thẻ cũ và ghi `payment_method_changed` cho người bắt đầu. `GET .../billing/payment-method` trả thẻ không có token, `expired` và `paymentsEnabled`.
+  - **Thông tin xuất hóa đơn:** `GET` và `PUT /workspaces/:id/billing/info`. 13 chữ số gõ không có gạch được thêm gạch. `billing_info_changed` không ghi nội dung.
+  - **Hóa đơn và biên nhận:** `GET .../billing/invoices` (keyset, tối đa 50 mỗi trang, mới nhất trước, có `payable`), `GET .../billing/invoices/:invoiceId` và `GET .../billing/invoices/:invoiceId/receipt` (chỉ hóa đơn `paid`, kèm tên workspace).
+  - **Webhook:**
+    - Body thô, bằng parser riêng cho `/public/billing/webhooks/`, tối đa 64 KB.
+    - Sai hay thiếu chữ ký 401, có chữ ký mà không phải sự kiện 400, provider khác 404. Mọi sự kiện có chữ ký đều được trả lời như nhau, 200 `{ received: true }`: đã áp dụng, đã áp dụng trước đó, hay bị bỏ qua (reference không biết, số tiền khác, hóa đơn đã quyết).
+    - `billing_events { provider, eventId, kind, receivedAt, expiresAt }`, xóa theo TTL ở `expiresAt` (90 ngày).
+    - `charge_failed` chỉ áp dụng cho lần trừ đang `pending`; `charge_succeeded` và `transfer_received` trả mọi hóa đơn chưa quyết.
+  - **Cổng giả:** chữ ký `x-plp-fake-signature: t={giây},v1={HMAC-SHA256 hex của "{t}.{body}"}`, lệch tối đa 5 phút, so sánh trong thời gian không đổi. Token `tok_fake_{kết quả}_{ngẫu nhiên}`, không chứa số thẻ. Trang thẻ ở `/public/billing/fake-gateway/setup?session=…`, phiên có chữ ký và hạn 30 phút. Mỗi phiên lưu một thẻ: mở lại trang (nút Back của trình duyệt) thì trang báo thẻ đã lưu và dẫn về admin, không còn form.
+  - **Env:** `PAYMENT_PROVIDER` (`none` hay `fake`; mặc định `fake` ngoài production và `none` ở production; `fake` ở production bị từ chối). `PAYMENT_WEBHOOK_SECRET` (ít nhất 32 ký tự, sinh cho từng môi trường); thiếu thì cổng giả dùng bí mật ngẫu nhiên của process.
+  - **Quyền:** mọi endpoint mới cần `billing.manage`, kể cả ở workspace chỉ đọc; Quản trị nhận 403, workspace khác 404.
 
 ---
 
@@ -3181,7 +3224,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ---------- |
 | T0  | Nhập board 28–33, ADR-035, bổ sung ADR-014, 020, 021, 022, 024, 025, 031, 034                                                                                                  | —                      | Xong       |
 | T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói" | 28, 16, 25, Sidebar v2 | Xong       |
-| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Chưa làm   |
+| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Xong       |
 | T3  | Gia hạn, trừ tiền lỗi và thử lại, ân hạn, chuyển khoản chờ xác nhận, hạ gói theo lịch, hủy và giữ lại, banner theo trạng thái, email                                           | 28, 29                 | Chưa làm   |
 
 **Hoàn thành Phase 4** khi một E2E chạy xanh toàn bộ chuỗi:
@@ -3217,7 +3260,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
-- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 15 template (14 template của PR plp-mailer#1 đã merge, và `automation-notice` của ADR-034 chưa có ở đó) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 15 template (14 template của PR plp-mailer#1 và `automation-notice` của ADR-034 ở PR plp-mailer#2, cả hai đã merge; template email thanh toán thì chưa có) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):

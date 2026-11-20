@@ -20,6 +20,8 @@ export const LOG_REDACT_PATHS = [
   'req.headers["x-plp-client-ip"]',
   'req.headers["x-plp-client-ua"]',
   'req.headers["x-plp-renderer-signature"]',
+  // The fake payment gateway's webhook signature (ADR-035).
+  'req.headers["x-plp-fake-signature"]',
   ...AI_TEXT_FIELDS,
   ...AI_TEXT_FIELDS.map((field) => `*.${field}`),
 ];

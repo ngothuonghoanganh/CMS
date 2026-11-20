@@ -136,6 +136,16 @@ export function billingHref(workspaceId: string): string {
   return `${workspaceHref(workspaceId)}/billing`;
 }
 
+/** "Thanh toán & hóa đơn" (board 29, ADR-035), optionally with the gateway's `?paymentMethod=`. */
+export function paymentsHref(workspaceId: string, search = ''): string {
+  return `${billingHref(workspaceId)}/payments${search}`;
+}
+
+/** The printable receipt of a paid invoice (ADR-035): a page without the app's frame. */
+export function receiptHref(workspaceId: string, invoiceId: string): string {
+  return `${billingHref(workspaceId)}/receipts/${encodeURIComponent(invoiceId)}`;
+}
+
 /** "Thành viên" (board 15, ADR-021), optionally with a request open: `?request=`. */
 export function membersHref(workspaceId: string, search = ''): string {
   return `${workspaceHref(workspaceId)}/members${search}`;

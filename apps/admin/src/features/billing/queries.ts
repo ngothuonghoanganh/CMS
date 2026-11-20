@@ -1,10 +1,24 @@
 'use client';
 
-import { type BillingSummary, endpoints, type WorkspacePlan } from '@plp/contracts';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { INVOICE_PAGE_SIZE } from './payment-presentation';
+import {
+  type BillingInfoResponse,
+  type BillingSummary,
+  endpoints,
+  type InvoiceListResponse,
+  type PaymentMethodResponse,
+  type WorkspacePlan,
+} from '@plp/contracts';
+import {
+  type QueryClient,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { api } from '../../lib/api';
+import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 
 /** Query keys of a workspace's plan (ADR-035). */
 export const billingQueryKeys = {
@@ -12,7 +26,24 @@ export const billingQueryKeys = {
   /** The member-level plan of the sidebar, the banner and the "Nâng cấp" chips. */
   plan: (workspaceId: string) => ['workspaces', workspaceId, 'billing', 'plan'] as const,
   summary: (workspaceId: string) => ['workspaces', workspaceId, 'billing', 'summary'] as const,
+  /** Board 29's three cards: the saved card, the billing info and the invoices. */
+  paymentMethod: (workspaceId: string) =>
+    ['workspaces', workspaceId, 'billing', 'payment-method'] as const,
+  info: (workspaceId: string) => ['workspaces', workspaceId, 'billing', 'info'] as const,
+  invoices: (workspaceId: string) => ['workspaces', workspaceId, 'billing', 'invoices'] as const,
+  /** What choosing a plan does now; `payNow` tells the trial's two offers apart. */
+  quote: (workspaceId: string, planId: string, cycle: string, payNow: boolean) =>
+    ['workspaces', workspaceId, 'billing', 'quote', planId, cycle, payNow] as const,
 };
+
+/**
+ * What else reads again once the plan changed, from the dialog or an invoice paid on board 29:
+ * automations and custom roles depend on the plan, and the charge made or settled an invoice.
+ */
+export function invalidateAfterPlanChange(queryClient: QueryClient, workspaceId: string): void {
+  void queryClient.invalidateQueries({ queryKey: ['sites'] });
+  void queryClient.invalidateQueries({ queryKey: billingQueryKeys.invoices(workspaceId) });
+}
 
 /**
  * The workspace's plan, starting from what the server loaded with the frame. Changing the plan on
@@ -78,4 +109,78 @@ export function useBillingSummary(
     initialDataUpdatedAt: loadedAt,
     refetchOnWindowFocus: true,
   }).data;
+}
+
+/** What board 29's page loaded on the server, and when (epoch ms). */
+export interface PaymentsInitial {
+  paymentMethod: PaymentMethodResponse;
+  billingInfo: BillingInfoResponse;
+  invoices: InvoiceListResponse;
+  loadedAt: number;
+}
+
+/** The saved card, read for the notice of a return from the gateway to board 28. */
+export function usePaymentMethod(workspaceId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: billingQueryKeys.paymentMethod(workspaceId),
+    queryFn: ({ signal }) => api(endpoints.getPaymentMethod, [workspaceId], { signal }),
+    enabled,
+  });
+}
+
+/**
+ * Board 29's three cards from what the server loaded; each replaces an older visit's cache and is
+ * read again when the user comes back to the tab (a charge or a card saved in another tab).
+ */
+export function usePaymentsData(workspaceId: string, initial: PaymentsInitial) {
+  const queryClient = useQueryClient();
+  const { loadedAt } = initial;
+  useEffect(() => {
+    adoptServerRender(
+      queryClient,
+      billingQueryKeys.paymentMethod(workspaceId),
+      initial.paymentMethod,
+      loadedAt,
+    );
+    adoptServerRender(
+      queryClient,
+      billingQueryKeys.info(workspaceId),
+      initial.billingInfo,
+      loadedAt,
+    );
+    adoptServerRender(
+      queryClient,
+      billingQueryKeys.invoices(workspaceId),
+      serverFirstPage(initial.invoices),
+      loadedAt,
+    );
+  }, [queryClient, workspaceId, initial, loadedAt]);
+
+  const paymentMethod = useQuery({
+    queryKey: billingQueryKeys.paymentMethod(workspaceId),
+    queryFn: ({ signal }) => api(endpoints.getPaymentMethod, [workspaceId], { signal }),
+    initialData: initial.paymentMethod,
+    initialDataUpdatedAt: loadedAt,
+    refetchOnWindowFocus: true,
+  });
+  const billingInfo = useQuery({
+    queryKey: billingQueryKeys.info(workspaceId),
+    queryFn: ({ signal }) => api(endpoints.getBillingInfo, [workspaceId], { signal }),
+    initialData: initial.billingInfo,
+    initialDataUpdatedAt: loadedAt,
+  });
+  const invoices = useInfiniteQuery({
+    queryKey: billingQueryKeys.invoices(workspaceId),
+    queryFn: ({ pageParam, signal }) =>
+      api(endpoints.listInvoices, [workspaceId], {
+        query: { limit: INVOICE_PAGE_SIZE, ...(pageParam === null ? {} : { cursor: pageParam }) },
+        signal,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialData: serverFirstPage(initial.invoices),
+    initialDataUpdatedAt: loadedAt,
+    refetchOnWindowFocus: true,
+  });
+  return { paymentMethod, billingInfo, invoices };
 }

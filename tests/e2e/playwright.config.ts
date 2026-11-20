@@ -33,6 +33,9 @@ const apiEnv = {
   AI_PROVIDER: 'fake',
   // t1-plans.spec.ts moves the billing clock past a trial's end (ADR-035); it resets it after.
   BILLING_TEST_CLOCK: 'on',
+  // T2 (ADR-035): cards and charges go to the fake gateway, which signs its events with this.
+  PAYMENT_PROVIDER: 'fake',
+  PAYMENT_WEBHOOK_SECRET: 'e2e-payment-webhook-secret-0123456789abcdef',
   // Webhook secrets are encrypted with it (ADR-034).
   AUTOMATION_SECRET_KEY: 'e2e-automation-secret-key-0123456789abcdef',
   // Webhooks pass the address rules, then go to the specs' receiver (support/webhook-receiver.ts).
