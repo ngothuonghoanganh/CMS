@@ -3369,6 +3369,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Màn 30: "Đã sở hữu · N" nay là link tới màn 32 (thay cho chữ thường của MP1). Khung giá màn 31 có bốn trạng thái; mẫu trả phí chưa sở hữu vẫn là câu trung tính của MP1 cho tới MP3.
     - "Tạo trang" ở màn 32 thành link "Xem mẫu" khi vai trò thiếu `pages.edit` hay chưa có site.
   - **E2E:** API của E2E và capture đọc danh mục sinh bởi `tests/e2e/support/marketplace-catalog.ts` (danh mục đi kèm cộng một mẫu `withdrawn` hai phiên bản), nên màn 30 vẫn 4 mẫu; test chống lệch so với danh mục đi kèm. Giấy phép gieo bằng driver `mongodb` (devDependency của `@plp/e2e`, đã có trong lockfile).
+- **Chi tiết khi làm (lát MP3):**
+  - **"Thanh toán lại" hóa đơn marketplace bị từ chối** (`failed`) là mua mẫu lần nữa: workspace chỉ đọc bị 402 `workspace_read_only` (`payable: false` trong lúc đó, nên màn 29 và 31 không mời trả), và bị chặn như lần mua bởi hóa đơn `pending` ở cổng hay `open` của bất kỳ loại nào (409 `payment_in_progress` kèm hóa đơn đó). Hóa đơn `open` vẫn trả được khi chỉ đọc: nó chỉ hỏi lại cổng về lần trừ đã có, cùng key. Cùng `Idempotency-Key` của lần mua mà lần trừ chưa được ghi cũng bị chặn như vậy.
+  - **Màn 29:** banner "Thanh toán … không thành công" (lần thử lại, ân hạn, "Chuyển khoản") chỉ của hóa đơn gói; lần mua mẫu bị từ chối không đổi gói nên chỉ hiện ở dòng của nó, với "Thanh toán lại". "Thanh toán lại" bị chặn bởi hóa đơn khác thì bảo xem hóa đơn đó rồi thử lại, không bảo chọn lại gói.
+  - **Chỉ đọc ở màn 31:** "Mua mẫu" và "Thanh toán" vẫn bấm được như các nút của MP2 (banner chỉ đọc báo trước); 402 hiện trong hộp là cảnh báo với "Theo gói" và "Xem gói & thanh toán".
+  - **Hộp "Xác nhận mua mẫu":** lời của cổng ("Đã lưu thẻ", "Chưa thêm thẻ") chỉ hiện ở hộp mà cổng dẫn về; quay lại bằng nút Back của trình duyệt không mở lại hộp, như màn 28 và 29. Trong lúc chờ cổng, nút đóng của hộp báo không dùng được (`dismissible` của `Dialog`). 409 `payment_not_applied` đóng hộp, và khung giá báo mẫu đã sở hữu kèm câu hoàn tiền của API.
 
 ---
 
