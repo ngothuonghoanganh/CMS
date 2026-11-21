@@ -121,6 +121,7 @@ describe('changes for the end of the period, cancel and keep (ADR-035, T3)', () 
         aiUses: { from: 100, to: 20 },
         members: 1,
       },
+      renewalInvoiceVoided: null,
     });
     // Another cycle of the same plan: scheduled, with nothing lost.
     expect(await quote(owner, workspaceId, { planId: 'agency', cycle: 'yearly' })).toMatchObject({

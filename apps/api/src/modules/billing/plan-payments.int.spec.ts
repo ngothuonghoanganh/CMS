@@ -182,6 +182,7 @@ describe('paying for plans (ADR-035, T2)', () => {
           aiUses: { from: 100, to: 20 },
           members: 1,
         },
+        renewalInvoiceVoided: null,
       });
       const paidNow = await quote(owner, workspaceId, {
         planId: 'business',

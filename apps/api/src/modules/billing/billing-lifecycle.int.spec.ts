@@ -284,6 +284,11 @@ describe('the life of a plan (ADR-035, T3)', () => {
         amount: 1_490_000,
         autoRenews: true,
         blocker: null,
+        // Charged to the card at the end, with no invoice before it (T4).
+        method: 'card',
+        invoiceAt: null,
+        invoice: null,
+        paid: false,
       });
 
       await runAt(trialEnd);

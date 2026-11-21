@@ -407,6 +407,36 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
   }
 
   /**
+   * A trial renewed by bank transfer (ADR-035, T4): its invoice made 7 days before the end, then
+   * still unpaid on its due day. Returns the owner's address.
+   */
+  async function transferLife(): Promise<string> {
+    const billing = await signedUpClient(t.app);
+    const clock = t.app.get(BillingClock);
+    const scheduler = t.app.get(BillingScheduler);
+    const stored = await t.connection
+      .collection('subscriptions')
+      .findOne({ _id: new Types.ObjectId(billing.workspaceId) });
+    const trialEnd: unknown = stored?.['trialEndsAt'];
+    if (!(trialEnd instanceof Date)) {
+      throw new Error('The workspace has no trial');
+    }
+    await billing.client
+      .put(endpoints.setRenewalMethod.path(billing.workspaceId), { method: 'transfer' })
+      .expect(200);
+    const day = 86_400_000;
+    try {
+      clock.set(new Date(trialEnd.getTime() - 7 * day));
+      await scheduler.runDue();
+      clock.set(trialEnd);
+      await scheduler.runDue();
+    } finally {
+      clock.set(null);
+    }
+    return billing.me.user.email;
+  }
+
+  /**
    * The emails of the marketplace (ADR-036): an item bought, whose receipt goes to the owner, and
    * a member asking the owner to buy another. Returns the owner's address.
    */
@@ -421,7 +451,7 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     return buyer.me.user.email;
   }
 
-  it('queues each of the 22 emails, once, with data its template renders', async () => {
+  it('queues each of the 23 emails, once, with data its template renders', async () => {
     const ownerEmail = owner.me.user.email;
 
     // Account emails (ADR-026); the owner's own sign-up queued the first confirmation.
@@ -523,6 +553,7 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     expect((await checkDomain(other, claim.id)).status).toBe('active');
 
     const billingOwner = await planLife();
+    const transferOwner = await transferLife();
     const marketplaceOwner = await marketplaceLife();
 
     const requests = requestsIn(stub);
@@ -536,6 +567,12 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     ] as const) {
       expect(queued(template).some((request) => request.to.join() === billingOwner)).toBe(true);
     }
+    // Once when the invoice is made, once on its due day.
+    expect(
+      queued('billing-transfer-due')
+        .filter((request) => request.to.join() === transferOwner)
+        .map((request) => (request.data as { stage: string }).stage),
+    ).toEqual(['issued', 'due']);
     for (const template of ['marketplace-receipt', 'marketplace-suggestion'] as const) {
       expect(queued(template)).toEqual([expect.objectContaining({ to: [marketplaceOwner] })]);
     }

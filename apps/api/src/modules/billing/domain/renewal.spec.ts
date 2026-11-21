@@ -1,7 +1,13 @@
 import type { Plan } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { periodEndOf } from './billing-period.js';
-import { renewalBlockerOf, renewalTermsOf, scheduledChangeOf } from './renewal.js';
+import {
+  renewalBlockerOf,
+  renewalTermsOf,
+  scheduledChangeOf,
+  transferInvoiceAtOf,
+  transferInvoiceDue,
+} from './renewal.js';
 
 const DAY = 86_400_000;
 const START = new Date('2026-11-01T03:00:00.000Z');
@@ -97,5 +103,52 @@ describe('scheduledChangeOf', () => {
     const canceled = { ...downgrade, cancelAtPeriodEnd: true };
     expect(scheduledChangeOf(canceled, at(30))).toBeNull();
     expect(scheduledChangeOf(canceled, at(45))).toBeNull();
+  });
+});
+
+describe('the next period’s invoice for a bank transfer (T4)', () => {
+  const POLICY = { transferLeadDays: 7 };
+  const transfer = {
+    trialEndsAt: null,
+    periodEnd: at(30),
+    cancelAtPeriodEnd: false,
+    failedSince: null,
+    openInvoiceId: null,
+    renewalMethod: 'transfer' as const,
+    renewalInvoiceId: null,
+    prepaid: null,
+  };
+
+  it('is made 7 days before the end of the period or trial', () => {
+    expect(transferInvoiceAtOf(transfer, POLICY)).toEqual(at(23));
+    expect(transferInvoiceAtOf({ trialEndsAt: at(14), periodEnd: at(14) }, POLICY)).toEqual(at(7));
+    expect(transferInvoiceDue(transfer, POLICY, at(22))).toBe(false);
+    expect(transferInvoiceDue(transfer, POLICY, at(23))).toBe(true);
+  });
+
+  it('is made late, at the end of a paid period at the latest, but never after a trial', () => {
+    expect(transferInvoiceDue(transfer, POLICY, at(30))).toBe(true);
+    expect(transferInvoiceDue(transfer, POLICY, at(31))).toBe(true);
+    const trial = { ...transfer, trialEndsAt: at(14), periodEnd: at(14) };
+    expect(transferInvoiceDue(trial, POLICY, at(13))).toBe(true);
+    // Choosing the transfer once the trial is over gives no grace.
+    expect(transferInvoiceDue(trial, POLICY, at(14))).toBe(false);
+  });
+
+  it('is made once, and not for a card, a cancellation, a payment due or a paid period', () => {
+    const now = at(25);
+    expect(transferInvoiceDue({ ...transfer, renewalMethod: 'card' }, POLICY, now)).toBe(false);
+    expect(transferInvoiceDue({ ...transfer, renewalInvoiceId: 'inv' }, POLICY, now)).toBe(false);
+    expect(transferInvoiceDue({ ...transfer, cancelAtPeriodEnd: true }, POLICY, now)).toBe(false);
+    expect(transferInvoiceDue({ ...transfer, openInvoiceId: 'inv' }, POLICY, now)).toBe(false);
+    expect(transferInvoiceDue({ ...transfer, failedSince: at(1) }, POLICY, now)).toBe(false);
+    const prepaid = {
+      invoiceId: 'inv',
+      planId: 'agency',
+      cycle: 'monthly' as const,
+      periodStart: at(30),
+      periodEnd: at(60),
+    };
+    expect(transferInvoiceDue({ ...transfer, prepaid }, POLICY, now)).toBe(false);
   });
 });

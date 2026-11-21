@@ -364,6 +364,15 @@ const ROWS: Row[] = [
     status: 200,
     call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/billing/invoices`),
   },
+  {
+    // T4: the owner's, also while read-only, like paying; a transfer needs no card.
+    action: 'Phương thức gia hạn',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.put(`/workspaces/${workspaceId}/billing/renewal-method`, { method: 'transfer' }),
+  },
   // Custom domains (board 13, ADR-022)
   // Custom roles (board 16, ADR-024)
   {
