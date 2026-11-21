@@ -536,7 +536,10 @@ describe('buying a marketplace item (ADR-036, MP3)', () => {
         workspaceId,
         purchaseBody({ itemId: OTHER_PAID_ID, expectedAmount: 499_000 }),
       ).expect(409);
-      expect(problemSchema.parse(blocked.body).code).toBe('payment_in_progress');
+      expect(problemSchema.parse(blocked.body)).toMatchObject({
+        code: 'payment_in_progress',
+        context: { invoiceId: pending.invoice.id, invoiceNumber: pending.invoice.number },
+      });
       const plan = await owner
         .post(endpoints.changePlan.path(workspaceId), {
           planId: 'agency',

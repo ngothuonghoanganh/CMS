@@ -80,6 +80,20 @@ export function paymentInProgress(): AppError {
 }
 
 /**
+ * 409 `payment_in_progress` with the invoice whose charge the gateway is still deciding (`pending`):
+ * its event settles it, then another charge may start.
+ */
+export function paymentPending(invoice: InvoiceRef): AppError {
+  return new AppError(409, 'payment_in_progress', 'Đang có một thanh toán chưa xong', {
+    detail: `Cổng thanh toán đang xác nhận hóa đơn ${invoice.number}. Chờ kết quả rồi thử lại.`,
+    context: {
+      invoiceId: invoice._id.toHexString(),
+      invoiceNumber: invoice.number,
+    } satisfies InvoiceProblemContext,
+  });
+}
+
+/**
  * 409 `payment_in_progress` with the invoice: an earlier charge's outcome is unknown, so it may have
  * gone through. A new change would make a second charge; "Thanh toán lại" on that invoice asks
  * the gateway about the first one with the same key, which never charges twice (ADR-035).

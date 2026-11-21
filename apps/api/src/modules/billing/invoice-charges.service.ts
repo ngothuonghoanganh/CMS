@@ -46,6 +46,7 @@ import {
   paymentAwaitingTransfer,
   paymentMethodRequired,
   paymentNotApplied,
+  paymentPending,
   paymentsDisabled,
   paymentUndecided,
   subscriptionChanged,
@@ -380,8 +381,9 @@ export class InvoiceCharges {
         await this.subscriptions.releaseCharge(scope, until, tx);
         return { keyed } as const;
       }
-      if (await this.invoices.hasPending(scope, tx)) {
-        throw paymentInProgress();
+      const pending = await this.invoices.findPending(scope, tx);
+      if (pending !== null) {
+        throw paymentPending(pending);
       }
       const undecided = await this.invoices.findUndecided(scope, tx);
       if (undecided !== null) {

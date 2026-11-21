@@ -199,6 +199,16 @@ export class InvoicesRepository {
     return found !== null;
   }
 
+  /** The newest card charge of the workspace the gateway is still deciding; null for none. */
+  findPending(ref: WorkspaceRef, tx?: Tx): Promise<InvoiceRecord | null> {
+    return this.invoices
+      .findOne({ workspaceId: ref.workspaceId, status: 'pending', method: 'card' })
+      .sort(NEWEST_FIRST)
+      .session(tx ?? null)
+      .lean<InvoiceRecord>()
+      .exec();
+  }
+
   /** Every invoice of the workspace whose charge may have gone through (`open`), newest first. */
   listUndecided(ref: WorkspaceRef, tx?: Tx): Promise<InvoiceRecord[]> {
     return this.invoices
