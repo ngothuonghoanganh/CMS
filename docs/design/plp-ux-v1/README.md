@@ -53,14 +53,14 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 
 **Phase 2 — Tạo trang nhanh** (ARCHITECTURE §5, ADR-030, ADR-031):
 
-| #   | Board                       | File                         | Lát    |
-| --- | --------------------------- | ---------------------------- | ------ |
-| 17  | Thư viện template           | `TemplateLibrary.dc.html`    | G1, G2 |
-| 18  | Chi tiết & preview template | `TemplateDetail.dc.html`     | G1, G3 |
-| 19  | Template của workspace      | `WorkspaceTemplates.dc.html` | G2     |
-| 20  | Tạo landing page bằng AI    | `AiCreate.dc.html`           | G4     |
-| 21  | Trợ lý AI trong editor      | `AiAssistant.dc.html`        | G5     |
-| —   | Ảnh thu nhỏ template        | `TemplateThumb.dc.html`      | G1     |
+| #   | Board                       | File                         | Lát                           |
+| --- | --------------------------- | ---------------------------- | ----------------------------- |
+| 17  | Thư viện template           | `TemplateLibrary.dc.html`    | G1, G2, MP2 (tab marketplace) |
+| 18  | Chi tiết & preview template | `TemplateDetail.dc.html`     | G1, G3                        |
+| 19  | Template của workspace      | `WorkspaceTemplates.dc.html` | G2                            |
+| 20  | Tạo landing page bằng AI    | `AiCreate.dc.html`           | G4                            |
+| 21  | Trợ lý AI trong editor      | `AiAssistant.dc.html`        | G5                            |
+| —   | Ảnh thu nhỏ template        | `TemplateThumb.dc.html`      | G1                            |
 
 **Phase 3 — Chăm sóc khách** (ARCHITECTURE §5, ADR-033, ADR-034):
 
@@ -73,17 +73,17 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 | 26  | Thiết lập automation    | `AutomationEditor.dc.html` | A2  |
 | 27  | Lịch sử chạy automation | `AutomationRuns.dc.html`   | A3  |
 
-**Phase 4 — Thương mại hóa** (ARCHITECTURE §5, ADR-035). Giá, hạn mức và chính sách trên board là chỗ trống `[…]`; con số tạm nằm ở ADR-035:
+**Phase 4 — Thương mại hóa** (ARCHITECTURE §5, ADR-035, ADR-036). Giá, hạn mức và chính sách trên board là chỗ trống `[…]`; con số tạm nằm ở ADR-035 (gói) và ADR-036 (marketplace):
 
-| #   | Board                         | File                      | Lát                                 |
-| --- | ----------------------------- | ------------------------- | ----------------------------------- |
-| 28  | Gói dịch vụ & mức sử dụng     | `Plan.dc.html`            | T1 (gói, mức dùng), T3 (vòng đời)   |
-| 29  | Thanh toán & hóa đơn          | `Billing.dc.html`         | T2, T3 (chuyển khoản, thử lại)      |
-| 30  | Marketplace                   | `Marketplace.dc.html`     | Chưa làm: chờ chốt luật marketplace |
-| 31  | Chi tiết sản phẩm marketplace | `MarketplaceItem.dc.html` | Chưa làm                            |
-| 32  | Sản phẩm đã mua               | `Purchases.dc.html`       | Chưa làm                            |
-| 33  | Khu vực nhà cung cấp          | `Vendor.dc.html`          | Chưa làm                            |
-| —   | Sidebar v2, bật `planLimited` | `SidebarV2.dc.html`       | T1                                  |
+| #   | Board                         | File                      | Lát                                                                |
+| --- | ----------------------------- | ------------------------- | ------------------------------------------------------------------ |
+| 28  | Gói dịch vụ & mức sử dụng     | `Plan.dc.html`            | T1 (gói, mức dùng), T3 (vòng đời)                                  |
+| 29  | Thanh toán & hóa đơn          | `Billing.dc.html`         | T2, T3 (chuyển khoản, thử lại), MP3 (dòng mua mẫu)                 |
+| 30  | Marketplace                   | `Marketplace.dc.html`     | MP1                                                                |
+| 31  | Chi tiết sản phẩm marketplace | `MarketplaceItem.dc.html` | MP1 (xem), MP2 (nhận mẫu miễn phí, đã sở hữu), MP3 (mua)           |
+| 32  | Sản phẩm đã mua               | `Purchases.dc.html`       | MP2; không có `licenseFull` (giấy phép phủ cả workspace)           |
+| 33  | Khu vực nhà cung cấp          | `Vendor.dc.html`          | Hoãn: chủ sản phẩm quyết ngày 2026-11-20 chỉ Payload bán (ADR-036) |
+| —   | Sidebar v2, bật `planLimited` | `SidebarV2.dc.html`       | T1; khóa của mục Marketplace không làm (ADR-036)                   |
 
 **Chuyển động** (ARCHITECTURE §5, ADR-032):
 
