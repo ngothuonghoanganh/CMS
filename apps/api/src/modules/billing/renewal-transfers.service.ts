@@ -6,7 +6,11 @@ import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.
 import { BillingLogRepository } from './billing-log.repository.js';
 import { BillingNotifier } from './billing-notifier.service.js';
 import { BillingSchedule, lacksTransferDetails } from './billing-schedule.service.js';
-import { awaitsRenewalTransfer, chargeUndecided } from './domain/invoice-state.js';
+import {
+  awaitsRenewalTransfer,
+  chargeUndecided,
+  isFinalInvoiceStatus,
+} from './domain/invoice-state.js';
 import { currentEndOf, renewalTermsOf, transferInvoiceDue } from './domain/renewal.js';
 import type { InvoiceReplacedRecord, PlanInvoiceRecord } from './invoice.schema.js';
 import { InvoiceTransfers } from './invoice-transfers.service.js';
@@ -30,7 +34,13 @@ export type ReissueOutcome =
    * The owner's card charge of the early invoice is being decided or may have gone through:
    * nothing may void it, since the money may be taken (409 `payment_in_progress`).
    */
-  | { kind: 'undecided'; invoice: PlanInvoiceRecord };
+  | { kind: 'undecided'; invoice: PlanInvoiceRecord }
+  /**
+   * A charge holds the subscription (`lockedUntil`) while the early invoice is still unpaid: it may
+   * be the owner's card charge of that invoice at the gateway, which leaves the invoice as it was
+   * until its answer is recorded (409 `payment_in_progress`). Only asked with `refuseWhileHeld`.
+   */
+  | { kind: 'held'; invoice: PlanInvoiceRecord };
 
 /** Who and when, for the `billing_log` of an early invoice made or voided. */
 export interface RenewalChange {
@@ -145,8 +155,14 @@ export class RenewalTransfers {
    * cancellation, keeping the plan. Before the end, the unpaid early invoice is voided (its
    * transfer details stop working) and, when the plan still renews then, its replacement is made at
    * once with the new amount, a new number and new content. The job's next time follows.
+   * `refuseWhileHeld`: a request's change, which a charge holding the subscription may overtake
+   * (`held`); a paid upgrade replaces it under its own charge's hold.
    */
-  async reissueIn(ref: WorkspaceRef, change: RenewalChange, tx: Tx): Promise<ReissueOutcome> {
+  async reissueIn(
+    ref: WorkspaceRef,
+    change: RenewalChange & { refuseWhileHeld?: boolean },
+    tx: Tx,
+  ): Promise<ReissueOutcome> {
     const { at } = change;
     const facts = await this.subscriptions.find(ref, tx);
     if (facts === null) {
@@ -160,6 +176,15 @@ export class RenewalTransfers {
       }
       if (invoice !== null && chargeUndecided(invoice)) {
         return { kind: 'undecided', invoice };
+      }
+      if (
+        invoice !== null &&
+        change.refuseWhileHeld === true &&
+        !isFinalInvoiceStatus(invoice.status) &&
+        facts.lockedUntil !== null &&
+        facts.lockedUntil.getTime() > at.getTime()
+      ) {
+        return { kind: 'held', invoice };
       }
       voided = invoice === null ? null : await this.voidIn(ref, invoice._id, change, tx);
       if (

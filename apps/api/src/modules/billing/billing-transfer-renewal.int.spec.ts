@@ -611,6 +611,41 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
     expect(await renewalInvoices(workspaceId)).toHaveLength(4);
   });
 
+  it('voids nothing while the owner’s card charge of the early invoice is at the gateway', async () => {
+    const { owner, workspaceId, periodEnd, invoice } = await invoiced();
+    clock.set(after(periodEnd, -5));
+    const gateway = fakeGateway(t);
+    const real = gateway.charge.bind(gateway);
+    const refused: unknown[] = [];
+    vi.spyOn(gateway, 'charge').mockImplementationOnce(async (request) => {
+      // Another tab changes the plan while the gateway answers "Thanh toán bằng thẻ thay thế".
+      for (const response of [
+        await owner.post(endpoints.changePlan.path(workspaceId), {
+          planId: 'basic',
+          cycle: 'monthly',
+        }),
+        await owner.post(endpoints.cancelPlan.path(workspaceId)),
+      ]) {
+        refused.push({ status: response.status, code: problemSchema.parse(response.body).code });
+      }
+      return real(request);
+    });
+
+    await payInvoice(owner, workspaceId, invoice.id).expect(200);
+    expect(refused).toEqual([
+      { status: 409, code: 'payment_in_progress' },
+      { status: 409, code: 'payment_in_progress' },
+    ]);
+    // The card paid the invoice it was charged for: the next period is paid, nothing was voided.
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      scheduledChange: null,
+      cancelAt: null,
+      renewal: { paid: true, invoice: { id: invoice.id, status: 'paid' } },
+    });
+    expect(await renewalInvoices(workspaceId)).toHaveLength(1);
+    expect(await logOf(workspaceId)).not.toContain('renewal_invoice_voided');
+  });
+
   it('replaces the early invoice when an upgrade is paid, at the new plan’s price', async () => {
     const { owner, workspaceId, email, periodEnd, invoice: first } = await invoiced();
     clock.set(after(periodEnd, -5));

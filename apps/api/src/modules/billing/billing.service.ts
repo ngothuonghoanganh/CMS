@@ -33,6 +33,7 @@ import type { InvoiceRecord, PlanInvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import {
   paymentPending,
+  paymentInProgress,
   paymentUndecided,
   quoteChanged,
   subscriptionChanged,
@@ -355,14 +356,25 @@ export class BillingService {
   /**
    * In `tx`, after a change of what the next period is or costs, or whether there is one (T4): the
    * unpaid transfer invoice made for it is voided and replaced. 409 `payment_in_progress` while the
-   * owner's card charge of that invoice may go through: voiding it could lose a payment.
+   * owner's card charge of that invoice may go through: voiding it could lose a payment. That
+   * includes a charge that holds the subscription (`lockedUntil`) and has not reached the invoice
+   * yet: the change writes the subscription too, so the two never both commit.
    */
   private async reissueRenewal(scope: WorkspaceScope, at: Date, tx: Tx): Promise<void> {
-    const outcome = await this.renewals.reissueIn(scope, { at, actorId: scope.userId }, tx);
-    if (outcome.kind === 'undecided') {
-      throw outcome.invoice.status === 'open'
-        ? paymentUndecided(outcome.invoice)
-        : paymentPending(outcome.invoice);
+    const outcome = await this.renewals.reissueIn(
+      scope,
+      { at, actorId: scope.userId, refuseWhileHeld: true },
+      tx,
+    );
+    switch (outcome.kind) {
+      case 'undecided':
+        throw outcome.invoice.status === 'open'
+          ? paymentUndecided(outcome.invoice)
+          : paymentPending(outcome.invoice);
+      case 'held':
+        throw paymentInProgress();
+      case 'done':
+        return;
     }
   }
 
