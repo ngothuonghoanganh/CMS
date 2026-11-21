@@ -5,7 +5,9 @@ import {
   can,
   customRolePermissions,
   customRoleSchema,
+  endpoints,
   leadRecipientListResponseSchema,
+  marketplaceSuggestionResponseSchema,
   meResponseSchema,
   type MeResponse,
   onlyHoldersMessage,
@@ -1564,6 +1566,7 @@ describe('the six roles on every endpoint', () => {
       subscription,
       billingLog,
       marketplaceLicences,
+      billingNotices,
     ] = await Promise.all([
       // Every field of every event: a refused call must not edit one either.
       collection('activity'),
@@ -1584,6 +1587,7 @@ describe('the six roles on every endpoint', () => {
         ),
       ofWorkspace('billing_log'),
       ofWorkspace('marketplace_licences'),
+      ofWorkspace('billing_notices'),
     ]);
     return JSON.stringify({
       siteRecord,
@@ -1612,6 +1616,7 @@ describe('the six roles on every endpoint', () => {
       subscription,
       billingLog,
       marketplaceLicences,
+      billingNotices,
     });
   }
 
@@ -1686,6 +1691,50 @@ describe('the six roles on every endpoint', () => {
     if (allowed) {
       expect((await row.call(customHolder.client, target)).status, 'custom role').not.toBe(403);
     }
+  });
+
+  // The one row the table cannot say: `pages.view` for whoever cannot buy (ADR-036, MP3).
+  it('Đề xuất mua mẫu: pages.view, and never billing.manage, which buys', async () => {
+    const target = await fixture();
+    const suggestion = endpoints.suggestMarketplaceItem.path(target.workspaceId, PAID_ITEM_ID);
+    const notices = () =>
+      t.connection
+        .collection('billing_notices')
+        .countDocuments({ workspaceId: new Types.ObjectId(target.workspaceId) });
+
+    expect((await stranger.post(suggestion)).status).toBe(404);
+    const owner = await target.owner.post(suggestion);
+    expect(owner.status).toBe(403);
+    expect(problemSchema.parse(owner.body).code).toBe('forbidden');
+    expect(await notices()).toBe(0);
+
+    // Everyone else asks once, whatever the role and the sites it is kept to.
+    const askers = [
+      ...MEMBER_ROLES.map((role) => [role, memberOf(role).client] as const),
+      ['kept to another site', elsewhere.client] as const,
+    ];
+    for (const [who, client] of askers) {
+      expect((await client.post(suggestion)).status, who).toBe(200);
+    }
+    expect(await notices()).toBe(askers.length);
+    for (const [who, client] of askers) {
+      const again = await client.post(suggestion);
+      expect(marketplaceSuggestionResponseSchema.parse(again.body).alreadySuggested, who).toBe(
+        true,
+      );
+    }
+    expect(await notices()).toBe(askers.length);
+
+    // A read-only workspace still takes suggestions: they change nothing of it.
+    await setReadOnly(t, target.workspaceId, true);
+    // The fixture holds the two-version item (for the update row): ask for another paid one.
+    const other = endpoints.suggestMarketplaceItem.path(
+      target.workspaceId,
+      'mp-mo-ban-du-an-can-ho',
+    );
+    expect((await memberOf('viewer').client.post(other)).status).toBe(200);
+    expect((await target.owner.post(other)).status).toBe(403);
+    await setReadOnly(t, target.workspaceId, false);
   });
 });
 
