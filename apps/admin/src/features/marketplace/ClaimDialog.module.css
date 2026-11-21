@@ -60,3 +60,61 @@
   line-height: 1.6;
   color: var(--color-ink-2);
 }
+
+/* The facts and totals of "Xác nhận mua mẫu" (PurchaseDialog) */
+.sum {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-hover);
+  font-size: var(--text-body);
+}
+
+.sum dt {
+  overflow-wrap: anywhere;
+}
+
+.sum dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.sumMuted {
+  color: var(--color-ink-2);
+}
+
+.sumTotal {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  font-weight: 700;
+}
+
+.line {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.lineMuted {
+  composes: line;
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-hover);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}

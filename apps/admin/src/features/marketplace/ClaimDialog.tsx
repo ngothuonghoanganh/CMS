@@ -7,10 +7,11 @@ import {
 } from '@plp/contracts';
 import { Button, Checkbox, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { type RefObject, useId, useRef, useState } from 'react';
+import { type RefObject, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { reportUnexpected } from '../shell/problem-message';
 import { DialogFailure } from './DialogFailure';
+import { LicenceTerms } from './LicenceTerms';
 import styles from './ClaimDialog.module.css';
 
 export interface ClaimDialogProps {
@@ -44,9 +45,7 @@ export function ClaimDialog({
   onChanged,
   fallbackFocusRef,
 }: ClaimDialogProps) {
-  const termsId = useId();
   const [agreed, setAgreed] = useState(false);
-  const [termsShown, setTermsShown] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   // `isPending` turns true a tick after `mutate`: a double click would claim twice before it.
   const sending = useRef(false);
@@ -129,34 +128,7 @@ export function ClaimDialog({
           {item.name} · v{item.version}
         </p>
         <p className={styles.note}>Giấy phép dùng cho mọi site trong workspace.</p>
-        <div className={styles.terms}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={styles.termsToggle}
-            aria-expanded={termsShown}
-            aria-controls={termsId}
-            onClick={() => {
-              setTermsShown((shown) => !shown);
-            }}
-          >
-            {termsShown ? 'Ẩn điều khoản giấy phép' : 'Đọc điều khoản giấy phép'}
-          </Button>
-          {/* Focusable so a keyboard scrolls the terms; the region names their version. */}
-          <section
-            id={termsId}
-            hidden={!termsShown}
-            aria-label={`Điều khoản giấy phép v${item.terms.version}`}
-            tabIndex={0}
-            className={styles.termsText}
-          >
-            <ol>
-              {item.terms.licence.map((paragraph, index) => (
-                <li key={index}>{paragraph}</li>
-              ))}
-            </ol>
-          </section>
-        </div>
+        <LicenceTerms terms={item.terms} />
         <Checkbox
           checked={agreed}
           onChange={(event) => {
