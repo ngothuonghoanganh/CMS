@@ -98,6 +98,7 @@ export function toTemplateSummary(template: SystemTemplate): TemplateSummary {
     sections: templateSections(template),
     // A system template may be used in every site.
     siteIds: null,
+    marketplace: null,
   };
 }
 

@@ -17,12 +17,16 @@ export const PAGES_CREATED_FROM_INDEX = 'pages_created_from_template';
 
 /**
  * The template a page was made from, at the version it used (ADR-030): the count "Đã dùng N
- * trang" of board 18. Set once at creation; the page never follows later versions.
+ * trang" of board 18. Set once at creation; the page never follows later versions, nor the
+ * version a marketplace licence moves to (ADR-036).
  */
 export interface PageCreatedFromRecord {
   kind: 'template';
   source: TemplateSource;
-  /** A system template's id, or (from G2) a workspace template's id as hex. */
+  /**
+   * A system template's id, (from G2) a workspace template's id as hex, or (from MP2) a
+   * marketplace item's "mp-" id.
+   */
   templateId: string;
   version: number;
 }
