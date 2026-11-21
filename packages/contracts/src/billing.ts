@@ -172,6 +172,14 @@ export const planCatalogSchema = z
           path: ['retryDays', index],
         });
       }
+      // A retry after the grace would charge a workspace already read-only, by itself (ADR-035).
+      if (day >= catalog.graceDays) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Ngày thử lại phải nằm trong thời gian ân hạn',
+          path: ['retryDays', index],
+        });
+      }
     });
   });
 export type PlanCatalog = z.infer<typeof planCatalogSchema>;

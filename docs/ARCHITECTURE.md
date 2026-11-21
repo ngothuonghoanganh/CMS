@@ -3106,7 +3106,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Không có thẻ dùng được: lần thử ghi `failed` mã `no_payment_method` hay `expired_card`, không gọi cổng (`no_payment_method` thêm vào `paymentDeclineCodes`, nhãn "Chưa có thẻ thanh toán"). Hóa đơn và lần thử lại nói lý do.
   - **Trừ tiền lỗi và thử lại:**
     - Lần lỗi đầu của hóa đơn subscription đang chờ đặt `failedSince`; ân hạn 7 ngày tính từ đó.
-    - Thử lại sau 2 và 5 ngày: `retryDays: [2, 5]` trong `plans.json` (con số tạm; schema: tăng dần, mỗi số 1–60, tối đa 5 lần). Một lần thử lại coi như đã làm khi hóa đơn có lần trừ tiền nào từ mốc của nó, kể cả "Thanh toán lại" của Chủ sở hữu; việc nền chạy trễ chỉ trừ một lần cho mọi mốc đã qua. Sau lần cuối, không tự trừ nữa.
+    - Thử lại sau 2 và 5 ngày: `retryDays: [2, 5]` trong `plans.json` (con số tạm; schema: tăng dần, mỗi số 1–60, tối đa 5 lần, và nhỏ hơn `graceDays`, để không lần thử lại nào tự trừ tiền một workspace đã chỉ đọc). Một lần thử lại coi như đã làm khi hóa đơn có lần trừ tiền nào từ mốc của nó, kể cả "Thanh toán lại" của Chủ sở hữu; việc nền chạy trễ chỉ trừ một lần cho mọi mốc đã qua. Sau lần cuối, không tự trừ nữa.
     - Không thử lại khi hóa đơn đang chờ chuyển khoản hay cổng đang quyết.
     - "Thanh toán lại" (thẻ mới) hay chuyển khoản trả hóa đơn đó: gói hoạt động lại, kỳ tính từ cuối kỳ cũ, hay từ lúc trả nếu kỳ đó đã hết.
   - **Lần trừ tiền chưa rõ kết quả** (phần còn lại của T2):

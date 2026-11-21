@@ -130,6 +130,16 @@ describe('the plan catalog', () => {
     expect(issuesOf({ ...CATALOG, retryDays: [0] })).toEqual(['retryDays.0']);
     expect(issuesOf({ ...CATALOG, retryDays: [1, 2, 3, 4, 5, 6] })).toEqual(['retryDays']);
   });
+
+  it('retries a failed charge only within the grace, never on a read-only workspace', () => {
+    expect(issuesOf({ ...CATALOG, graceDays: 7, retryDays: [2, 6] })).toEqual([]);
+    expect(issuesOf({ ...CATALOG, graceDays: 7, retryDays: [2, 7] })).toEqual(['retryDays.1']);
+    expect(issuesOf({ ...CATALOG, graceDays: 5, retryDays: [2, 5, 9] })).toEqual([
+      'retryDays.1',
+      'retryDays.2',
+    ]);
+    expect(issuesOf({ ...CATALOG, graceDays: 0, retryDays: [] })).toEqual([]);
+  });
 });
 
 describe('the state of a subscription (ADR-035)', () => {
