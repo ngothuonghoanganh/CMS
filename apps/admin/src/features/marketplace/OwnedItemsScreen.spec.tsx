@@ -211,6 +211,38 @@ describe('OwnedItemsScreen (board 32)', () => {
     );
   });
 
+  it('opens without the failure of an earlier opening, for this row or another', async () => {
+    const user = userEvent.setup();
+    const spa = ownedItemFixture({
+      itemId: 'mp-spa-uu-dai-ngay-le',
+      name: 'Spa ưu đãi ngày lễ',
+      source: 'purchase',
+      version: 1,
+      latestVersion: 2,
+      newVersions: [{ version: 2, releasedOn: '2026-12-02', note: 'Thêm bảng giá.' }],
+    });
+    apiMock.mockRejectedValueOnce(apiError(500, 'internal', 'Lỗi máy chủ'));
+    renderScreen({ items: [bought, spa] });
+    await user.click(screen.getByRole('button', { name: 'Cập nhật Khai trương phòng tập' }));
+    await user.click(screen.getByRole('button', { name: 'Cập nhật mẫu' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Lỗi máy chủ');
+    await user.click(screen.getByRole('button', { name: 'Để sau' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Cập nhật Khai trương phòng tập' }));
+    expect(
+      screen.getByRole('dialog', { name: 'Cập nhật “Khai trương phòng tập” lên v2?' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Để sau' }));
+
+    await user.click(screen.getByRole('button', { name: 'Cập nhật Spa ưu đãi ngày lễ' }));
+    expect(
+      screen.getByRole('dialog', { name: 'Cập nhật “Spa ưu đãi ngày lễ” lên v2?' }),
+    ).toHaveTextContent('Thêm bảng giá.');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('creates a page from the version of the licence, in the dialog of board 18', async () => {
     const user = userEvent.setup();
     renderScreen();

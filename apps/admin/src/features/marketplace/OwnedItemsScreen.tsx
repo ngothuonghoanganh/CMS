@@ -55,7 +55,12 @@ export function OwnedItemsScreen({
   const router = useRouter();
   const canUpdate = can(role, 'templates.manage');
   const targets = can(role, 'pages.edit') ? sites : [];
-  const [updating, setUpdating] = useState<{ itemId: string; open: boolean } | null>(null);
+  // `opening` counts the openings: each one is a new dialog, with no failure from an earlier one.
+  const [updating, setUpdating] = useState<{
+    itemId: string;
+    open: boolean;
+    opening: number;
+  } | null>(null);
   const [creating, setCreating] = useState<{ itemId: string; open: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -158,7 +163,11 @@ export function OwnedItemsScreen({
                       variant="secondary"
                       size="sm"
                       onClick={() => {
-                        setUpdating({ itemId: item.itemId, open: true });
+                        setUpdating((current) => ({
+                          itemId: item.itemId,
+                          open: true,
+                          opening: (current?.opening ?? 0) + 1,
+                        }));
                       }}
                     >
                       Cập nhật <span className={styles.srOnly}>{item.name}</span>
@@ -190,11 +199,12 @@ export function OwnedItemsScreen({
         </section>
       )}
 
-      {updatingItem !== undefined && hasUpdate(updatingItem) ? (
+      {updatingItem !== undefined && updating !== null && hasUpdate(updatingItem) ? (
         <UpdateLicenceDialog
+          key={updating.opening}
           workspaceId={workspace.id}
           item={updatingItem}
-          open={updating?.open === true}
+          open={updating.open}
           onOpenChange={(open) => {
             setUpdating((current) => (current === null ? null : { ...current, open }));
           }}

@@ -28,7 +28,8 @@ export interface UpdateLicenceDialogProps {
 
 /**
  * "Cập nhật “…” lên vM?" (board 32): the notes of the versions released after the licence's, and
- * what the update does not touch. Only pages made from now take the new version (ADR-036).
+ * what the update does not touch. Only pages made from now take the new version (ADR-036). The
+ * screen gives it a new `key` for every opening, so it never shows an earlier opening's failure.
  */
 export function UpdateLicenceDialog({
   workspaceId,
@@ -71,9 +72,6 @@ export function UpdateLicenceDialog({
         // The update being written cannot be dismissed: its answer shows here.
         if (!next && update.isPending) {
           return;
-        }
-        if (next) {
-          setFailure(null);
         }
         onOpenChange(next);
       }}
