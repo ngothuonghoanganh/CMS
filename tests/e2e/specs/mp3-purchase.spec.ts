@@ -5,6 +5,7 @@ import {
   GYM,
   openBuyDialog,
   priceBoxOf,
+  TERMS_LABEL,
   tickAndPay,
 } from '../support/marketplace-purchase.js';
 import { waitForEmail } from '../support/mailpit.js';
@@ -219,10 +220,12 @@ test.describe('MP3 · Buying a marketplace item', () => {
     await expect(row).toContainText('Ngân hàng từ chối thẻ');
     await expect(row.getByRole('button', { name: /^Thanh toán lại/ })).toHaveCount(0);
 
+    // The dialog says the plan comes first before the terms are ticked, and pays nothing.
     dialog = await openBuyDialog(page, workspace, APARTMENT.id);
-    await tickAndPay(dialog);
+    await expect(dialog).toContainText('Workspace đang ở chế độ chỉ đọc');
     await expect(dialog.getByRole('link', { name: 'Xem gói & thanh toán' })).toBeVisible();
-    await expect(dialog.getByText(`Đã mua “${APARTMENT.name}”`)).toHaveCount(0);
+    await dialog.getByRole('checkbox', { name: TERMS_LABEL }).check();
+    await expect(dialog.getByRole('button', { name: /^Thanh toán \d/ })).toBeDisabled();
     await page.keyboard.press('Escape');
     await page.goto(`${workspace}/marketplace/owned`);
     await expect(

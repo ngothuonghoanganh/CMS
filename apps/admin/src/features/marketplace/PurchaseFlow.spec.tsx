@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { ApiError } from '../../lib/api-core';
 import { navigateTo } from '../../lib/navigate';
-import { WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { WorkspacePlanProvider } from '../billing/plan-context';
+import { WORKSPACE_ID, workspacePlanFixture } from '../dashboard/test-fixtures';
 import { invoiceFixture } from '../billing/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { MarketplaceItemScreen } from './MarketplaceItemScreen';
@@ -14,7 +15,11 @@ import { licenceFixture, marketplaceDetailFixture, quoteFixture } from './test-f
 const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
 }));
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => router,
+  // The plan frame (WorkspacePlanProvider) follows the screen it is on.
+  usePathname: () => '/workspaces/64b0000000000000000000a1/marketplace',
+}));
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
   api: vi.fn(),
@@ -124,6 +129,10 @@ async function openDialog(user: User) {
 async function confirm(user: User, dialog: HTMLElement) {
   await user.click(await within(dialog).findByRole('checkbox'));
   await user.click(within(dialog).getByRole('button', { name: /^Thanh toán / }));
+}
+
+function callsTo(endpoint: unknown) {
+  return apiMock.mock.calls.filter((call) => call[0] === endpoint);
 }
 
 function keyOf(call: readonly unknown[] | undefined): string | undefined {
@@ -463,7 +472,46 @@ describe('"Xác nhận mua mẫu" (board 31, ADR-036)', () => {
     await confirm(user, dialog);
     const alert = await within(dialog).findByRole('alert');
     expect(alert).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
-    expect(within(dialog).getByRole('button', { name: /^Thanh toán / })).toBeEnabled();
+    expect(within(alert).getByRole('link', { name: 'Xem gói & thanh toán' })).toBeVisible();
+    // Pressing it again would only be refused again: the plan is paid first.
+    expect(within(dialog).getByRole('button', { name: /^Thanh toán / })).toBeDisabled();
+    expect(callsTo(endpoints.purchaseMarketplaceItem)).toHaveLength(1);
+  });
+
+  it('says up front that a read-only workspace pays its plan first, and pays nothing', async () => {
+    route();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <WorkspacePlanProvider
+        workspaceId={WORKSPACE_ID}
+        canViewBilling
+        plan={workspacePlanFixture({ state: 'past_due', access: 'read_only' })}
+      >
+        <MarketplaceItemScreen
+          workspace={workspace}
+          role="owner"
+          item={marketplaceDetailFixture()}
+          returned={null}
+        />
+      </WorkspacePlanProvider>,
+    );
+    const dialog = await openDialog(user);
+    const title = await within(dialog).findByText('Workspace đang ở chế độ chỉ đọc');
+    const notice = title.closest<HTMLElement>('[role="status"]');
+    if (notice === null) {
+      throw new Error('The read-only notice is not a status');
+    }
+    expect(notice).toHaveTextContent(
+      'Gói chưa được thanh toán và đã hết thời gian ân hạn. Thanh toán gói để mở lại workspace, rồi mua mẫu.',
+    );
+    expect(notice).toHaveTextContent('Theo gói');
+    expect(within(notice).getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing`,
+    );
+    await user.click(within(dialog).getByRole('checkbox'));
+    expect(within(dialog).getByRole('button', { name: /^Thanh toán / })).toBeDisabled();
+    expect(callsTo(endpoints.purchaseMarketplaceItem)).toHaveLength(0);
   });
 
   it('asks for a card instead of paying when none can be charged', async () => {

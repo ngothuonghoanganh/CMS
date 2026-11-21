@@ -17,6 +17,10 @@ import { billingQueryKeys } from '../billing/queries';
 import { MethodSetupNotice } from '../billing/MethodSetupNotice';
 import { cardLabel } from '../billing/payment-presentation';
 import { paymentProblemOf } from '../billing/payment-problem';
+import { useWorkspacePlan } from '../billing/plan-context';
+import { readOnlyReason } from '../billing/plan-presentation';
+import { planProblemOf } from '../billing/plan-problem';
+import { planActionLabel, PlanMark } from '../billing/PlanProblemAction';
 import { answerLost } from '../billing/use-pay-invoice';
 import { useMethodSetup } from '../billing/use-method-setup';
 import { marketplaceOwnedHref, paymentsHref, templateHref } from '../shell/navigation';
@@ -80,6 +84,7 @@ export function PurchaseDialog({
   fallbackFocusRef,
 }: PurchaseDialogProps) {
   const queryClient = useQueryClient();
+  const frame = useWorkspacePlan();
   const setup = useMethodSetup(workspaceId, 'marketplace', item.id);
   const [agreed, setAgreed] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'confirm' });
@@ -285,7 +290,13 @@ export function PurchaseDialog({
               ? 'Đang có một thanh toán chưa xong'
               : 'Xác nhận mua mẫu';
   const confirming = phase.kind === 'confirm' || busy;
-  const canPay = quoted !== undefined && quoted.paymentsEnabled && !quoted.paymentMethodRequired;
+  // A read-only workspace pays its plan first (ADR-036): the dialog says so before the owner ticks
+  // the terms, and nothing in it pays, as after the API's 402 when the plan changed meanwhile.
+  const readOnlyState = frame?.plan.access === 'read_only' ? frame.plan.state : null;
+  const refusedReadOnly = planProblemOf(failure)?.kind === 'read_only';
+  const readOnly = readOnlyState !== null || refusedReadOnly;
+  const canPay =
+    quoted !== undefined && quoted.paymentsEnabled && !quoted.paymentMethodRequired && !readOnly;
 
   const close = (
     <Button
@@ -326,7 +337,7 @@ export function PurchaseDialog({
             </Button>
             {quoted === undefined ||
             !quoted.paymentsEnabled ? null : quoted.paymentMethodRequired ? (
-              <Button loading={setup.busy} onClick={setup.start}>
+              <Button loading={setup.busy} disabled={readOnly} onClick={setup.start}>
                 Thêm thẻ
               </Button>
             ) : (
@@ -385,6 +396,12 @@ export function PurchaseDialog({
               <dt className={styles.sumTotal}>Tổng</dt>
               <dd className={styles.sumTotal}>{total ?? '…'}</dd>
             </dl>
+            {readOnlyState === null || refusedReadOnly ? null : (
+              <Callout tone="warning" role="status" title="Workspace đang ở chế độ chỉ đọc">
+                {readOnlyReason(readOnlyState)} Thanh toán gói để mở lại workspace, rồi mua mẫu.{' '}
+                <PlanMark label={planActionLabel('read_only')} workspaceId={workspaceId} />
+              </Callout>
+            )}
             {quote.isError ? (
               <>
                 <DialogFailure error={quote.error} workspaceId={workspaceId} />
