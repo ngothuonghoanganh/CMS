@@ -6,23 +6,30 @@ import {
   type Plan,
   type PlanCatalog,
   type PlanCatalogResponse,
+  type PlanChangeImpacts,
   type PlanChangeQuote,
   type PlanChangeQuoteQuery,
+  type PlanLimitKey,
   type WorkspacePlan,
 } from '@plp/contracts';
 import { validationFailed } from '../../shared/errors.js';
+import { toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { BillingLogRepository } from './billing-log.repository.js';
 import { toBillingSummary, toPlanChangeQuote, toWorkspacePlan } from './billing-dto.js';
+import { BillingSchedule } from './billing-schedule.service.js';
+import { invoicePayable } from './domain/invoice-state.js';
 import { type PlanChange, planChangeOf } from './domain/plan-change.js';
+import { currentEndOf, paymentUnderWay } from './domain/renewal.js';
 import { type Entitlements, EntitlementsService } from './entitlements.service.js';
 import { InvoiceCharges } from './invoice-charges.service.js';
+import { InvoicesRepository } from './invoices.repository.js';
 import { quoteChanged, subscriptionChanged } from './payment-problems.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
-import { InjectPlanCatalog } from './plan-catalog.js';
+import { InjectPlanCatalog, planOf } from './plan-catalog.js';
 import { planChangeUnavailable } from './plan-problems.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
@@ -32,10 +39,15 @@ export interface PlanChangeOutcome {
   pending: boolean;
 }
 
+/** Limits counted at any moment, which a lower plan may leave the workspace over. */
+const STANDING_LIMITS: readonly PlanLimitKey[] = ['sites', 'members', 'customDomains'];
+
 /**
  * Board 28 (ADR-035): the plans, the workspace's plan and usage, and changing the plan. During the
  * trial a change is free, or paid now, which ends the trial; in a paid period a higher plan is
- * charged for the days left (T2). Scheduled downgrades and cycle changes come with T3.
+ * charged for the days left (T2), and a lower price or another cycle is scheduled for the period's
+ * end, which charges it (T3). "Hủy gói" stops the plan at the end of the period, "Giữ lại gói"
+ * withdraws it, and a canceled plan starts again only when paid now (T3).
  */
 @Injectable()
 export class BillingService {
@@ -44,9 +56,11 @@ export class BillingService {
     private readonly access: AccessService,
     private readonly entitlements: EntitlementsService,
     private readonly subscriptions: SubscriptionsRepository,
+    private readonly invoices: InvoicesRepository,
     private readonly log: BillingLogRepository,
     private readonly hooks: PlanChangeHooks,
     private readonly charges: InvoiceCharges,
+    private readonly schedule: BillingSchedule,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -77,13 +91,14 @@ export class BillingService {
     this.access.require(scope, 'billing.manage');
     const target = this.planNamed(query.planId);
     const current = await this.entitlements.of(scope);
-    return this.quoteOf(current, target, query);
+    return this.quoteOf(scope, current, target, query);
   }
 
   /**
    * "Đổi gói" as `quote` describes it. A free change of the trial's plan, its log entry and what
-   * other modules do about it (`PlanChangeHooks`) commit together. A change that charges needs
-   * the amount the owner confirmed and a card that can pay, then makes its invoice and charges it
+   * other modules do about it (`PlanChangeHooks`) commit together; so does a change scheduled for
+   * the period's end (T3). A change that charges needs the amount the owner confirmed and a card
+   * that can pay, or a transfer for a plan paid now, then makes its invoice and charges it
    * (`InvoiceCharges`); the plan changes when the invoice is paid.
    */
   async changePlan(
@@ -104,10 +119,17 @@ export class BillingService {
       case 'trial_change':
         await this.changeTrialPlan(scope, current, target, request);
         return { summary: await this.summaryOf(scope), pending: false };
+      case 'scheduled':
+        await this.scheduleChange(scope, current, target, request);
+        return { summary: await this.summaryOf(scope), pending: false };
       case 'start_paid':
       case 'upgrade': {
         this.charges.requireEnabled();
-        this.charges.requireMethod(current.facts, current.at);
+        const payWith =
+          change.mode === 'start_paid' && request.payWith === 'transfer' ? 'transfer' : 'card';
+        if (payWith === 'card') {
+          this.charges.requireMethod(current.facts, current.at);
+        }
         if (request.expectedAmount === undefined) {
           throw validationFailed([
             {
@@ -118,7 +140,7 @@ export class BillingService {
           ]);
         }
         if (request.expectedAmount !== change.amount) {
-          throw quoteChanged(this.quoteOf(current, target, request));
+          throw quoteChanged(await this.quoteOf(scope, current, target, request));
         }
         const answer = await this.charges.checkout(scope, {
           facts: current.facts,
@@ -126,11 +148,101 @@ export class BillingService {
           target,
           cycle: request.cycle,
           change,
+          payWith,
           at: current.at,
         });
         return { summary: await this.summaryOf(scope), pending: answer.pending };
       }
     }
+  }
+
+  /** Drops the change scheduled for the end of the period (T3); nothing to drop is fine. */
+  async cancelScheduledChange(
+    user: AuthenticatedUser,
+    workspaceId: string,
+  ): Promise<BillingSummary> {
+    const scope = await this.access.scopeForWorkspace(user, workspaceId);
+    this.access.require(scope, 'billing.manage');
+    const { facts, plan, at } = await this.entitlements.of(scope);
+    const scheduled = facts.scheduledChange;
+    if (scheduled !== null) {
+      await this.transactions.run(async (tx) => {
+        await this.writeOrConflict(
+          this.subscriptions.setScheduledChange(
+            scope,
+            { scheduled: null, fromVersion: facts.version, at },
+            tx,
+          ),
+        );
+        await this.log.record(
+          scope,
+          {
+            at,
+            actorId: scope.userId,
+            action: 'scheduled_change_canceled',
+            from: { planId: plan.id, cycle: facts.cycle },
+            to: scheduled,
+          },
+          tx,
+        );
+      });
+    }
+    return this.summaryOf(scope);
+  }
+
+  /**
+   * "Hủy gói" (T3): the plan stops at the end of the trial or period; nothing is refunded (§6).
+   * Not while a payment is due (`unpaid`), nor once nothing runs (`payment_required`).
+   */
+  async cancel(user: AuthenticatedUser, workspaceId: string): Promise<BillingSummary> {
+    const scope = await this.access.scopeForWorkspace(user, workspaceId);
+    this.access.require(scope, 'billing.manage');
+    const { facts, at } = await this.entitlements.of(scope);
+    if (!facts.cancelAtPeriodEnd) {
+      if (at.getTime() >= currentEndOf(facts).getTime()) {
+        const expired =
+          facts.trialEndsAt !== null && !paymentUnderWay(facts) && facts.paymentMethod === null;
+        throw planChangeUnavailable(expired ? 'payment_required' : 'unpaid');
+      }
+      if (facts.trialEndsAt === null && paymentUnderWay(facts)) {
+        throw planChangeUnavailable('unpaid');
+      }
+      await this.setCancel(scope, facts.version, true, at);
+    }
+    return this.summaryOf(scope);
+  }
+
+  /** "Giữ lại gói" (T3): before the end of the trial or period, the plan goes on. */
+  async keep(user: AuthenticatedUser, workspaceId: string): Promise<BillingSummary> {
+    const scope = await this.access.scopeForWorkspace(user, workspaceId);
+    this.access.require(scope, 'billing.manage');
+    const { facts, at } = await this.entitlements.of(scope);
+    if (facts.cancelAtPeriodEnd) {
+      if (at.getTime() >= currentEndOf(facts).getTime()) {
+        throw planChangeUnavailable('payment_required');
+      }
+      await this.setCancel(scope, facts.version, false, at);
+    }
+    return this.summaryOf(scope);
+  }
+
+  private async setCancel(
+    scope: WorkspaceScope,
+    fromVersion: number,
+    cancel: boolean,
+    at: Date,
+  ): Promise<void> {
+    await this.transactions.run(async (tx) => {
+      await this.writeOrConflict(
+        this.subscriptions.setCancelAtPeriodEnd(scope, { cancel, fromVersion, at }, tx),
+      );
+      await this.log.record(
+        scope,
+        { at, actorId: scope.userId, action: cancel ? 'cancel_scheduled' : 'cancel_withdrawn' },
+        tx,
+      );
+      await this.schedule.reschedule(scope, at, tx);
+    });
   }
 
   private planNamed(planId: string): Plan {
@@ -158,18 +270,49 @@ export class BillingService {
     });
   }
 
-  private quoteOf(
+  private async quoteOf(
+    scope: WorkspaceScope,
     current: Entitlements,
     target: Plan,
     choice: Pick<ChangePlanRequest, 'cycle' | 'payNow'>,
-  ): PlanChangeQuote {
+  ): Promise<PlanChangeQuote> {
     const change = this.changeOf(current, target, choice);
+    const impacts =
+      (change.mode === 'scheduled' || change.mode === 'trial_change') &&
+      target.id !== current.plan.id
+        ? await this.impactsOf(scope, current.plan, target)
+        : null;
     return toPlanChangeQuote(
       change,
       { planId: target.id, cycle: choice.cycle },
       current.facts.paymentMethod,
       current.at,
+      impacts,
     );
+  }
+
+  /**
+   * What moving to `target` does to the workspace (board 28's dialog): what it already uses over
+   * the new limits, the automations it pauses, the AI uses each month, and the members who all
+   * keep their access.
+   */
+  private async impactsOf(
+    scope: WorkspaceScope,
+    current: Plan,
+    target: Plan,
+  ): Promise<PlanChangeImpacts> {
+    const [usage, automations] = await Promise.all([
+      this.entitlements.usageOf(scope),
+      target.features.automation ? Promise.resolve(0) : this.hooks.featureUse(scope, 'automation'),
+    ]);
+    return {
+      overLimits: STANDING_LIMITS.filter((limit) => usage[limit] > target.limits[limit]).map(
+        (limit) => ({ limit, used: usage[limit], max: target.limits[limit] }),
+      ),
+      automationsToPause: automations,
+      aiUses: { from: current.limits.aiUses, to: target.limits.aiUses },
+      members: usage.members,
+    };
   }
 
   /** During the trial: at once, at no charge, from the version read (ADR-035, T1). */
@@ -204,12 +347,70 @@ export class BillingService {
     });
   }
 
+  /**
+   * A lower price or another cycle in a paid period (T3): nothing changes and nothing is charged
+   * until the end of the period, whose renewal charges the new plan and cycle and applies them.
+   */
+  private async scheduleChange(
+    scope: WorkspaceScope,
+    current: Entitlements,
+    target: Plan,
+    request: Pick<ChangePlanRequest, 'cycle'>,
+  ): Promise<void> {
+    const { at, facts } = current;
+    const scheduled = { planId: target.id, cycle: request.cycle };
+    if (
+      facts.scheduledChange?.planId === target.id &&
+      facts.scheduledChange.cycle === request.cycle
+    ) {
+      return;
+    }
+    await this.transactions.run(async (tx) => {
+      await this.writeOrConflict(
+        this.subscriptions.setScheduledChange(
+          scope,
+          { scheduled, fromVersion: facts.version, at },
+          tx,
+        ),
+      );
+      await this.log.record(
+        scope,
+        {
+          at,
+          actorId: scope.userId,
+          action: 'change_scheduled',
+          from: { planId: current.plan.id, cycle: facts.cycle },
+          to: scheduled,
+        },
+        tx,
+      );
+    });
+  }
+
+  /** 409 `conflict` when a write guarded by the version read finds it moved. */
+  private async writeOrConflict(write: Promise<boolean>): Promise<void> {
+    if (!(await write)) {
+      throw subscriptionChanged();
+    }
+  }
+
   private async summaryOf(scope: WorkspaceScope): Promise<BillingSummary> {
     const month = this.entitlements.currentMonth();
     const [entitlements, usage] = await Promise.all([
       this.entitlements.of(scope),
       this.entitlements.usageOf(scope, month),
     ]);
-    return toBillingSummary(entitlements, usage, month);
+    const { facts, at } = entitlements;
+    const due =
+      facts.openInvoiceId === null
+        ? null
+        : await this.invoices.findOfWorkspace(scope, toObjectId(facts.openInvoiceId));
+    return toBillingSummary(entitlements, {
+      usage,
+      month,
+      policy: this.catalog,
+      planOf: (planId) => planOf(this.catalog, planId),
+      due: due === null ? null : { invoice: due, payable: invoicePayable(due, facts, at) },
+    });
   }
 }

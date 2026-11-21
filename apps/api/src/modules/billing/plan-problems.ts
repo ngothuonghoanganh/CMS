@@ -70,6 +70,11 @@ const readOnlyReasons: Partial<Record<SubscriptionState, string>> = {
   pending_payment: 'Thanh toán chưa được xác nhận và đã hết thời gian ân hạn.',
 };
 
+/** Why a workspace in `state` is read-only, as one sentence; null for a state that never is. */
+export function readOnlyReasonOf(state: SubscriptionState): string | null {
+  return readOnlyReasons[state] ?? null;
+}
+
 /**
  * 402 `workspace_read_only`: the workspace may only be read until its owner pays. Live pages and
  * lead forms keep working, which the detail says.
@@ -86,10 +91,8 @@ export function workspaceReadOnly(state: SubscriptionState): AppError {
 
 const unavailableDetails: Record<PlanChangeUnavailableReason, string> = {
   payment_required:
-    'Thời gian dùng thử đã hết. Chọn "Thanh toán ngay" để trả cho gói đã chọn và dùng tiếp.',
+    'Thời gian dùng thử đã hết hoặc gói đã hủy. Chọn "Thanh toán ngay" để trả cho gói đã chọn và dùng tiếp.',
   unpaid: 'Kỳ này chưa được thanh toán. Thanh toán kỳ này trước, rồi đổi gói.',
-  scheduled_change:
-    'Hạ gói, chuyển sang gói cùng giá hay đổi chu kỳ có hiệu lực ở cuối kỳ, sẽ có trong bản cập nhật tới. Gói hiện tại vẫn giữ nguyên.',
 };
 
 /** 409 `plan_change_unavailable`: the choice cannot apply now, for `reason`. */

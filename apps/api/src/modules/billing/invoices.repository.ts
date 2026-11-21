@@ -20,13 +20,29 @@ import {
   type InvoiceAttemptRecord,
   type InvoiceCounterRecord,
   type InvoiceRecord,
+  type InvoiceTransferRecord,
 } from './invoice.schema.js';
 
-/** A new invoice: everything but its id, number and the dates the repository sets. */
+/** Invoices of a workspace whose charge's outcome is unknown, read at once at most. */
+const UNDECIDED_MAX = 10;
+
+/**
+ * A new invoice: everything but its number and the dates the repository sets. It is `open`, or
+ * `pending` from the start when it waits for a transfer (`awaitingTransfer`, T3), whose details
+ * the gateway gives once its number is known (`startTransfer`).
+ */
 export type NewInvoice = Omit<
   InvoiceRecord,
-  '_id' | 'number' | 'status' | 'attempts' | 'paidAt' | 'voidedAt' | 'createdAt' | 'updatedAt'
->;
+  | '_id'
+  | 'number'
+  | 'status'
+  | 'attempts'
+  | 'paidAt'
+  | 'voidedAt'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'transfer'
+> & { awaitingTransfer?: boolean };
 
 /** What a charge changes besides the attempt it adds. */
 export interface InvoiceChange {
@@ -72,11 +88,13 @@ export class InvoicesRepository {
       )
       .lean<InvoiceCounterRecord>()
       .exec();
+    const { awaitingTransfer, ...fields } = invoice;
     const record: InvoiceRecord = {
       _id: newObjectId(),
       number: formatInvoiceNumber(year, counter.seq),
-      ...invoice,
-      status: 'open',
+      ...fields,
+      status: awaitingTransfer === true ? 'pending' : 'open',
+      transfer: null,
       attempts: [],
       paidAt: null,
       voidedAt: null,
@@ -96,8 +114,12 @@ export class InvoicesRepository {
   }
 
   /** By the id a gateway echoes back (ADR-035): the webhook knows no workspace before it. */
-  findByReference(invoiceId: ObjectId, tx: Tx): Promise<InvoiceRecord | null> {
-    return this.invoices.findById(invoiceId).session(tx).lean<InvoiceRecord>().exec();
+  findByReference(invoiceId: ObjectId, tx?: Tx): Promise<InvoiceRecord | null> {
+    return this.invoices
+      .findById(invoiceId)
+      .session(tx ?? null)
+      .lean<InvoiceRecord>()
+      .exec();
   }
 
   /** "Lịch sử giao dịch", newest first, `limit` at a time. */
@@ -114,13 +136,105 @@ export class InvoicesRepository {
     return toKeysetPage(records, page.limit);
   }
 
-  /** Whether a charge of the workspace is still being decided by the gateway. */
-  async hasPending(ref: WorkspaceRef, tx: Tx): Promise<boolean> {
+  /**
+   * Whether a card charge of the workspace is still being decided by the gateway. A transfer
+   * waiting for its confirmation is not one (T3): nothing is decided at the gateway for it.
+   */
+  async hasPending(ref: WorkspaceRef, tx?: Tx): Promise<boolean> {
     const found = await this.invoices
-      .exists({ workspaceId: ref.workspaceId, status: 'pending' })
-      .session(tx)
+      .exists({ workspaceId: ref.workspaceId, status: 'pending', method: 'card' })
+      .session(tx ?? null)
       .exec();
     return found !== null;
+  }
+
+  /** Every invoice of the workspace whose charge may have gone through (`open`), newest first. */
+  listUndecided(ref: WorkspaceRef, tx?: Tx): Promise<InvoiceRecord[]> {
+    return this.invoices
+      .find({ workspaceId: ref.workspaceId, status: 'open' })
+      .sort(NEWEST_FIRST)
+      .limit(UNDECIDED_MAX)
+      .session(tx ?? null)
+      .lean<InvoiceRecord[]>()
+      .exec();
+  }
+
+  /**
+   * "Chuyển khoản" (T3): the invoice waits for the transfer, `pending`, with what the gateway gave
+   * for it. Only from a refused charge (`failed`), or for a transfer waiting without them yet; null
+   * otherwise.
+   */
+  startTransfer(
+    invoiceId: ObjectId,
+    transfer: InvoiceTransferRecord,
+    tx: Tx,
+  ): Promise<InvoiceRecord | null> {
+    return this.invoices
+      .findOneAndUpdate(
+        {
+          _id: invoiceId,
+          $or: [
+            { status: changeableFrom(['failed']) },
+            { status: changeableFrom(['pending']), method: 'transfer', transfer: null },
+          ],
+        },
+        {
+          $set: {
+            status: 'pending',
+            method: 'transfer',
+            transfer,
+            updatedAt: transfer.startedAt,
+          },
+        },
+        { returnDocument: 'after', session: tx },
+      )
+      .lean<InvoiceRecord>()
+      .exec();
+  }
+
+  /**
+   * Voids the transfers still waiting for plans paid now that a new choice replaces (T3): a
+   * transfer that arrives for one later is refunded outside the system. The invoices voided.
+   */
+  async voidReplacedTransfers(ref: WorkspaceRef, at: Date, tx: Tx): Promise<ObjectId[]> {
+    const filter = {
+      workspaceId: ref.workspaceId,
+      from: { $ne: null },
+      method: 'transfer' as const,
+      status: changeableFrom(['pending']),
+    };
+    const replaced = await this.invoices
+      .find(filter, { _id: 1 })
+      .session(tx)
+      .lean<Pick<InvoiceRecord, '_id'>[]>()
+      .exec();
+    if (replaced.length === 0) {
+      return [];
+    }
+    const ids = replaced.map((invoice) => invoice._id);
+    await this.invoices
+      .updateMany(
+        { ...filter, _id: { $in: ids } },
+        { $set: { status: 'void', voidedAt: at, updatedAt: at } },
+        { session: tx },
+      )
+      .exec();
+    return ids;
+  }
+
+  /**
+   * Voids an invoice whose charge's outcome the gateway still cannot tell once what it paid for is
+   * over (T3): it is never charged again. Null when it was decided meanwhile.
+   */
+  voidUndecided(invoiceId: ObjectId, at: Date, tx: Tx): Promise<InvoiceRecord | null> {
+    return this.invoices
+      .findOneAndUpdate(
+        { _id: invoiceId, status: changeableFrom(['open']) },
+        { $set: { status: 'void', voidedAt: at, updatedAt: at } },
+        { returnDocument: 'after', session: tx },
+      )
+      .lean<InvoiceRecord>()
+      .exec();
   }
 
   /**
@@ -176,7 +290,8 @@ export class InvoicesRepository {
           $set: {
             status: change.status,
             updatedAt: attempt.at,
-            ...(change.card ? { card: change.card } : {}),
+            // A card paying a transfer still waiting (T3) makes it a card payment again.
+            ...(change.card ? { card: change.card, method: 'card', transfer: null } : {}),
             ...(change.paidAt ? { paidAt: change.paidAt } : {}),
             ...(change.period
               ? { periodStart: change.period.start, periodEnd: change.period.end }

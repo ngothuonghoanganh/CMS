@@ -3,13 +3,23 @@ import type { ChargeOutcome, InvoiceStatus, PaymentDeclineCode, PlanCatalog } fr
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import { BillingLogRepository } from './billing-log.repository.js';
+import { BillingSchedule } from './billing-schedule.service.js';
 import { periodEndOf } from './domain/billing-period.js';
-import { statusAfterCharge } from './domain/invoice-state.js';
+import { purposeOf, startsWhenPaid, statusAfterCharge } from './domain/invoice-state.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { type InvoiceChange, InvoicesRepository } from './invoices.repository.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
-import { SubscriptionsRepository } from './subscriptions.repository.js';
+import { type PaidPeriod, SubscriptionsRepository } from './subscriptions.repository.js';
+
+/** The `billing_log` entry of each kind of payment. */
+const PAID_ACTIONS = {
+  start_paid: 'paid_plan_started',
+  trial_end: 'paid_plan_started',
+  upgrade: 'plan_upgraded',
+  renewal: 'period_renewed',
+  restart: 'plan_restarted',
+} as const;
 
 /** One charge's outcome, as a charge or the gateway's event reports it. */
 export interface ChargeReport {
@@ -26,9 +36,11 @@ export interface ChargeReport {
 /**
  * Records what became of an invoice's charges (ADR-035), inside the caller's transaction, for the
  * charges the API makes and the gateway's events alike. A paid invoice applies what it pays for in
- * the same transaction: the first paid period that ends the trial, or the upgrade, with its
- * `billing_log` entry and `PlanChangeHooks`. Nothing here leaves the database, so a transaction
- * that runs again does it again safely.
+ * the same transaction: the first paid period that ends the trial, the upgrade, the next period of
+ * a renewal, or a canceled plan started again, with its `billing_log` entry and `PlanChangeHooks`.
+ * A refused charge of the invoice the subscription waits for starts its grace and retries (T3).
+ * The billing job's next time follows. Nothing here leaves the database, so a transaction that
+ * runs again does it again safely.
  */
 @Injectable()
 export class InvoiceSettlement {
@@ -40,6 +52,7 @@ export class InvoiceSettlement {
     private readonly subscriptions: SubscriptionsRepository,
     private readonly log: BillingLogRepository,
     private readonly hooks: PlanChangeHooks,
+    private readonly schedule: BillingSchedule,
   ) {}
 
   /**
@@ -57,8 +70,9 @@ export class InvoiceSettlement {
       status,
       ...(report.card ? { card: report.card } : {}),
       ...(status === 'paid' ? { paidAt: report.at } : {}),
-      // The first paid period starts when it is paid, however late after the quote.
-      ...(status === 'paid' && invoice.endsTrial
+      // A plan paid now starts its period when it is paid, however late after the quote; a
+      // renewal keeps the calendar of the period it follows.
+      ...(status === 'paid' && startsWhenPaid(invoice)
         ? { period: { start: report.at, end: periodEndOf(report.at, invoice.cycle) } }
         : {}),
     };
@@ -78,9 +92,13 @@ export class InvoiceSettlement {
     if (after === null) {
       return (await this.invoices.findByReference(invoice._id, tx)) ?? invoice;
     }
+    const ref = { workspaceId: after.workspaceId };
     if (after.status === 'paid') {
       await this.applyPaid(after, report.at, tx);
+    } else if (after.status === 'failed') {
+      await this.subscriptions.recordFailure(ref, { invoiceId: after._id, at: report.at }, tx);
     }
+    await this.schedule.reschedule(ref, report.at, tx);
     return after;
   }
 
@@ -103,54 +121,70 @@ export class InvoiceSettlement {
     }
     const from = planOf(this.catalog, facts.planId);
     const to = planOf(this.catalog, invoice.planId);
+    const period: PaidPeriod = {
+      planId: invoice.planId,
+      cycle: invoice.cycle,
+      periodStart: invoice.periodStart,
+      periodEnd: invoice.periodEnd,
+      fromVersion: facts.version,
+      at,
+    };
+    const purpose = purposeOf(invoice);
     let applied: boolean;
-    if (invoice.endsTrial) {
-      applied = await this.subscriptions.startPaidPeriod(
-        ref,
-        {
-          planId: invoice.planId,
-          cycle: invoice.cycle,
-          periodStart: invoice.periodStart,
-          periodEnd: invoice.periodEnd,
-          fromVersion: facts.version,
-          at,
-        },
-        tx,
-      );
-    } else if (invoice.kind === 'upgrade' && invoice.from !== null) {
-      applied = await this.subscriptions.upgradePlan(
-        ref,
-        {
-          from: invoice.from,
-          periodEnd: invoice.periodEnd,
-          planId: invoice.planId,
-          fromVersion: facts.version,
-          at,
-        },
-        tx,
-      );
-    } else {
-      throw new Error(
-        `Invoice ${invoice._id.toHexString()} renews a period, which comes with T3 (ADR-035)`,
-      );
+    switch (purpose) {
+      case 'start_paid':
+      case 'trial_end':
+        applied = await this.subscriptions.startPaidPeriod(ref, period, tx);
+        break;
+      case 'renewal':
+        applied = await this.subscriptions.renewPeriod(ref, period, tx);
+        break;
+      case 'restart':
+        applied = await this.subscriptions.restartPeriod(ref, period, tx);
+        break;
+      case 'upgrade':
+        applied =
+          invoice.from !== null &&
+          (await this.subscriptions.upgradePlan(
+            ref,
+            {
+              from: invoice.from,
+              periodEnd: invoice.periodEnd,
+              planId: invoice.planId,
+              fromVersion: facts.version,
+              at,
+            },
+            tx,
+          ));
+        break;
     }
     if (!applied) {
       this.reportUnapplied(invoice, 'the subscription moved on before it was paid');
       return;
     }
+    const before = { planId: facts.planId, cycle: facts.cycle };
+    const after = { planId: invoice.planId, cycle: invoice.cycle };
+    const paid = { invoiceId: invoice._id, amount: invoice.amount };
     await this.log.record(
       ref,
       {
         at,
         actorId: invoice.createdBy,
-        action: invoice.endsTrial ? 'paid_plan_started' : 'plan_upgraded',
-        from: { planId: facts.planId, cycle: facts.cycle },
-        to: { planId: invoice.planId, cycle: invoice.cycle },
-        invoiceId: invoice._id,
-        amount: invoice.amount,
+        action: PAID_ACTIONS[purpose],
+        from: before,
+        to: after,
+        ...paid,
       },
       tx,
     );
+    if (purpose === 'renewal' && (before.planId !== after.planId || before.cycle !== after.cycle)) {
+      // The change the owner scheduled for this period's end, applied by its payment.
+      await this.log.record(
+        ref,
+        { at, actorId: null, action: 'scheduled_change_applied', from: before, to: after, ...paid },
+        tx,
+      );
+    }
     if (from.id !== to.id) {
       await this.hooks.run(ref, { from, to, at, by: invoice.createdBy }, tx);
     }

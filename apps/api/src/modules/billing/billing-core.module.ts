@@ -2,12 +2,14 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import type { Env } from '../../config/env.js';
 import { ENV } from '../../shared/env.js';
+import { JOB_WAKEUP_MODEL, jobWakeupSchema } from '../automations/job-wakeup.schema.js';
 import { DOMAIN_MODEL, domainSchema } from '../domains/domain.schema.js';
 import { INVITATION_MODEL, invitationSchema } from '../workspaces/invitation.schema.js';
 import { MEMBERSHIP_MODEL, membershipSchema } from '../workspaces/workspace.schema.js';
 import { BillingClock } from './billing-clock.js';
 import { BILLING_LOG_MODEL, billingLogSchema } from './billing-log.schema.js';
 import { BillingLogRepository } from './billing-log.repository.js';
+import { BillingWakeupRepository } from './billing-wakeup.repository.js';
 import { EntitlementsService } from './entitlements.service.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
 import { loadPlanCatalog, PLAN_CATALOG } from './plan-catalog.js';
@@ -29,6 +31,8 @@ import { SubscriptionsRepository } from './subscriptions.repository.js';
       { name: MEMBERSHIP_MODEL, schema: membershipSchema },
       { name: INVITATION_MODEL, schema: invitationSchema },
       { name: DOMAIN_MODEL, schema: domainSchema },
+      // The billing job's document among the queues' wake-ups (ADR-034, ADR-035 T3).
+      { name: JOB_WAKEUP_MODEL, schema: jobWakeupSchema },
     ]),
   ],
   providers: [
@@ -39,6 +43,7 @@ import { SubscriptionsRepository } from './subscriptions.repository.js';
       useFactory: (env: Env) => loadPlanCatalog(env.PLAN_CATALOG_FILE),
     },
     BillingClock,
+    BillingWakeupRepository,
     SubscriptionsRepository,
     BillingLogRepository,
     PlanUsageRepository,
@@ -48,6 +53,7 @@ import { SubscriptionsRepository } from './subscriptions.repository.js';
   exports: [
     PLAN_CATALOG,
     BillingClock,
+    BillingWakeupRepository,
     SubscriptionsRepository,
     BillingLogRepository,
     EntitlementsService,

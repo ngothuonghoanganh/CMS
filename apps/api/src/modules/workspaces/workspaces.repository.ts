@@ -104,6 +104,19 @@ export class WorkspacesRepository {
     return workspace?.slug ?? null;
   }
 
+  /**
+   * The name and admin address of a workspace a background job writes about (the emails of its
+   * plan, ADR-035); null when it no longer exists.
+   */
+  findNameOf(
+    workspaceId: ObjectId,
+  ): Promise<Pick<WorkspaceRecord, '_id' | 'name' | 'slug'> | null> {
+    return this.workspaces
+      .findById(workspaceId, { name: 1, slug: 1 })
+      .lean<Pick<WorkspaceRecord, '_id' | 'name' | 'slug'>>()
+      .exec();
+  }
+
   /** Every workspace id, oldest first, as a stream: for startup work on each workspace database. */
   async *allIds(): AsyncGenerator<ObjectId> {
     const cursor = this.workspaces

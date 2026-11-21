@@ -32,6 +32,19 @@ export interface InvoicePlanChoice {
   cycle: BillingCycle;
 }
 
+/** "Chuyển khoản" (T3): what the gateway gave for the transfer, and when it started. */
+export interface InvoiceTransferRecord {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  content: string;
+  /** What the QR code encodes; null when the gateway gives none. */
+  qrPayload: string | null;
+  /** The gateway's page for the transfer (the fake gateway's confirmation page); usually null. */
+  pageUrl: string | null;
+  startedAt: Date;
+}
+
 /**
  * An invoice in the master DB (ADR-035): payment records outlive the workspace's data, and the
  * gateway's events find it by its id. It is written only through `InvoicesRepository`, which
@@ -58,10 +71,15 @@ export interface InvoiceRecord {
   card: { brand: string; last4: string } | null;
   status: InvoiceStatus;
   attempts: InvoiceAttemptRecord[];
-  /** The plan a change paid now moves from; null for a period's renewal (T3). */
+  /**
+   * The plan a change paid now moves from (or a canceled plan paid for again); null for the job's
+   * charge at the end of a trial or period (T3).
+   */
   from: InvoicePlanChoice | null;
   /** Paying it ends the trial and starts the first paid period. */
   endsTrial: boolean;
+  /** The bank transfer it waits for or was paid by (T3); null for a card. */
+  transfer: InvoiceTransferRecord | null;
   /** The member who chose the change; null for the subscription's own jobs (T3). */
   createdBy: Types.ObjectId | null;
   paidAt: Date | null;
@@ -99,6 +117,19 @@ const invoiceBillingInfoSchema = new Schema(
   { _id: false },
 );
 
+const transferSchema = new Schema<InvoiceTransferRecord>(
+  {
+    bankName: { type: String, required: true },
+    accountNumber: { type: String, required: true },
+    accountName: { type: String, required: true },
+    content: { type: String, required: true },
+    qrPayload: { type: String, default: null },
+    pageUrl: { type: String, default: null },
+    startedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
 const cardSchema = new Schema(
   {
     brand: { type: String, required: true },
@@ -125,6 +156,7 @@ export const invoiceSchema = new Schema<InvoiceRecord>(
     attempts: { type: [attemptSchema], default: [] },
     from: { type: choiceSchema, default: null },
     endsTrial: { type: Boolean, required: true },
+    transfer: { type: transferSchema, default: null },
     createdBy: { type: Schema.Types.ObjectId, default: null },
     paidAt: { type: Date, default: null },
     voidedAt: { type: Date, default: null },

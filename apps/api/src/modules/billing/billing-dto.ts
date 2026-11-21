@@ -2,26 +2,79 @@ import {
   type BillingCycle,
   type BillingSummary,
   cardValidAt,
+  type DueInvoice,
   type Invoice,
   type InvoiceAttempt,
   type InvoiceSummary,
+  type InvoiceTransfer,
   nextVnMonthStart,
   type PaymentMethod,
   type PaymentMethodView,
+  type Plan,
+  type PlanChangeImpacts,
   type PlanChangeQuote,
   type PlanUsage,
+  type SubscriptionRenewal,
   type VnMonth,
   type WorkspacePlan,
 } from '@plp/contracts';
+import { nextRetryOf } from './domain/billing-agenda.js';
 import { chargesNow, type PlanChange } from './domain/plan-change.js';
+import {
+  type BillingPolicy,
+  currentEndOf,
+  paymentUnderWay,
+  renewalBlockerOf,
+  renewalTermsOf,
+} from './domain/renewal.js';
+import { qrSvgDataUrl } from './domain/transfer-qr.js';
 import type { Entitlements } from './entitlements.service.js';
 import type { InvoiceAttemptRecord, InvoiceRecord } from './invoice.schema.js';
 
+/** What board 28 and 29's banners need beyond the plan (T3): the due invoice and the policy. */
+export interface SummaryContext {
+  usage: PlanUsage;
+  month: VnMonth;
+  policy: Pick<BillingPolicy, 'retryDays'>;
+  planOf: (planId: string) => Plan;
+  /** The invoice the subscription waits for (`openInvoiceId`), with whether it is payable. */
+  due: { invoice: InvoiceRecord; payable: boolean } | null;
+}
+
+/**
+ * The next charge: at the end of the trial or period, for the plan it will have then. None after
+ * "Hủy gói", or once the trial or period ended or a payment of it is under way.
+ */
+function renewalOf(
+  { facts, at }: Pick<Entitlements, 'facts' | 'at'>,
+  planOf: (planId: string) => Plan,
+): SubscriptionRenewal | null {
+  const end = currentEndOf(facts);
+  if (facts.cancelAtPeriodEnd || paymentUnderWay(facts) || at.getTime() >= end.getTime()) {
+    return null;
+  }
+  const terms = renewalTermsOf(facts, planOf);
+  const blocker = renewalBlockerOf(facts.paymentMethod, end);
+  return {
+    at: end.toISOString(),
+    planId: terms.plan.id,
+    planName: terms.plan.name,
+    cycle: terms.cycle,
+    amount: terms.amount,
+    autoRenews: blocker === null,
+    blocker,
+  };
+}
+
 export function toBillingSummary(
-  { plan, facts, status }: Entitlements,
-  usage: PlanUsage,
-  month: VnMonth,
+  { plan, facts, status, at }: Entitlements,
+  context: SummaryContext,
 ): BillingSummary {
+  const { due, month } = context;
+  const nextRetry =
+    facts.failedSince !== null && due !== null && due.invoice.status === 'failed'
+      ? nextRetryOf(facts.failedSince, context.policy.retryDays, due.invoice.attempts)
+      : null;
   return {
     plan,
     cycle: facts.cycle,
@@ -34,10 +87,21 @@ export function toBillingSummary(
     cancelAtPeriodEnd: facts.cancelAtPeriodEnd,
     scheduledChange: facts.scheduledChange,
     graceEndsAt: status.graceEndsAt?.toISOString() ?? null,
-    usage,
+    cancelAt: facts.cancelAtPeriodEnd ? currentEndOf(facts).toISOString() : null,
+    renewal: renewalOf({ facts, at }, context.planOf),
+    dueInvoice: due === null ? null : toDueInvoice(due.invoice, due.payable),
+    failedSince: facts.failedSince?.toISOString() ?? null,
+    nextRetryAt: nextRetry?.toISOString() ?? null,
+    usage: context.usage,
     usageMonth: month,
     usageResetsOn: nextVnMonthStart(month),
   };
+}
+
+/** The due invoice of board 28's banners, without the card (board 29 only). */
+function toDueInvoice(invoice: InvoiceRecord, payable: boolean): DueInvoice {
+  const { card: _card, ...summary } = toInvoiceSummary(invoice, payable);
+  return summary;
 }
 
 export function toWorkspacePlan({ plan, status }: Entitlements): WorkspacePlan {
@@ -71,6 +135,7 @@ export function toPlanChangeQuote(
   choice: { planId: string; cycle: BillingCycle },
   method: PaymentMethod | null,
   at: Date,
+  impacts: PlanChangeImpacts | null,
 ): PlanChangeQuote {
   const charges = chargesNow(change);
   const view = toPaymentMethodView(method, at);
@@ -86,6 +151,9 @@ export function toPlanChangeQuote(
     paymentMethod: view,
     paymentMethodRequired: charges && (view === null || view.expired),
     unavailableReason: change.mode === 'unavailable' ? change.reason : null,
+    effectiveAt: change.mode === 'scheduled' ? change.effectiveAt.toISOString() : null,
+    nextAmount: change.mode === 'scheduled' ? change.nextAmount : null,
+    impacts,
   };
 }
 
@@ -121,6 +189,24 @@ export function toInvoiceSummary(invoice: InvoiceRecord, payable: boolean): Invo
   };
 }
 
+/** The transfer's details, with the QR code drawn here. */
+function toInvoiceTransfer(invoice: InvoiceRecord): InvoiceTransfer | null {
+  const { transfer } = invoice;
+  if (transfer === null) {
+    return null;
+  }
+  return {
+    bankName: transfer.bankName,
+    accountNumber: transfer.accountNumber,
+    accountName: transfer.accountName,
+    content: transfer.content,
+    amount: invoice.amount,
+    qrDataUrl: transfer.qrPayload === null ? null : qrSvgDataUrl(transfer.qrPayload),
+    pageUrl: transfer.pageUrl,
+    startedAt: transfer.startedAt.toISOString(),
+  };
+}
+
 export function toInvoice(invoice: InvoiceRecord, payable: boolean): Invoice {
   return {
     ...toInvoiceSummary(invoice, payable),
@@ -135,5 +221,6 @@ export function toInvoice(invoice: InvoiceRecord, payable: boolean): Invoice {
       : null,
     from: invoice.from ? { planId: invoice.from.planId, cycle: invoice.from.cycle } : null,
     endsTrial: invoice.endsTrial,
+    transfer: toInvoiceTransfer(invoice),
   };
 }

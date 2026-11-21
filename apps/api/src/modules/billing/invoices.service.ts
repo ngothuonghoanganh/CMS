@@ -16,6 +16,7 @@ import { toInvoice, toInvoiceSummary } from './billing-dto.js';
 import { invoicePayable } from './domain/invoice-state.js';
 import { EntitlementsService } from './entitlements.service.js';
 import { InvoiceCharges } from './invoice-charges.service.js';
+import { InvoiceTransfers } from './invoice-transfers.service.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
 
@@ -38,6 +39,7 @@ export class InvoicesService {
     private readonly entitlements: EntitlementsService,
     private readonly invoices: InvoicesRepository,
     private readonly charges: InvoiceCharges,
+    private readonly transfers: InvoiceTransfers,
     private readonly workspaces: WorkspacesRepository,
   ) {}
 
@@ -103,6 +105,18 @@ export class InvoicesService {
     );
     const { facts, at } = await this.entitlements.of(scope);
     return { invoice: this.invoiceOf(answer.invoice, facts, at), pending: answer.pending };
+  }
+
+  /** "Chuyển khoản" (T3): the invoice waiting for a transfer, with its details. */
+  async startTransfer(
+    user: AuthenticatedUser,
+    workspaceId: string,
+    invoiceId: string,
+  ): Promise<Invoice> {
+    const scope = await this.ownerScope(user, workspaceId);
+    const invoice = await this.transfers.start(scope, toObjectId(invoiceId, INVOICE_NOT_FOUND));
+    const { facts, at } = await this.entitlements.of(scope);
+    return this.invoiceOf(invoice, facts, at);
   }
 
   private async find(scope: WorkspaceScope, invoiceId: string): Promise<InvoiceRecord> {

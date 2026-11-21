@@ -93,6 +93,12 @@ export const subscriptionSchema = new Schema<SubscriptionRecord>(
     createdAt: { type: Date, required: true },
     updatedAt: { type: Date, required: true },
   },
-  // Read by `_id` only in T1; the renewal job of T3 adds the index it queries by.
   { collection: 'subscriptions', versionKey: false },
+);
+// The billing job's queue (ADR-035, T3): the subscriptions due by a time, earliest first.
+subscriptionSchema.index({ nextActionAt: 1 }, { name: 'subscriptions_next_action' });
+// Held ones come due again when their hold runs out (an instance that stopped while working).
+subscriptionSchema.index(
+  { lockedUntil: 1 },
+  { name: 'subscriptions_locked', partialFilterExpression: { lockedUntil: { $type: 'date' } } },
 );
