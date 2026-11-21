@@ -1,3 +1,5 @@
+import { rmSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   approvalResponseSchema,
   can,
@@ -36,6 +38,15 @@ import { heroSection } from '../../../test/compositions.js';
 import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
+import {
+  claimPath,
+  FREE_ITEM_ID,
+  grantLicence,
+  licenceVersionPath,
+  marketplaceCatalogFile,
+  testMarketplaceCatalog,
+  TWO_VERSIONS_ITEM_ID,
+} from '../../../test/marketplace.js';
 import { ContactsBackfill } from '../contacts/contacts-backfill.service.js';
 import {
   createPage,
@@ -627,7 +638,8 @@ const ROWS: Row[] = [
         baseVersion: 1,
       }),
   },
-  // Marketplace (ADR-036): browsing, like the template library
+  // Marketplace (ADR-036): browsing and the licences, like the template library; claiming and
+  // updating add or change a template of the library
   {
     action: 'Marketplace',
     permission: 'pages.view',
@@ -642,6 +654,30 @@ const ROWS: Row[] = [
     status: 200,
     call: (client, { workspaceId }) =>
       client.get(`/workspaces/${workspaceId}/marketplace/items/mp-khai-truong-phong-tap`),
+  },
+  {
+    action: 'Nhận mẫu miễn phí',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.post(claimPath(workspaceId, FREE_ITEM_ID), { version: 1, termsVersion: 1 }),
+  },
+  {
+    action: 'Sản phẩm đã mua',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.get(`/workspaces/${workspaceId}/marketplace/licences`),
+  },
+  {
+    action: 'Cập nhật phiên bản mẫu đã sở hữu',
+    permission: 'templates.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.post(licenceVersionPath(workspaceId, TWO_VERSIONS_ITEM_ID), { baseVersion: 1 }),
   },
   {
     action: 'Xem trang và bản nháp',
@@ -1209,11 +1245,14 @@ describe('the six roles on every endpoint', () => {
   /** A holder of `CUSTOM_ROLE` in each fixture's workspace. */
   let customHolder: { client: TestClient; me: MeResponse };
 
+  /** With an item at a second version, which a licence of v1 updates to (ADR-036). */
+  const catalogFile = marketplaceCatalogFile(testMarketplaceCatalog());
+
   beforeAll(async () => {
     t = await createTestApp('plp_test_role_matrix', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
       // The AI endpoints answer with the fake AI (ADR-031).
-      env: { AI_PROVIDER: 'fake' },
+      env: { AI_PROVIDER: 'fake', MARKETPLACE_CATALOG_FILE: catalogFile },
     });
     stranger = (await signedUpClient(t.app)).client;
     members = new Map(
@@ -1227,6 +1266,7 @@ describe('the six roles on every endpoint', () => {
 
   afterAll(async () => {
     await t.close();
+    rmSync(dirname(catalogFile), { recursive: true, force: true });
   });
 
   function memberOf(role: MemberRole): { client: TestClient; me: MeResponse } {
@@ -1314,6 +1354,8 @@ describe('the six roles on every endpoint', () => {
     await owner
       .post(`/workspaces/${workspaceId}/workspace-templates/${archivedTemplate.id}/archive`)
       .expect(200);
+    // A licence of v1 of an item released twice, as a purchase grants it (MP3).
+    await grantLicence(t, workspaceId, TWO_VERSIONS_ITEM_ID, { version: 1, grantedBy: me.user.id });
     const asked = approvalResponseSchema.parse(
       (
         await memberOf('contributor')
@@ -1450,6 +1492,7 @@ describe('the six roles on every endpoint', () => {
       workspace,
       subscription,
       billingLog,
+      marketplaceLicences,
     ] = await Promise.all([
       // Every field of every event: a refused call must not edit one either.
       collection('activity'),
@@ -1469,6 +1512,7 @@ describe('the six roles on every endpoint', () => {
           { projection: { planId: 1, cycle: 1, version: 1 } },
         ),
       ofWorkspace('billing_log'),
+      ofWorkspace('marketplace_licences'),
     ]);
     return JSON.stringify({
       siteRecord,
@@ -1496,6 +1540,7 @@ describe('the six roles on every endpoint', () => {
       workspace,
       subscription,
       billingLog,
+      marketplaceLicences,
     });
   }
 
