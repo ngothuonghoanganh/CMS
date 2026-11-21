@@ -11,6 +11,7 @@ import {
   billingInfoSchema,
   changePlanRequestSchema,
   planCatalogResponseSchema,
+  setRenewalMethodRequestSchema,
   setTestClockRequestSchema,
   testClockSchema,
   workspacePlanSchema,
@@ -513,6 +514,19 @@ export const endpoints = {
     method: 'POST',
     path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/keep`,
     request: null,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /**
+   * `billing.manage` (T4), also while read-only: how the next period is paid, the saved card at its
+   * end or a bank transfer of an invoice made `transferLeadDays` before it (made at once when that
+   * time passed). 200 with the summary, also when unchanged; 422 `payment_method_required` for
+   * `card` without a card that can pay, 503 `payments_disabled`, 409 `conflict`.
+   */
+  setRenewalMethod: endpoint({
+    method: 'PUT',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/renewal-method`,
+    request: setRenewalMethodRequestSchema,
     query: null,
     response: billingSummarySchema,
   }),

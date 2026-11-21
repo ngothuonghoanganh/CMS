@@ -50,6 +50,7 @@ export function workspacePlanOf(summary: BillingSummary): WorkspacePlan {
     trialDaysLeft: summary.trialDaysLeft,
     graceDaysLeft: summary.graceDaysLeft,
     paymentWaiting: dueWaiting(summary.dueInvoice),
+    awaitingTransfer: summary.awaitingTransfer,
   };
 }
 

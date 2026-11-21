@@ -58,6 +58,8 @@ export function summaryFixture(overrides: Partial<BillingSummary> = {}): Billing
     cancelAt: null,
     renewal: null,
     dueInvoice: null,
+    renewalMethod: 'card',
+    awaitingTransfer: false,
     failedSince: null,
     nextRetryAt: null,
     usage: { sites: 4, members: 7, aiUses: 12, automationRuns: 1240, customDomains: 4 },
@@ -91,6 +93,7 @@ export function quoteFixture(overrides: Partial<PlanChangeQuote> = {}): PlanChan
     effectiveAt: null,
     nextAmount: null,
     impacts: null,
+    renewalInvoiceVoided: null,
     ...overrides,
   };
 }

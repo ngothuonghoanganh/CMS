@@ -48,6 +48,7 @@ export function workspacePlanFixture(overrides: Partial<WorkspacePlan> = {}): Wo
     trialDaysLeft: null,
     graceDaysLeft: null,
     paymentWaiting: false,
+    awaitingTransfer: false,
     ...overrides,
   };
 }

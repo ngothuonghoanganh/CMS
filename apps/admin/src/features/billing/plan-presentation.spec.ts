@@ -66,6 +66,10 @@ describe('planBanner', () => {
           planName: 'Agency',
           cycle: 'monthly',
           amount: 599_000,
+          method: 'card' as const,
+          invoiceAt: null,
+          invoice: null,
+          paid: false,
           autoRenews: true,
           blocker: null,
         },
@@ -81,6 +85,10 @@ describe('planBanner', () => {
       planName: 'Agency',
       cycle: 'monthly' as const,
       amount: 599_000,
+      method: 'card' as const,
+      invoiceAt: null,
+      invoice: null,
+      paid: false,
       autoRenews: false,
     };
     expect(
@@ -186,6 +194,10 @@ describe('planBanner', () => {
       planName: 'Agency',
       cycle: 'monthly' as const,
       amount: 599_000,
+      method: 'card' as const,
+      invoiceAt: null,
+      invoice: null,
+      paid: false,
       autoRenews: true,
       blocker: null,
     };
@@ -310,6 +322,10 @@ describe('periodLine', () => {
       planName: 'Agency',
       cycle: 'monthly' as const,
       amount: 599_000,
+      method: 'card' as const,
+      invoiceAt: null,
+      invoice: null,
+      paid: false,
     };
     const active = { state: 'active' as const };
     expect(
