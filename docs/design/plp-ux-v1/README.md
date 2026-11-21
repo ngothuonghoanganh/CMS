@@ -75,15 +75,15 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 
 **Phase 4 — Thương mại hóa** (ARCHITECTURE §5, ADR-035, ADR-036). Giá, hạn mức và chính sách trên board là chỗ trống `[…]`; con số tạm nằm ở ADR-035 (gói) và ADR-036 (marketplace):
 
-| #   | Board                         | File                      | Lát                                                                |
-| --- | ----------------------------- | ------------------------- | ------------------------------------------------------------------ |
-| 28  | Gói dịch vụ & mức sử dụng     | `Plan.dc.html`            | T1 (gói, mức dùng), T3 (vòng đời)                                  |
-| 29  | Thanh toán & hóa đơn          | `Billing.dc.html`         | T2, T3 (chuyển khoản, thử lại), MP3 (dòng mua mẫu)                 |
-| 30  | Marketplace                   | `Marketplace.dc.html`     | MP1                                                                |
-| 31  | Chi tiết sản phẩm marketplace | `MarketplaceItem.dc.html` | MP1 (xem), MP2 (nhận mẫu miễn phí, đã sở hữu), MP3 (mua)           |
-| 32  | Sản phẩm đã mua               | `Purchases.dc.html`       | MP2; không có `licenseFull` (giấy phép phủ cả workspace)           |
-| 33  | Khu vực nhà cung cấp          | `Vendor.dc.html`          | Hoãn: chủ sản phẩm quyết ngày 2026-11-20 chỉ Payload bán (ADR-036) |
-| —   | Sidebar v2, bật `planLimited` | `SidebarV2.dc.html`       | T1; khóa của mục Marketplace không làm (ADR-036)                   |
+| #   | Board                         | File                      | Lát                                                                                |
+| --- | ----------------------------- | ------------------------- | ---------------------------------------------------------------------------------- |
+| 28  | Gói dịch vụ & mức sử dụng     | `Plan.dc.html`            | T1 (gói, mức dùng), T3 (vòng đời), T4 (chờ chuyển khoản)                           |
+| 29  | Thanh toán & hóa đơn          | `Billing.dc.html`         | T2, T3 (chuyển khoản, thử lại), MP3 (dòng mua mẫu), T4 (gia hạn bằng chuyển khoản) |
+| 30  | Marketplace                   | `Marketplace.dc.html`     | MP1                                                                                |
+| 31  | Chi tiết sản phẩm marketplace | `MarketplaceItem.dc.html` | MP1 (xem), MP2 (nhận mẫu miễn phí, đã sở hữu), MP3 (mua)                           |
+| 32  | Sản phẩm đã mua               | `Purchases.dc.html`       | MP2; không có `licenseFull` (giấy phép phủ cả workspace)                           |
+| 33  | Khu vực nhà cung cấp          | `Vendor.dc.html`          | Hoãn: chủ sản phẩm quyết ngày 2026-11-20 chỉ Payload bán (ADR-036)                 |
+| —   | Sidebar v2, bật `planLimited` | `SidebarV2.dc.html`       | T1; khóa của mục Marketplace không làm (ADR-036)                                   |
 
 **Chuyển động** (ARCHITECTURE §5, ADR-032):
 

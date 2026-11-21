@@ -73,7 +73,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 
 - Ba gói tính theo workspace, hạn mức site, thành viên, lượt AI, lượt automation, tên miền riêng, và tính năng theo gói ("Theo gói", "Nâng cấp") (ADR-035).
 - Dùng thử, đổi gói, hạ gói theo lịch, hủy và giữ lại gói (ADR-035).
-- Thanh toán qua một cổng có adapter; bản đầu dùng adapter giả. Phương thức thanh toán, thông tin xuất hóa đơn, lịch sử giao dịch, gia hạn, thanh toán lỗi và thời gian ân hạn (ADR-035).
+- Thanh toán qua một cổng có adapter; bản đầu dùng adapter giả. Phương thức thanh toán, thông tin xuất hóa đơn, lịch sử giao dịch, gia hạn bằng thẻ hay chuyển khoản, thanh toán lỗi và thời gian ân hạn (ADR-035).
 - Quá hạn hay đã hủy: trang live và form lead vẫn chạy, admin chỉ đọc, không xóa dữ liệu (ADR-035).
 - Tương ứng màn 28–29, mục "Gói & thanh toán" của Sidebar v2 và nhóm Thanh toán của màn 16. Lát và trạng thái ở §5.
 
@@ -3015,7 +3015,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Workspace đã có lúc triển khai T1 nhận một kỳ dùng thử mới (chưa có dữ liệu production, §6).
   - Bảng quyền có thêm hai quyền và cờ đọc/ghi cho mọi quyền; `role-matrix.int.spec.ts` có thêm workspace chỉ đọc.
   - Kiểm thử vòng đời dùng một đồng hồ dời được của API, chỉ bật ngoài production.
-- **Lát:** T1 gói, hạn mức, tính năng và chỉ đọc, màn 28 (phần gói và mức dùng); T2 cổng thanh toán, phương thức, hóa đơn, nâng gói, màn 29; T3 gia hạn, trừ tiền lỗi, ân hạn, chuyển khoản, hạ gói và hủy, email (§5).
+- **Lát:** T1 gói, hạn mức, tính năng và chỉ đọc, màn 28 (phần gói và mức dùng); T2 cổng thanh toán, phương thức, hóa đơn, nâng gói, màn 29; T3 gia hạn, trừ tiền lỗi, ân hạn, chuyển khoản, hạ gói và hủy, email; T4 gia hạn bằng chuyển khoản (§5).
 - **Amended 2026-11-20 (T1, cách làm):**
   - **Bảng gói** (`apps/api/plans.json`):
     - Mã gói `basic`, `agency`, `business`.
@@ -3132,7 +3132,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Thanh toán ngay bằng chuyển khoản tạo hóa đơn `pending` trước để có số hóa đơn, rồi hỏi cổng. Trong lúc dùng thử, dùng thử vẫn chạy tới khi tiền tới; kỳ tính từ lúc nhận.
     - `transfer_received` trả hóa đơn trong cùng transaction với `billing_events`; sự kiện đến lại không áp dụng hai lần. Một chuyển khoản tới cho hóa đơn đã trả, hay khác số tiền của hóa đơn: không áp dụng, log lỗi để hoàn tiền ngoài hệ thống. Lần trừ tiền ghi lại chuyển khoản mang dấu `transfer`, để phân biệt với lần trừ thẻ.
     - Trong lúc chờ, Chủ sở hữu vẫn trả bằng thẻ được ("Thanh toán lại"); chuyển khoản tới sau đó thì hoàn tiền ngoài hệ thống. Lần trừ thẻ thành công mà hóa đơn đã được trả bằng cách khác trong lúc chờ cổng (chuyển khoản tới giữa chừng) cũng log lỗi để hoàn tiền, và không gửi biên nhận thứ hai. Admin nhắc điều này dưới nút "Thanh toán bằng thẻ thay thế". Một lần thanh toán ngay mới hủy (`void`) chuyển khoản đang chờ của lần thanh toán ngay trước; chuyển khoản đang chờ của gia hạn hay cuối dùng thử thì chặn đổi gói (409 `payment_in_progress`, context `awaiting: 'transfer'`).
-    - **Không có "chuyển khoản" làm phương thức gia hạn:** board 29 còn ghi "Phương thức được hỗ trợ: CHƯA CHỐT — thẻ, chuyển khoản, ví điện tử", và trả trước cho kỳ chưa tới cần một cách tính kỳ khác. Workspace trả bằng chuyển khoản nhận email "Sắp hết hạn" (chưa có thẻ), rồi ở cuối kỳ có hóa đơn kỳ mới để chuyển khoản trong thời gian ân hạn. Chủ sản phẩm chốt phương thức thì bổ sung ADR này.
+    - **Chuyển khoản làm phương thức gia hạn:** chủ sản phẩm chốt ngày 2026-11-22; xem "Amended 2026-11-22 (T4, gia hạn bằng chuyển khoản)" bên dưới, thay cho đoạn "Không có chuyển khoản làm phương thức gia hạn" trước đó.
     - Cổng giả: trang `/public/billing/fake-gateway/transfer?session=…` (phiên có chữ ký, hạn 14 ngày) với nút "Xác nhận đã nhận tiền", gửi `transfer_received` ký như T2 rồi dẫn về màn 29 với `?transfer=received`. Mỗi phiên xác nhận một lần; mở lại thì trang báo "Đã xác nhận chuyển khoản".
   - **Hạ gói và đổi chu kỳ:** `POST .../billing/plan` với giá thấp hơn hay bằng, hoặc chu kỳ khác, trong kỳ trả phí: 200, đặt `scheduledChange`, không hóa đơn, `billing_log` `change_scheduled`; chọn lại thì thay lịch. Báo giá có `mode: scheduled`, `effectiveAt` (cuối kỳ), `nextAmount` và `impacts` (phần vượt hạn mức của site, thành viên, tên miền riêng; số automation đang bật sẽ tạm dừng, đếm qua `PlanChangeHooks.registerFeatureUse`; lượt AI trước và sau; số thành viên giữ quyền). `impacts` cũng có cho đổi gói trong lúc dùng thử. `DELETE .../billing/plan/scheduled-change` bỏ lịch (`scheduled_change_canceled`), chỉ khi kỳ đã trả: hết kỳ hay thanh toán đang dở thì 409 `plan_change_unavailable` `unpaid`, vì hóa đơn gia hạn đã tính gói của lịch và trả nó là áp dụng gói đó. Nâng gói thì bỏ lịch hạ gói đang có. 409 `plan_change_unavailable` không còn lý do `scheduled_change`.
   - **Hủy, giữ lại, mua lại:**
@@ -3152,6 +3152,49 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Chỉ đọc:** `billing.manage` vẫn được giữ cho thanh toán gói, nhưng mua mẫu bị chặn bằng 402 `workspace_read_only` (`requireWritable`). "Mọi thao tác thanh toán" ở mục Chỉ đọc không còn gồm mua mẫu.
   - `methodSetupReturnTargets` thêm `marketplace`; `billing_log` thêm `marketplace_purchased`; email `marketplace-receipt` và `marketplace-suggestion` (plp-mailer, §6).
   - Mục "Ngoài phạm vi" ở trên chỉ còn giữ màn 33 và những gì ADR-036 để ngoài.
+- **Amended 2026-11-22 (T4, gia hạn bằng chuyển khoản):**
+  - **Quyết định của chủ sản phẩm** (ngày 2026-11-22): chuyển khoản là một phương thức gia hạn, và khi một lựa chọn sản phẩm còn mở thì chọn cách thuận tiện nhất cho khách trả tiền. "Phương thức được hỗ trợ" của board 29 nay là thẻ và chuyển khoản; ví điện tử cần một cổng thanh toán thật (§6). Mục này thay đoạn "Không có chuyển khoản làm phương thức gia hạn" của T3; câu "Chuyển khoản dùng để trả từng hóa đơn, không tự gia hạn" của màn 29 không còn đúng.
+  - **Phương thức gia hạn** (`renewalMethod: card | transfer` của subscription):
+    - Mặc định `card` cho subscription mới và cũ: subscription lưu trước T4 thiếu trường thì đọc là `card`, và lúc khởi động API ghi `card` cho chúng (chạy lại được, nhiều instance cùng lúc được).
+    - `PUT /workspaces/:id/billing/renewal-method { method }` (`billing.manage`, kể cả workspace chỉ đọc, như thanh toán) trả `GET .../billing`. `card` cần thẻ đã lưu còn hạn (422 `payment_method_required`; admin mời "Thêm thẻ"). 503 `payments_disabled` khi tắt cổng. Chọn lại phương thức đang có là 200 không đổi gì. Ghi từ đúng `version` đã đọc (409 `conflict`), cùng `billing_log` `renewal_method_changed` (kèm phương thức mới).
+    - Phương thức chỉ quyết định hóa đơn của kỳ sau được làm thế nào. Hóa đơn của kỳ đã hết mà chưa trả đi theo T3.
+  - **Hóa đơn chuyển khoản sớm:**
+    - Với `transfer`, hóa đơn của kỳ sau (`from: null`; gói và chu kỳ của `scheduledChange` nếu có; kỳ từ cuối kỳ hiện tại, hay từ cuối dùng thử với `endsTrial`) được làm `transferLeadDays` ngày trước cuối kỳ hay cuối dùng thử: con số tạm 7 trong `plans.json`, schema 1–30 và ít hơn số ngày dùng thử và kỳ ngắn nhất (28 ngày). Hóa đơn `pending`, `method: transfer`, cờ `transferRenewal`, với thông tin chuyển khoản của `startTransfer` như T3: ngân hàng, tài khoản, tên tài khoản, số tiền, nội dung `PLP {số hóa đơn}`, mã QR VietQR vẽ thành SVG. `billing_log` `transfer_started` (`actorId` null khi việc nền làm).
+    - Subscription giữ nó ở `renewalInvoiceId`, không ở `openInvoiceId`: trước cuối kỳ không có gì đang nợ, nên trạng thái, ân hạn, đổi gói và hủy vẫn như một kỳ đã trả.
+    - Việc nền làm nó ở mốc `transfer_invoice` của `billingAgendaOf`, giữ subscription như mọi lần chạy, không làm khi còn lần trừ tiền đang chờ cổng hay chưa rõ kết quả, và đọc lại sự kiện, nên chạy lại hay chạy trễ chỉ có một hóa đơn. Hóa đơn có số trước, rồi mới hỏi cổng, như thanh toán ngay bằng chuyển khoản của T3: cổng lỗi thì hóa đơn chờ thông tin, và mốc `transfer_invoice` lúc làm hóa đơn cho việc nền hỏi lại, 15 phút một lần.
+    - Đổi sang `transfer` khi cuối kỳ đã ở trong `transferLeadDays`: hóa đơn được làm ngay trong request đó. Kỳ trả phí mà tới cuối kỳ vẫn chưa có hóa đơn (cổng lỗi suốt thời gian đó) thì việc nền làm nó ở cuối kỳ. Dùng thử thì chỉ trước cuối dùng thử: chọn `transfer` sau khi dùng thử đã hết không mở ân hạn, như `cardAfterTrial`; "Thanh toán ngay" (thẻ hay chuyển khoản) vẫn chọn được gói.
+    - Mốc `transfer_invoice` là việc còn nợ: một lệnh ghi đặt lại `nextActionAt` khi mốc đó đã qua thì việc nền tới hạn ngay, không chờ mốc sau. Với dùng thử, mốc chỉ còn nợ tới cuối dùng thử.
+  - **Email `billing-transfer-due`** tới Chủ sở hữu, ở đường SMTP và cùng tên ở plp-mailer (§6), data `{ workspaceName, planName, cycle, period, invoiceNumber, amount, stage, dueOn, graceEndsOn, bankName, accountNumber, accountName, content, replacesInvoiceNumber, paymentsUrl }`:
+    - `stage: issued` khi hóa đơn đã có thông tin chuyển khoản, key `billing-transfer-due:{invoiceId}:issued`; `stage: due` vào ngày đến hạn (cuối kỳ) nếu chưa trả, key `billing-transfer-due:{invoiceId}:due`. Một template có `stage` thay vì hai template: cùng thông tin, chỉ khác câu mở.
+    - `dueOn` là cuối kỳ; `graceEndsOn` là ngày workspace chuyển sang chỉ đọc nếu tới đó vẫn chưa trả. `replacesInvoiceNumber`: hóa đơn cũ mà hóa đơn này thay (đừng chuyển khoản cho nó nữa), hay `null`.
+    - Mã QR không nằm trong email (nhiều hộp thư chặn ảnh data URL): `paymentsUrl` (màn 29) có mã QR, thông tin chuyển khoản và "Thanh toán bằng thẻ".
+    - Thay `billing-expiring-soon` và `billing-trial-ending` cho workspace gia hạn bằng chuyển khoản. Mỗi email một lần (`billing_notices`), như mọi email của T3.
+  - **Trả trước khi kỳ hết** (bất kỳ đường nào: `transfer_received`, hay "Thanh toán lại" bằng thẻ):
+    - Không mất ngày: hóa đơn giữ kỳ của nó, từ cuối kỳ cũ. Trong transaction đánh dấu `paid`, subscription ghi `prepaid { invoiceId, planId, cycle, periodStart, periodEnd }` và bỏ `renewalInvoiceId`; `billing_log` `renewal_prepaid`; biên nhận như mọi hóa đơn. Gói, chu kỳ, kỳ và `scheduledChange` chưa đổi.
+    - Ở cuối kỳ (hay cuối dùng thử), việc nền chuyển sang kỳ đã trả mà không trừ tiền: gói và chu kỳ của hóa đơn (lịch đổi gói áp dụng đúng lúc này, không lúc trả), `prepaid` về `null`, `billing_log` `period_renewed` (thêm `scheduled_change_applied` khi gói hay chu kỳ đổi) hay `paid_plan_started` sau dùng thử, và `PlanChangeHooks` khi gói đổi. Hàm trạng thái coi `prepaid` đã qua mốc đó là `active` tới khi việc nền chuyển kỳ, nên việc nền trễ không làm workspace quá hạn. Hóa đơn bất biến khi đã trả, một lần chạy chuyển tối đa một kỳ và không trừ bù, như T3.
+    - Trong lúc kỳ sau đã trả mà kỳ hiện tại chưa hết (tối đa `transferLeadDays` ngày): đổi gói, đặt hay bỏ lịch, hủy gói và thanh toán ngay trả 409 `plan_change_unavailable` `next_period_paid`; chúng làm được từ khi kỳ đã trả bắt đầu. Kỳ đã trả không bị đổi hay hủy giữa chừng, và không có hoàn tiền trong hệ thống (§6). Đổi phương thức gia hạn vẫn được: nó áp dụng cho kỳ sau kỳ đã trả. Một lần nâng gói hay thanh toán ngay mà cổng chỉ quyết sau khi kỳ sau đã trả thì không áp dụng, log lỗi để hoàn tiền ngoài hệ thống.
+  - **Trả sau khi kỳ đã hết:** như T3 (`periodPaidAt`): trả trong kỳ của hóa đơn thì kỳ vẫn tính từ cuối kỳ cũ (workspace đã dùng đủ quyền trong ân hạn, như gia hạn bằng thẻ); trả sau khi chính kỳ của hóa đơn đã hết thì kỳ mới tính từ lúc trả.
+  - **Chưa trả tới cuối kỳ: chờ chuyển khoản.**
+    - Ở cuối kỳ, việc nền chuyển hóa đơn sang `openInvoiceId` (subscription chờ nó như T3): `pending_payment`, ân hạn `graceDays` tính từ cuối kỳ. Không có lần trừ tiền lỗi, không `failedSince`, không thử lại, không `billing-charge-failed`; email `billing-transfer-due` `stage: due`. Trước khi việc nền chạy, hàm trạng thái đã cho `pending_payment` từ `renewalInvoiceId`, và `GET .../billing` coi hóa đơn đó là `dueInvoice`.
+    - `GET .../billing` và `GET /workspaces/:id/plan` có `awaitingTransfer: true`: hóa đơn đang chờ là hóa đơn gia hạn bằng chuyển khoản (`transferRenewal`), chưa trả và chưa có lần trừ thẻ bị từ chối. Banner "Chờ chuyển khoản" ghi số hóa đơn, số tiền và hạn ân hạn, với "Xem thông tin chuyển khoản" và "Thanh toán bằng thẻ thay thế" ("Thanh toán lại" của T3; chuyển khoản tới sau đó thì hoàn tiền ngoài hệ thống như T3). Thẻ thay thế bị từ chối thì hóa đơn đi theo trừ tiền lỗi của T3.
+    - Hết ân hạn: chỉ đọc như T3 (`billing-read-only`). Chuyển khoản tới sau đó làm gói hoạt động lại (`periodPaidAt`).
+  - **Cuối dùng thử với `transfer`:** như cuối kỳ. Hóa đơn của kỳ trả phí đầu (`endsTrial`) có `transferLeadDays` ngày trước cuối dùng thử. Trả trước thì dùng thử chạy hết và kỳ trả phí đầu bắt đầu đúng cuối dùng thử; chưa trả thì chờ chuyển khoản trong ân hạn, không `trial_expired` ngay, vì đã chọn phương thức. Thẻ lưu trong lúc dùng thử không bị trừ: `trialEndCharges` chỉ đúng với `card`.
+  - **Đổi gói khi có hóa đơn chuyển khoản sớm chưa trả** (trước cuối kỳ):
+    - Đặt, thay hay bỏ lịch hạ gói hay đổi chu kỳ, đổi gói trong lúc dùng thử, nâng gói, hủy gói và giữ lại gói không bị hóa đơn đó chặn. Trong transaction của thay đổi (với nâng gói: transaction ghi hóa đơn nâng gói đã trả), hóa đơn cũ `void` (`billing_log` `renewal_invoice_voided`) và, nếu gói còn gia hạn, có ngay hóa đơn thay: số mới, nội dung mới, số tiền mới, `replaces` là hóa đơn cũ. Thông tin của cổng và email `billing-transfer-due` (với `replacesInvoiceNumber`) tới ngay sau transaction; lỗi thì việc nền làm tiếp.
+    - Báo giá có `renewalInvoiceVoided { invoiceId, invoiceNumber }` khi xác nhận sẽ hủy hóa đơn đó, để hộp xác nhận nói thông tin chuyển khoản cũ không còn dùng được.
+    - Hóa đơn sớm mà Chủ sở hữu đang trả bằng thẻ và cổng chưa quyết (`pending`) hay chưa rõ kết quả (`open`) thì chặn các thay đổi đó (409 `payment_in_progress`, kèm hóa đơn), vì tiền có thể đã bị trừ.
+    - Chuyển khoản tới cho hóa đơn đã `void`: như T3, không áp dụng, log lỗi để hoàn tiền ngoài hệ thống.
+    - Thanh toán ngay trong lúc dùng thử: khi trả xong, hóa đơn sớm của cuối dùng thử bị `void`, vì dùng thử đã kết thúc.
+    - Sau cuối kỳ (chờ chuyển khoản trong ân hạn): luật chặn của T3 giữ nguyên (409 `plan_change_unavailable` `unpaid`, 409 `payment_in_progress` với `awaiting: 'transfer'`).
+  - **Đổi phương thức khi đã có hóa đơn sớm:**
+    - `transfer` sang `card`: hóa đơn giữ nguyên và vẫn chuyển khoản được trước hạn. Ở cuối kỳ, nếu chưa trả, việc nền trừ thẻ cho chính hóa đơn đó theo đường thẻ của T3, không có hóa đơn thứ hai; bị từ chối thì trừ tiền lỗi, thử lại và email như T3.
+    - `card` sang `transfer`: như trên, làm ngay khi đã ở trong `transferLeadDays`.
+  - **Không đổi:** nâng gói vẫn trừ thẻ (số tiền chỉ đúng trong ngày báo giá); thanh toán ngay bằng chuyển khoản như T3; mua mẫu marketplace chỉ bằng thẻ (ADR-036); không có ví điện tử.
+  - **Trạng thái và banner** (hàm thuần `subscriptionStatusOf`, thêm `renewalMethod`, `renewalInvoiceId`, `prepaid`):
+    - Gia hạn bằng chuyển khoản không là `expiring_soon`: hóa đơn đã có hay sẽ có trước cuối kỳ, và email của nó thay "Sắp hết hạn". `prepaid` đã qua cuối kỳ là `active`.
+    - `GET .../billing` thêm `renewalMethod`, `awaitingTransfer` và `renewal { …, method, invoiceAt, invoice, paid }`: `invoiceAt` là lúc hóa đơn của kỳ sau được làm hay sẽ được làm (null với thẻ chưa có hóa đơn); `invoice` là hóa đơn đó khi đã có (chờ chuyển khoản, hay đã trả); `paid` là kỳ sau đã trả. `autoRenews` chỉ đúng khi thẻ sẽ bị trừ.
+  - **Code:** `RenewalTransfers` (làm, hủy và thay hóa đơn sớm, hỏi cổng, email) dùng chung cho việc nền, đổi gói, đổi phương thức và `InvoiceSettlement`.
+  - **Kiểm thử:** unit cho hàm trạng thái, mốc của `billingAgendaOf`, schema của bảng gói, đổi gói khi kỳ sau đã trả và data email theo schema; integration (MongoDB thật, cổng giả, `BILLING_TEST_CLOCK`) cho quyền và cô lập của endpoint, hóa đơn sớm một lần khi việc nền chạy hai lần hay trễ, email một lần và nhắc một lần, trả trước không mất ngày và không trừ thẻ, chờ chuyển khoản rồi chỉ đọc rồi hoạt động lại, hạ gói khi có hóa đơn sớm, đổi về thẻ, dùng thử với chuyển khoản.
 
 ### ADR-036 — Marketplace template
 
@@ -3517,12 +3560,13 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 
 **Phase 4 — Thương mại hóa** (chủ sản phẩm yêu cầu ngày 2026-11-14, ADR-035). Marketplace (màn 30–32) có lát riêng ở bảng sau:
 
-| Lát | Nội dung                                                                                                                                                                       | Màn                    | Trạng thái |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ---------- |
-| T0  | Nhập board 28–33, ADR-035, bổ sung ADR-014, 020, 021, 022, 024, 025, 031, 034                                                                                                  | —                      | Xong       |
-| T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói" | 28, 16, 25, Sidebar v2 | Xong       |
-| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                   | 29, 28                 | Xong       |
-| T3  | Gia hạn, trừ tiền lỗi và thử lại, ân hạn, chuyển khoản chờ xác nhận, hạ gói theo lịch, hủy và giữ lại, banner theo trạng thái, email                                           | 28, 29                 | Xong       |
+| Lát | Nội dung                                                                                                                                                                                                                                            | Màn                    | Trạng thái |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------- |
+| T0  | Nhập board 28–33, ADR-035, bổ sung ADR-014, 020, 021, 022, 024, 025, 031, 034                                                                                                                                                                       | —                      | Xong       |
+| T1  | Bảng gói, gói của workspace, dùng thử, trạng thái suy ra, hạn mức và tính năng theo gói, chỉ đọc, quyền `billing.*`, màn 28 (gói, mức dùng, so sánh), "Nâng cấp" và "Theo gói"                                                                      | 28, 16, 25, Sidebar v2 | Xong       |
+| T2  | Cổng thanh toán và adapter giả, phương thức thanh toán, thông tin xuất hóa đơn, hóa đơn và biên nhận, nâng gói có trừ tiền, webhook của cổng                                                                                                        | 29, 28                 | Xong       |
+| T3  | Gia hạn, trừ tiền lỗi và thử lại, ân hạn, chuyển khoản chờ xác nhận, hạ gói theo lịch, hủy và giữ lại, banner theo trạng thái, email                                                                                                                | 28, 29                 | Xong       |
+| T4  | Gia hạn bằng chuyển khoản (ADR-035 T4): phương thức gia hạn, hóa đơn chuyển khoản sớm `transferLeadDays` ngày trước cuối kỳ, trả trước không mất ngày, chờ chuyển khoản trong ân hạn, đổi gói hủy và thay hóa đơn sớm, email `billing-transfer-due` | 28, 29                 | Đang làm   |
 
 **Hoàn thành Phase 4** (phần gói và thanh toán; E2E `phase4-chain.spec.ts` chạy xanh toàn bộ chuỗi ngày 2026-11-21) khi một E2E chạy xanh toàn bộ chuỗi:
 
@@ -3579,7 +3623,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
-- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 22 template (14 template của PR plp-mailer#1, `automation-notice` của ADR-034 ở PR plp-mailer#2 và 5 template thanh toán `billing-trial-ending`, `billing-charge-failed`, `billing-expiring-soon`, `billing-read-only`, `billing-receipt` của ADR-035 T3 ở PR plp-mailer#3, đều đã merge; 2 template marketplace `marketplace-receipt`, `marketplace-suggestion` của ADR-036 nằm ở nhánh `feat/marketplace-templates` của plp-mailer, cần merge cùng lát MP3) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 23 template (14 template của PR plp-mailer#1, `automation-notice` của ADR-034 ở PR plp-mailer#2, 5 template thanh toán `billing-trial-ending`, `billing-charge-failed`, `billing-expiring-soon`, `billing-read-only`, `billing-receipt` của ADR-035 T3 ở PR plp-mailer#3 và 2 template marketplace `marketplace-receipt`, `marketplace-suggestion` của ADR-036 ở PR plp-mailer#4, đều đã merge; `billing-transfer-due` của ADR-035 T4 nằm ở nhánh `feat/transfer-renewal-template` của plp-mailer, cần merge cùng lát T4) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):
@@ -3603,7 +3647,8 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - Thanh toán (ADR-035):
   - Một cổng thanh toán thật có hợp đồng merchant, adapter của nó và một lần bổ sung ADR-035. `PAYMENT_PROVIDER`, khóa của cổng và bí mật webhook sinh cho production; API không khởi động với `fake` ở production.
   - Edge chuyển nguyên body của `POST /public/billing/webhooks/:provider` (chữ ký tính trên body thô).
-  - plp-mailer có 5 template email thanh toán (`billing-*`, ADR-035 T3) nếu dùng `MAIL_TRANSPORT=sqs`.
+  - plp-mailer có 6 template email thanh toán (`billing-*`, ADR-035 T3 và `billing-transfer-due` của T4) nếu dùng `MAIL_TRANSPORT=sqs`.
+  - Phương thức gia hạn là thẻ và chuyển khoản (chủ sản phẩm chốt ngày 2026-11-22, ADR-035 T4). Ví điện tử cần cổng thanh toán thật có ví và một lần bổ sung ADR-035.
 - Marketplace (ADR-036):
   - Danh mục của production là file đi kèm API hay file ở `MARKETPLACE_CATALOG_FILE`, đã qua review: giá, trạng thái, chữ điều khoản thật. Không bỏ mẫu nào đã có giấy phép khỏi file (API không khởi động); dừng bán là `withdrawn`.
   - plp-mailer có 2 template `marketplace-receipt`, `marketplace-suggestion` nếu dùng `MAIL_TRANSPORT=sqs`.
@@ -3611,7 +3656,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 **Chủ sản phẩm cần quyết**
 
 - `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
-- Gói (ADR-035): giá thật, chu kỳ, giá đã gồm VAT hay chưa, hạn mức từng gói, thời gian dùng thử, thời gian ân hạn và lịch thử lại khi trừ tiền lỗi. Bảng gói hiện là con số tạm.
+- Gói (ADR-035): giá thật, chu kỳ, giá đã gồm VAT hay chưa, hạn mức từng gói, thời gian dùng thử, thời gian ân hạn, lịch thử lại khi trừ tiền lỗi và số ngày gửi hóa đơn chuyển khoản trước cuối kỳ (`transferLeadDays`, T4). Bảng gói hiện là con số tạm.
 - Marketplace (ADR-036; ai bán, giấy phép theo workspace và hoàn tiền ngoài hệ thống đã chốt ngày 2026-11-20; hoàn tiền không thu hồi giấy phép, chốt ngày 2026-11-22):
   - giá thật của từng mẫu (danh mục đi kèm là giá tạm), mẫu nào bán lúc phát hành, giá đã gồm VAT hay chưa (như gói);
   - thời hạn cập nhật miễn phí: bản đầu là mọi phiên bản sau, không thời hạn;
