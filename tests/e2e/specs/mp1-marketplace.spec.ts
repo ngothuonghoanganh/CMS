@@ -174,6 +174,13 @@ test.describe('MP1 · Marketplace', () => {
       await expect(page.getByRole('heading', { level: 1, name: 'Marketplace' })).toBeVisible();
       await expectAccessible(page, 'Marketplace');
       await expectNoSidewaysScroll(page, 'Marketplace');
+      // The empty result echoes the search: a pasted address, one long word, wraps in it.
+      const pasted = `https://${'maukhongco'.repeat(20)}.example`;
+      await page.getByRole('searchbox', { name: 'Tìm trên marketplace' }).fill(pasted);
+      await expect(
+        page.getByRole('heading', { level: 2, name: `Marketplace chưa có mẫu khớp “${pasted}”` }),
+      ).toBeVisible();
+      await expectNoSidewaysScroll(page, 'Marketplace with a long search');
       await page.goto(`${workspace}/marketplace/mp-khai-truong-phong-tap`);
       await expect(page.getByRole('heading', { level: 1, name: GYM })).toBeVisible();
       await expectAccessible(page, 'Marketplace item');

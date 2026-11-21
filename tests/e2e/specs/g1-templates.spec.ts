@@ -126,6 +126,11 @@ test.describe('G1 · System templates', () => {
       await expect(page.getByRole('button', { name: 'Bỏ lọc Bất động sản' })).toBeVisible();
       await expectAccessible(page, 'Templates');
       await expectNoSidewaysScroll(page, 'Templates');
+      // The empty result echoes the search: one long word wraps in it.
+      await page.getByRole('searchbox', { name: 'Tìm template' }).fill('x'.repeat(160));
+      await expect(page.getByRole('heading', { level: 2, name: /x{160}/ })).toBeVisible();
+      await expectNoSidewaysScroll(page, 'Templates with a long search');
+      await page.getByRole('searchbox', { name: 'Tìm template' }).fill('');
 
       await page.goto(`/workspaces/${site.workspaceId}/templates/nha-khoa-uu-dai`);
       await expect(page.getByRole('heading', { level: 1, name: TEMPLATE })).toBeVisible();
