@@ -10,6 +10,12 @@ export interface RenewalTransferCalloutProps {
   /** Pays the invoice with the saved card; null when no card is saved. */
   onPayWithCard: (() => void) | null;
   payingWithCard: boolean;
+  /**
+   * With no card saved, the way to the card instead: the gateway's page that adds one, back to this
+   * screen. Null when the gateway is off, or a card is saved.
+   */
+  onAddCard?: (() => void) | null;
+  addingCard?: boolean;
   /** Another payment of the screen is running. */
   busy: boolean;
 }
@@ -27,12 +33,16 @@ function showTransferDetails() {
  * The invoice of a plan renewed by bank transfer (ADR-035, T4), in the three moments board 29 has
  * no drawing for: the early invoice waiting before the period ends, "Chờ chuyển khoản" inside the
  * grace once it has ended (not a failed payment: nothing is retried), and the next period paid.
- * It follows the failed-payment banner's frame: a Callout with the actions at its right.
+ * It follows the failed-payment banner's frame: a Callout with the actions at its right. The card
+ * is always offered in place of the transfer: "Thanh toán bằng thẻ thay thế" with a saved card,
+ * "Thêm thẻ" without one. Read-only, it is an alert, as on board 28 and the shell's banner.
  */
 export function RenewalTransferCallout({
   notice,
   onPayWithCard,
   payingWithCard,
+  onAddCard = null,
+  addingCard = false,
   busy,
 }: RenewalTransferCalloutProps) {
   if (notice.kind === 'paid') {
@@ -65,16 +75,29 @@ export function RenewalTransferCallout({
         : ''
     }`;
   }
+  const addCard = onPayWithCard === null ? onAddCard : null;
   return (
     <Callout
       tone={awaiting ? (notice.readOnly ? 'danger' : 'warning') : 'info'}
-      role="status"
+      role={awaiting && notice.readOnly ? 'alert' : 'status'}
       title={title}
       action={
         <>
           <Button variant="secondary" size="sm" onClick={showTransferDetails}>
             Xem thông tin chuyển khoản
           </Button>
+          {addCard === null ? null : (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={addingCard}
+              disabled={busy}
+              aria-describedby="renewal-card-add"
+              onClick={addCard}
+            >
+              Thêm thẻ
+            </Button>
+          )}
           {onPayWithCard === null ? null : (
             <Button
               variant="secondary"
@@ -91,6 +114,9 @@ export function RenewalTransferCallout({
       }
     >
       {body}
+      {addCard === null ? null : (
+        <span id="renewal-card-add"> Muốn thanh toán bằng thẻ thay thế, thêm thẻ trước.</span>
+      )}
       {onPayWithCard === null ? null : (
         // A transfer that arrives after the card paid is not applied, and not refunded by itself.
         <span id="renewal-card-warning">

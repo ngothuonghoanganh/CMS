@@ -26,7 +26,8 @@ export interface RenewalMethodChoiceProps {
  * transfer of an invoice sent before it. The board draws no such choice, so it follows its card
  * list: radio cards of @plp/ui. Choosing the card without one that can pay does not ask the API:
  * it leads to "Thêm thẻ" (the API says the same with 422 `payment_method_required`). Allowed in a
- * read-only workspace, like paying.
+ * read-only workspace, like paying. The radios stay enabled while a choice is saved, so the one
+ * the keyboard is on keeps the focus; another choice meanwhile waits for that answer.
  */
 export function RenewalMethodChoice({ workspaceId, summary, method }: RenewalMethodChoiceProps) {
   const change = useRenewalMethod(workspaceId);
@@ -38,10 +39,13 @@ export function RenewalMethodChoice({ workspaceId, summary, method }: RenewalMet
   // Said aloud only in answer to a click; a card renewal that has no card says it quietly.
   const asked = wantsCard || paymentProblemOf(change.error)?.kind === 'card_required';
   const needsCard = asked || (current === 'card' && !cardUsable);
-  const off = !method.paymentsEnabled || change.isPending;
+  const off = !method.paymentsEnabled;
   const status = renewalMethodStatus(summary.renewal);
 
   function choose(next: RenewalMethod) {
+    if (change.isPending) {
+      return;
+    }
     change.reset();
     if (next === current) {
       setWantsCard(false);
@@ -88,7 +92,13 @@ export function RenewalMethodChoice({ workspaceId, summary, method }: RenewalMet
           {...(asked ? { role: 'status' } : {})}
           title="Cần thêm thẻ để gia hạn bằng thẻ"
           action={
-            <Button variant="secondary" size="sm" loading={setup.busy} onClick={setup.start}>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={setup.busy}
+              disabled={off}
+              onClick={setup.start}
+            >
               Thêm thẻ
             </Button>
           }

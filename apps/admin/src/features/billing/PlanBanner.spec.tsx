@@ -120,9 +120,13 @@ describe('PlanBanner (ADR-035)', () => {
           awaitingTransfer: true,
         }),
       );
-      expect(screen.getByRole('status')).toHaveTextContent(
+      const readOnly = screen.getByRole('status');
+      expect(readOnly).toHaveTextContent(
         'Workspace mở lại khi nhận được chuyển khoản theo hóa đơn gia hạn.',
       );
+      // No payment waits for a confirmation: the transfer never came.
+      expect(readOnly).toHaveTextContent('Chưa nhận được chuyển khoản của hóa đơn gia hạn');
+      expect(readOnly).not.toHaveTextContent('Thanh toán chưa được xác nhận');
     });
 
     it('gives the days to every role, and says who acts to one that cannot', () => {

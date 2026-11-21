@@ -262,6 +262,16 @@ export function PaymentsScreen({
                 }
           }
           payingWithCard={pay.isPending && pay.variables === renewalInvoice?.id}
+          onAddCard={
+            saved === null && renewalInvoice !== null && method.paymentsEnabled
+              ? () => {
+                  setNotice(null);
+                  setReceived(false);
+                  setup.start();
+                }
+              : null
+          }
+          addingCard={setup.busy}
           busy={pay.isPending || transfer.isPending}
         />
       )}
@@ -305,6 +315,7 @@ export function PaymentsScreen({
           void fetchNextPageAfterRead(invoices);
         }}
         payingId={pay.isPending ? pay.variables : null}
+        cardSaved={saved !== null}
         onPay={payInvoice}
       />
     </PageContainer>

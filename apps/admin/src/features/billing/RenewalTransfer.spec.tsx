@@ -1,4 +1,10 @@
-import { endpoints, type DueInvoice, type Invoice, type SubscriptionRenewal } from '@plp/contracts';
+import {
+  type BillingSummary,
+  endpoints,
+  type DueInvoice,
+  type Invoice,
+  type SubscriptionRenewal,
+} from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -186,11 +192,69 @@ describe('"Gia hạn bằng" on board 29 (T4)', () => {
     expect(await screen.findByRole('button', { name: 'Thêm thẻ' })).toBeInTheDocument();
   });
 
-  it('is disabled while the gateway is off', () => {
-    renderPayments(activeSummary(), {
+  it('is disabled while the gateway is off, "Thêm thẻ" too', () => {
+    renderPayments(activeSummary({ renewalMethod: 'card' }), {
       paymentMethod: { paymentMethod: null, paymentsEnabled: false },
     });
     expect(screen.getByRole('radio', { name: 'Chuyển khoản ngân hàng' })).toBeDisabled();
+    expect(screen.getByText('Cần thêm thẻ để gia hạn bằng thẻ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thêm thẻ' })).toBeDisabled();
+  });
+
+  it('keeps the focus on the radio the keyboard chose while the choice is saved', async () => {
+    const user = userEvent.setup();
+    let answer: (summary: BillingSummary) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.setRenewalMethod) {
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      }
+      if (endpoint === endpoints.listInvoices) {
+        return Promise.resolve({ items: [], nextCursor: null });
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    renderPayments(activeSummary({ renewalMethod: 'card' }));
+    const card = screen.getByRole('radio', { name: 'Thẻ thanh toán tự động' });
+    const transfer = screen.getByRole('radio', { name: 'Chuyển khoản ngân hàng' });
+    card.focus();
+
+    await user.keyboard('{ArrowRight}');
+    expect(transfer).toHaveFocus();
+    expect(transfer).toBeEnabled();
+    expect(transfer).toBeChecked();
+    // Another choice while the first is saved waits for its answer.
+    await user.keyboard('{ArrowLeft}');
+    expect(card).toHaveFocus();
+    expect(transfer).toBeChecked();
+
+    answer(activeSummary({ renewal: renewalOf() }));
+    expect(await screen.findByText('Gia hạn bằng chuyển khoản ngân hàng')).toBeInTheDocument();
+    expect(card).toHaveFocus();
+    expect(transfer).toBeChecked();
+    expect(
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.setRenewalMethod),
+    ).toHaveLength(1);
+  });
+
+  it('says when the invoice comes once, in the line under the choice', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.setRenewalMethod) {
+        return Promise.resolve(activeSummary({ renewal: renewalOf() }));
+      }
+      if (endpoint === endpoints.listInvoices) {
+        return Promise.resolve({ items: [], nextCursor: null });
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    renderPayments(activeSummary({ renewalMethod: 'card' }));
+
+    await user.click(screen.getByRole('radio', { name: 'Chuyển khoản ngân hàng' }));
+
+    expect(await screen.findByText('Gia hạn bằng chuyển khoản ngân hàng')).toBeInTheDocument();
+    expect(screen.getAllByText(/27\/11\/2026/)).toHaveLength(1);
   });
 });
 
@@ -262,7 +326,7 @@ describe('the renewal invoice on board 29 (T4)', () => {
     await screen.findByRole('region', { name: 'Chuyển khoản hóa đơn gia hạn HD-2026-000011' });
   });
 
-  it('says read-only once the grace ended, and that a transfer reopens it', () => {
+  it('says read-only once the grace ended, and that a transfer reopens it, as an alert', () => {
     renderPayments(
       activeSummary({
         state: 'pending_payment',
@@ -272,9 +336,37 @@ describe('the renewal invoice on board 29 (T4)', () => {
         graceEndsAt: '2026-12-11T03:00:00.000Z',
       }),
     );
-    expect(screen.getByText(/Workspace mở lại khi nhận được chuyển khoản/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /Chờ chuyển khoản hóa đơn HD-2026-000011.*Workspace mở lại khi nhận được chuyển khoản/,
+    );
     // Said once, in the renewal banner.
     expect(screen.queryByText('Workspace đang ở chế độ chỉ đọc')).toBeNull();
+  });
+
+  it('leads to "Thêm thẻ" in place of the card when none is saved, and the history agrees', async () => {
+    renderPayments(
+      activeSummary({
+        state: 'pending_payment',
+        awaitingTransfer: true,
+        dueInvoice,
+        graceEndsAt: '2026-12-11T03:00:00.000Z',
+      }),
+      {
+        paymentMethod: { paymentMethod: null, paymentsEnabled: true },
+        invoices: { items: [pending], nextCursor: null },
+      },
+    );
+
+    const addCard = screen.getByRole('button', { name: 'Thêm thẻ' });
+    expect(addCard).toHaveAccessibleDescription(
+      'Muốn thanh toán bằng thẻ thay thế, thêm thẻ trước.',
+    );
+    expect(screen.queryByRole('button', { name: 'Thanh toán bằng thẻ thay thế' })).toBeNull();
+    // The history row offers no card payment either: there is no card to pay with.
+    const history = screen.getByRole('table', { name: 'Lịch sử giao dịch' });
+    expect(within(history).getByText('Chờ nhận chuyển khoản')).toBeInTheDocument();
+    expect(within(history).queryByRole('button', { name: /Thanh toán bằng thẻ/ })).toBeNull();
+    await screen.findByRole('region', { name: 'Chuyển khoản hóa đơn gia hạn HD-2026-000011' });
   });
 
   it('says a paid next period starts with no lost day', () => {

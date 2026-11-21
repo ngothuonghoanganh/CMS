@@ -45,7 +45,7 @@ export function PlanBanner({ variant = 'card' }: PlanBannerProps) {
         title="Workspace đang ở chế độ chỉ đọc"
         action={link}
       >
-        {readOnlyReason(frame.plan.state)} Trang live và form vẫn chạy.{' '}
+        {readOnlyReason(frame.plan.state, frame.plan.awaitingTransfer)} Trang live và form vẫn chạy.{' '}
         {variant === 'strip' ? 'Thay đổi ở đây chưa lưu được. ' : null}
         {frame.plan.awaitingTransfer
           ? frame.canViewBilling

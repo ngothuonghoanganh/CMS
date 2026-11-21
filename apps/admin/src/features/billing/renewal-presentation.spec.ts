@@ -198,6 +198,8 @@ describe('plan card and banner of a transfer renewal (T4)', () => {
     });
     expect(grace?.body).toContain('Chuyển khoản trước 11/12/2026');
     expect(grace?.body).not.toContain('thử lại');
+    // The card in place of the transfer is on board 29, which knows the saved card.
+    expect(grace?.body).toContain('Hoặc thanh toán bằng thẻ thay thế ở Thanh toán & hóa đơn.');
     const readOnly = planBanner(active({ ...waiting, access: 'read_only' }));
     expect(readOnly).toMatchObject({ role: 'alert', tone: 'danger' });
     expect(readOnly?.body).toContain('Workspace mở lại khi nhận được chuyển khoản');

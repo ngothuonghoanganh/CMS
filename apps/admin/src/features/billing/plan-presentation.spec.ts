@@ -579,4 +579,11 @@ describe('readOnlyReason', () => {
     expect(readOnlyReason('canceled')).toBe('Gói đã hủy.');
     expect(readOnlyReason('past_due')).toContain('ân hạn');
   });
+
+  it('says a renewal transfer never came, not that a payment waits for its confirmation (T4)', () => {
+    expect(readOnlyReason('pending_payment', true)).toBe(
+      'Chưa nhận được chuyển khoản của hóa đơn gia hạn và đã hết thời gian ân hạn.',
+    );
+    expect(readOnlyReason('pending_payment')).toContain('chưa được xác nhận');
+  });
 });

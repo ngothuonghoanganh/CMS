@@ -185,7 +185,7 @@ function pendingBanner(summary: BannerSummary): PlanBannerContent {
 /**
  * The ended period waits for the bank transfer of its renewal invoice (T4): "Chờ chuyển khoản", not
  * a failed payment. Everything keeps running until the grace ends; then the workspace is read-only
- * until the money arrives.
+ * until the money arrives. The card pays it instead on board 29, where the saved card is known.
  */
 function awaitingTransferBanner(
   summary: BannerSummary,
@@ -193,12 +193,13 @@ function awaitingTransferBanner(
 ): PlanBannerContent {
   const { invoice, deadline } = notice;
   const lead = `Hóa đơn ${invoice.number} · ${formatVnd(invoice.amount)}.`;
+  const byCard = 'Hoặc thanh toán bằng thẻ thay thế ở Thanh toán & hóa đơn.';
   const body =
     summary.access === 'read_only'
-      ? `${lead} Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING} Workspace mở lại khi nhận được chuyển khoản.`
+      ? `${lead} Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING} Workspace mở lại khi nhận được chuyển khoản. ${byCard}`
       : deadline === null
-        ? lead
-        : `${lead} Chuyển khoản trước ${formatDate(deadline)}. ${KEPT_RUNNING} Workspace chuyển sang chỉ đọc từ ngày đó nếu chưa nhận được tiền.`;
+        ? `${lead} ${byCard}`
+        : `${lead} Chuyển khoản trước ${formatDate(deadline)}. ${KEPT_RUNNING} Workspace chuyển sang chỉ đọc từ ngày đó nếu chưa nhận được tiền. ${byCard}`;
   return {
     role: summary.access === 'read_only' ? 'alert' : 'status',
     tone: summary.access === 'read_only' ? 'danger' : 'warning',
@@ -788,8 +789,15 @@ export function quoteImpacts(
   return list;
 }
 
-/** The sentence of the read-only banner on every workspace screen. */
-export function readOnlyReason(state: SubscriptionState): string {
+/**
+ * The sentence of the read-only banner on every workspace screen. `awaitingTransfer`: the ended
+ * period waits for the bank transfer of its renewal invoice (T4), which never came; nothing
+ * waits for a confirmation.
+ */
+export function readOnlyReason(state: SubscriptionState, awaitingTransfer = false): string {
+  if (awaitingTransfer) {
+    return 'Chưa nhận được chuyển khoản của hóa đơn gia hạn và đã hết thời gian ân hạn.';
+  }
   switch (state) {
     case 'trial_expired':
       return 'Thời gian dùng thử đã hết.';
