@@ -16,6 +16,8 @@ import {
   domainLostEmail,
   domainMovedEmail,
   leadNotificationEmail,
+  marketplaceReceiptEmail,
+  marketplaceSuggestionEmail,
   memberInvitationEmail,
   passwordResetEmail,
   recipientConfirmationEmail,
@@ -465,5 +467,57 @@ describe('the emails of the plan (ADR-035, T3)', () => {
     expect(paid.text).toContain('Phương thức: Chuyển khoản');
     expect(paid.text).toContain('không phải hóa đơn điện tử');
     expect(paid.html).toContain(`href="${billingUrl}/receipts/${ID}"`);
+  });
+});
+
+describe('the emails of the marketplace (ADR-036, MP3)', () => {
+  const workspace = { workspaceId: ID, workspaceName: 'Mây <Xanh>' };
+  const origin = `http://localhost:3100/workspaces/${ID}`;
+
+  it('give the receipt of an item bought, naming it and its version, with a link to use it', () => {
+    const paid = renderEmail(
+      marketplaceReceiptEmail({
+        workspaceName: workspace.workspaceName,
+        invoiceId: ID,
+        invoiceNumber: 'HD-2026-000124',
+        itemName: 'Mở bán <dự án>',
+        version: 2,
+        amount: '499.000 ₫',
+        paidOn: '01/11/2026',
+        method: 'Thẻ Visa •••• 4242',
+        receiptUrl: `${origin}/billing/receipts/${ID}`,
+        templateUrl: `${origin}/templates/mp-mo-ban-du-an-can-ho`,
+      }),
+    );
+    expect(paid.subject).toBe('Biên nhận HD-2026-000124 · Mẫu “Mở bán <dự án>”');
+    expect(paid.text).toContain('Nội dung: Mẫu “Mở bán <dự án>” · v2 · Marketplace');
+    expect(paid.text).toContain('Phương thức: Thẻ Visa •••• 4242');
+    expect(paid.text).toContain(`${origin}/templates/mp-mo-ban-du-an-can-ho`);
+    expect(paid.text).toContain('không phải hóa đơn điện tử');
+    expect(paid.html).toContain(`href="${origin}/billing/receipts/${ID}"`);
+    expect(paid.html).toContain(`href="${origin}/templates/mp-mo-ban-du-an-can-ho"`);
+    expect(paid.html).not.toContain('<dự án>');
+    expect(paid.html).toContain('Mở bán &lt;dự án&gt;');
+  });
+
+  it('tell the owner who asks for which item, its price, and where to buy it', () => {
+    const asked = renderEmail(
+      marketplaceSuggestionEmail({
+        ...workspace,
+        userId: ID,
+        itemId: 'mp-mo-ban-du-an-can-ho',
+        memberName: 'Lan <Hương>',
+        itemName: 'Mở bán dự án căn hộ',
+        price: '499.000 ₫',
+        itemUrl: `${origin}/marketplace/mp-mo-ban-du-an-can-ho`,
+      }),
+    );
+    expect(asked.subject).toBe('Lan <Hương> đề xuất mua mẫu “Mở bán dự án căn hộ”');
+    expect(asked.text).toContain('Giá 499.000 ₫ (đã gồm VAT), mua một lần');
+    expect(asked.text).toContain('Chỉ Chủ sở hữu mua được mẫu trả phí.');
+    expect(asked.text).toContain(`${origin}/marketplace/mp-mo-ban-du-an-can-ho`);
+    expect(asked.text).toContain('Bạn nhận email này vì là Chủ sở hữu của Mây <Xanh>.');
+    expect(asked.html).toContain(`href="${origin}/marketplace/mp-mo-ban-du-an-can-ho"`);
+    expect(asked.html).not.toContain('<Hương>');
   });
 });

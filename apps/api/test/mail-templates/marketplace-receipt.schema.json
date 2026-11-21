@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "marketplace-receipt",
+  "description": "Biên nhận một hóa đơn mẫu Marketplace đã thanh toán (ADR-036, MP3); không phải hóa đơn điện tử.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workspaceName",
+    "invoiceNumber",
+    "itemName",
+    "version",
+    "amount",
+    "paidOn",
+    "method",
+    "receiptUrl",
+    "templateUrl"
+  ],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "invoiceNumber": { "type": "string", "pattern": "^HD-\\d{4}-\\d{6}$" },
+    "itemName": { "type": "string", "minLength": 1, "description": "Tên mẫu lúc mua." },
+    "version": { "type": "integer", "minimum": 1, "description": "Phiên bản đã mua." },
+    "amount": { "type": "string", "minLength": 1, "description": "Ví dụ \"399.000 ₫\"." },
+    "paidOn": { "type": "string", "minLength": 1, "description": "\"dd/MM/yyyy\"." },
+    "method": {
+      "type": "string",
+      "minLength": 1,
+      "description": "\"Thẻ Visa •••• 4242\" hoặc \"Chuyển khoản\"."
+    },
+    "receiptUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Trang biên nhận in được trong admin."
+    },
+    "templateUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Mẫu trong thư viện template của workspace (màn 18), để tạo trang từ mẫu."
+    }
+  }
+}

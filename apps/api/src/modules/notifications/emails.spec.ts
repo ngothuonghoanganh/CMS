@@ -19,6 +19,8 @@ import {
   type KeyedEmail,
   type LeadEmailInput,
   leadNotificationEmail,
+  marketplaceReceiptEmail,
+  marketplaceSuggestionEmail,
   memberInvitationEmail,
   passwordResetEmail,
   recipientConfirmationEmail,
@@ -248,6 +250,32 @@ function receipt(method: string): KeyedEmail {
   });
 }
 
+function marketplaceReceipt(method: string): KeyedEmail {
+  return marketplaceReceiptEmail({
+    invoiceId: OTHER_ID,
+    workspaceName: BILLING.workspaceName,
+    invoiceNumber: 'HD-2026-000124',
+    itemName: 'Mở bán dự án căn hộ',
+    version: 2,
+    amount: '499.000 ₫',
+    paidOn: '01/11/2026',
+    method,
+    receiptUrl: `http://localhost:3100/workspaces/${ID}/billing/receipts/${OTHER_ID}`,
+    templateUrl: `http://localhost:3100/workspaces/${ID}/templates/mp-mo-ban-du-an-can-ho`,
+  });
+}
+
+const SUGGESTION = { workspaceId: ID, userId: OTHER_ID, itemId: 'mp-mo-ban-du-an-can-ho' };
+
+const marketplaceSuggestion = marketplaceSuggestionEmail({
+  ...SUGGESTION,
+  workspaceName: BILLING.workspaceName,
+  memberName: 'Lan Hương',
+  itemName: 'Mở bán dự án căn hộ',
+  price: '499.000 ₫',
+  itemUrl: `http://localhost:3100/workspaces/${ID}/marketplace/mp-mo-ban-du-an-can-ho`,
+});
+
 /** Every email the API can send, in each shape its data can take. */
 const EVERY_EMAIL: Array<[string, KeyedEmail]> = [
   ['automation-notice without a page or an owner', automationNotice],
@@ -259,6 +287,9 @@ const EVERY_EMAIL: Array<[string, KeyedEmail]> = [
   ['billing-read-only', readOnly],
   ['billing-receipt of a card', receipt('Thẻ Visa •••• 4242')],
   ['billing-receipt of a transfer', receipt('Chuyển khoản')],
+  ['marketplace-receipt of a card', marketplaceReceipt('Thẻ Visa •••• 4242')],
+  ['marketplace-receipt of a transfer', marketplaceReceipt('Chuyển khoản')],
+  ['marketplace-suggestion', marketplaceSuggestion],
   ['lead-notification', leadEmail()],
   [
     'lead-notification without email, message or campaign',
@@ -473,5 +504,56 @@ describe('the emails of the plan (ADR-035, T3)', () => {
         invoiceNumber: 'HD-1',
       }),
     ).toEqual(['/invoiceNumber must match pattern "^HD-\\d{4}-\\d{6}$"']);
+  });
+});
+
+describe('the emails of the marketplace (ADR-036, MP3)', () => {
+  it('are each sent once: per paid invoice, and per member and item', () => {
+    expect(marketplaceReceipt('Chuyển khoản').idempotencyKey).toBe(
+      `marketplace-receipt:${OTHER_ID}`,
+    );
+    expect(marketplaceSuggestion.idempotencyKey).toBe(
+      `marketplace-suggestion:${ID}:${OTHER_ID}:mp-mo-ban-du-an-can-ho`,
+    );
+    const otherItem = marketplaceSuggestionEmail({
+      ...SUGGESTION,
+      itemId: 'mp-spa-uu-dai-ngay-le',
+      workspaceName: BILLING.workspaceName,
+      memberName: 'Lan Hương',
+      itemName: 'Spa ưu đãi ngày lễ',
+      price: '299.000 ₫',
+      itemUrl: `http://localhost:3100/workspaces/${ID}/marketplace/mp-spa-uu-dai-ngay-le`,
+    });
+    expect(otherItem.idempotencyKey).not.toBe(marketplaceSuggestion.idempotencyKey);
+  });
+
+  it('keep the key of the longest item id within what plp-mailer takes', () => {
+    const key = marketplaceSuggestionEmail({
+      ...SUGGESTION,
+      itemId: `mp-${'a'.repeat(47)}`,
+      workspaceName: 'Mây Xanh',
+      memberName: 'Lan Hương',
+      itemName: 'Mẫu',
+      price: '1 ₫',
+      itemUrl: 'http://localhost:3100/',
+    }).idempotencyKey;
+    expect(key).toMatch(/^[A-Za-z0-9._:-]{8,128}$/);
+  });
+
+  it('refuse data plp-mailer could not render', () => {
+    expect(
+      templateDataProblems('marketplace-receipt', {
+        ...marketplaceReceipt('Chuyển khoản').data,
+        version: 0,
+        invoiceNumber: 'HD-1',
+      }).sort(),
+    ).toEqual(['/invoiceNumber must match pattern "^HD-\\d{4}-\\d{6}$"', '/version must be >= 1']);
+    expect(
+      templateDataProblems('marketplace-suggestion', {
+        ...marketplaceSuggestion.data,
+        itemUrl: 'javascript:alert(1)',
+        email: 'lan@example.com',
+      }).sort(),
+    ).toEqual(['/ must NOT have additional properties', '/itemUrl must match format "http-url"']);
   });
 });
