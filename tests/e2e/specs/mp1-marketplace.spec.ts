@@ -129,13 +129,15 @@ test.describe('MP1 · Marketplace', () => {
     await page.keyboard.press('Escape');
     await expect(open).toBeFocused();
 
-    // An item without a form shows no form line; the free one shows its price as free.
+    // An item without a form shows no form line; the free one is free, with nothing to tax or refund.
     await page.goto(`${workspace}/marketplace/mp-spa-uu-dai-ngay-le`);
     await expect(page.getByRole('region', { name: 'Gồm những gì' })).not.toContainText(
       'form thu lead',
     );
     await page.goto(`${workspace}/marketplace/mp-khoa-hoc-tieng-anh-tre-em`);
-    await expect(page.getByRole('complementary', { name: 'Giá' })).toContainText('Miễn phí');
+    const freeBox = page.getByRole('complementary', { name: 'Giá' });
+    await expect(freeBox).toContainText('Miễn phí');
+    await expect(freeBox).not.toContainText('Đã gồm VAT');
 
     // An id the catalog does not list is not found.
     await page.goto(`${workspace}/marketplace/mp-khong-co`);

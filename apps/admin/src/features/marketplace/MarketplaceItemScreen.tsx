@@ -134,7 +134,10 @@ export function MarketplaceItemScreen({ workspace, item }: MarketplaceItemScreen
         <aside aria-label="Giá" className={styles.aside}>
           <Card className={styles.priceBox}>
             <p className={styles.price}>{priceText(item.price)}</p>
-            <p className={styles.priceNote}>Một lần · Đã gồm VAT · {item.terms.refund}</p>
+            {/* A free item is not paid for: there is no VAT to include and nothing to refund. */}
+            {item.price > 0 ? (
+              <p className={styles.priceNote}>Một lần · Đã gồm VAT · {item.terms.refund}</p>
+            ) : null}
             <p className={styles.notice}>
               Bạn xem được toàn bộ mẫu và điều khoản ở đây. Nhận hoặc mua mẫu chưa mở trong bản này.
             </p>

@@ -101,4 +101,12 @@ describe('MarketplaceItemScreen (board 31)', () => {
     renderItem({ price: 0 });
     expect(screen.getByRole('complementary', { name: 'Giá' })).toHaveTextContent('Miễn phí');
   });
+
+  it('leaves the VAT and refund line out for a free item, as nothing is paid', () => {
+    renderItem({ price: 0 });
+    const box = screen.getByRole('complementary', { name: 'Giá' });
+    expect(box).toHaveTextContent('Miễn phí');
+    expect(box).not.toHaveTextContent('Đã gồm VAT');
+    expect(box).not.toHaveTextContent(termsFixture.refund);
+  });
 });
