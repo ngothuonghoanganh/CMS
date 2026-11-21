@@ -1,11 +1,17 @@
-import { endpoints, type Invoice } from '@plp/contracts';
+import { endpoints, type Invoice, type InvoiceSummary } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { PaymentsScreen, type PaymentsScreenProps } from './PaymentsScreen';
-import { invoiceFixture, invoiceSummaryFixture, summaryFixture, visaCard } from './test-fixtures';
+import {
+  invoiceFixture,
+  invoiceSummaryFixture,
+  marketplaceInvoiceSummaryFixture,
+  summaryFixture,
+  visaCard,
+} from './test-fixtures';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -61,7 +67,10 @@ const waitingDetail: Invoice = invoiceFixture({
   },
 });
 
-function renderPayments(overrides: Partial<PaymentsScreenProps> = {}, items = [failed]) {
+function renderPayments(
+  overrides: Partial<PaymentsScreenProps> = {},
+  items: InvoiceSummary[] = [failed],
+) {
   return renderWithProviders(
     <PaymentsScreen
       workspaceId={WORKSPACE_ID}
@@ -144,6 +153,67 @@ describe('the failed payment banner (board 29)', () => {
       'Workspace đang ở chế độ chỉ đọc; thanh toán để mở lại việc chỉnh sửa.',
     );
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('stays the plan’s when a newer marketplace purchase was refused, which shows in its row', () => {
+    // The plan's renewal failed (grace), then a purchase with another card was declined.
+    const refusedPurchase = marketplaceInvoiceSummaryFixture({
+      id: '64b0000000000000000000b8',
+      number: 'HD-2026-000008',
+      status: 'failed',
+      paidAt: null,
+      payable: true,
+      createdAt: '2026-12-02T03:00:00.000Z',
+      card: { brand: 'mastercard', last4: '4444' },
+      lastAttempt: {
+        number: 1,
+        at: '2026-12-02T03:00:00.000Z',
+        outcome: 'failed',
+        code: 'card_declined',
+      },
+    });
+    renderPayments({}, [refusedPurchase, failed]);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Thanh toán hóa đơn HD-2026-000002 không thành công.');
+    expect(alert).toHaveTextContent('Hệ thống tự thử lại ngày 03/12.');
+    expect(alert).toHaveTextContent('chỉ đọc từ 08/12/2026');
+    expect(within(alert).getByRole('button', { name: 'Chuyển khoản' })).toBeEnabled();
+    expect(within(alert).getByRole('button', { name: 'Thanh toán lại' })).toBeEnabled();
+    const payRow = screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000008' });
+    expect(payRow).toBeEnabled();
+    expect(payRow.closest('tr')).toHaveTextContent('Mẫu “Mở bán dự án căn hộ” · Marketplace');
+  });
+
+  it('is not shown for a refused marketplace purchase alone: it changes nothing of the plan', () => {
+    const refusedPurchase = marketplaceInvoiceSummaryFixture({
+      status: 'failed',
+      paidAt: null,
+      payable: true,
+      lastAttempt: {
+        number: 1,
+        at: '2026-12-02T03:00:00.000Z',
+        outcome: 'failed',
+        code: 'card_declined',
+      },
+    });
+    renderPayments(
+      {
+        initial: {
+          summary: summaryFixture({ state: 'active' }),
+          paymentMethod: { paymentMethod: visaCard, paymentsEnabled: true },
+          billingInfo: { billingInfo: null },
+          invoices: { items: [refusedPurchase], nextCursor: null },
+          loadedAt: Date.now(),
+        },
+      },
+      [refusedPurchase],
+    );
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000009' }),
+    ).toBeEnabled();
   });
 
   it('says why a stopped plan is read-only, with no invoice to pay', () => {

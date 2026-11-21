@@ -80,6 +80,23 @@ describe('paymentProblemOf', () => {
     );
   });
 
+  it('tells "Thanh toán lại" blocked by another invoice to try again, not to choose a plan', () => {
+    // A refused marketplace purchase paid again waits for a charge still being decided (ADR-036).
+    const blocked = problem(409, 'payment_in_progress', {
+      invoiceId: '64b0000000000000000000b1',
+      invoiceNumber: 'HD-2026-000001',
+    });
+
+    const text = paymentsMessage(blocked, 'invoice');
+    expect(text).toBe(
+      'Hóa đơn HD-2026-000001 chưa có kết quả. Xem nó trong lịch sử giao dịch rồi thử lại.',
+    );
+    expect(text).not.toContain('gói');
+    expect(paymentsMessage(problem(409, 'payment_in_progress'), 'invoice')).toBe(
+      'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.',
+    );
+  });
+
   it('tells an invoice waiting for a transfer from one whose charge is unknown (T3)', () => {
     const waiting = problem(409, 'payment_in_progress', {
       invoiceId: '64b0000000000000000000b1',

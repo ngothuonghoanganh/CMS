@@ -424,6 +424,29 @@ describe('PaymentsScreen (board 29)', () => {
       ).toBeVisible();
     });
 
+    it('says to try "Thanh toán lại" again once another charge is known, not to choose a plan', async () => {
+      const user = userEvent.setup();
+      routePay([refused], () => {
+        throw problem(409, 'payment_in_progress', {
+          invoiceId: '64b0000000000000000000b7',
+          invoiceNumber: 'HD-2026-000007',
+        });
+      });
+      renderPayments({
+        initial: initialOf({ invoices: { items: [refused], nextCursor: null } }),
+      });
+
+      await user.click(
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000008' }),
+      );
+
+      expect(
+        await screen.findByText(
+          'Hóa đơn HD-2026-000007 chưa có kết quả. Xem nó trong lịch sử giao dịch rồi thử lại.',
+        ),
+      ).toBeInTheDocument();
+    });
+
     it('never offers a bank transfer for it, the card pays it', () => {
       renderPayments({
         initial: initialOf({ invoices: { items: [refused], nextCursor: null } }),

@@ -97,13 +97,13 @@ export function usePayInvoice(workspaceId: string) {
               tone: 'warning',
               title: 'Chưa biết kết quả thanh toán',
               description: lost
-                ? `${paymentsMessage(error)} Kiểm tra lịch sử giao dịch, hoặc bấm "Thanh toán lại": tiền không bị trừ hai lần.`
-                : paymentsMessage(error),
+                ? `${paymentsMessage(error, 'invoice')} Kiểm tra lịch sử giao dịch, hoặc bấm "Thanh toán lại": tiền không bị trừ hai lần.`
+                : paymentsMessage(error, 'invoice'),
             }
           : {
               tone: 'danger',
               title: 'Thanh toán không thành công',
-              description: paymentsMessage(error),
+              description: paymentsMessage(error, 'invoice'),
             },
       );
     },
