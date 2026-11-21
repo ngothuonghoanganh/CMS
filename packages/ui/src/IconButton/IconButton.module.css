@@ -58,7 +58,9 @@
   color: var(--color-danger-ink);
 }
 
-.root:disabled {
+/* Unavailable: `aria-disabled` looks the same as `disabled`, and keeps the focus it may have. */
+.root:is(:disabled, [aria-disabled='true']),
+.root:is(:disabled, [aria-disabled='true']):hover {
   background: transparent;
   color: var(--color-disabled);
   cursor: not-allowed;

@@ -1,7 +1,7 @@
 'use client';
 
 import { Dialog as RadixDialog } from 'radix-ui';
-import type { ReactElement, ReactNode, RefObject } from 'react';
+import type { MouseEvent, ReactElement, ReactNode, RefObject } from 'react';
 import { IconButton } from '../IconButton/IconButton';
 import { ArrowLeftIcon, CloseIcon } from '../icons';
 import { cx } from '../internal/cx';
@@ -47,6 +47,12 @@ export interface DialogProps {
   backLabel?: string | undefined;
   /** Accessible name of the close button. Defaults to "Đóng". */
   closeLabel?: string | undefined;
+  /**
+   * False while the dialog must stay open, e.g. while a payment it started is being decided:
+   * Escape and a click outside do nothing, and the close button says it is unavailable
+   * (`aria-disabled`, keeping any focus it has). Defaults to true.
+   */
+  dismissible?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -68,6 +74,7 @@ export function Dialog({
   fallbackFocusRef,
   backLabel,
   closeLabel = 'Đóng',
+  dismissible = true,
   className,
 }: DialogProps) {
   const focus = useReturnFocus(fallbackFocusRef);
@@ -94,11 +101,26 @@ export function Dialog({
             }
           }}
           onCloseAutoFocus={focus.restoreFocus}
+          onEscapeKeyDown={(event) => {
+            if (!dismissible) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            if (!dismissible) {
+              event.preventDefault();
+            }
+          }}
           onKeyDown={(event) => {
             // Radix gives Escape to the newest layer only. While a toast shows, that is the toast:
             // it closes and lets the key through, so the dialog closes here too. When the dialog
             // (or a menu inside it) handled the key, it is already marked as handled.
-            if (event.key === 'Escape' && !event.defaultPrevented && onOpenChange !== undefined) {
+            if (
+              event.key === 'Escape' &&
+              !event.defaultPrevented &&
+              dismissible &&
+              onOpenChange !== undefined
+            ) {
               event.preventDefault();
               onOpenChange(false);
             }
@@ -107,7 +129,12 @@ export function Dialog({
           <div className={styles.header}>
             {backLabel === undefined ? null : (
               <RadixDialog.Close asChild>
-                <IconButton aria-label={backLabel} icon={<ArrowLeftIcon />} size="sm" />
+                <IconButton
+                  aria-label={backLabel}
+                  icon={<ArrowLeftIcon />}
+                  size="sm"
+                  {...closeGuard(dismissible)}
+                />
               </RadixDialog.Close>
             )}
             <div className={styles.heading}>
@@ -122,7 +149,12 @@ export function Dialog({
               <div className={styles.headerActions}>{headerActions}</div>
             ) : null}
             <RadixDialog.Close asChild>
-              <IconButton aria-label={closeLabel} icon={<CloseIcon />} size="sm" />
+              <IconButton
+                aria-label={closeLabel}
+                icon={<CloseIcon />}
+                size="sm"
+                {...closeGuard(dismissible)}
+              />
             </RadixDialog.Close>
           </div>
           <div className={cx(styles.body, flush && styles.flush)}>{children}</div>
@@ -138,4 +170,22 @@ export function Dialog({
       </RadixDialog.Portal>
     </RadixDialog.Root>
   );
+}
+
+/**
+ * What a close control of a dialog that cannot be dismissed now gets: unavailable to assistive
+ * technology, and its click stopped before Radix closes the dialog.
+ */
+function closeGuard(dismissible: boolean): {
+  'aria-disabled'?: true;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+} {
+  return dismissible
+    ? {}
+    : {
+        'aria-disabled': true,
+        onClick: (event) => {
+          event.preventDefault();
+        },
+      };
 }
