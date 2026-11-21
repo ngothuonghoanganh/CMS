@@ -141,6 +141,22 @@ describe('OwnedItemsScreen (board 32)', () => {
     expect(screen.getAllByRole('link', { name: /^Xem mẫu/ })).toHaveLength(2);
   });
 
+  it('tells a role without templates.manage who updates an item that has a new version', () => {
+    renderScreen({ role: 'contributor' });
+    expect(screen.getByText('CÓ BẢN v2')).toBeInTheDocument();
+    expect(
+      screen.getByText('Chỉ Chủ sở hữu, Quản trị và Biên tập cập nhật được mẫu lên phiên bản mới.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing of who updates when no row has a new version, or the role can update', () => {
+    const { unmount } = renderScreen({ role: 'contributor', items: [free] });
+    expect(screen.queryByText(/cập nhật được mẫu lên phiên bản mới/)).toBeNull();
+    unmount();
+    renderScreen({ role: 'editor' });
+    expect(screen.queryByText(/cập nhật được mẫu lên phiên bản mới/)).toBeNull();
+  });
+
   it('asks before updating, with the notes of the new versions, and updates from the licence’s version', async () => {
     const user = userEvent.setup();
     apiMock.mockResolvedValueOnce(licenceFixture({ version: 2 }));

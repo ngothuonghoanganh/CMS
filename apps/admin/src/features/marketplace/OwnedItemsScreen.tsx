@@ -4,6 +4,7 @@ import {
   type Access,
   can,
   DEFAULT_THEME_PRESET,
+  holdersOf,
   type MarketplaceOwnedItem,
   type Membership,
   type Site,
@@ -213,6 +214,12 @@ export function OwnedItemsScreen({
           </ul>
         </section>
       )}
+      {!canUpdate && items.some(hasUpdate) ? (
+        // The rows show "CÓ BẢN vM" without "Cập nhật": say who can take the new version.
+        <p className={styles.hint}>
+          Chỉ {holdersOf('templates.manage')} cập nhật được mẫu lên phiên bản mới.
+        </p>
+      ) : null}
 
       {updatingItem !== undefined && updating !== null && hasUpdate(updatingItem) ? (
         <UpdateLicenceDialog

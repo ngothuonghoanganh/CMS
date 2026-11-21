@@ -73,13 +73,24 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
             Tạo trang từ mẫu
           </ButtonLink>
           {hasNewer ? (
-            <p className={styles.notice}>
-              Có phiên bản mới v{item.version}.{' '}
-              <Link href={marketplaceOwnedHref(workspace.id)} className={styles.inlineLink}>
-                Cập nhật
-              </Link>{' '}
-              ở Sản phẩm đã mua.
-            </p>
+            can(role, 'templates.manage') ? (
+              <p className={styles.notice}>
+                Có phiên bản mới v{item.version}.{' '}
+                <Link href={marketplaceOwnedHref(workspace.id)} className={styles.inlineLink}>
+                  Cập nhật
+                </Link>{' '}
+                ở Sản phẩm đã mua.
+              </p>
+            ) : (
+              <p className={styles.notice}>
+                Có phiên bản mới v{item.version}. Chỉ {holdersOf('templates.manage')} cập nhật được,
+                ở{' '}
+                <Link href={marketplaceOwnedHref(workspace.id)} className={styles.inlineLink}>
+                  Sản phẩm đã mua
+                </Link>
+                .
+              </p>
+            )
           ) : null}
           {item.withdrawn ? (
             <p className={styles.notice}>Mẫu đã ngừng bán. Workspace vẫn dùng và cập nhật được.</p>

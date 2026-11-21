@@ -343,6 +343,22 @@ describe('MarketplaceItemScreen (board 31)', () => {
       );
     });
 
+    it('tells a role that cannot update who can, and still leads to screen 32', () => {
+      renderItem(
+        { version: 2, licence: licenceFixture({ source: 'purchase', version: 1 }) },
+        'viewer',
+      );
+      const box = screen.getByRole('complementary', { name: 'Giá' });
+      expect(box).toHaveTextContent(
+        'Có phiên bản mới v2. Chỉ Chủ sở hữu, Quản trị và Biên tập cập nhật được, ở Sản phẩm đã mua.',
+      );
+      expect(within(box).queryByRole('link', { name: 'Cập nhật' })).toBeNull();
+      expect(within(box).getByRole('link', { name: 'Sản phẩm đã mua' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/marketplace/owned`,
+      );
+    });
+
     it('says a withdrawn item is still used and updated', () => {
       renderItem({ withdrawn: true, licence: licenceFixture({ source: 'purchase' }) });
       expect(screen.getByRole('complementary', { name: 'Giá' })).toHaveTextContent(
