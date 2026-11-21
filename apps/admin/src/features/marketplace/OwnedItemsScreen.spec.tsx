@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
-import { apiError, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { licenceFixture, ownedItemFixture } from './test-fixtures';
 import { OwnedItemsScreen } from './OwnedItemsScreen';
 
@@ -189,21 +189,19 @@ describe('OwnedItemsScreen (board 32)', () => {
     expect(within(dialog).getByRole('textbox', { name: /Tên trang/ })).toHaveValue(
       'Khai trương phòng tập',
     );
-    apiMock.mockResolvedValueOnce({ page: { id: 'p1' } } as never);
+    apiMock.mockResolvedValueOnce({ page: { id: 'p1' } });
     await user.click(within(dialog).getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
-    expect(apiMock).toHaveBeenCalledWith(
-      endpoints.createPage,
-      [SITE_ID],
-      expect.objectContaining({
-        body: expect.objectContaining({
-          start: {
-            kind: 'template',
-            source: 'marketplace',
-            templateId: 'mp-khai-truong-phong-tap',
-            version: 1,
-          },
-        }),
-      }),
-    );
+    const call = lastCallTo(apiMock, endpoints.createPage);
+    expect(call.args).toEqual([SITE_ID]);
+    expect(call.options).toMatchObject({
+      body: {
+        start: {
+          kind: 'template',
+          source: 'marketplace',
+          templateId: 'mp-khai-truong-phong-tap',
+          version: 1,
+        },
+      },
+    });
   });
 });
