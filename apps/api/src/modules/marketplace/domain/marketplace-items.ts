@@ -6,12 +6,13 @@ import type {
   MarketplaceItemVersion,
   MarketplaceLicence,
   MarketplaceListResponse,
+  MarketplaceOwnedItem,
 } from '@plp/contracts';
 import { compositionHasForm, compositionOutline } from '@plp/sections/schema';
 
 /*
- * What boards 30 and 31 show of the catalog (ADR-036), as pure functions of the catalog and of what
- * the workspaces hold of it.
+ * What boards 30, 31 and 32 show of the catalog (ADR-036), as pure functions of the catalog and of
+ * what the workspaces hold of it.
  */
 
 /** What the workspace, and every workspace, hold of the catalog. */
@@ -22,8 +23,24 @@ export interface MarketplaceHoldings {
   licenceCounts: ReadonlyMap<string, number>;
 }
 
-/** Nothing held anywhere: no workspace holds a licence before MP2 (ADR-036). */
+/** Nothing held anywhere. */
 export const NO_HOLDINGS: MarketplaceHoldings = { licences: new Map(), licenceCounts: new Map() };
+
+/** The catalog's item with this id; undefined for any other id. */
+export function findMarketplaceItem(
+  catalog: MarketplaceCatalog,
+  itemId: string,
+): MarketplaceItem | undefined {
+  return catalog.items.find((item) => item.id === itemId);
+}
+
+/** The item's version `version`; undefined when the catalog has no such version of it. */
+export function itemVersionOf(
+  item: MarketplaceItem,
+  version: number,
+): MarketplaceItemVersion | undefined {
+  return item.versions.find((candidate) => candidate.version === version);
+}
 
 /** The last version: the catalog numbers them one after another from 1. */
 export function currentVersionOf(item: MarketplaceItem): MarketplaceItemVersion {
@@ -49,7 +66,8 @@ export function itemVisibleTo(item: MarketplaceItem, licensed: boolean): boolean
   }
 }
 
-function listedItems(catalog: MarketplaceCatalog): MarketplaceItem[] {
+/** The items on sale, in the catalog's order: board 30, and the unowned cards of the library. */
+export function listedItems(catalog: MarketplaceCatalog): MarketplaceItem[] {
   return catalog.items.filter((item) => item.status === 'listed');
 }
 
@@ -112,7 +130,7 @@ export function marketplaceDetail(
   itemId: string,
   holdings: MarketplaceHoldings,
 ): MarketplaceItemView | null {
-  const item = catalog.items.find((candidate) => candidate.id === itemId);
+  const item = findMarketplaceItem(catalog, itemId);
   const licence = holdings.licences.get(itemId) ?? null;
   if (item === undefined || !itemVisibleTo(item, licence !== null)) {
     return null;
@@ -125,5 +143,36 @@ export function marketplaceDetail(
     terms: catalog.terms,
     withdrawn: item.status === 'withdrawn',
     licence,
+  };
+}
+
+/**
+ * A row of board 32: the item at its licence's version, with the notes of every version released
+ * after it ("CÓ BẢN vM", the update dialog). The licence must name a version of the item, as the
+ * startup check makes sure.
+ */
+export function ownedItemOf(
+  item: MarketplaceItem,
+  licence: MarketplaceLicence,
+): MarketplaceOwnedItem {
+  const held = itemVersionOf(item, licence.version);
+  if (held === undefined) {
+    throw new Error(
+      `Marketplace item ${item.id} has no v${licence.version}, which a licence names`,
+    );
+  }
+  return {
+    itemId: item.id,
+    name: item.name,
+    source: licence.source,
+    version: licence.version,
+    latestVersion: currentVersionOf(item).version,
+    newVersions: item.versions
+      .filter((version) => version.version > licence.version)
+      .map(({ version, releasedOn, note }) => ({ version, releasedOn, note })),
+    grantedAt: licence.grantedAt,
+    withdrawn: item.status === 'withdrawn',
+    hasForm: compositionHasForm(held.composition),
+    sections: compositionOutline(held.composition),
   };
 }
