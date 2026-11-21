@@ -28,9 +28,11 @@ test.describe('MP1 · Marketplace', () => {
       'page',
     );
     await expect(sidebar.getByRole('link', { name: 'Marketplace' })).not.toContainText('Nâng cấp');
-    // It opens board 32 once there is one (MP2): until then it is text, not a control's outline.
-    await expect(page.getByText('Đã sở hữu · 0')).toBeVisible();
-    await expect(page.getByText('Đã sở hữu · 0')).toHaveCSS('border-top-style', 'none');
+    // It opens board 32 (MP2).
+    await expect(page.getByRole('link', { name: 'Đã sở hữu · 0' })).toHaveAttribute(
+      'href',
+      `${workspace}/marketplace/owned`,
+    );
 
     const cards = page.getByRole('article');
     await expect(cards.getByRole('heading', { level: 2 })).toHaveText(NAMES);

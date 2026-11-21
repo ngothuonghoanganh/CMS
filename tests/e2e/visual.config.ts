@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { writeE2eCatalog } from './support/marketplace-catalog.js';
 import { WEBHOOK_RECEIVER_URL } from './support/webhook-receiver.js';
 import { urls } from './urls.js';
 
@@ -47,6 +48,8 @@ export default defineConfig({
         AUTOMATION_SECRET_KEY: 'visual-automation-secret-key-0123456789abcdef',
         // Board 27's webhook goes to the capture's receiver (support/webhook-receiver.ts).
         WEBHOOK_TEST_RECEIVER: WEBHOOK_RECEIVER_URL,
+        // Boards 31 and 32 (ADR-036): the bundled catalog plus a withdrawn item with two versions.
+        MARKETPLACE_CATALOG_FILE: writeE2eCatalog(),
       },
       url: `${urls.api}/health`,
       reuseExistingServer: false,
