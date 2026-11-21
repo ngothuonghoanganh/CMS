@@ -1,4 +1,10 @@
-import type { Composition, TemplateRef, TemplateSource, TemplateSummary } from '@plp/contracts';
+import type {
+  Composition,
+  TemplateChangedProblemContext,
+  TemplateRef,
+  TemplateSource,
+  TemplateSummary,
+} from '@plp/contracts';
 import {
   buildCompositionFromTemplate,
   findSystemTemplate,
@@ -32,7 +38,7 @@ export function templateChanged(name: string, currentVersion: number): AppError 
     `Mẫu “${name}” đã có phiên bản mới (v${currentVersion})`,
     {
       detail: 'Xem lại bản xem trước của phiên bản mới rồi thử lại.',
-      context: { currentVersion },
+      context: { currentVersion } satisfies TemplateChangedProblemContext,
     },
   );
 }
