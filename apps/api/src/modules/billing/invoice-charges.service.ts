@@ -26,7 +26,7 @@ import type { PlanChange } from './domain/plan-change.js';
 import { chargeWithTimeout } from './gateway/charge-with-timeout.js';
 import { PaymentGateway, type ChargeResult } from './gateway/payment-gateway.js';
 import type { InvoiceAttemptRecord, InvoiceRecord } from './invoice.schema.js';
-import { InvoiceSettlement } from './invoice-settlement.service.js';
+import { InvoiceSettlement, type RecordedCharge } from './invoice-settlement.service.js';
 import { InvoiceTransfers } from './invoice-transfers.service.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import {
@@ -68,6 +68,20 @@ export interface ChargeAttempt {
   code: PaymentDeclineCode | null;
   /** Why the gateway could not be asked or did not answer; set for an unknown outcome. */
   failure: unknown;
+}
+
+/**
+ * Whether the card charge numbered `number` is what paid the invoice: its success reported by the
+ * gateway's event, with its key, before the API recorded its answer.
+ */
+function paidBy(invoice: InvoiceRecord, number: number): boolean {
+  return (
+    invoice.status === 'paid' &&
+    invoice.attempts.some(
+      (attempt) =>
+        attempt.number === number && attempt.outcome === 'succeeded' && attempt.transfer !== true,
+    )
+  );
 }
 
 /** The card a charge uses: saved, and valid now. 422 otherwise. */
@@ -299,7 +313,7 @@ export class InvoiceCharges {
     code: Extract<PaymentDeclineCode, 'no_payment_method' | 'expired_card'>,
   ): Promise<ChargeAttempt> {
     const number = nextAttemptNumber(invoice.attempts);
-    const after = await this.transactions.run((tx) =>
+    const { invoice: after } = await this.transactions.run((tx) =>
       this.settlement.record(
         invoice,
         { number, at: this.clock.now(), outcome: 'failed', code, requestKey: null },
@@ -387,9 +401,9 @@ export class InvoiceCharges {
       requestKey,
       card: { brand: method.brand, last4: method.last4 },
     } as const;
-    let after: InvoiceRecord;
+    let settled: RecordedCharge;
     try {
-      after = await this.transactions.run(async (tx) => {
+      settled = await this.transactions.run(async (tx) => {
         const recorded = await this.settlement.record(
           invoice,
           report,
@@ -414,6 +428,7 @@ export class InvoiceCharges {
       }
       throw error;
     }
+    const after = settled.invoice;
     this.logger.log(
       {
         workspaceId,
@@ -425,13 +440,16 @@ export class InvoiceCharges {
       },
       'Charged an invoice',
     );
-    if (after.status === 'paid' && invoice.status !== 'paid') {
-      await this.notifier.receipt(after);
-    } else if (report.outcome === 'succeeded') {
-      // The invoice was decided while the gateway answered (a hold that ran out): the money is
-      // taken and nothing it pays for is applied.
+    if (settled.recorded) {
+      if (after.status === 'paid') {
+        await this.notifier.receipt(after);
+      }
+    } else if (report.outcome === 'succeeded' && !paidBy(after, number)) {
+      // Something else decided the invoice while the gateway answered (a transfer that arrived,
+      // a hold that ran out): this charge took the money a second time, and pays for nothing.
+      // The same charge reported by the gateway's event first is not one.
       this.logger.error(
-        { workspaceId, invoiceId, number: after.number, status: after.status },
+        { workspaceId, invoiceId, number: after.number, attempt: number, status: after.status },
         'A charge succeeded on an invoice decided before: refund it outside the system',
       );
     }

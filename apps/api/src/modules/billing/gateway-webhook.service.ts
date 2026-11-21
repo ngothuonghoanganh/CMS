@@ -166,6 +166,17 @@ export class GatewayWebhookService {
       return { result: 'ignored', why: 'no invoice has this reference' };
     }
     if (event.amount !== invoice.amount) {
+      // Money arrived and pays nothing: a transfer of another amount, or a gateway's mistake.
+      this.logger.error(
+        {
+          workspaceId: invoice.workspaceId.toHexString(),
+          invoiceId: invoice._id.toHexString(),
+          kind: event.kind,
+          amount: event.amount,
+          invoiceAmount: invoice.amount,
+        },
+        'A payment of another amount than its invoice arrived and was not applied: refund it outside the system',
+      );
       return { result: 'ignored', why: 'the amount is not the invoice’s' };
     }
     if (invoice.status === 'paid') {
@@ -190,9 +201,16 @@ export class GatewayWebhookService {
     const number =
       (key === null ? null : attemptOfIdempotencyKey(invoice._id.toHexString(), key)) ??
       (invoice.attempts.at(-1)?.number ?? 0) + 1;
-    const decided = await this.settlement.record(
+    const { invoice: decided } = await this.settlement.record(
       invoice,
-      { number, at: this.clock.now(), outcome: 'succeeded', code: null, requestKey: null },
+      {
+        number,
+        at: this.clock.now(),
+        outcome: 'succeeded',
+        code: null,
+        requestKey: null,
+        transfer: event.kind === 'transfer_received',
+      },
       ['open', 'pending', 'failed'],
       tx,
     );
@@ -217,7 +235,7 @@ export class GatewayWebhookService {
     if (invoice.status !== 'pending' || number === null || last?.number !== number) {
       return { result: 'ignored', why: 'the refused charge is not the one being decided' };
     }
-    const decided = await this.settlement.record(
+    const { invoice: decided } = await this.settlement.record(
       invoice,
       { number, at: this.clock.now(), outcome: 'failed', code: event.code, requestKey: null },
       ['pending'],

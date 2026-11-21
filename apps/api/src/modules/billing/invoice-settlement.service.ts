@@ -29,8 +29,20 @@ export interface ChargeReport {
   code: PaymentDeclineCode | null;
   /** The `Idempotency-Key` of the "Thanh toán lại" request; null otherwise. */
   requestKey: string | null;
+  /** A bank transfer that arrived, not a card charge (T3). */
+  transfer?: boolean;
   /** The card charged, when the API charged it. */
   card?: { brand: string; last4: string };
+}
+
+/** A charge's outcome once recorded: the invoice after, and whether this report changed it. */
+export interface RecordedCharge {
+  invoice: InvoiceRecord;
+  /**
+   * False when the invoice was decided before (its status was not one of `from`): the report
+   * changed nothing, and `invoice` is as something else left it.
+   */
+  recorded: boolean;
 }
 
 /**
@@ -57,14 +69,15 @@ export class InvoiceSettlement {
 
   /**
    * Adds the charge to `invoice` while its status is one of `from`, and applies it when it paid.
-   * The invoice after; unchanged when its status was not one of `from` (decided before).
+   * The invoice after; unchanged, and not `recorded`, when its status was not one of `from`
+   * (decided before).
    */
   async record(
     invoice: InvoiceRecord,
     report: ChargeReport,
     from: readonly InvoiceStatus[],
     tx: Tx,
-  ): Promise<InvoiceRecord> {
+  ): Promise<RecordedCharge> {
     const status = statusAfterCharge(report.outcome);
     const change: InvoiceChange = {
       status,
@@ -85,12 +98,14 @@ export class InvoiceSettlement {
         outcome: report.outcome,
         code: report.code,
         requestKey: report.requestKey,
+        ...(report.transfer === true ? { transfer: true } : {}),
       },
       change,
       tx,
     );
     if (after === null) {
-      return (await this.invoices.findByReference(invoice._id, tx)) ?? invoice;
+      const current = await this.invoices.findByReference(invoice._id, tx);
+      return { invoice: current ?? invoice, recorded: false };
     }
     const ref = { workspaceId: after.workspaceId };
     if (after.status === 'paid') {
@@ -99,7 +114,7 @@ export class InvoiceSettlement {
       await this.subscriptions.recordFailure(ref, { invoiceId: after._id, at: report.at }, tx);
     }
     await this.schedule.reschedule(ref, report.at, tx);
-    return after;
+    return { invoice: after, recorded: true };
   }
 
   /** The invoice of `invoiceId` in `tx`, for an event that names it. */

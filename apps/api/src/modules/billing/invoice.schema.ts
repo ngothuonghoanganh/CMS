@@ -25,6 +25,11 @@ export interface InvoiceAttemptRecord {
   code: PaymentDeclineCode | null;
   /** The `Idempotency-Key` of the "Thanh toán lại" request that made it; null otherwise. */
   requestKey: string | null;
+  /**
+   * A bank transfer that arrived (T3), rather than a card charge, which is the default and what
+   * attempts stored before T3 are.
+   */
+  transfer?: boolean;
 }
 
 export interface InvoicePlanChoice {
@@ -103,6 +108,7 @@ const attemptSchema = new Schema<InvoiceAttemptRecord>(
     outcome: { type: String, enum: chargeOutcomes, required: true },
     code: { type: String, enum: [...paymentDeclineCodes, null], default: null },
     requestKey: { type: String, default: null },
+    transfer: { type: Boolean },
   },
   { _id: false },
 );
