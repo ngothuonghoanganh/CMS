@@ -2,6 +2,7 @@ import {
   type BillingCycle,
   type BillingSummary,
   billingCycleLabels,
+  type DueInvoice,
   type Plan,
   type PlanChangeImpacts,
   type PlanFeatureKey,
@@ -13,6 +14,7 @@ import {
   paymentDeclineLabels,
   type SubscriptionState,
   subscriptionStateLabels,
+  type WorkspacePlan,
 } from '@plp/contracts';
 import type { BadgeTone, CalloutTone } from '@plp/ui';
 import { formatCount, formatDate, formatDayMonth, formatVnd } from '../../lib/format';
@@ -25,6 +27,20 @@ export function priceLabel(plan: Pick<Plan, 'prices'>, cycle: BillingCycle): str
 interface StateChip {
   label: string;
   tone: BadgeTone;
+}
+
+/**
+ * The state the screens show (T3): an unpaid period whose payment waits for its answer (a transfer
+ * to confirm, a gateway that has not replied) reads "Chờ thanh toán", even after a failed charge.
+ * The API keeps `past_due`: the grace still counts from the failure.
+ */
+export function shownState(state: SubscriptionState, paymentWaiting: boolean): SubscriptionState {
+  return state === 'past_due' && paymentWaiting ? 'pending_payment' : state;
+}
+
+/** Whether the invoice the subscription waits for has no answer yet: a transfer, or the gateway. */
+export function dueWaiting(due: Pick<DueInvoice, 'status'> | null): boolean {
+  return due !== null && (due.status === 'pending' || due.status === 'open');
 }
 
 /** The status chip beside the plan's name: a trial adds "· còn N ngày". */
@@ -115,9 +131,12 @@ function graceSentence(summary: Pick<BillingSummary, 'access' | 'graceEndsAt'>):
     : `Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING}`;
 }
 
-/** "Hệ thống tự thử lại ngày 03/12.", or that no automatic try is left. */
+/**
+ * "Hệ thống tự thử lại ngày 03/12.", or that no automatic try is left: only for a refused charge,
+ * never one that waits for its answer.
+ */
 function retrySentence(summary: Pick<BillingSummary, 'nextRetryAt' | 'dueInvoice'>): string {
-  if (summary.dueInvoice === null || summary.dueInvoice.status === 'pending') {
+  if (summary.dueInvoice?.status !== 'failed') {
     return '';
   }
   return summary.nextRetryAt === null
@@ -125,10 +144,17 @@ function retrySentence(summary: Pick<BillingSummary, 'nextRetryAt' | 'dueInvoice
     : `Hệ thống tự thử lại ngày ${formatDayMonth(summary.nextRetryAt)}.`;
 }
 
-/** A payment waits for its answer: a transfer to be confirmed, or a gateway that has not replied. */
+/**
+ * A payment waits for its answer: a transfer to be confirmed, or a gateway that has not replied.
+ * During a trial the trial runs on meanwhile.
+ */
 function pendingBanner(summary: BannerSummary): PlanBannerContent {
   const due = summary.dueInvoice;
   const transfer = due?.method === 'transfer' && due.status === 'pending';
+  const trialRuns =
+    summary.state === 'trialing' && summary.trialEndsAt !== null
+      ? `Bạn dùng thử bình thường tới ${formatDate(summary.trialEndsAt)}.`
+      : null;
   return {
     role: 'status',
     tone: 'warning',
@@ -139,6 +165,7 @@ function pendingBanner(summary: BannerSummary): PlanBannerContent {
         : transfer
           ? `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Thường được xác nhận trong 1 ngày làm việc.`
           : `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Cổng thanh toán chưa trả lời.`,
+      trialRuns,
       graceSentence(summary),
     ]
       .filter((part) => part !== null && part !== '')
@@ -157,12 +184,16 @@ export function planBanner(summary: BannerSummary): PlanBannerContent | null {
     case 'active':
       return null;
     case 'trialing': {
+      if (due !== null && due.method === 'transfer' && due.status === 'pending') {
+        // "Thanh toán ngay" by transfer: the trial runs until the money arrives.
+        return pendingBanner(summary);
+      }
       if (summary.cancelAt !== null) {
         return {
           role: 'status',
           tone: 'info',
           title: `Gói sẽ dừng vào ${stopDay(summary)}.`,
-          body: `Bạn dùng thử bình thường tới hết ngày đó, rồi workspace chuyển sang chỉ đọc. ${DATA_KEPT} Bạn có thể giữ lại gói trước ngày đó.`,
+          body: `Bạn dùng thử bình thường tới ngày đó, rồi workspace chuyển sang chỉ đọc. ${DATA_KEPT} Bạn có thể giữ lại gói trước ngày đó.`,
           action: 'keep',
         };
       }
@@ -221,19 +252,24 @@ export function planBanner(summary: BannerSummary): PlanBannerContent | null {
     }
     case 'past_due': {
       if (due === null) {
-        // The trial ended with a card added too late, or a period no invoice was made for.
+        // The trial or period just ended and the job has not made its invoice yet: it charges the
+        // saved card in a moment, or records why it cannot. Nothing for the owner to do yet.
         return {
-          role: 'alert',
-          tone: 'danger',
-          title: 'Kỳ này chưa được thanh toán.',
-          body: [graceSentence(summary), 'Chọn gói và thanh toán để dùng tiếp.']
+          role: 'status',
+          tone: 'info',
+          title: 'Đang thanh toán kỳ mới.',
+          body: [
+            'Hệ thống đang tạo hóa đơn kỳ mới và thanh toán bằng thẻ đã lưu. Tải lại trang sau ít phút để xem kết quả.',
+            graceSentence(summary),
+          ]
             .filter(Boolean)
             .join(' '),
-          action: 'pay_now',
+          action: null,
         };
       }
-      if (due.status === 'pending') {
-        // A transfer started after the failure: the failure is old news until it is confirmed.
+      if (dueWaiting(due)) {
+        // A transfer started after the failure, or a charge the gateway has not answered: the
+        // failure is old news until it is decided.
         return pendingBanner(summary);
       }
       const reason =
@@ -311,6 +347,18 @@ export function periodLine(
     : `${base} · chưa thể gia hạn tự động`;
 }
 
+/**
+ * Whether "Hủy thay đổi" is offered for a scheduled change: only while the period is paid. Once it
+ * is due, its renewal invoice already charges the scheduled plan (the API says 409 `unpaid`).
+ */
+export function canDropSchedule(summary: Pick<BillingSummary, 'state'>): boolean {
+  return (
+    summary.state === 'active' ||
+    summary.state === 'expiring_soon' ||
+    summary.state === 'cancel_scheduled'
+  );
+}
+
 /** Whether "Hủy gói" is offered: only a plan that runs and is paid for (the API says 409 else). */
 export function canCancelPlan(summary: Pick<BillingSummary, 'state' | 'cancelAt'>): boolean {
   return (
@@ -335,22 +383,19 @@ export function scheduledChangeLine(
 
 /**
  * The strip across every workspace screen while an unpaid period is still inside its grace: the
- * read-only banner covers the time after. The days left need the grace's end, which only the
- * billing summary (`billing.view`) holds: without it the title says nothing of days.
+ * read-only banner covers the time after. The days left are the server's (`graceDaysLeft`), so a
+ * moved test clock or a wrong clock in the browser never changes them; a payment that waits for
+ * its answer reads as waiting, not as failed.
  */
 export function graceNotice(
-  state: SubscriptionState,
-  graceEndsAt: string | null,
-  now: number | null,
+  plan: Pick<WorkspacePlan, 'state' | 'graceDaysLeft' | 'paymentWaiting'>,
 ): { title: string; detail: string } | null {
+  const state = shownState(plan.state, plan.paymentWaiting);
   if (state !== 'past_due' && state !== 'pending_payment') {
     return null;
   }
-  const daysLeft =
-    graceEndsAt === null || now === null
-      ? null
-      : Math.max(1, Math.ceil((new Date(graceEndsAt).getTime() - now) / 86_400_000));
-  const left = daysLeft === null ? '' : ` — còn ${daysLeft} ngày trước khi chỉ đọc`;
+  const left =
+    plan.graceDaysLeft === null ? '' : ` — còn ${plan.graceDaysLeft} ngày trước khi chỉ đọc`;
   return state === 'past_due'
     ? {
         title: `Thanh toán lỗi${left}`,

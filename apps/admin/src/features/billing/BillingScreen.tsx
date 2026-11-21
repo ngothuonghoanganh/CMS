@@ -21,12 +21,15 @@ import { MethodSetupNotice } from './MethodSetupNotice';
 import {
   BANNER_ACTION_LABELS,
   canCancelPlan,
+  canDropSchedule,
   comparisonRows,
+  dueWaiting,
   periodLine,
   type PlanBannerAction,
   planBanner,
   priceLabel,
   scheduledChangeLine,
+  shownState,
   stateChip,
   usageMeters,
 } from './plan-presentation';
@@ -72,7 +75,10 @@ export function BillingScreen({
   // "Đã lưu thẻ" once the card is there, not because the address says so.
   const savedCard = usePaymentMethod(workspaceId, notice === 'saved');
 
-  const chip = stateChip(summary.state, summary.trialDaysLeft);
+  const chip = stateChip(
+    shownState(summary.state, dueWaiting(summary.dueInvoice)),
+    summary.trialDaysLeft,
+  );
   const banner = planBanner(summary);
   const nextPlan =
     summary.scheduledChange === null
@@ -145,7 +151,7 @@ export function BillingScreen({
         ? {
             tone: 'success',
             title: 'Đã lên lịch đổi gói',
-            description: `Gói ${summary.plan.name} giữ nguyên tới hết ${formatDate(next.periodEnd)}.`,
+            description: `Gói ${summary.plan.name} giữ nguyên tới ${formatDate(next.periodEnd)}.`,
           }
         : {
             tone: 'success',
@@ -223,7 +229,7 @@ export function BillingScreen({
         {scheduledLine === null ? null : (
           <div className={styles.scheduled}>
             <span className={styles.scheduledText}>{scheduledLine}</span>
-            {canManage ? (
+            {canManage && canDropSchedule(summary) ? (
               <Button
                 variant="ghost"
                 size="sm"

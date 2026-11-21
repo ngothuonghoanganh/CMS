@@ -15,6 +15,7 @@ import { MethodSetupNotice } from './MethodSetupNotice';
 import { cardLabel, sameCard } from './payment-presentation';
 import { paymentsMessage } from './payment-problem';
 import { PaymentMethodCard } from './PaymentMethodCard';
+import { readOnlyReason } from './plan-presentation';
 import { type PaymentsInitial, useInvoiceDetail, usePaymentsData } from './queries';
 import { TransferInstructions } from './TransferInstructions';
 import { useMethodSetup } from './use-method-setup';
@@ -94,10 +95,22 @@ export function PaymentsScreen({
     : summary.nextRetryAt === null
       ? ' Hệ thống đã hết lượt tự thử lại.'
       : ` Hệ thống tự thử lại ngày ${formatDayMonth(summary.nextRetryAt)}.`;
-  const graceLine =
-    !retrying || summary.graceEndsAt === null || summary.access !== 'full'
-      ? ''
-      : ` Workspace chuyển sang chỉ đọc từ ${formatDate(summary.graceEndsAt)} nếu chưa thanh toán.`;
+  // The shell's banner is not on this board (AppShell): the read-only state is said here.
+  const graceLine = !retrying
+    ? ''
+    : summary.access === 'read_only'
+      ? ' Workspace đang ở chế độ chỉ đọc; thanh toán để mở lại việc chỉnh sửa.'
+      : summary.graceEndsAt === null
+        ? ''
+        : ` Workspace chuyển sang chỉ đọc từ ${formatDate(summary.graceEndsAt)} nếu chưa thanh toán.`;
+  const readOnlyLine =
+    summary.access !== 'read_only' || retrying
+      ? null
+      : `${readOnlyReason(summary.state)} Trang live và form vẫn chạy. ${
+          waiting === null
+            ? 'Chọn gói ở "Gói & mức dùng" để sửa và xuất bản lại.'
+            : 'Workspace mở lại khi chuyển khoản được xác nhận.'
+        }`;
 
   function readAgain() {
     if (invoices.isFetchNextPageError) {
@@ -156,6 +169,11 @@ export function PaymentsScreen({
         </Callout>
       ) : null}
 
+      {readOnlyLine === null ? null : (
+        <Callout tone="danger" role="status" title="Workspace đang ở chế độ chỉ đọc">
+          {readOnlyLine}
+        </Callout>
+      )}
       {failed === null ? null : (
         <Callout
           tone="danger"

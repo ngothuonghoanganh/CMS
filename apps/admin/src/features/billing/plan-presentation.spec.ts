@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   canCancelPlan,
+  canDropSchedule,
   comparisonRows,
+  dueWaiting,
   graceNotice,
   periodLine,
   planBanner,
@@ -10,6 +12,7 @@ import {
   quoteImpacts,
   readOnlyReason,
   scheduledChangeLine,
+  shownState,
   stateChip,
   usageMeters,
 } from './plan-presentation';
@@ -92,6 +95,9 @@ describe('planBanner', () => {
     const trial = planBanner(summaryFixture({ cancelAt: '2026-12-04T03:00:00.000Z' }));
     expect(trial?.title).toBe('Gói sẽ dừng vào 04/12/2026.');
     expect(trial?.action).toBe('keep');
+    // The trial stops at an instant of that day, not at its end.
+    expect(trial?.body).toContain('tới ngày đó');
+    expect(trial?.body).not.toContain('hết ngày');
     const paid = planBanner(
       summaryFixture({ state: 'cancel_scheduled', cancelAt: '2026-12-04T03:00:00.000Z' }),
     );
@@ -131,11 +137,62 @@ describe('planBanner', () => {
     expect(spent?.body).toContain('Hệ thống đã hết lượt tự thử lại.');
   });
 
-  it('sends a trial that ended with a card added late to paying now', () => {
+  it('says a period whose invoice the job has not made yet is being paid, with nothing to do', () => {
+    for (const trialEndsAt of [null, '2026-12-04T03:00:00.000Z']) {
+      const banner = planBanner(
+        summaryFixture({ state: 'past_due', trialEndsAt, graceEndsAt: '2026-12-11T03:00:00.000Z' }),
+      );
+      expect(banner).toMatchObject({
+        role: 'status',
+        tone: 'info',
+        title: 'Đang thanh toán kỳ mới.',
+        action: null,
+      });
+      expect(banner?.body).toContain('chuyển sang chỉ đọc từ 11/12/2026');
+    }
+  });
+
+  it('waits for the gateway after a failure rather than saying it failed with no retry left', () => {
+    const { card: _card, ...open } = invoiceSummaryFixture({
+      status: 'open',
+      paidAt: null,
+      payable: true,
+      lastAttempt: { number: 2, at: '2026-12-03T03:00:00.000Z', outcome: 'unknown', code: null },
+    });
     const banner = planBanner(
-      summaryFixture({ state: 'past_due', graceEndsAt: '2026-12-11T03:00:00.000Z' }),
+      summaryFixture({
+        state: 'past_due',
+        dueInvoice: open,
+        nextRetryAt: null,
+        graceEndsAt: '2026-12-08T03:00:00.000Z',
+      }),
     );
-    expect(banner?.action).toBe('pay_now');
+    expect(banner?.title).toBe('Đang chờ xác nhận thanh toán.');
+    expect(banner?.body).toContain('Cổng thanh toán chưa trả lời.');
+    expect(banner?.body).not.toContain('hết lượt tự thử lại');
+    expect(banner?.action).toBe('view_invoice');
+  });
+
+  it('shows a transfer paying for a plan now during the trial, which runs on meanwhile', () => {
+    const { card: _card, ...transfer } = invoiceSummaryFixture({
+      status: 'pending',
+      method: 'transfer',
+      paidAt: null,
+      payable: true,
+    });
+    const renewal = {
+      at: '2026-12-04T03:00:00.000Z',
+      planId: 'agency' as const,
+      planName: 'Agency',
+      cycle: 'monthly' as const,
+      amount: 599_000,
+      autoRenews: true,
+      blocker: null,
+    };
+    const banner = planBanner(summaryFixture({ dueInvoice: transfer, renewal }));
+    expect(banner?.title).toBe('Đang chờ xác nhận chuyển khoản.');
+    expect(banner?.body).toContain('Bạn dùng thử bình thường tới 04/12/2026.');
+    expect(banner?.action).toBe('view_invoice');
   });
 
   it('waits for a transfer, or for the gateway, and leads to the invoice', () => {
@@ -274,6 +331,33 @@ describe('periodLine', () => {
   });
 });
 
+describe('the state shown', () => {
+  it('reads a failed period whose payment waits for its answer as waiting', () => {
+    expect(shownState('past_due', true)).toBe('pending_payment');
+    expect(shownState('past_due', false)).toBe('past_due');
+    expect(shownState('active', true)).toBe('active');
+    expect(stateChip(shownState('past_due', true), null).label).toBe('Chờ thanh toán');
+  });
+
+  it('waits for a transfer or a gateway that has not answered, never for a refused charge', () => {
+    expect(dueWaiting({ status: 'pending' })).toBe(true);
+    expect(dueWaiting({ status: 'open' })).toBe(true);
+    expect(dueWaiting({ status: 'failed' })).toBe(false);
+    expect(dueWaiting(null)).toBe(false);
+  });
+});
+
+describe('canDropSchedule', () => {
+  it('is only while the period is paid: an unpaid renewal already charges the schedule', () => {
+    for (const state of ['active', 'expiring_soon', 'cancel_scheduled'] as const) {
+      expect(canDropSchedule({ state })).toBe(true);
+    }
+    for (const state of ['past_due', 'pending_payment', 'canceled'] as const) {
+      expect(canDropSchedule({ state })).toBe(false);
+    }
+  });
+});
+
 describe('canCancelPlan', () => {
   it('is for a plan that runs, until its stop is set', () => {
     for (const state of ['trialing', 'active', 'expiring_soon'] as const) {
@@ -310,22 +394,31 @@ describe('scheduledChangeLine', () => {
 });
 
 describe('graceNotice', () => {
-  const now = new Date('2026-12-05T03:00:00.000Z').getTime();
+  const plan = (
+    state: 'past_due' | 'pending_payment' | 'active' | 'trial_expired',
+    graceDaysLeft: number | null,
+    paymentWaiting = false,
+  ) => ({ state, graceDaysLeft, paymentWaiting });
 
-  it('counts the days to the read-only date of an unpaid period', () => {
-    expect(graceNotice('past_due', '2026-12-08T03:00:00.000Z', now)?.title).toBe(
+  it('gives the days to read-only that the server counted', () => {
+    expect(graceNotice(plan('past_due', 3))?.title).toBe(
       'Thanh toán lỗi — còn 3 ngày trước khi chỉ đọc',
     );
-    expect(graceNotice('pending_payment', '2026-12-08T03:00:00.000Z', now)?.title).toBe(
+    expect(graceNotice(plan('pending_payment', 3))?.title).toBe(
       'Đang chờ xác nhận thanh toán — còn 3 ngày trước khi chỉ đọc',
     );
   });
 
-  it('leaves the days out when they are not known, and says nothing for other states', () => {
-    expect(graceNotice('past_due', null, now)?.title).toBe('Thanh toán lỗi');
-    expect(graceNotice('past_due', '2026-12-08T03:00:00.000Z', null)?.title).toBe('Thanh toán lỗi');
-    expect(graceNotice('active', null, now)).toBeNull();
-    expect(graceNotice('trial_expired', null, now)).toBeNull();
+  it('says a failed period whose transfer or charge waits for its answer is waiting', () => {
+    const notice = graceNotice(plan('past_due', 7, true));
+    expect(notice?.title).toBe('Đang chờ xác nhận thanh toán — còn 7 ngày trước khi chỉ đọc');
+    expect(notice?.detail).not.toContain('Thanh toán lại');
+  });
+
+  it('leaves the days out when there are none, and says nothing for other states', () => {
+    expect(graceNotice(plan('past_due', null))?.title).toBe('Thanh toán lỗi');
+    expect(graceNotice(plan('active', null))).toBeNull();
+    expect(graceNotice(plan('trial_expired', null))).toBeNull();
   });
 });
 

@@ -1,11 +1,9 @@
-import { endpoints } from '@plp/contracts';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { workspacePlanFixture } from '../dashboard/test-fixtures';
 import { renderWithProviders } from '../shell/test-utils';
 import { WorkspacePlanProvider } from './plan-context';
-import { summaryFixture } from './test-fixtures';
 import { PlanBanner } from './PlanBanner';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
@@ -56,44 +54,52 @@ describe('PlanBanner (ADR-035)', () => {
   });
 
   describe('during the grace of an unpaid period (T3)', () => {
-    const pastDue = workspacePlanFixture({ state: 'past_due', access: 'full' });
+    const pastDue = workspacePlanFixture({ state: 'past_due', access: 'full', graceDaysLeft: 3 });
 
-    it('counts the days to read-only and leads to board 28', async () => {
-      const graceEndsAt = new Date(Date.now() + 2.5 * 86_400_000).toISOString();
-      apiMock.mockImplementation((endpoint) =>
-        endpoint === endpoints.getBillingSummary
-          ? Promise.resolve(summaryFixture({ state: 'past_due', graceEndsAt }))
-          : Promise.reject(new Error('unexpected call')),
-      );
+    it('gives the days to read-only the server counted, and leads to board 28', () => {
       renderBanner('card', true, pastDue);
 
-      const banner = await screen.findByRole('status');
-      await vi.waitFor(() => {
-        expect(banner).toHaveTextContent('Thanh toán lỗi — còn 3 ngày trước khi chỉ đọc');
-      });
+      const banner = screen.getByRole('status');
+      expect(banner).toHaveTextContent('Thanh toán lỗi — còn 3 ngày trước khi chỉ đọc');
       expect(banner).toHaveTextContent('Trang live và form vẫn chạy.');
       expect(screen.getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
         'href',
         `/workspaces/${WORKSPACE_ID}/billing`,
       );
+      // No second read, and no clock of the browser: the days come with the plan.
+      expect(apiMock).not.toHaveBeenCalled();
     });
 
-    it('waits for a payment to be confirmed, with the same days', async () => {
-      const graceEndsAt = new Date(Date.now() + 5 * 86_400_000).toISOString();
-      apiMock.mockResolvedValue(summaryFixture({ state: 'pending_payment', graceEndsAt }));
-      renderBanner('strip', true, workspacePlanFixture({ state: 'pending_payment' }));
+    it('waits for a payment to be confirmed, with the same days', () => {
+      renderBanner(
+        'strip',
+        true,
+        workspacePlanFixture({ state: 'pending_payment', graceDaysLeft: 5 }),
+      );
 
-      await vi.waitFor(() => {
-        expect(screen.getByRole('status')).toHaveTextContent(
-          'Đang chờ xác nhận thanh toán — còn 5 ngày trước khi chỉ đọc',
-        );
-      });
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Đang chờ xác nhận thanh toán — còn 5 ngày trước khi chỉ đọc',
+      );
     });
 
-    it('does not read the billing summary for a role that cannot, and says who acts', () => {
+    it('says a failed period whose transfer waits is waiting, not failed', () => {
+      renderBanner(
+        'card',
+        false,
+        workspacePlanFixture({ state: 'past_due', graceDaysLeft: 6, paymentWaiting: true }),
+      );
+
+      const banner = screen.getByRole('status');
+      expect(banner).toHaveTextContent(
+        'Đang chờ xác nhận thanh toán — còn 6 ngày trước khi chỉ đọc',
+      );
+      expect(banner).not.toHaveTextContent('Thanh toán lỗi');
+    });
+
+    it('gives the days to every role, and says who acts to one that cannot', () => {
       renderBanner('card', false, pastDue);
 
-      expect(screen.getByRole('status')).toHaveTextContent('Thanh toán lỗi');
+      expect(screen.getByRole('status')).toHaveTextContent('Thanh toán lỗi — còn 3 ngày');
       expect(screen.getByRole('status')).toHaveTextContent('Chủ sở hữu workspace cần xử lý');
       expect(screen.queryByRole('link')).toBeNull();
       expect(apiMock).not.toHaveBeenCalled();

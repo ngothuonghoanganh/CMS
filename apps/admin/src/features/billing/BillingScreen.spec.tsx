@@ -140,7 +140,7 @@ describe('BillingScreen (board 28)', () => {
     expect(screen.getByRole('button', { name: 'Tải lại' })).toBeEnabled();
   });
 
-  it('leads a trial that ended unpaid to paying, also past due with a card on file', () => {
+  it('says a period ended with a card on file is being paid, with nothing to click there', () => {
     renderBilling({
       initial: summaryFixture({
         state: 'past_due',
@@ -150,8 +150,60 @@ describe('BillingScreen (board 28)', () => {
       }),
     });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Kỳ này chưa được thanh toán.');
-    expect(screen.getByRole('button', { name: 'Chọn gói và thanh toán' })).toBeEnabled();
+    expect(screen.getByText('Đang thanh toán kỳ mới.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Chọn gói và thanh toán' })).toBeNull();
+    // "Đổi gói" stays the way to choose and pay.
+    expect(screen.getByRole('button', { name: 'Đổi gói' })).toBeEnabled();
+  });
+
+  it('shows a failed period whose transfer waits as waiting, chip included', () => {
+    renderBilling({
+      initial: summaryFixture({
+        state: 'past_due',
+        trialDaysLeft: null,
+        trialEndsAt: null,
+        graceEndsAt: '2026-12-11T03:00:00.000Z',
+        dueInvoice: {
+          id: '64b0000000000000000000f1',
+          number: 'HD-2026-000001',
+          kind: 'subscription',
+          planId: 'agency',
+          planName: 'Agency',
+          cycle: 'monthly',
+          periodStart: '2026-12-04T03:00:00.000Z',
+          periodEnd: '2027-01-04T03:00:00.000Z',
+          amount: 599_000,
+          method: 'transfer',
+          status: 'pending',
+          createdAt: '2026-12-04T03:00:00.000Z',
+          paidAt: null,
+          payable: true,
+          lastAttempt: null,
+        },
+      }),
+    });
+
+    expect(screen.getByText('Chờ thanh toán')).toBeInTheDocument();
+    expect(screen.queryByText('Quá hạn')).toBeNull();
+    expect(screen.getByText('Đang chờ xác nhận chuyển khoản.')).toBeInTheDocument();
+  });
+
+  it('offers "Hủy thay đổi" only while the period is paid', () => {
+    const scheduled = {
+      trialDaysLeft: null,
+      trialEndsAt: null,
+      scheduledChange: { planId: 'basic' as const, cycle: 'monthly' as const },
+    };
+    const { unmount } = renderBilling({
+      initial: summaryFixture({ ...scheduled, state: 'active' }),
+    });
+    expect(screen.getByRole('button', { name: 'Hủy thay đổi' })).toBeEnabled();
+    unmount();
+
+    renderBilling({ initial: summaryFixture({ ...scheduled, state: 'past_due' }) });
+    expect(screen.getByText(/Chuyển sang Gói Cơ bản/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hủy thay đổi' })).toBeNull();
   });
 
   it('shows a banner of the state, as an alert when work has stopped', () => {

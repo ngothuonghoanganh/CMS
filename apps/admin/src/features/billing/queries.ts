@@ -1,6 +1,7 @@
 'use client';
 
 import { INVOICE_PAGE_SIZE } from './payment-presentation';
+import { dueWaiting } from './plan-presentation';
 import {
   type BillingInfoResponse,
   type BillingSummary,
@@ -47,6 +48,8 @@ export function workspacePlanOf(summary: BillingSummary): WorkspacePlan {
     state: summary.state,
     access: summary.access,
     trialDaysLeft: summary.trialDaysLeft,
+    graceDaysLeft: summary.graceDaysLeft,
+    paymentWaiting: dueWaiting(summary.dueInvoice),
   };
 }
 
@@ -138,18 +141,6 @@ export function useBillingSummary(
     initialDataUpdatedAt: loadedAt,
     refetchOnWindowFocus: true,
   }).data;
-}
-
-/**
- * The summary for a banner on any screen: only read for a viewer who holds `billing.view` and
- * only while `enabled` (a grace period is running), from the cache board 28 fills.
- */
-export function useGraceSummary(workspaceId: string, enabled: boolean) {
-  return useQuery({
-    queryKey: billingQueryKeys.summary(workspaceId),
-    queryFn: ({ signal }) => api(endpoints.getBillingSummary, [workspaceId], { signal }),
-    enabled,
-  });
 }
 
 /** One invoice with its transfer details, read while a transfer waits. */

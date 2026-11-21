@@ -53,6 +53,7 @@ export function summaryFixture(overrides: Partial<BillingSummary> = {}): Billing
     cancelAtPeriodEnd: false,
     scheduledChange: null,
     graceEndsAt: null,
+    graceDaysLeft: null,
     cancelAt: null,
     renewal: null,
     dueInvoice: null,

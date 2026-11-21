@@ -2,11 +2,9 @@
 
 import { Callout } from '@plp/ui';
 import Link from 'next/link';
-import { useClientNow } from '../shell/use-now';
 import { billingHref } from '../shell/navigation';
 import { useWorkspacePlan } from './plan-context';
-import { graceNotice, readOnlyReason } from './plan-presentation';
-import { useGraceSummary } from './queries';
+import { graceNotice, readOnlyReason, shownState } from './plan-presentation';
 import styles from './PlanBanner.module.css';
 
 export interface PlanBannerProps {
@@ -21,22 +19,13 @@ export interface PlanBannerProps {
  * On every workspace screen (the full-screen ones included), one banner at most, by what matters
  * most (ADR-035, T3):
  * - the plan has lapsed: the workspace may be read, live pages and lead forms keep working;
- * - an unpaid period is inside its grace: "Thanh toán lỗi — còn N ngày trước khi chỉ đọc";
+ * - an unpaid period is inside its grace: "Thanh toán lỗi — còn N ngày trước khi chỉ đọc", or
+ *   "Đang chờ xác nhận thanh toán" while its payment waits for an answer;
  * - nothing otherwise.
- * Board 28 says what to do in both.
+ * Board 28 says what to do in both. The days are the server's, for every member (T3).
  */
 export function PlanBanner({ variant = 'card' }: PlanBannerProps) {
   const frame = useWorkspacePlan();
-  const state = frame?.plan.state;
-  const inGrace =
-    frame !== null &&
-    frame.plan.access === 'full' &&
-    (state === 'past_due' || state === 'pending_payment');
-  const mayReadSummary = inGrace && frame.canViewBilling;
-  // The grace's end is in the billing summary, which only `billing.view` reads; other roles get
-  // the banner without the days.
-  const summary = useGraceSummary(frame?.workspaceId ?? '', mayReadSummary);
-  const now = useClientNow();
   if (frame === null) {
     return null;
   }
@@ -65,13 +54,17 @@ export function PlanBanner({ variant = 'card' }: PlanBannerProps) {
     return variant === 'strip' ? callout : <div className={styles.banner}>{callout}</div>;
   }
 
-  const notice = graceNotice(frame.plan.state, summary.data?.graceEndsAt ?? null, now);
-  if (!inGrace || notice === null) {
+  const notice = graceNotice(frame.plan);
+  if (notice === null) {
     return null;
   }
   const callout = (
     <Callout
-      tone={frame.plan.state === 'past_due' ? 'danger' : 'warning'}
+      tone={
+        shownState(frame.plan.state, frame.plan.paymentWaiting) === 'past_due'
+          ? 'danger'
+          : 'warning'
+      }
       role="status"
       variant={variant === 'strip' ? 'banner' : 'panel'}
       title={notice.title}

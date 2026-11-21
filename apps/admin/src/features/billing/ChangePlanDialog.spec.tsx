@@ -381,7 +381,7 @@ describe('"Đổi gói" once the trial ended unpaid with a card on file (past du
       }),
     });
 
-    await user.click(screen.getByRole('button', { name: 'Chọn gói và thanh toán' }));
+    await user.click(screen.getByRole('button', { name: 'Đổi gói' }));
     const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
     expect(dialog).toHaveAccessibleDescription(/Thời gian dùng thử đã hết/);
     expect(within(dialog).queryByRole('button', { name: 'Đổi miễn phí' })).toBeNull();

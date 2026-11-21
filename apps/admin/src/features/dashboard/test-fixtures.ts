@@ -46,6 +46,8 @@ export function workspacePlanFixture(overrides: Partial<WorkspacePlan> = {}): Wo
     state: 'active',
     access: 'full',
     trialDaysLeft: null,
+    graceDaysLeft: null,
+    paymentWaiting: false,
     ...overrides,
   };
 }

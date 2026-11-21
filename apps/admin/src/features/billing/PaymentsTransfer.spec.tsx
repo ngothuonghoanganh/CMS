@@ -122,6 +122,50 @@ describe('the failed payment banner (board 29)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Hệ thống đã hết lượt tự thử lại.');
   });
 
+  it('says the workspace is read-only once the grace is over, since the shell does not here', () => {
+    renderPayments({
+      initial: {
+        summary: summaryFixture({
+          state: 'past_due',
+          access: 'read_only',
+          dueInvoice: dueOf,
+          failedSince: '2026-12-01T03:00:00.000Z',
+          nextRetryAt: null,
+          graceEndsAt: '2026-12-08T03:00:00.000Z',
+        }),
+        paymentMethod: { paymentMethod: visaCard, paymentsEnabled: true },
+        billingInfo: { billingInfo: null },
+        invoices: { items: [failed], nextCursor: null },
+        loadedAt: Date.now(),
+      },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Workspace đang ở chế độ chỉ đọc; thanh toán để mở lại việc chỉnh sửa.',
+    );
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('says why a stopped plan is read-only, with no invoice to pay', () => {
+    renderPayments(
+      {
+        initial: {
+          summary: summaryFixture({ state: 'trial_expired', access: 'read_only' }),
+          paymentMethod: { paymentMethod: null, paymentsEnabled: true },
+          billingInfo: { billingInfo: null },
+          invoices: { items: [], nextCursor: null },
+          loadedAt: Date.now(),
+        },
+      },
+      [],
+    );
+
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
+    expect(notice).toHaveTextContent('Thời gian dùng thử đã hết.');
+    expect(notice).toHaveTextContent('Chọn gói ở "Gói & mức dùng"');
+  });
+
   it('asks for the bank details, and shows them with the invoice as awaiting', async () => {
     const user = userEvent.setup();
     let started = false;
