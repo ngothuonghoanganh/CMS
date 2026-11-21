@@ -34,6 +34,12 @@ export interface TestApp {
 
 export interface TestAppOptions {
   env?: Partial<EnvInput>;
+  /**
+   * Starts on this database, another test app's (`t.env.MONGODB_URI`), instead of a database of
+   * its own: the API started again with other settings, e.g. another catalog file. `close` then
+   * leaves the database to that app.
+   */
+  database?: string;
   /** Replace providers, e.g. the revalidation client: `builder.overrideProvider(X).useValue(y)`. */
   override?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
   /** Send through `SMTP_URL` (Mailpit) instead of recording. */
@@ -52,7 +58,7 @@ export async function createTestApp(
   prefix: string,
   options: TestAppOptions = {},
 ): Promise<TestApp> {
-  const mongoUri = isolatedMongoUri(prefix);
+  const mongoUri = options.database ?? isolatedMongoUri(prefix);
   const env = parseEnv(testEnvInput({ ...options.env, MONGODB_URI: mongoUri }));
   const emails = new RecordingEmailSender();
   const dns = new FakeDomainDns();
@@ -96,7 +102,9 @@ export async function createTestApp(
     tls,
     async close() {
       await app.close();
-      await dropDatabase(mongoUri);
+      if (options.database === undefined) {
+        await dropDatabase(mongoUri);
+      }
       emails.checkContract();
     },
   };
