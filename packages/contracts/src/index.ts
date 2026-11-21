@@ -25,6 +25,7 @@ export * from './contact-profile.js';
 export * from './opportunities.js';
 export * from './automations.js';
 export * from './lead-recipients.js';
+export * from './marketplace.js';
 export * from './members.js';
 export * from './motion.js';
 export * from './membership.js';
