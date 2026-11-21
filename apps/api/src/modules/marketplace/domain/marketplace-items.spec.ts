@@ -191,7 +191,7 @@ describe('board 32', () => {
   it('shows a licence behind its item with the notes of every newer version', () => {
     const twice = itemOf(TWO_VERSIONS_ITEM_ID);
     const v1 = itemVersionOf(twice, 1);
-    expect(ownedItemOf(twice, LICENCE)).toEqual({
+    expect(ownedItemOf(twice, LICENCE, 3)).toEqual({
       itemId: TWO_VERSIONS_ITEM_ID,
       name: 'Mẫu có hai phiên bản',
       source: 'purchase',
@@ -203,26 +203,29 @@ describe('board 32', () => {
       hasForm: true,
       // The thumbnail is the licence's version, which new pages are made from.
       sections: v1 === undefined ? [] : compositionOutline(v1.composition),
+      // "3 trang đã tạo từ mẫu này không đổi", counted by the caller.
+      usedCount: 3,
     });
-    expect(ownedItemOf(twice, LICENCE).sections[1]?.label).not.toContain(V2_HEADING);
+    expect(ownedItemOf(twice, LICENCE, 0).sections[1]?.label).not.toContain(V2_HEADING);
   });
 
   it('has nothing new at the latest version, and says when the item is withdrawn', () => {
     const free = { ...LICENCE, source: 'free' as const };
-    expect(ownedItemOf(itemOf(TWO_VERSIONS_ITEM_ID), { ...free, version: 2 })).toMatchObject({
+    expect(ownedItemOf(itemOf(TWO_VERSIONS_ITEM_ID), { ...free, version: 2 }, 0)).toMatchObject({
       source: 'free',
       version: 2,
       latestVersion: 2,
       newVersions: [],
+      usedCount: 0,
     });
-    expect(ownedItemOf(itemOf(WITHDRAWN_ITEM_ID), LICENCE)).toMatchObject({
+    expect(ownedItemOf(itemOf(WITHDRAWN_ITEM_ID), LICENCE, 0)).toMatchObject({
       withdrawn: true,
       newVersions: [],
     });
   });
 
   it('refuses a licence of a version the item never released: the startup check prevents it', () => {
-    expect(() => ownedItemOf(itemOf(TWO_VERSIONS_ITEM_ID), { ...LICENCE, version: 3 })).toThrow(
+    expect(() => ownedItemOf(itemOf(TWO_VERSIONS_ITEM_ID), { ...LICENCE, version: 3 }, 0)).toThrow(
       /has no v3/,
     );
   });

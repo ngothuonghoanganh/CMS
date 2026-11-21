@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { type Composition, MAX_PAGES_PER_SITE, type PageGoal, type Seo } from '@plp/contracts';
+import {
+  type Composition,
+  MAX_PAGES_PER_SITE,
+  type PageGoal,
+  type Seo,
+  type TemplateSource,
+} from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { AppError } from '../../shared/errors.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
@@ -243,12 +249,14 @@ export class PagesRepository {
   }
 
   /**
-   * "ĐÃ TẠO" of board 19: pages made from each of the workspace templates given, any version, in
-   * the sites given (null: every site), keyed by template id hex, in one aggregation on the index.
-   * Templates without pages are absent.
+   * Pages made from each of the templates of one source given, any version, in the sites given
+   * (null: every site), keyed by template id, in one aggregation on the index: "ĐÃ TẠO" of board
+   * 19 for the workspace templates, "N trang đã tạo từ mẫu này" of board 32 for the marketplace
+   * items held (ADR-036). Templates without pages are absent.
    */
-  async countCreatedFromWorkspaceTemplates(
+  async countCreatedFromEach(
     scope: WorkspaceScope,
+    source: TemplateSource,
     templateIds: readonly string[],
     siteIds: readonly ObjectId[] | null,
   ): Promise<Map<string, number>> {
@@ -261,7 +269,7 @@ export class PagesRepository {
           $match: {
             workspaceId: scope.workspaceId,
             'createdFrom.templateId': { $in: [...templateIds] },
-            'createdFrom.source': 'workspace',
+            'createdFrom.source': source,
             ...(siteIds === null ? {} : { siteId: { $in: [...siteIds] } }),
           },
         },

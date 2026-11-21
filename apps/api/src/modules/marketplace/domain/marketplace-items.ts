@@ -148,12 +148,14 @@ export function marketplaceDetail(
 
 /**
  * A row of board 32: the item at its licence's version, with the notes of every version released
- * after it ("CÓ BẢN vM", the update dialog). The licence must name a version of the item, as the
- * startup check makes sure.
+ * after it ("CÓ BẢN vM", the update dialog) and the pages made from it in the member's sites
+ * (`usedCount`, "N trang đã tạo từ mẫu này không đổi"). The licence must name a version of the
+ * item, as the startup check makes sure.
  */
 export function ownedItemOf(
   item: MarketplaceItem,
   licence: MarketplaceLicence,
+  usedCount: number,
 ): MarketplaceOwnedItem {
   const held = itemVersionOf(item, licence.version);
   if (held === undefined) {
@@ -174,5 +176,6 @@ export function ownedItemOf(
     withdrawn: item.status === 'withdrawn',
     hasForm: compositionHasForm(held.composition),
     sections: compositionOutline(held.composition),
+    usedCount,
   };
 }

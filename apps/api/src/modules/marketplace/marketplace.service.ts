@@ -11,6 +11,7 @@ import type {
 import { notFound } from '../../shared/errors.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { PagesRepository } from '../pages/pages.repository.js';
 import { TEMPLATE_NOT_FOUND } from '../templates/template-catalog.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
@@ -38,6 +39,7 @@ export class MarketplaceService {
     private readonly access: AccessService,
     private readonly workspaces: WorkspacesRepository,
     private readonly users: UsersRepository,
+    private readonly pages: PagesRepository,
   ) {}
 
   async list(user: AuthenticatedUser, workspaceId: string): Promise<MarketplaceListResponse> {
@@ -105,14 +107,26 @@ export class MarketplaceService {
     }
   }
 
-  /** Board 32: every licence of the workspace, withdrawn items included, the newest first. */
+  /**
+   * Board 32: every licence of the workspace, withdrawn items included, the newest first, with the
+   * pages made from each in the member's sites, counted as "Đã dùng" of board 18: one aggregation
+   * on the pages' `createdFrom` index for every row.
+   */
   async licenceList(
     user: AuthenticatedUser,
     workspaceId: string,
   ): Promise<MarketplaceLicenceListResponse> {
     const scope = await this.scope(user, workspaceId, 'pages.view');
     const held = await this.licences.heldItems(scope);
-    return { items: held.map(({ item, licence }) => ownedItemOf(item, licence)) };
+    const used = await this.pages.countCreatedFromEach(
+      scope,
+      'marketplace',
+      held.map(({ item }) => item.id),
+      scope.siteIds,
+    );
+    return {
+      items: held.map(({ item, licence }) => ownedItemOf(item, licence, used.get(item.id) ?? 0)),
+    };
   }
 
   /**
