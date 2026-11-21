@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { templateQueryKeys } from '../templates/queries';
 import { licenceFixture, ownedItemFixture } from './test-fixtures';
 import { OwnedItemsScreen } from './OwnedItemsScreen';
 
@@ -166,6 +167,21 @@ describe('OwnedItemsScreen (board 32)', () => {
         ([endpoint]) => endpoint === endpoints.updateMarketplaceLicenceVersion,
       ),
     ).toHaveLength(1);
+  });
+
+  it('has the library and the editor read the item again at its new version', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValueOnce(licenceFixture({ version: 2 }));
+    const { queryClient } = renderScreen();
+    queryClient.setQueryData(templateQueryKeys.all(WORKSPACE_ID), { items: [] });
+    await user.click(screen.getByRole('button', { name: 'Cập nhật Khai trương phòng tập' }));
+    await user.click(screen.getByRole('button', { name: 'Cập nhật mẫu' }));
+    await vi.waitFor(() => {
+      expect(router.refresh).toHaveBeenCalled();
+    });
+    expect(queryClient.getQueryState(templateQueryKeys.all(WORKSPACE_ID))?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it('leaves the licence alone on "Để sau"', async () => {

@@ -17,6 +17,7 @@ import {
   EmptyState,
   StoreIcon,
 } from '@plp/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -24,6 +25,7 @@ import { formatDate } from '../../lib/format';
 import { marketplaceHref, marketplaceItemHref, templateHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
 import { CreateFromTemplateDialog } from '../templates/CreateFromTemplateDialog';
+import { templateQueryKeys } from '../templates/queries';
 import { TemplateThumb } from '../templates/TemplateThumb';
 import { dialogTemplateOf, hasUpdate, licenceSourceLabel } from './owned-items';
 import { UpdateLicenceDialog } from './UpdateLicenceDialog';
@@ -53,6 +55,7 @@ export function OwnedItemsScreen({
   initialSiteId,
 }: OwnedItemsScreenProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const canUpdate = can(role, 'templates.manage');
   const targets = can(role, 'pages.edit') ? sites : [];
   // `opening` counts the openings: each one is a new dialog, with no failure from an earlier one.
@@ -67,6 +70,15 @@ export function OwnedItemsScreen({
   // Looked up on every render: after a refresh the dialogs show the row as it is now.
   const updatingItem = items.find((item) => item.itemId === updating?.itemId);
   const creatingItem = items.find((item) => item.itemId === creating?.itemId);
+  /**
+   * The licence moved: this list, and the library and the editor's "Áp dụng mẫu…" that offer the
+   * item at the licence's version, which would otherwise send the old one (409 template_changed).
+   */
+  function readAgain(): void {
+    void queryClient.invalidateQueries({ queryKey: templateQueryKeys.all(workspace.id) });
+    router.refresh();
+  }
+
   const siteId = targets.some((site) => site.id === initialSiteId)
     ? initialSiteId
     : (targets[0]?.id ?? null);
@@ -210,13 +222,13 @@ export function OwnedItemsScreen({
           }}
           onUpdated={() => {
             setNotice(null);
-            router.refresh();
+            readAgain();
           }}
           onChangedMeanwhile={() => {
             setNotice(
               `Mẫu “${updatingItem.name}” vừa được cập nhật ở nơi khác. Đã tải lại danh sách.`,
             );
-            router.refresh();
+            readAgain();
           }}
         />
       ) : null}
