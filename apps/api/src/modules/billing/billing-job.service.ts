@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   cardValidAt,
+  type PaymentMethod,
   type PlanCatalog,
   type SubscriptionFacts,
   subscriptionStatusOf,
@@ -8,6 +9,7 @@ import {
 } from '@plp/contracts';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
+import { BillingClock } from './billing-clock.js';
 import { BillingNotifier, type NoticeOutcome } from './billing-notifier.service.js';
 import { BillingSchedule, type BillingTimeline } from './billing-schedule.service.js';
 import {
@@ -26,7 +28,11 @@ import {
   renewalBlockerOf,
   renewalTermsOf,
 } from './domain/renewal.js';
-import { type ChargeAttempt, InvoiceCharges } from './invoice-charges.service.js';
+import {
+  CHARGE_TIMEOUT_MS,
+  type ChargeAttempt,
+  InvoiceCharges,
+} from './invoice-charges.service.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
@@ -38,20 +44,24 @@ export const JOB_HOLD_MS = 2 * 60_000;
 /** When a step that could not finish (an email, a blocked charge) is tried again. */
 export const JOB_RETRY_MS = 15 * 60_000;
 
+/** What a charge needs of the hold beyond the gateway's answer: recording its outcome. */
+const CHARGE_RECORD_MS = 15_000;
+
 /**
  * The billing job (ADR-035, T3): one run for one subscription whose `nextActionAt` is due. It
  * claims the subscription (`lockedUntil`, so only one instance acts and no charge of the owner
  * runs meanwhile), then in order:
  *
  * 1. asks the gateway again, with the same key, about charges whose outcome is unknown; one whose
- *    purpose is over and still unknown is voided, never charged again;
+ *    purpose is over is voided without asking, never charged again;
  * 2. at the end of the trial or period, makes the invoice of the next period (a scheduled change
  *    applied) and charges the saved card, or records why it could not;
  * 3. makes the latest retry due of a refused charge;
  * 4. sends the emails that are due: the trial's reminder, "Sắp hết hạn", read-only;
  *
  * and lets go with the next `nextActionAt`. Every step reads the facts again and does only what is
- * still due, so a run that stopped half way, or one that runs late, is safe to run again.
+ * still due, so a run that stopped half way, or one that runs late, is safe to run again. A charge
+ * starts only while the hold lasts long enough for its answer to be recorded.
  */
 @Injectable()
 export class BillingJob {
@@ -59,6 +69,7 @@ export class BillingJob {
 
   constructor(
     @InjectPlanCatalog() private readonly catalog: PlanCatalog,
+    private readonly clock: BillingClock,
     private readonly subscriptions: SubscriptionsRepository,
     private readonly invoices: InvoicesRepository,
     private readonly charges: InvoiceCharges,
@@ -90,7 +101,11 @@ export class BillingJob {
     return true;
   }
 
-  /** Charges whose outcome is unknown, asked again when their time came (`settleAtOf`). */
+  /**
+   * Charges whose outcome is unknown, asked again when their time came (`settleAtOf`). One whose
+   * purpose is over is voided without asking: a charge that never reached the gateway would be
+   * made by the question, for what no longer applies.
+   */
   private async settleUndecided(ref: WorkspaceRef, run: JobRun, until: Date): Promise<void> {
     const { facts, due, undecided } = await this.schedule.timelineOf(ref);
     const open = [...(due?.status === 'open' ? [due] : []), ...undecided];
@@ -98,10 +113,7 @@ export class BillingJob {
       if (settleAtOf(invoice).getTime() > run.at.getTime()) {
         continue;
       }
-      const lapsed = this.lapsed(invoice, facts, run.at);
-      if (invoice.attempts.length === 0 && lapsed) {
-        // Its charge was never recorded, so asking with its key could charge it now, for what no
-        // longer applies: it is voided instead.
+      if (this.lapsed(invoice, facts, run.at)) {
         await this.voidUndecided(ref, invoice, run, 'what it paid for no longer applies');
         continue;
       }
@@ -111,13 +123,29 @@ export class BillingJob {
         continue;
       }
       // The same key: the gateway answers the first charge again and never charges twice.
-      const attempt = await this.charges.chargeForJob(ref, invoice, method, until);
-      if (attempt.outcome === 'unknown' && lapsed) {
-        await this.voidUndecided(ref, attempt.invoice, run, 'the gateway still cannot tell');
-      } else {
+      const attempt = await this.chargeHeld(ref, invoice, method, run, until);
+      if (attempt !== null) {
         await this.afterAttempt(ref, attempt);
       }
     }
+  }
+
+  /**
+   * A charge of the run, only while its hold lasts until the answer is recorded; null, and the run
+   * comes again, when it would not: the owner's charge or another instance may start once it ends.
+   */
+  private async chargeHeld(
+    ref: WorkspaceRef,
+    invoice: InvoiceRecord,
+    method: PaymentMethod,
+    run: JobRun,
+    until: Date,
+  ): Promise<ChargeAttempt | null> {
+    if (this.clock.now().getTime() + CHARGE_TIMEOUT_MS + CHARGE_RECORD_MS > until.getTime()) {
+      run.again();
+      return null;
+    }
+    return this.charges.chargeForJob(ref, invoice, method, until);
   }
 
   /**
@@ -255,12 +283,14 @@ export class BillingJob {
     const method = facts.paymentMethod;
     const attempt =
       method !== null && cardValidAt(method, run.at)
-        ? await this.charges.chargeForJob(ref, invoice, method, until)
+        ? await this.chargeHeld(ref, invoice, method, run, until)
         : await this.charges.recordUncharged(
             invoice,
             method === null ? 'no_payment_method' : 'expired_card',
           );
-    await this.afterAttempt(ref, attempt);
+    if (attempt !== null) {
+      await this.afterAttempt(ref, attempt);
+    }
   }
 
   /**

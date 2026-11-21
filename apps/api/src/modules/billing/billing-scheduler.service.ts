@@ -83,10 +83,11 @@ export class BillingScheduler implements OnApplicationBootstrap, OnModuleDestroy
     let handled = 0;
     for (let round = 0; round < ROUNDS_MAX && !this.closed; round += 1) {
       const seq = await this.wakeups.seq();
-      const at = this.clock.now();
-      const due = await this.subscriptions.dueIds(at, DUE_BATCH);
+      const due = await this.subscriptions.dueIds(this.clock.now(), DUE_BATCH);
       for (const workspaceId of due) {
-        if (await this.job.runFor({ workspaceId }, at)) {
+        // Each run reads the time it starts at: the runs before it may have waited for the gateway
+        // for minutes, and its hold must count from now.
+        if (await this.job.runFor({ workspaceId }, this.clock.now())) {
           handled += 1;
         }
       }
