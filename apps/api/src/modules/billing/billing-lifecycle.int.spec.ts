@@ -7,11 +7,13 @@ import {
   problemSchema,
   workspacePlanSchema,
 } from '@plp/contracts';
+import { Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createSecondInstance } from '../../../test/instances.js';
+import { uniqueSubdomain } from '../../../test/resources.js';
 import {
   addCard,
   CARD_DECLINED,
@@ -179,6 +181,44 @@ describe('the life of a plan (ADR-035, T3)', () => {
         expect.objectContaining({ reason: 'Thời gian dùng thử đã hết.' }),
       ]);
       expect(await subscriptionOf(workspaceId)).toMatchObject({ nextActionAt: null });
+    });
+
+    it('stays read-only when a card is saved after it ended without one, until paid now', async () => {
+      const { owner, workspaceId, trialEnd } = await trialing();
+      await runAt(after(trialEnd, 1));
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      await addCard(t, owner, workspaceId, CARD_OK);
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ cardAfterTrial: true });
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'trial_expired',
+        access: 'read_only',
+        graceEndsAt: null,
+        dueInvoice: null,
+      });
+      const refused = await owner
+        .post(`/workspaces/${workspaceId}/sites`, { name: 'Smile', subdomain: uniqueSubdomain() })
+        .expect(402);
+      expect(problemSchema.parse(refused.body).code).toBe('workspace_read_only');
+      // The card is not charged for the trial's end, whenever the job runs.
+      await scheduler.runDue();
+      await runAt(after(trialEnd, 3));
+      expect(charge).not.toHaveBeenCalled();
+      expect((await invoicesOf(owner, workspaceId)).items).toEqual([]);
+
+      await owner
+        .post(endpoints.changePlan.path(workspaceId), {
+          planId: 'agency',
+          cycle: 'monthly',
+          payNow: true,
+          expectedAmount: 599_000,
+        })
+        .expect(200);
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'active',
+        access: 'full',
+        trialEndsAt: null,
+      });
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ cardAfterTrial: false });
     });
 
     it('charges the saved card at its end for the plan chosen, from its end', async () => {
@@ -516,6 +556,87 @@ describe('the life of a plan (ADR-035, T3)', () => {
       expect((await logOf(workspaceId)).at(-1)).toBe('plan_restarted');
     });
 
+    it('renews the next period at once when its renewal is paid after that period ended too', async () => {
+      const { owner, workspaceId, periodEnd } = await paying();
+      await addCard(t, owner, workspaceId, CARD_DECLINED);
+      await runAt(periodEnd);
+      await runAt(after(periodEnd, 9));
+      const { dueInvoice } = await summaryOf(owner, workspaceId);
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ nextActionAt: null });
+
+      // Paid 45 days late: the period it pays, from the old end, is over by then.
+      const nextEnd = periodEndOf(periodEnd, 'monthly');
+      clock.set(after(periodEnd, 45));
+      await addCard(t, owner, workspaceId, CARD_OK);
+      await payInvoice(owner, workspaceId, dueInvoice?.id ?? '').expect(200);
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        periodStart: periodEnd.toISOString(),
+        periodEnd: nextEnd.toISOString(),
+        access: 'read_only',
+      });
+      // The job is due at once for the period after it, instead of never again.
+      const due = await storedTime(workspaceId, 'nextActionAt');
+      expect(due.getTime()).toBeLessThanOrEqual(clock.now().getTime());
+
+      expect(await scheduler.runDue()).toBe(1);
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'active',
+        access: 'full',
+        periodStart: nextEnd.toISOString(),
+        periodEnd: periodEndOf(nextEnd, 'monthly').toISOString(),
+        dueInvoice: null,
+      });
+      const renewals = (await invoicesOf(owner, workspaceId)).items.filter(
+        (item) => item.status === 'paid',
+      );
+      expect(renewals.map((item) => item.periodStart)).toEqual(
+        expect.arrayContaining([periodEnd.toISOString(), nextEnd.toISOString()]),
+      );
+      expect(await subscriptionOf(workspaceId)).toMatchObject({
+        nextActionAt: periodEndOf(nextEnd, 'monthly'),
+      });
+    });
+
+    it('keeps a downgrade scheduled for its end once the renewal charges it, unpaid', async () => {
+      const { owner, workspaceId, periodEnd, trialEnd } = await paying();
+      clock.set(after(trialEnd, 10));
+      await owner
+        .post(endpoints.changePlan.path(workspaceId), { planId: 'basic', cycle: 'monthly' })
+        .expect(200);
+      await addCard(t, owner, workspaceId, CARD_DECLINED);
+      await runAt(periodEnd);
+      const unpaid = await summaryOf(owner, workspaceId);
+      expect(unpaid).toMatchObject({
+        state: 'past_due',
+        dueInvoice: { planId: 'basic', amount: 199_000 },
+      });
+
+      const refused = await owner
+        .delete(endpoints.cancelScheduledChange.path(workspaceId))
+        .expect(409);
+      expect(problemSchema.parse(refused.body)).toMatchObject({
+        code: 'plan_change_unavailable',
+        context: { reason: 'unpaid' },
+      });
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        scheduledChange: { planId: 'basic', cycle: 'monthly' },
+      });
+      expect(await logOf(workspaceId)).not.toContain('scheduled_change_canceled');
+
+      // Paying the renewal applies the plan it charged, as the log says.
+      await addCard(t, owner, workspaceId, CARD_OK);
+      await payInvoice(owner, workspaceId, unpaid.dueInvoice?.id ?? '').expect(200);
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'active',
+        plan: { id: 'basic' },
+        scheduledChange: null,
+      });
+      expect((await logOf(workspaceId)).slice(-2)).toEqual([
+        'period_renewed',
+        'scheduled_change_applied',
+      ]);
+    });
+
     it('cannot be canceled while its renewal is unpaid', async () => {
       const { owner, workspaceId } = await paying(CARD_DECLINED);
       const refused = await owner.post(endpoints.cancelPlan.path(workspaceId)).expect(409);
@@ -552,7 +673,7 @@ describe('the life of a plan (ADR-035, T3)', () => {
       });
     });
 
-    it('voids a plan change still unknown once its period ended, so it never charges twice', async () => {
+    it('voids a plan change still unknown once its period ended, without asking with its key', async () => {
       const { owner, workspaceId, periodEnd, trialEnd } = await paying();
       clock.set(after(trialEnd, 18, MINUTE_MS));
       const charge = vi
@@ -567,36 +688,59 @@ describe('the life of a plan (ADR-035, T3)', () => {
         .expect(503);
       const invoiceId = String(problemSchema.parse(unknown.body).context?.['invoiceId']);
 
-      // Still unknown when asked at the period's end: voided, and the renewal goes on.
+      // First asked about at the period's end, when the upgrade no longer applies: a question with
+      // its key could make the charge now, if the first never reached the gateway. It is voided
+      // without one, logged for a check at the gateway, and the renewal goes on.
       charge.mockRestore();
-      const stillUnknown = vi
+      const later = vi
         .spyOn(fakeGateway(t), 'charge')
         .mockImplementation((request) =>
           request.idempotencyKey.startsWith(invoiceId)
             ? Promise.reject(new Error('socket hang up'))
             : Promise.resolve({ status: 'succeeded' }),
         );
+      const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       await runAt(periodEnd);
       const upgrade = invoiceSchema.parse(
         (await owner.get(endpoints.getInvoice.path(workspaceId, invoiceId)).expect(200)).body,
       );
       expect(upgrade).toMatchObject({ status: 'void', payable: false });
       expect(
-        stillUnknown.mock.calls.filter(([request]) => request.idempotencyKey === `${invoiceId}-1`)
-          .length,
-      ).toBeGreaterThanOrEqual(1);
-      expect(
-        stillUnknown.mock.calls.every(
-          ([request]) =>
-            !request.idempotencyKey.startsWith(invoiceId) ||
-            request.idempotencyKey === `${invoiceId}-1`,
-        ),
-      ).toBe(true);
+        later.mock.calls.filter(([request]) => request.idempotencyKey.startsWith(invoiceId)),
+      ).toEqual([]);
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ invoiceId }),
+        expect.stringContaining('refund it outside the system'),
+      );
       expect(await summaryOf(owner, workspaceId)).toMatchObject({
         state: 'active',
         plan: { id: 'agency' },
         periodStart: periodEnd.toISOString(),
       });
+    });
+  });
+
+  describe('one round of the job', () => {
+    it('holds each subscription from when its own run starts, however long the runs before took', async () => {
+      const first = await paying();
+      const second = await paying();
+      const due = new Date(Math.max(first.periodEnd.getTime(), second.periodEnd.getTime()));
+      const held: boolean[] = [];
+      vi.spyOn(fakeGateway(t), 'charge').mockImplementation(async (request) => {
+        const invoice = await t.connection
+          .collection('invoices')
+          .findOne({ _id: new Types.ObjectId(request.reference) });
+        const subscription = await t.connection
+          .collection('subscriptions')
+          .findOne({ _id: invoice?.['workspaceId'] as Types.ObjectId });
+        const lockedUntil: unknown = subscription?.['lockedUntil'];
+        held.push(lockedUntil instanceof Date && lockedUntil > clock.now());
+        // A gateway that takes 3 minutes to answer the first charge of the round.
+        clock.set(new Date(clock.now().getTime() + 3 * MINUTE_MS));
+        return { status: 'succeeded' };
+      });
+      expect(await runAt(due)).toBe(2);
+      expect(held).toEqual([true, true]);
     });
   });
 

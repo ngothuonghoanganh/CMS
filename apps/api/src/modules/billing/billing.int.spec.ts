@@ -214,6 +214,8 @@ describe('plans and billing (ADR-035)', () => {
         state: 'trialing',
         access: 'full',
         trialDaysLeft: 14,
+        graceDaysLeft: null,
+        paymentWaiting: false,
       });
       const refused = await viewer.get(`/workspaces/${workspaceId}/billing`).expect(403);
       expect(problemSchema.parse(refused.body).title).toBe(

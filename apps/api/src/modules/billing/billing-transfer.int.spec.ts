@@ -7,7 +7,9 @@ import {
   invoiceSchema,
   problemSchema,
   startTransferResponseSchema,
+  workspacePlanSchema,
 } from '@plp/contracts';
+import { Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -165,6 +167,13 @@ describe('paying by bank transfer (ADR-035, T3)', () => {
       dueInvoice: { id: due, status: 'pending', method: 'transfer' },
     });
     expect((await logOf(workspaceId)).at(-1)).toBe('transfer_started');
+    // Every member's banner says the payment waits, with the days by the server's clock.
+    clock.set(after(await storedTime(workspaceId, 'failedSince'), 1));
+    expect(
+      workspacePlanSchema.parse(
+        (await owner.get(endpoints.getWorkspacePlan.path(workspaceId)).expect(200)).body,
+      ),
+    ).toMatchObject({ state: 'past_due', access: 'full', paymentWaiting: true, graceDaysLeft: 6 });
 
     const charge = vi.spyOn(fakeGateway(t), 'charge');
     const failedSince = await storedTime(workspaceId, 'failedSince');
@@ -246,6 +255,73 @@ describe('paying by bank transfer (ADR-035, T3)', () => {
       .send({ session })
       .expect(409);
     await server.get('/public/billing/fake-gateway/transfer?session=forged').expect(400);
+  });
+
+  it('logs a card payment made while a transfer paid the invoice, for a refund', async () => {
+    const { owner, workspaceId, email, due } = await refused();
+    const invoice = await transferOf(owner, workspaceId, due);
+    await addCard(t, owner, workspaceId, CARD_OK);
+    const gateway = fakeGateway(t);
+    const charge = gateway.charge.bind(gateway);
+    // The transfer arrives while the gateway answers the card: both take the money.
+    vi.spyOn(gateway, 'charge').mockImplementation(async (request) => {
+      await postGatewayEvent(t, received(invoice)).expect(200);
+      return charge(request);
+    });
+    const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await payInvoice(owner, workspaceId, due).expect(200);
+    const paid = invoiceSchema.parse(
+      (await owner.get(endpoints.getInvoice.path(workspaceId, due)).expect(200)).body,
+    );
+    expect(paid).toMatchObject({ status: 'paid', method: 'transfer' });
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({ invoiceId: due }),
+      'A charge succeeded on an invoice decided before: refund it outside the system',
+    );
+    // One receipt: the transfer's.
+    expect(
+      t.emails.sent.filter(
+        (sent) => sent.template === 'billing-receipt' && sent.to.includes(email),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('keeps a transfer of another amount out, and logs it for a refund', async () => {
+    const { owner, workspaceId, due } = await refused();
+    const invoice = await transferOf(owner, workspaceId, due);
+    const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await postGatewayEvent(t, {
+      kind: 'transfer_received',
+      eventId: newEventId(),
+      occurredAt: new Date().toISOString(),
+      reference: invoice.id,
+      amount: invoice.amount - 9_000,
+    }).expect(200);
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({ invoiceId: due, amount: 590_000, invoiceAmount: 599_000 }),
+      expect.stringContaining('refund it outside the system'),
+    );
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      dueInvoice: { id: due, status: 'pending' },
+    });
+  });
+
+  it('blocks paying another plan now while the trial’s transfer waits, saying so', async () => {
+    const { owner, workspaceId, due } = await refused();
+    const invoice = await transferOf(owner, workspaceId, due);
+    await addCard(t, owner, workspaceId, CARD_OK);
+    const blocked = await owner
+      .post(endpoints.changePlan.path(workspaceId), {
+        planId: 'business',
+        cycle: 'monthly',
+        payNow: true,
+        expectedAmount: 1_490_000,
+      })
+      .expect(409);
+    expect(problemSchema.parse(blocked.body)).toMatchObject({
+      code: 'payment_in_progress',
+      context: { invoiceId: due, invoiceNumber: invoice.number, awaiting: 'transfer' },
+    });
   });
 
   it('may be paid by card instead while it waits', async () => {
