@@ -551,6 +551,55 @@ const ROWS: Row[] = [
         version: 1,
       }),
   },
+  // Marketplace items held, as templates (ADR-036): the fixture holds a v1 licence
+  {
+    action: 'Xem trước mẫu marketplace đã sở hữu',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.get(`/workspaces/${workspaceId}/templates/${TWO_VERSIONS_ITEM_ID}`),
+  },
+  {
+    action: 'Tạo trang từ mẫu marketplace',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 201,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/pages`, {
+        title: 'Khai trương chi nhánh',
+        slug: uniqueSlug('mp'),
+        start: {
+          kind: 'template',
+          source: 'marketplace',
+          templateId: TWO_VERSIONS_ITEM_ID,
+          version: 1,
+        },
+      }),
+  },
+  {
+    action: 'Áp dụng mẫu marketplace vào trang đang sửa',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: async (client, { owner, site, draftPageId }) =>
+      client.post(`/sites/${site.id}/pages/${draftPageId}/draft/template`, {
+        baseRevision: (await getPage(owner, site.id, draftPageId)).draft.revision,
+        template: { source: 'marketplace', templateId: TWO_VERSIONS_ITEM_ID, version: 1 },
+      }),
+  },
+  {
+    action: 'Áp dụng mẫu marketplace trong editor',
+    permission: 'pages.edit',
+    scope: 'site',
+    status: 200,
+    call: (client, { site, draftPageId }) =>
+      client.post(`/sites/${site.id}/pages/${draftPageId}/template-composition`, {
+        source: 'marketplace',
+        templateId: TWO_VERSIONS_ITEM_ID,
+        version: 1,
+      }),
+  },
   // Workspace templates (board 19, ADR-030)
   {
     action: 'Template của workspace',
