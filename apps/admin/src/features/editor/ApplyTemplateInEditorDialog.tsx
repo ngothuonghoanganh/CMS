@@ -38,8 +38,10 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
   const pageId = useEditor((state) => state.page.id);
   const current = useEditor((state) => state.draft.composition.sections.length);
   const library = useQuery(libraryQuery(site.workspaceId));
-  const usable = (library.data?.items ?? []).filter((template) =>
-    templateUsableIn(template.siteIds, site.id),
+  // A marketplace item the workspace does not hold is not applied from here (ADR-036).
+  const usable = (library.data?.items ?? []).filter(
+    (template) =>
+      templateUsableIn(template.siteIds, site.id) && template.marketplace?.owned !== false,
   );
   const [templateId, setTemplateId] = useState<string | null>(null);
   // The first template until the user picks one; a pick that left the list (archived meanwhile)
@@ -97,6 +99,7 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
 
   const system = usable.filter((template) => template.source === 'system');
   const own = usable.filter((template) => template.source === 'workspace');
+  const marketplace = usable.filter((template) => template.source === 'marketplace');
 
   return (
     <form noValidate onSubmit={submit} className={styles.form}>
@@ -132,6 +135,15 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
             {own.length === 0 ? null : (
               <optgroup label="Của workspace">
                 {own.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} · v{template.version}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {marketplace.length === 0 ? null : (
+              <optgroup label="Đã sở hữu từ Marketplace">
+                {marketplace.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name} · v{template.version}
                   </option>

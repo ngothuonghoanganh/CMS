@@ -6,6 +6,7 @@ import {
   templateIndustries,
   templateIndustryLabels,
   type TemplateSource,
+  templateSourceLabels,
   templateSources,
   type TemplateSummary,
 } from '@plp/contracts';
@@ -71,13 +72,15 @@ export function goalLabel(goal: PageGoal): string {
  * own templates ("Thu lead · 7 section · Mây Xanh Agency"). A workspace template may have no goal.
  */
 export function templateMeta(
-  template: Pick<TemplateSummary, 'goal' | 'sections' | 'source'>,
+  template: Pick<TemplateSummary, 'goal' | 'sections' | 'source' | 'marketplace' | 'version'>,
   workspaceName: string,
 ): string {
   return [
     template.goal === null ? null : goalLabel(template.goal),
     `${template.sections.length} section`,
     template.source === 'workspace' ? workspaceName : null,
+    // An owned marketplace item is at the version of the licence (board 17: "· v2").
+    template.marketplace?.owned === true ? `v${template.version}` : null,
   ]
     .filter((part) => part !== null)
     .join(' · ');
@@ -98,12 +101,50 @@ export interface LibraryFilters {
   industries: readonly TemplateIndustry[];
   /** "Có form thu lead". */
   withForm: boolean;
+  /** "Ẩn mẫu trả phí": hides the paid marketplace items the workspace does not own. */
+  hidePaid: boolean;
 }
 
-export const NO_FILTERS: LibraryFilters = { goals: [], industries: [], withForm: false };
+export const NO_FILTERS: LibraryFilters = {
+  goals: [],
+  industries: [],
+  withForm: false,
+  hidePaid: false,
+};
 
 export function hasFilters(filters: LibraryFilters): boolean {
-  return filters.goals.length > 0 || filters.industries.length > 0 || filters.withForm;
+  return (
+    filters.goals.length > 0 ||
+    filters.industries.length > 0 ||
+    filters.withForm ||
+    filters.hidePaid
+  );
+}
+
+/** A marketplace item with a price that the workspace holds no licence of (ADR-036). */
+export function isPaidUnowned(template: Pick<TemplateSummary, 'marketplace'>): boolean {
+  const { marketplace } = template;
+  return marketplace !== null && !marketplace.owned && marketplace.price > 0;
+}
+
+/** The chip of a card's source: "HỆ THỐNG", "WORKSPACE", "MARKETPLACE · TRẢ PHÍ" and so on. */
+export function sourceChip(template: Pick<TemplateSummary, 'source' | 'marketplace'>): {
+  label: string;
+  tone: 'neutral' | 'info' | 'success' | 'warning';
+} {
+  const { marketplace } = template;
+  if (template.source === 'marketplace' && marketplace !== null) {
+    if (marketplace.owned) {
+      return { label: 'MARKETPLACE · ĐÃ SỞ HỮU', tone: 'success' };
+    }
+    return marketplace.price > 0
+      ? { label: 'MARKETPLACE · TRẢ PHÍ', tone: 'warning' }
+      : { label: 'MARKETPLACE · MIỄN PHÍ', tone: 'success' };
+  }
+  return {
+    label: templateSourceLabels[template.source].toUpperCase(),
+    tone: template.source === 'workspace' ? 'info' : 'neutral',
+  };
 }
 
 /** Words without accents or case: "Nhà hàng & F&B" → ["nha", "hang", "f", "b"]. */
@@ -134,7 +175,7 @@ export function matchesQuery(
   );
 }
 
-type FilterGroup = 'goals' | 'industries' | 'withForm';
+type FilterGroup = 'goals' | 'industries' | 'withForm' | 'hidePaid';
 
 /**
  * Whether a template passes the filters: any checked goal, any checked industry, and a form when
@@ -153,7 +194,8 @@ function matchesFilters(
     (except === 'industries' ||
       filters.industries.length === 0 ||
       (industry !== null && filters.industries.includes(industry))) &&
-    (except === 'withForm' || !filters.withForm || template.hasForm)
+    (except === 'withForm' || !filters.withForm || template.hasForm) &&
+    (except === 'hidePaid' || !filters.hidePaid || !isPaidUnowned(template))
   );
 }
 
@@ -202,6 +244,8 @@ export interface FilterGroups {
   goals: FilterOption<PageGoal>[];
   industries: FilterOption<TemplateIndustry>[];
   withForm: { count: number; checked: boolean };
+  /** "Ẩn mẫu trả phí": its count is the paid items it would hide. */
+  hidePaid: { count: number; checked: boolean };
 }
 
 /**
@@ -234,6 +278,10 @@ export function filterGroups(
       count: countWhere('withForm', (template) => template.hasForm),
       checked: filters.withForm,
     },
+    hidePaid: {
+      count: countWhere('hidePaid', isPaidUnowned),
+      checked: filters.hidePaid,
+    },
   };
 }
 
@@ -255,6 +303,7 @@ export function withIndustry(
 }
 
 export const WITH_FORM_LABEL = 'Có form thu lead';
+export const HIDE_PAID_LABEL = 'Ẩn mẫu trả phí';
 
 export interface FilterChip {
   /** Unique among the chips, for React and for focus after one is removed. */
@@ -280,6 +329,9 @@ export function filterChips(filters: LibraryFilters): FilterChip[] {
     ...(filters.withForm
       ? [{ key: 'form', label: WITH_FORM_LABEL, without: { ...filters, withForm: false } }]
       : []),
+    ...(filters.hidePaid
+      ? [{ key: 'paid', label: HIDE_PAID_LABEL, without: { ...filters, hidePaid: false } }]
+      : []),
   ];
 }
 
@@ -292,16 +344,27 @@ export interface EmptyMessage {
  * Why the list is empty, as precise as the choice: board 17's "Chưa có mẫu “Webinar” cho ngành Bất
  * động sản" for one goal in one industry.
  */
-export function emptyMessage({ query, filters }: Omit<LibraryQuery, 'tab'>): EmptyMessage {
+export function emptyMessage({
+  query,
+  filters,
+  tab,
+}: Omit<LibraryQuery, 'tab'> & { tab?: LibraryTab }): EmptyMessage {
   const [goal] = filters.goals;
   const [industry] = filters.industries;
   const search = query.trim();
+  if (tab === 'marketplace' && search === '' && !hasFilters(filters)) {
+    return {
+      title: 'Workspace chưa sở hữu mẫu nào từ Marketplace',
+      description: 'Mẫu bạn nhận hoặc mua ở Marketplace sẽ có ở đây, kèm phiên bản đang dùng.',
+    };
+  }
   const description = hasFilters(filters)
     ? 'Thử bỏ bớt một bộ lọc hoặc đổi từ khóa tìm kiếm.'
     : 'Thử một từ khóa khác, ví dụ tên ngành hay mục tiêu của trang.';
   if (
     search === '' &&
     !filters.withForm &&
+    !filters.hidePaid &&
     filters.goals.length === 1 &&
     filters.industries.length === 1 &&
     goal !== undefined &&

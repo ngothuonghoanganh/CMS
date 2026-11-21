@@ -127,6 +127,11 @@ export function marketplaceHref(workspaceId: string): string {
   return `${workspaceHref(workspaceId)}/marketplace`;
 }
 
+/** "Sản phẩm đã mua" (board 32): the items the workspace holds a licence of. */
+export function marketplaceOwnedHref(workspaceId: string): string {
+  return `${marketplaceHref(workspaceId)}/owned`;
+}
+
 /** One marketplace item (board 31). */
 export function marketplaceItemHref(workspaceId: string, itemId: string): string {
   return `${marketplaceHref(workspaceId)}/${encodeURIComponent(itemId)}`;

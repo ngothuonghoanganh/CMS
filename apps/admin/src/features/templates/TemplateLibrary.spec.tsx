@@ -9,7 +9,12 @@ import { SITE_ID, siteFixture, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { apiError, renderWithProviders } from '../shell/test-utils';
 import type { LibraryTab } from './library-filters';
 import { TemplateLibrary } from './TemplateLibrary';
-import { readinessFixture, templateSummaries, workspaceSummaryFixture } from './test-fixtures';
+import {
+  marketplaceSummaryFixture,
+  readinessFixture,
+  templateSummaries,
+  workspaceSummaryFixture,
+} from './test-fixtures';
 
 const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
@@ -310,5 +315,103 @@ describe('TemplateLibrary', () => {
       'href',
       `/workspaces/${WORKSPACE_ID}/templates?site=${KITCHEN_ID}`,
     );
+  });
+
+  describe('marketplace items (ADR-036)', () => {
+    const owned = marketplaceSummaryFixture({ owned: true });
+    const paid = marketplaceSummaryFixture({
+      id: 'mp-mo-ban-du-an-can-ho',
+      name: 'Mở bán dự án căn hộ',
+      owned: false,
+      price: 499_000,
+    });
+    const free = marketplaceSummaryFixture({
+      id: 'mp-khoa-hoc-tieng-anh-tre-em',
+      name: 'Tiếng Anh trẻ em từ Marketplace',
+      owned: false,
+      price: 0,
+    });
+    const library = [...templateSummaries, owned, paid, free];
+
+    it('counts the items held in the tab, and marks each card by its state', () => {
+      renderLibrary({ templates: library });
+      const tabs = screen.getByRole('navigation', { name: 'Nguồn mẫu' });
+      expect(
+        within(tabs).getByRole('link', { name: 'Đã sở hữu từ Marketplace · 1' }),
+      ).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/templates?source=marketplace&site=${KITCHEN_ID}`,
+      );
+      expect(within(tabs).getByRole('link', { name: 'Tất cả · 15' })).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('article', { name: owned.name })).getByText(
+          'MARKETPLACE · ĐÃ SỞ HỮU',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('article', { name: paid.name })).getByText('MARKETPLACE · TRẢ PHÍ'),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('article', { name: free.name })).getByText(
+          'MARKETPLACE · MIỄN PHÍ',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('offers an owned card to preview and use, at its version', () => {
+      renderLibrary({ templates: library });
+      const card = screen.getByRole('article', { name: owned.name });
+      expect(card).toHaveTextContent('Sự kiện / webinar · 7 section · v1');
+      expect(within(card).getByRole('link', { name: `Xem trước ${owned.name}` })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/templates/${owned.id}?site=${KITCHEN_ID}`,
+      );
+      expect(
+        within(card).getByRole('button', { name: `Dùng mẫu ${owned.name}` }),
+      ).toBeInTheDocument();
+    });
+
+    it('gives an unowned card only "Xem trên Marketplace", a free one too', () => {
+      renderLibrary({ templates: library });
+      for (const item of [paid, free]) {
+        const card = screen.getByRole('article', { name: item.name });
+        expect(
+          within(card).getByRole('link', { name: `Xem trên Marketplace ${item.name}` }),
+        ).toHaveAttribute('href', `/workspaces/${WORKSPACE_ID}/marketplace/${item.id}`);
+        expect(within(card).queryByRole('button')).toBeNull();
+        expect(within(card).queryByRole('link', { name: /Xem trước/ })).toBeNull();
+      }
+    });
+
+    it('shows the items held only in their tab', () => {
+      renderLibrary({ templates: library, tab: 'marketplace' });
+      expect(cardNames()).toEqual([owned.name]);
+    });
+
+    it('hides the paid items not owned with "Ẩn mẫu trả phí"', async () => {
+      const user = userEvent.setup();
+      renderLibrary({ templates: library });
+      await user.click(screen.getByRole('checkbox', { name: /Ẩn mẫu trả phí/ }));
+      expect(cardNames()).not.toContain(paid.name);
+      expect(cardNames()).toContain(owned.name);
+      expect(cardNames()).toContain(free.name);
+      expect(screen.getByRole('button', { name: 'Bỏ lọc Ẩn mẫu trả phí' })).toBeInTheDocument();
+    });
+
+    it('points an empty tab to the marketplace', () => {
+      renderLibrary({ templates: templateSummaries, tab: 'marketplace' });
+      expect(screen.getByText('Workspace chưa sở hữu mẫu nào từ Marketplace')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Tìm trên Marketplace' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/marketplace`,
+      );
+    });
+
+    it('creates a page from an owned item with source marketplace and its version', async () => {
+      const user = userEvent.setup();
+      renderLibrary({ templates: library });
+      await user.click(screen.getByRole('button', { name: `Dùng mẫu ${owned.name}` }));
+      expect(await screen.findByRole('dialog', { name: 'Tạo trang từ mẫu' })).toBeInTheDocument();
+    });
   });
 });

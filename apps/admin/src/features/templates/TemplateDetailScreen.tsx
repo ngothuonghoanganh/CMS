@@ -9,7 +9,6 @@ import {
   type Site,
   type TemplateDetail,
   templateIndustryLabels,
-  templateSourceLabels,
   templateUsableIn,
 } from '@plp/contracts';
 import { themePresets } from '@plp/sections/schema';
@@ -35,7 +34,7 @@ import { templateHref, templatesHref, workspaceTemplatesHref } from '../shell/na
 import { PageContainer } from '../shell/PageHeader';
 import { ApplyTemplateDialog } from './ApplyTemplateDialog';
 import { CreateFromTemplateDialog } from './CreateFromTemplateDialog';
-import { goalLabel } from './library-filters';
+import { goalLabel, sourceChip } from './library-filters';
 import { type ReadinessItem, readinessItems } from './readiness';
 import { archivedHint } from './workspace-templates';
 import { type PreviewDevice, previewDeviceLabels, TemplatePreview } from './TemplatePreview';
@@ -74,6 +73,7 @@ export function TemplateDetailScreen({
   siteId,
 }: TemplateDetailScreenProps) {
   const router = useRouter();
+  const chip = sourceChip(template);
   const [device, setDevice] = useState<PreviewDevice>('desktop');
   const [createOpen, setCreateOpen] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -108,8 +108,8 @@ export function TemplateDetailScreen({
       <header className={styles.header}>
         <div className={styles.heading}>
           <div className={styles.badges}>
-            <Badge size="sm" tone={template.source === 'workspace' ? 'info' : 'neutral'}>
-              {templateSourceLabels[template.source].toUpperCase()}
+            <Badge size="sm" tone={chip.tone}>
+              {chip.label}
             </Badge>
             {template.goal === null ? null : <Badge size="sm">{goalLabel(template.goal)}</Badge>}
             {template.industry === null ? null : (

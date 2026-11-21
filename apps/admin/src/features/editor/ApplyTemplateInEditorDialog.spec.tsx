@@ -4,7 +4,11 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../../lib/api';
-import { templateSummaries, workspaceSummaryFixture } from '../templates/test-fixtures';
+import {
+  marketplaceSummaryFixture,
+  templateSummaries,
+  workspaceSummaryFixture,
+} from '../templates/test-fixtures';
 import { ApplyTemplateInEditorDialog } from './ApplyTemplateInEditorDialog';
 import { asset, makeStore, PAGE_ID, SITE_ID, sectionIds } from './test-fixtures';
 import { renderEditor } from './test-render';
@@ -199,5 +203,49 @@ describe('ApplyTemplateInEditorDialog ("Áp dụng mẫu…", ADR-030)', () => {
       'Mẫu “Ưu đãi dịch vụ nha khoa” đã có phiên bản mới (v2)',
     );
     expect(store.getState().draft).toBe(before);
+  });
+
+  it('lists the marketplace items the workspace owns, never the ones it does not (ADR-036)', async () => {
+    const user = userEvent.setup();
+    const owned = marketplaceSummaryFixture({ owned: true, version: 2 });
+    const unowned = marketplaceSummaryFixture({
+      id: 'mp-mo-ban-du-an-can-ho',
+      name: 'Mở bán dự án căn hộ',
+      owned: false,
+      price: 499_000,
+    });
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.listTemplates) {
+        return Promise.resolve({ items: [...templateSummaries, owned, unowned] });
+      }
+      if (endpoint === endpoints.templateComposition) {
+        return Promise.resolve({
+          composition: dentalComposition(),
+          assets: [],
+          template: { name: owned.name, version: 2 },
+        });
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+    renderEditor(<ApplyTemplateInEditorDialog open onOpenChange={vi.fn()} />, {
+      store: makeStore(),
+    });
+    const dialog = screen.getByRole('dialog', { name: 'Áp dụng mẫu' });
+    const picker = await within(dialog).findByRole('combobox', { name: 'Mẫu' });
+    expect(
+      within(within(picker).getByRole('group', { name: 'Đã sở hữu từ Marketplace' })).getAllByRole(
+        'option',
+      ),
+    ).toHaveLength(1);
+    expect(
+      within(picker).getByRole('option', { name: 'Khai trương phòng tập · v2' }),
+    ).toBeInTheDocument();
+    expect(within(picker).queryByRole('option', { name: /Mở bán dự án căn hộ/ })).toBeNull();
+
+    await user.selectOptions(picker, owned.id);
+    await user.click(within(dialog).getByRole('button', { name: 'Áp dụng mẫu' }));
+    expect(apiMock).toHaveBeenCalledWith(endpoints.templateComposition, [SITE_ID, PAGE_ID], {
+      body: { source: 'marketplace', templateId: owned.id, version: 2 },
+    });
   });
 });
