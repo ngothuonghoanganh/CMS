@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "billing-trial-ending",
+  "description": "Nhắc Chủ sở hữu thời gian dùng thử sắp hết (ADR-035, T3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "planName", "trialEndsOn", "daysLeft", "charge", "billingUrl"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "planName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Tên gói, ví dụ \"Agency\" (email viết \"Gói Agency\")."
+    },
+    "trialEndsOn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ngày hết dùng thử theo giờ Việt Nam, \"dd/MM/yyyy\"."
+    },
+    "daysLeft": { "type": "integer", "minimum": 1 },
+    "charge": {
+      "type": ["object", "null"],
+      "description": "Số tiền sẽ trừ khi hết dùng thử bằng thẻ đã lưu; null khi không có thẻ dùng được.",
+      "additionalProperties": false,
+      "required": ["amount", "cycle", "card"],
+      "properties": {
+        "amount": { "type": "string", "minLength": 1, "description": "Ví dụ \"599.000 ₫\"." },
+        "cycle": { "type": "string", "enum": ["tháng", "năm"] },
+        "card": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Hãng và bốn số cuối, ví dụ \"Visa •••• 4242\"."
+        }
+      }
+    },
+    "billingUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Màn 28 \"Gói & mức dùng\" trong admin."
+    }
+  }
+}

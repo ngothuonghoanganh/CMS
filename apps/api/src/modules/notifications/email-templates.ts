@@ -6,6 +6,11 @@ import type {
   ApprovalRejectedData,
   AutomationNoticeData,
   ApprovalRequestData,
+  BillingChargeFailedData,
+  BillingExpiringSoonData,
+  BillingReadOnlyData,
+  BillingReceiptData,
+  BillingTrialEndingData,
   DomainEmailData,
   Email,
   LeadNotificationData,
@@ -303,6 +308,116 @@ function automationNotice(data: AutomationNoticeData): RenderedEmail {
   };
 }
 
+/** Why the Chủ sở hữu, and only they, get the emails of the plan (ADR-035). */
+function ownerFooter(workspaceName: string): string {
+  return `Bạn nhận email này vì là Chủ sở hữu của ${workspaceName}.`;
+}
+
+/** "Dùng thử sắp hết" (ADR-035, T3): what the end of the trial charges, or how to keep going. */
+function billingTrialEnding(data: BillingTrialEndingData): RenderedEmail {
+  const title = `Dùng thử ${data.workspaceName} còn ${data.daysLeft} ngày`;
+  const body =
+    data.charge === null
+      ? `Thời gian dùng thử Gói ${data.planName} kết thúc ngày ${data.trialEndsOn}. Thêm thẻ thanh toán hoặc chọn "Thanh toán ngay" để dùng tiếp. Nếu không, workspace chuyển sang chỉ đọc: trang live và form vẫn chạy nhưng không sửa hay xuất bản được.`
+      : `Thời gian dùng thử Gói ${data.planName} kết thúc ngày ${data.trialEndsOn}. Hôm đó hệ thống tự trừ ${data.charge.amount} / ${data.charge.cycle} vào thẻ ${data.charge.card} để dùng tiếp; bạn không cần làm gì thêm.`;
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: title,
+    text: [body, '', `Xem gói: ${data.billingUrl}`, '', footer].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(body)}${button(data.billingUrl, 'Xem gói')}${smallPrint(footer)}`,
+    ),
+  };
+}
+
+/** A charge of the plan did not go through (ADR-035, T3): why, the next try, the grace. */
+function billingChargeFailed(data: BillingChargeFailedData): RenderedEmail {
+  const title = `Chưa gia hạn được ${data.workspaceName}`;
+  const card = data.card === null ? '' : ` (thẻ ${data.card})`;
+  const what = `Hệ thống chưa trừ được ${data.amount} cho Gói ${data.planName}, hóa đơn ${data.invoiceNumber}: ${data.reason}${card}.`;
+  const next =
+    data.nextRetryOn === null
+      ? 'Hệ thống không tự thử lại nữa. Hãy đổi thẻ rồi bấm "Thanh toán lại", hoặc chuyển khoản.'
+      : `Hệ thống tự thử lại ngày ${data.nextRetryOn}. Bạn cũng có thể đổi thẻ, thanh toán lại hoặc chuyển khoản ngay.`;
+  const grace = `Workspace vẫn dùng bình thường tới ${data.graceEndsOn}, sau đó chuyển sang chỉ đọc cho tới khi được thanh toán. Trang live và form vẫn chạy.`;
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: title,
+    text: [what, '', next, '', grace, '', `Thanh toán: ${data.paymentsUrl}`, '', footer].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(what)}${paragraph(next)}${paragraph(grace)}${button(data.paymentsUrl, 'Thanh toán')}${smallPrint(footer)}`,
+    ),
+  };
+}
+
+/** "Sắp hết hạn" (ADR-035, T3): the period ends soon and cannot renew by itself. */
+function billingExpiringSoon(data: BillingExpiringSoonData): RenderedEmail {
+  const title = `Gói của ${data.workspaceName} hết hạn ngày ${data.periodEndsOn}`;
+  const body = `Kỳ hiện tại của Gói ${data.planName} kết thúc ngày ${data.periodEndsOn} (còn ${data.daysLeft} ngày) và chưa tự gia hạn được: ${data.reason}.`;
+  const action =
+    'Thêm hoặc cập nhật thẻ trước ngày đó để không bị gián đoạn. Bạn cũng có thể chuyển khoản khi hóa đơn kỳ mới được tạo.';
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: title,
+    text: [body, '', action, '', `Thanh toán: ${data.paymentsUrl}`, '', footer].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(body)}${paragraph(action)}${button(data.paymentsUrl, 'Cập nhật thanh toán')}${smallPrint(footer)}`,
+    ),
+  };
+}
+
+/** The workspace turned read-only (ADR-035, T3): why, and that nothing is lost. */
+function billingReadOnly(data: BillingReadOnlyData): RenderedEmail {
+  const title = `${data.workspaceName} đã chuyển sang chế độ chỉ đọc`;
+  const body = `${data.reason} Trang live và form vẫn chạy, lead mới vẫn được nhận, nhưng không sửa hay xuất bản được.`;
+  const next = 'Chọn gói và thanh toán để dùng lại đầy đủ. Không dữ liệu nào bị xóa.';
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: title,
+    text: [body, '', next, '', `Xem gói: ${data.billingUrl}`, '', footer].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(body)}${paragraph(next)}${button(data.billingUrl, 'Xem gói')}${smallPrint(footer)}`,
+    ),
+  };
+}
+
+/** The receipt of a paid invoice (ADR-035, T3); not an electronic VAT invoice (§6). */
+function billingReceipt(data: BillingReceiptData): RenderedEmail {
+  const title = `Đã thanh toán ${data.amount}`;
+  const rows: Array<[string, string]> = [
+    ['Hóa đơn', data.invoiceNumber],
+    ['Nội dung', `Gói ${data.planName} · ${data.period}`],
+    ['Số tiền', data.amount],
+    ['Ngày thanh toán', data.paidOn],
+    ['Phương thức', data.method],
+  ];
+  const note = 'Đây là biên nhận thanh toán, không phải hóa đơn điện tử.';
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: `Biên nhận ${data.invoiceNumber} · ${data.workspaceName}`,
+    text: [
+      ...rows.map(([label, value]) => `${label}: ${value}`),
+      '',
+      `Xem biên nhận: ${data.receiptUrl}`,
+      '',
+      note,
+      footer,
+    ].join('\n'),
+    html: layout(
+      title,
+      `<table style="border-collapse:collapse;font-size:14px;line-height:1.5;margin:0 0 16px">${rows
+        .map(([label, value]) => row(label, value))
+        .join(
+          '',
+        )}</table>${button(data.receiptUrl, 'Xem biên nhận')}${smallPrint(`${note} ${footer}`)}`,
+    ),
+  };
+}
+
 /**
  * The subject and both parts of an email, as SMTP sends it (ADR-018). plp-mailer renders the same
  * data with its own copy of these texts (ADR-029).
@@ -339,5 +454,15 @@ export function renderEmail(email: Email): RenderedEmail {
       return approvalRejected(email.data);
     case 'automation-notice':
       return automationNotice(email.data);
+    case 'billing-trial-ending':
+      return billingTrialEnding(email.data);
+    case 'billing-charge-failed':
+      return billingChargeFailed(email.data);
+    case 'billing-expiring-soon':
+      return billingExpiringSoon(email.data);
+    case 'billing-read-only':
+      return billingReadOnly(email.data);
+    case 'billing-receipt':
+      return billingReceipt(email.data);
   }
 }
