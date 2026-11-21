@@ -2,7 +2,7 @@ import type { ErrorCode } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../lib/api-core';
 import { planProblemOf } from './plan-problem';
-import { paymentProblemOf, paymentsMessage } from './payment-problem';
+import { paymentProblemOf, paymentsMessage, planActionMessage } from './payment-problem';
 
 function problem(
   status: number,
@@ -70,6 +70,7 @@ describe('paymentProblemOf', () => {
     expect(paymentProblemOf(blocked)).toEqual({
       kind: 'in_progress',
       invoiceNumber: 'HD-2026-000001',
+      transfer: false,
     });
     expect(paymentsMessage(blocked)).toBe(
       'Chưa biết kết quả thanh toán hóa đơn HD-2026-000001. Bấm "Thanh toán lại" ở hóa đơn đó trong lịch sử giao dịch để biết kết quả, rồi chọn lại gói.',
@@ -77,6 +78,21 @@ describe('paymentProblemOf', () => {
     expect(paymentsMessage(problem(409, 'payment_in_progress'))).toBe(
       'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.',
     );
+  });
+
+  it('tells an invoice waiting for a transfer from one whose charge is unknown (T3)', () => {
+    const waiting = problem(409, 'payment_in_progress', {
+      invoiceId: '64b0000000000000000000b1',
+      invoiceNumber: 'HD-2026-000001',
+      awaiting: 'transfer',
+    });
+
+    expect(paymentProblemOf(waiting)).toMatchObject({ kind: 'in_progress', transfer: true });
+    const text = paymentsMessage(waiting);
+    expect(text).toBe(
+      'Hóa đơn HD-2026-000001 đang chờ chuyển khoản. Chờ xác nhận, hoặc thanh toán hóa đơn đó bằng thẻ ở "Thanh toán & hóa đơn".',
+    );
+    expect(text).not.toContain('Chưa biết kết quả');
   });
 
   it('carries the quote of a changed amount', () => {
@@ -106,5 +122,28 @@ describe('paymentsMessage', () => {
 
   it('falls back to the problem text', () => {
     expect(paymentsMessage(problem(500, 'internal', undefined, 'Máy chủ lỗi'))).toBe('Máy chủ lỗi');
+  });
+});
+
+describe('planActionMessage', () => {
+  it('words a refusal for the action refused, not for changing the plan or a trial', () => {
+    const unpaid = problem(409, 'plan_change_unavailable', { reason: 'unpaid' });
+    const stopped = problem(409, 'plan_change_unavailable', { reason: 'payment_required' });
+
+    expect(planActionMessage(unpaid, 'cancel')).toBe(
+      'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi hủy gói.',
+    );
+    expect(planActionMessage(stopped, 'keep')).toBe('Gói đã dừng. Chọn gói mới để dùng tiếp.');
+    expect(planActionMessage(unpaid, 'drop_schedule')).toContain('hóa đơn gia hạn đã tính');
+    for (const action of ['cancel', 'keep', 'drop_schedule'] as const) {
+      for (const error of [unpaid, stopped]) {
+        expect(planActionMessage(error, action)).not.toMatch(/dùng thử|trước khi đổi gói/);
+      }
+    }
+  });
+
+  it('says other problems as any payment request does', () => {
+    const busy = problem(409, 'payment_in_progress');
+    expect(planActionMessage(busy, 'cancel')).toBe(paymentsMessage(busy));
   });
 });

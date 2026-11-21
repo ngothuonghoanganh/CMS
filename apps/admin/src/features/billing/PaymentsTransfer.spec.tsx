@@ -246,7 +246,17 @@ describe('the failed payment banner (board 29)', () => {
     renderPayments({}, [waiting]);
 
     expect(await screen.findByText('PLP HD-2026-000002')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Thanh toán bằng thẻ thay thế' }));
+    const byCard = screen.getByRole('button', { name: 'Thanh toán bằng thẻ thay thế' });
+    // Paying by card after the money was sent would pay twice, and nothing refunds it by itself.
+    expect(byCard).toHaveAccessibleDescription(
+      'Đã chuyển khoản rồi thì đừng thanh toán bằng thẻ: khoản chuyển khoản tới sau không được tự hoàn lại.',
+    );
+    // The history row pays it by card too, not "again": it was never paid.
+    expect(
+      screen.getByRole('button', { name: 'Thanh toán bằng thẻ hóa đơn HD-2026-000002' }),
+    ).toHaveTextContent('Thanh toán bằng thẻ');
+    expect(screen.queryByRole('button', { name: /^Thanh toán lại hóa đơn/ })).toBeNull();
+    await user.click(byCard);
 
     expect(lastCallTo(apiMock, endpoints.payInvoice).args).toEqual([WORKSPACE_ID, waiting.id]);
   });

@@ -28,7 +28,13 @@ import { cardLabel } from './payment-presentation';
 import { paymentProblemOf, paymentProblemText, paymentsMessage } from './payment-problem';
 import { billingQueryKeys } from './queries';
 import { useMethodSetup } from './use-method-setup';
-import { type PlanImpact, planImpacts, priceLabel, quoteImpacts } from './plan-presentation';
+import {
+  type PlanImpact,
+  planImpacts,
+  priceLabel,
+  quoteImpacts,
+  scheduledChangeLine,
+} from './plan-presentation';
 import styles from './Billing.module.css';
 
 export interface ChangePlanDialogProps {
@@ -103,7 +109,8 @@ interface Offer {
   as: 'free' | 'main' | 'transfer';
 }
 
-function ChargeSummary({ quote }: { quote: PlanChangeQuote }) {
+/** `restart`: a canceled plan paid for again, which has no trial to end (T3). */
+function ChargeSummary({ quote, restart }: { quote: PlanChangeQuote; restart: boolean }) {
   const period =
     quote.periodStart === null || quote.periodEnd === null
       ? null
@@ -112,7 +119,9 @@ function ChargeSummary({ quote }: { quote: PlanChangeQuote }) {
     <p className={styles.quoteLine}>
       {quote.mode === 'upgrade'
         ? `Nâng cấp có hiệu lực ngay. Phần chênh lệch giá tính cho ${String(quote.remainingDays)}/${String(quote.periodDays)} ngày còn lại của kỳ, làm tròn lên 1.000 ₫.`
-        : 'Thanh toán ngay kết thúc dùng thử và bắt đầu kỳ đầu tiên của gói này.'}
+        : restart
+          ? 'Thanh toán ngay mở lại gói, với một kỳ mới tính từ hôm nay.'
+          : 'Thanh toán ngay kết thúc dùng thử và bắt đầu kỳ đầu tiên của gói này.'}
       {period === null ? null : ` Kỳ ${period}.`}
     </p>
   );
@@ -200,6 +209,12 @@ export function ChangePlanDialog({
       ? freeQuote
       : null;
   const needsCard = chargeQuote?.paymentMethodRequired === true;
+  // A change already scheduled for the period's end: choosing again replaces it.
+  const scheduled = summary.scheduledChange;
+  const scheduledPlan =
+    scheduled === null ? undefined : plans.find((plan) => plan.id === scheduled.planId);
+  const scheduledLine =
+    scheduledPlan === undefined ? null : scheduledChangeLine(summary, scheduledPlan.name);
 
   const change = useMutation({
     mutationFn: async ({ payNow, quote, as }: Offer) => {
@@ -380,6 +395,12 @@ export function ChangePlanDialog({
         </Callout>
       ) : (
         <div className={styles.dialogBody}>
+          {scheduledLine === null ? null : (
+            <Callout tone="info" title="Đã lên lịch đổi gói">
+              {scheduledLine}. Chọn gói hay chu kỳ khác sẽ thay lịch này. Muốn giữ Gói{' '}
+              {summary.plan.name} như hiện tại, đóng hộp thoại và bấm &quot;Hủy thay đổi&quot;.
+            </Callout>
+          )}
           <SegmentedControl<BillingCycle>
             aria-label="Chu kỳ thanh toán"
             options={billingCycles.map((value) => ({
@@ -393,7 +414,13 @@ export function ChangePlanDialog({
             legend="Gói dịch vụ"
             options={plans.map((plan) => ({
               value: plan.id,
-              label: `Gói ${plan.name}${plan.id === summary.plan.id ? ' (hiện tại)' : ''}`,
+              label: `Gói ${plan.name}${
+                plan.id === summary.plan.id
+                  ? ' (hiện tại)'
+                  : plan.id === scheduledPlan?.id
+                    ? ' (đã lên lịch)'
+                    : ''
+              }`,
               description: `${priceLabel(plan, cycle)} · ${plan.fit}`,
             }))}
             value={planId}
@@ -410,7 +437,7 @@ export function ChangePlanDialog({
                 <p className={styles.quoteAmount}>
                   Số tiền thanh toán ngay: <strong>{formatVnd(chargeQuote.amount)}</strong>
                 </p>
-                <ChargeSummary quote={chargeQuote} />
+                <ChargeSummary quote={chargeQuote} restart={summary.state === 'canceled'} />
                 {chargeQuote.paymentMethod === null ? (
                   <p className={styles.quoteLine}>
                     Chưa có thẻ dùng được.{' '}

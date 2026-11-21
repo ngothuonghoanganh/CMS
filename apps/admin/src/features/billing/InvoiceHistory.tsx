@@ -97,6 +97,11 @@ export function InvoiceHistory({
               {items.map((invoice) => {
                 const status = invoiceStatusView(invoice.status, invoice.method);
                 const note = failureNote(invoice);
+                // A transfer still waiting was never paid: the card pays it instead, not again.
+                const payLabel =
+                  invoice.status === 'pending' && invoice.method === 'transfer'
+                    ? 'Thanh toán bằng thẻ'
+                    : 'Thanh toán lại';
                 return (
                   <tr key={invoice.id} className={styles.row} role="row">
                     <td className={cx(styles.cellDate, styles.nowrap)} role="cell">
@@ -133,12 +138,12 @@ export function InvoiceHistory({
                           size="sm"
                           loading={payingId === invoice.id}
                           disabled={payingId !== null && payingId !== invoice.id}
-                          aria-label={`Thanh toán lại hóa đơn ${invoice.number}`}
+                          aria-label={`${payLabel} hóa đơn ${invoice.number}`}
                           onClick={() => {
                             onPay(invoice.id);
                           }}
                         >
-                          Thanh toán lại
+                          {payLabel}
                         </Button>
                       ) : (
                         <span className={styles.muted}>

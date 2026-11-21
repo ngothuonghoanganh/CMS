@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { reportUnexpected } from '../shell/problem-message';
-import { paymentsMessage } from './payment-problem';
+import { planActionMessage } from './payment-problem';
 import { adoptSummary, billingQueryKeys } from './queries';
 
 /**
@@ -49,7 +49,7 @@ export function usePlanLifecycle(workspaceId: string) {
       toast({
         tone: 'danger',
         title: 'Chưa giữ lại được gói',
-        description: paymentsMessage(error),
+        description: planActionMessage(error, 'keep'),
       });
     },
   });
@@ -65,7 +65,7 @@ export function usePlanLifecycle(workspaceId: string) {
       toast({
         tone: 'danger',
         title: 'Chưa hủy được thay đổi',
-        description: paymentsMessage(error),
+        description: planActionMessage(error, 'drop_schedule'),
       });
     },
   });

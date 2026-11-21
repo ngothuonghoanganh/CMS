@@ -133,11 +133,23 @@ export function TransferInstructions({
               </ButtonLink>
             )}
             {onPayWithCard === null ? null : (
-              <Button variant="ghost" loading={payingWithCard} onClick={onPayWithCard}>
+              <Button
+                variant="ghost"
+                loading={payingWithCard}
+                aria-describedby="transfer-card-warning"
+                onClick={onPayWithCard}
+              >
                 Thanh toán bằng thẻ thay thế
               </Button>
             )}
           </div>
+          {onPayWithCard === null ? null : (
+            // A transfer that arrives after the card paid is not applied, and not refunded by itself.
+            <p id="transfer-card-warning" className={styles.fine}>
+              Đã chuyển khoản rồi thì đừng thanh toán bằng thẻ: khoản chuyển khoản tới sau không
+              được tự hoàn lại.
+            </p>
+          )}
         </>
       ) : error !== null && error !== undefined ? (
         <Callout

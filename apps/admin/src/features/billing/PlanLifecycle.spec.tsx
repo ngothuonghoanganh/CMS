@@ -165,6 +165,8 @@ describe('"Giữ lại gói"', () => {
     await user.click(screen.getByRole('button', { name: 'Giữ lại gói' }));
 
     expect(await screen.findByText('Chưa giữ lại được gói')).toBeInTheDocument();
+    // Said for keeping a stopped plan, not for an ended trial.
+    expect(screen.getByText('Gói đã dừng. Chọn gói mới để dùng tiếp.')).toBeInTheDocument();
   });
 });
 
@@ -188,6 +190,18 @@ describe('a scheduled change', () => {
 
     expect(await screen.findByText('Đã hủy thay đổi đã lên lịch')).toBeInTheDocument();
     expect(screen.queryByText(/Chuyển sang Gói Cơ bản/)).toBeNull();
+  });
+
+  it('is named in "Đổi gói", where choosing again replaces it', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValue(quoteFixture({ mode: 'unchanged' }));
+    renderBilling({ initial: scheduled });
+
+    await user.click(screen.getByRole('button', { name: 'Đổi gói' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
+    expect(dialog).toHaveTextContent('Chuyển sang Gói Cơ bản · theo tháng từ 01/12/2026.');
+    expect(dialog).toHaveTextContent('Chọn gói hay chu kỳ khác sẽ thay lịch này.');
+    expect(within(dialog).getByRole('radio', { name: /Gói Cơ bản \(đã lên lịch\)/ })).toBeVisible();
   });
 
   it('is only for who manages the plan', () => {
@@ -320,6 +334,9 @@ describe('"Chọn gói mới" after a cancellation', () => {
     expect(
       await within(dialog).findByRole('button', { name: 'Thanh toán ngay 1.490.000 ₫' }),
     ).toBeEnabled();
+    // A stopped plan starts again: there is no trial to end.
+    expect(dialog).toHaveTextContent('Thanh toán ngay mở lại gói, với một kỳ mới tính từ hôm nay.');
+    expect(dialog).not.toHaveTextContent('dùng thử');
     expect(
       apiMock.mock.calls.every(
         ([endpoint, , options]) =>

@@ -3,7 +3,7 @@
 import type { BillingSummary } from '@plp/contracts';
 import { ConfirmDialog } from '@plp/ui';
 import { formatDate } from '../../lib/format';
-import { paymentsMessage } from './payment-problem';
+import { planActionMessage } from './payment-problem';
 import styles from './Billing.module.css';
 
 export interface CancelPlanDialogProps {
@@ -38,13 +38,13 @@ export function CancelPlanDialog({
       title={`Hủy Gói ${summary.plan.name}?`}
       description={
         trial
-          ? `Bạn dùng thử bình thường tới hết ${end}. Sau đó gói dừng và không bị tính phí.`
+          ? `Bạn dùng thử bình thường tới ${end}. Sau đó gói dừng và không bị tính phí.`
           : `Gói ${summary.plan.name} giữ nguyên tới hết kỳ này (${end}), rồi dừng và không gia hạn.`
       }
       confirmLabel="Hủy gói"
       cancelLabel={`Giữ Gói ${summary.plan.name}`}
       pending={pending}
-      error={error === null ? undefined : paymentsMessage(error)}
+      error={error === null ? undefined : planActionMessage(error, 'cancel')}
       onConfirm={onConfirm}
     >
       <ul className={styles.cancelList} aria-label="Điều gì xảy ra khi hết kỳ">
