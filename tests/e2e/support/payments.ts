@@ -26,3 +26,5 @@ export async function addCardViaGateway(
   await page.getByRole('button', { name: 'Lưu thẻ' }).click();
   await expect(page.getByText('Đã lưu thẻ', { exact: true })).toBeVisible();
 }
+
+export const CARD_INSUFFICIENT_FUNDS = '4000 0000 0000 9995';

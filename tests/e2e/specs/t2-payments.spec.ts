@@ -66,7 +66,7 @@ test.describe('T2 · cards, billing information, paid plan and receipts', () => 
     await expect(page.getByText(/Mã số thuế gồm 10/).first()).toBeVisible();
     await page.getByLabel('Mã số thuế').fill('0123456789001');
     await page.getByRole('button', { name: 'Lưu', exact: true }).click();
-    await expect(page.getByText('Đã lưu thông tin xuất hóa đơn')).toBeVisible();
+    await expect(page.getByText('Đã lưu thông tin xuất hóa đơn', { exact: true })).toBeVisible();
     await expect(page.getByText('0123456789-001')).toBeVisible();
 
     // Board 28: Doanh nghiệp monthly is a free change or "Thanh toán ngay", which charges the card.

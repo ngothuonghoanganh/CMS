@@ -3,10 +3,16 @@ import { type Cookie, expect, type Page, test } from '@playwright/test';
 import { fillAiBrief, openAiAssistant } from '../support/ai.js';
 import { animationsSettled } from '../support/axe.js';
 import { type Board, seedBoard } from '../support/board.js';
+import { billingSummaryOf, dateOf, MINUTE_MS, setBillingClock } from '../support/billing-clock.js';
 import { Editor } from '../support/editor.js';
 import { accountLink, waitForEmail } from '../support/mailpit.js';
-import { CARD_OK, paymentsPath } from '../support/payments.js';
-import { uniqueId } from '../support/setup.js';
+import {
+  addCardViaGateway,
+  CARD_INSUFFICIENT_FUNDS,
+  CARD_OK,
+  paymentsPath,
+} from '../support/payments.js';
+import { setUpSite, uniqueId } from '../support/setup.js';
 import { WebhookReceiver } from '../support/webhook-receiver.js';
 import { siteOrigin } from '../urls.js';
 
@@ -577,7 +583,7 @@ test.describe('Design capture', () => {
     await page.getByLabel('Địa chỉ').fill('45 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh');
     await page.getByLabel('Email nhận hóa đơn điện tử').fill('ketoan@smilecare.vn');
     await page.getByRole('button', { name: 'Lưu', exact: true }).click();
-    await expect(page.getByText('Đã lưu thông tin xuất hóa đơn')).toBeVisible();
+    await expect(page.getByText('Đã lưu thông tin xuất hóa đơn', { exact: true })).toBeVisible();
 
     await page.goto(`/workspaces/${workspaceId}/billing`);
     await page.getByRole('button', { name: 'Đổi gói' }).click();
@@ -601,5 +607,72 @@ test.describe('Design capture', () => {
       receipt.getByRole('heading', { level: 1, name: 'Biên nhận thanh toán' }),
     ).toBeVisible();
     await capture(receipt, 'Receipt');
+  });
+  // Last: a workspace of its own whose clock is moved, so the states of T3 (ADR-035) show on
+  // boards 28 and 29 without touching the board's data.
+  test('28 and 29 in the life of a plan: past due, transfer, scheduled downgrade, cancel', async ({
+    page,
+    request,
+  }) => {
+    try {
+      const { site } = await setUpSite(page.request);
+      const workspaceId = site.workspaceId;
+      const billing = `/workspaces/${workspaceId}/billing`;
+      await addCardViaGateway(page, workspaceId, CARD_INSUFFICIENT_FUNDS);
+      const trial = await billingSummaryOf(page.request, workspaceId);
+      await setBillingClock(request, new Date(dateOf(trial.trialEndsAt).getTime() + MINUTE_MS));
+
+      await page.setViewportSize({ width: 1440, height: 1200 });
+      await page.goto(billing);
+      await expect(page.getByRole('alert').filter({ hasText: 'chưa thành công' })).toBeVisible();
+      await capture(page, 'Plan-past-due');
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(paymentsPath(workspaceId));
+      await expect(page.getByRole('alert').filter({ hasText: 'không thành công' })).toBeVisible();
+      await capture(page, 'Billing-failed');
+      await page.getByRole('button', { name: 'Chuyển khoản' }).click();
+      await expect(
+        page.getByRole('region', { name: /^Chuyển khoản hóa đơn HD-/ }).getByRole('img'),
+      ).toBeVisible();
+      // The toast of "Chuyển khoản" would cover the history in the picture.
+      await expect(page.getByText('Đang chờ chuyển khoản', { exact: true })).toBeHidden({
+        timeout: 20_000,
+      });
+      await capture(page, 'Billing-transfer');
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await expect(page.getByRole('region', { name: /^Chuyển khoản hóa đơn HD-/ })).toBeVisible();
+      await capture(page, 'Billing-transfer-phone');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
+      await page.getByRole('link', { name: 'Mở trang chuyển khoản của cổng thanh toán' }).click();
+      await expect(page.getByRole('heading', { level: 1, name: 'Chuyển khoản' })).toBeVisible();
+      await capture(page, 'FakeTransfer');
+      await page.getByRole('button', { name: 'Xác nhận đã nhận tiền' }).click();
+      await expect(page.getByText('Đã nhận được chuyển khoản')).toBeVisible();
+
+      // Paid, then a downgrade for the end of the period and "Hủy gói".
+      await page.setViewportSize({ width: 1440, height: 1300 });
+      await page.goto(billing);
+      await page.getByRole('button', { name: 'Đổi gói' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Đổi gói' });
+      await dialog.getByRole('radio', { name: /^Gói Cơ bản/ }).check();
+      await expect(dialog.getByRole('list', { name: 'Điều gì thay đổi' })).toBeVisible();
+      await capture(page, 'Plan-downgrade');
+      await dialog.getByRole('button', { name: 'Lên lịch hạ gói' }).click();
+      await expect(page.getByText(/^Chuyển sang Gói Cơ bản/)).toBeVisible();
+      await capture(page, 'Plan-scheduled');
+
+      await page.getByRole('button', { name: 'Hủy gói' }).click();
+      await expect(page.getByRole('alertdialog')).toBeVisible();
+      await capture(page, 'Plan-cancel');
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Hủy gói' }).click();
+      await expect(page.getByText(/^Gói sẽ dừng vào/)).toBeVisible();
+      await capture(page, 'Plan-cancel-scheduled');
+    } finally {
+      await setBillingClock(request, null);
+    }
   });
 });
