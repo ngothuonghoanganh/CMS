@@ -196,6 +196,7 @@ import {
   marketplacePurchaseRequestSchema,
   marketplacePurchaseResponseSchema,
   marketplaceQuoteSchema,
+  marketplaceSuggestionResponseSchema,
   updateMarketplaceLicenceVersionRequestSchema,
 } from './marketplace.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
@@ -1698,6 +1699,21 @@ export const endpoints = {
     request: marketplacePurchaseRequestSchema,
     query: null,
     response: marketplacePurchaseResponseSchema,
+  }),
+  /**
+   * "Đề xuất {ownerName} mua" (`pages.view`, MP3): emails Chủ sở hữu once per member and item.
+   * Only a member without `billing.manage` (403 for the rest, who buy); 404 an item not on sale
+   * for the workspace; 409 `item_owned`; 409 `item_free` (a free item is claimed). A repeat
+   * answers 200 with `alreadySuggested: true` and sends nothing. A read-only workspace may
+   * suggest. 503 `suggestion_not_sent` when the email could not be sent: the member may ask again.
+   */
+  suggestMarketplaceItem: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, itemId: string) =>
+      `/workspaces/${e(workspaceId)}/marketplace/items/${e(itemId)}/suggestions`,
+    request: null,
+    query: null,
+    response: marketplaceSuggestionResponseSchema,
   }),
 
   // Pages and drafts

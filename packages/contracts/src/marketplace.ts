@@ -218,6 +218,11 @@ export const marketplaceItemDetailSchema = marketplaceItemCardSchema.extend({
   licence: marketplaceLicenceSchema.nullable(),
   /** The workspace's Chủ sở hữu, the only one who buys: "Đề xuất {ownerName} mua". */
   ownerName: z.string(),
+  /**
+   * The viewer already asked the owner to buy this item (MP3): "Đã đề xuất {ownerName} mua", with
+   * no button to ask again. False for everyone else, and again once the notice is forgotten.
+   */
+  suggested: z.boolean(),
 });
 export type MarketplaceItemDetail = z.infer<typeof marketplaceItemDetailSchema>;
 
@@ -367,6 +372,16 @@ export const marketplacePurchaseResponseSchema = z.object({
   licence: marketplaceLicenceSchema.nullable(),
 });
 export type MarketplacePurchaseResponse = z.infer<typeof marketplacePurchaseResponseSchema>;
+
+/**
+ * "Đề xuất {ownerName} mua" (MP3): 200 whether the email went now or this member sent it before
+ * (`alreadySuggested`, then nothing is sent again). `message` is the line to show.
+ */
+export const marketplaceSuggestionResponseSchema = z.object({
+  alreadySuggested: z.boolean(),
+  message: z.string().min(1),
+});
+export type MarketplaceSuggestionResponse = z.infer<typeof marketplaceSuggestionResponseSchema>;
 
 /** `context` of 409 `item_owned`: the workspace holds the item's licence already. */
 export const marketplaceItemOwnedProblemContextSchema = z.object({

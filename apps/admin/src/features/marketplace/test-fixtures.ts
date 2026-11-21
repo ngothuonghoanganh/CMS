@@ -110,6 +110,7 @@ export function marketplaceDetailFixture(
     withdrawn: false,
     licence: null,
     ownerName: 'Ngọc Anh',
+    suggested: false,
     ...overrides,
   };
 }

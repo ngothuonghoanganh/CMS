@@ -58,6 +58,7 @@ export const errorCodes = [
   'invoice_not_payable',
   'payment_not_applied',
   'idempotency_key_reused',
+  'suggestion_not_sent',
   'payload_too_large',
   'unsupported_media_type',
   'origin_rejected',

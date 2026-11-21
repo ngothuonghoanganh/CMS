@@ -9,6 +9,7 @@ import {
   marketplaceListResponseSchema,
   marketplacePurchaseRequestSchema,
   marketplaceQuoteSchema,
+  marketplaceSuggestionResponseSchema,
   MAX_MARKETPLACE_ITEM_VERSIONS,
   MAX_MARKETPLACE_ITEMS,
   updateMarketplaceLicenceVersionRequestSchema,
@@ -81,11 +82,18 @@ describe('marketplace item ids (ADR-036)', () => {
       'mp_spa',
       'mp-spa-',
       'mpspa-x',
-      `mp-${'a'.repeat(58)}`,
+      `mp-${'a'.repeat(48)}`,
       '64b000000000000000000001',
     ]) {
       expect(isMarketplaceItemId(id), id).toBe(false);
     }
+  });
+
+  it('are short enough for the key of an email that names them (128 for plp-mailer)', () => {
+    const longest = `mp-${'a'.repeat(47)}`;
+    expect(isMarketplaceItemId(longest)).toBe(true);
+    const key = `marketplace-suggestion:${'0'.repeat(24)}:${'1'.repeat(24)}:${longest}`;
+    expect(key.length).toBeLessThanOrEqual(128);
   });
 
   it('still read as kebab-case template ids, told apart by their prefix', () => {
@@ -274,6 +282,7 @@ describe('the answers of the marketplace screens', () => {
       withdrawn: false,
       licence: null,
       ownerName: 'Ngọc Anh',
+      suggested: false,
     };
     expect(marketplaceItemDetailSchema.parse(detail)).toEqual(detail);
     const licence = {
@@ -285,6 +294,20 @@ describe('the answers of the marketplace screens', () => {
     expect(marketplaceItemDetailSchema.parse({ ...detail, licence }).licence).toEqual(licence);
     expect(
       marketplaceItemDetailSchema.safeParse({ ...detail, licence: { ...licence, source: 'gift' } })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('"Đề xuất mua" (MP3)', () => {
+  it('answers whether the email went now or before, with the line to show', () => {
+    const sent = { alreadySuggested: false, message: 'Đã gửi đề xuất tới Ngọc Anh.' };
+    expect(marketplaceSuggestionResponseSchema.parse(sent)).toEqual(sent);
+    expect(marketplaceSuggestionResponseSchema.safeParse({ alreadySuggested: true }).success).toBe(
+      false,
+    );
+    expect(
+      marketplaceSuggestionResponseSchema.safeParse({ alreadySuggested: true, message: '' })
         .success,
     ).toBe(false);
   });
