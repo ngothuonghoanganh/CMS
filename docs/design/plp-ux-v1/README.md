@@ -78,7 +78,7 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 | #   | Board                         | File                      | Lát                                 |
 | --- | ----------------------------- | ------------------------- | ----------------------------------- |
 | 28  | Gói dịch vụ & mức sử dụng     | `Plan.dc.html`            | T1 (gói, mức dùng), T3 (vòng đời)   |
-| 29  | Thanh toán & hóa đơn          | `Billing.dc.html`         | T2                                  |
+| 29  | Thanh toán & hóa đơn          | `Billing.dc.html`         | T2, T3 (chuyển khoản, thử lại)      |
 | 30  | Marketplace                   | `Marketplace.dc.html`     | Chưa làm: chờ chốt luật marketplace |
 | 31  | Chi tiết sản phẩm marketplace | `MarketplaceItem.dc.html` | Chưa làm                            |
 | 32  | Sản phẩm đã mua               | `Purchases.dc.html`       | Chưa làm                            |
