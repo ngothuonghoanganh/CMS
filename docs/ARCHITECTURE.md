@@ -3374,6 +3374,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Màn 29:** banner "Thanh toán … không thành công" (lần thử lại, ân hạn, "Chuyển khoản") chỉ của hóa đơn gói; lần mua mẫu bị từ chối không đổi gói nên chỉ hiện ở dòng của nó, với "Thanh toán lại". "Thanh toán lại" bị chặn bởi hóa đơn khác thì bảo xem hóa đơn đó rồi thử lại, không bảo chọn lại gói.
   - **Chỉ đọc ở màn 31:** "Mua mẫu" vẫn bấm được như các nút của MP2 (banner chỉ đọc báo trước). Hộp "Xác nhận mua mẫu" nói ngay khi mở rằng workspace đang chỉ đọc và gói được trả trước, với "Theo gói" và "Xem gói & thanh toán", và "Thanh toán" hay "Thêm thẻ" không bấm được: khách không phải tích điều khoản rồi trả chỉ để nhận 402 (cách thuận tiện nhất cho khách). 402 của API, khi gói vừa đổi mà màn chưa biết, hiện trong hộp là cảnh báo như MP2 và cũng khóa "Thanh toán".
   - **Hộp "Xác nhận mua mẫu":** lời của cổng ("Đã lưu thẻ", "Chưa thêm thẻ") chỉ hiện ở hộp mà cổng dẫn về; quay lại bằng nút Back của trình duyệt không mở lại hộp, như màn 28 và 29. Trong lúc chờ cổng, nút đóng của hộp báo không dùng được (`dismissible` của `Dialog`). 409 `payment_not_applied` đóng hộp, và khung giá báo mẫu đã sở hữu kèm câu hoàn tiền của API.
+  - **Báo giá và mua:** báo giá (`GET …/marketplace/items/:itemId/quote`) không bao giờ trừ tiền và trả 200 cả khi chỉ đọc; mẫu miễn phí chưa sở hữu trả 409 `item_free`, mẫu đã sở hữu trả 200 `owned: true`. Lần mua kiểm theo thứ tự: thành viên (404), `billing.manage` (403), chỉ đọc (402), `Idempotency-Key` đã dùng (trả lại đúng hóa đơn đó theo trạng thái hiện tại), rồi mới tới mẫu (404, 409 `item_owned`, 409 `item_free`), cổng tắt (503), `item_changed` và thẻ (422). Cùng key cho mẫu khác là 422 `idempotency_key_reused`. Key là duy nhất theo workspace (chỉ mục `invoices_workspace_request_key`). `returnTo: 'marketplace'` của cài thẻ bắt buộc `itemId`; mẫu lạ hay bản nháp là 422 `unknown_item`.
+  - **Hóa đơn `marketplace`:** mọi trường gói là `null`, có `item { itemId, name, version }`; bản ghi còn lưu `item.termsVersion`, `requestKey` và `createdBy`. Giấy phép (`source: 'purchase'`, `versionHash` của phiên bản đã mua, `grantedBy` là người mua) được cấp trong cùng transaction ghi `paid`, dù hóa đơn được trả bằng đường nào; `billing_log` có `marketplace_purchased` với `itemId`. Hóa đơn `open` hết `payable` khi workspace đã có giấy phép (cùng luật "mục đích đã hết" của T3: job `void` và log lỗi, không hỏi cổng). Lần mua bị từ chối không đổi gói: không ân hạn, không thử lại, không email `billing-charge-failed`. Chuyển khoản bị từ chối: 409 `invoice_not_payable`.
+  - **Email:** `marketplace-receipt` gửi Chủ sở hữu một lần cho mỗi hóa đơn đã trả, ở mọi đường thanh toán, và không gửi khi lần trả không cấp giấy phép (`payment_not_applied`); `billing-receipt` không bao giờ gửi cho hóa đơn marketplace. Gửi lỗi thì nhả `billing_notices` và không ai gửi lại (như biên nhận của gói). `marketplace-suggestion` gửi một lần cho mỗi thành viên và mẫu.
+  - **Đề xuất mua:** `POST …/marketplace/items/:itemId/suggestions` trả 200 cả lần đầu lẫn lặp (`alreadySuggested`); 403 cho người có `billing.manage`; 409 `item_free` cho mẫu miễn phí (không gửi email); 503 `suggestion_not_sent` khi email lỗi, thông báo được nhả để hỏi lại. Mở cho mọi vai trò, kể cả thành viên chỉ một số site và workspace chỉ đọc. Chi tiết mẫu có `suggested`, cờ riêng của người xem. `marketplaceItemIdSchema` tối đa 50 ký tự để key email dài nhất vừa 128 ký tự của plp-mailer.
+  - **Ngoài hệ thống:** chủ sở hữu quyết ngày 2026-11-22: hoàn tiền thực hiện ngoài hệ thống không thu hồi giấy phép; workspace giữ mẫu (cách thuận tiện nhất cho khách). Không có thay đổi code.
 
 ---
 
@@ -3535,7 +3540,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | MP0 | ADR-036 cho board 30–32, bổ sung ADR-025, 030, 035, §1, §2 quy tắc 12, §6 và README thiết kế                                                                                                                                                               | —                  | Xong       |
 | MP1 | Danh mục `marketplace.json` (schema, registry, kiểm lúc khởi động) với 4 mẫu tạm, danh sách và chi tiết mẫu chỉ xem: tìm, lọc giá và ngành, sắp xếp, preview, "Gồm những gì", giấy phép và điều khoản, mục "Marketplace" của Sidebar v2                    | 30, 31, Sidebar v2 | Xong       |
 | MP2 | Giấy phép của workspace (`marketplace_licences`, `versionHash`, kiểm lúc khởi động), "Nhận mẫu" miễn phí, màn Sản phẩm đã mua, mẫu marketplace trong thư viện (tab, thẻ chưa sở hữu, "Ẩn mẫu trả phí"), màn 18, tạo trang và áp mẫu, cập nhật phiên bản    | 32, 31, 17, 18, 03 | Xong       |
-| MP3 | Mua mẫu qua cổng thanh toán (adapter giả): báo giá, hộp xác nhận, hóa đơn `marketplace`, cấp giấy phép khi trả xong, webhook, "Thanh toán lại", biên nhận và dòng của màn 29, email `marketplace-receipt` và `marketplace-suggestion`, chỉ đọc và cổng tắt | 31, 29             | Chưa làm   |
+| MP3 | Mua mẫu qua cổng thanh toán (adapter giả): báo giá, hộp xác nhận, hóa đơn `marketplace`, cấp giấy phép khi trả xong, webhook, "Thanh toán lại", biên nhận và dòng của màn 29, email `marketplace-receipt` và `marketplace-suggestion`, chỉ đọc và cổng tắt | 31, 29             | Xong       |
 
 MP2 đi trước MP3: giấy phép miễn phí đủ để làm và kiểm thử trọn đường từ giấy phép tới trang đã xuất bản, rồi MP3 chỉ thêm đường tiền vào giấy phép đã có.
 
@@ -3547,6 +3552,8 @@ MP2 đi trước MP3: giấy phép miễn phí đủ để làm và kiểm thử
 4. Màn 31 của mẫu đó ghi "Workspace đã sở hữu"; thư viện template, tab "Đã sở hữu từ Marketplace" có cả hai mẫu.
 5. Tạo trang từ mẫu đã mua ở site thứ nhất → sửa chữ mẫu → xuất bản → URL public đúng nội dung.
 6. Tạo site thứ hai → tạo trang từ cùng mẫu (giấy phép phủ mọi site), không mua lại.
+
+Đã chạy xanh ngày 2026-11-22 ở `tests/e2e/specs/marketplace-chain.spec.ts` ("Hoàn thành Marketplace", 6 `test.step`); mẫu trả phí của chuỗi là "Mở bán dự án căn hộ" vì mẫu Spa có kiểm tra chặn khi xuất bản.
 
 ## 6. Trước khi phát hành
 
@@ -3605,12 +3612,11 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 
 - `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
 - Gói (ADR-035): giá thật, chu kỳ, giá đã gồm VAT hay chưa, hạn mức từng gói, thời gian dùng thử, thời gian ân hạn và lịch thử lại khi trừ tiền lỗi. Bảng gói hiện là con số tạm.
-- Marketplace (ADR-036; ai bán, giấy phép theo workspace và hoàn tiền ngoài hệ thống đã chốt ngày 2026-11-20):
+- Marketplace (ADR-036; ai bán, giấy phép theo workspace và hoàn tiền ngoài hệ thống đã chốt ngày 2026-11-20; hoàn tiền không thu hồi giấy phép, chốt ngày 2026-11-22):
   - giá thật của từng mẫu (danh mục đi kèm là giá tạm), mẫu nào bán lúc phát hành, giá đã gồm VAT hay chưa (như gói);
   - thời hạn cập nhật miễn phí: bản đầu là mọi phiên bản sau, không thời hạn;
   - cam kết hỗ trợ (`terms.support`, chữ tạm);
   - có gói nào không được mua mẫu không (bản đầu: mọi gói mua được);
-  - hoàn tiền một lần mua mẫu có kèm thu hồi giấy phép không: hệ thống không có thao tác thu hồi, nên "có" cần một lần bổ sung ADR-036.
 - Dịch vụ AI của production (ADR-031): AI tự host, hay một nhà cung cấp bên ngoài. Bên ngoài thì cần adapter và bổ sung ADR.
 
 **Người phụ trách pháp lý cần xác nhận** (ADR-017)
