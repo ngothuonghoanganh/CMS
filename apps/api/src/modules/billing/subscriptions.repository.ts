@@ -4,6 +4,8 @@ import type {
   BillingCycle,
   BillingInfo,
   PaymentMethod,
+  PrepaidPeriod,
+  RenewalMethod,
   ScheduledChange,
   SubscriptionFacts,
 } from '@plp/contracts';
@@ -13,7 +15,11 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { BillingWakeupRepository } from './billing-wakeup.repository.js';
-import { SUBSCRIPTION_MODEL, type SubscriptionRecord } from './subscription.schema.js';
+import {
+  type PrepaidPeriodRecord,
+  SUBSCRIPTION_MODEL,
+  type SubscriptionRecord,
+} from './subscription.schema.js';
 
 /** Not held now: never held, or the hold of an instance that stopped ran out. */
 function unheldAt(at: Date) {
@@ -35,9 +41,16 @@ function newRecordFields(facts: SubscriptionFacts, at: Date): Omit<SubscriptionR
   return {
     ...facts,
     openInvoiceId: facts.openInvoiceId === null ? null : new Types.ObjectId(facts.openInvoiceId),
+    renewalInvoiceId:
+      facts.renewalInvoiceId === null ? null : new Types.ObjectId(facts.renewalInvoiceId),
+    prepaid: facts.prepaid === null ? null : prepaidRecordOf(facts.prepaid),
     createdAt: at,
     updatedAt: at,
   };
+}
+
+function prepaidRecordOf(prepaid: PrepaidPeriod): PrepaidPeriodRecord {
+  return { ...prepaid, invoiceId: new Types.ObjectId(prepaid.invoiceId) };
 }
 
 function toFacts(record: SubscriptionRecord): SubscriptionFacts {
@@ -63,6 +76,17 @@ function toFacts(record: SubscriptionRecord): SubscriptionFacts {
         }
       : null,
     cardAfterTrial: record.cardAfterTrial ?? false,
+    renewalMethod: record.renewalMethod ?? 'card',
+    renewalInvoiceId: record.renewalInvoiceId?.toHexString() ?? null,
+    prepaid: record.prepaid
+      ? {
+          invoiceId: record.prepaid.invoiceId.toHexString(),
+          planId: record.prepaid.planId,
+          cycle: record.prepaid.cycle,
+          periodStart: record.prepaid.periodStart,
+          periodEnd: record.prepaid.periodEnd,
+        }
+      : null,
     billingInfo: record.billingInfo
       ? {
           companyName: record.billingInfo.companyName,
@@ -141,11 +165,23 @@ export class SubscriptionsRepository {
 
   /** Every plan a subscription is on or moves to: the catalog must still have each. */
   async plansInUse(): Promise<string[]> {
-    const [current, scheduled] = await Promise.all([
+    const [current, scheduled, prepaid] = await Promise.all([
       this.subscriptions.distinct('planId').exec(),
       this.subscriptions.distinct('scheduledChange.planId').exec(),
+      this.subscriptions.distinct('prepaid.planId').exec(),
     ]);
-    return [...new Set([...current, ...scheduled].map(String))];
+    return [...new Set([...current, ...scheduled, ...prepaid].map(String))];
+  }
+
+  /**
+   * Gives the default renewal method, the card, to subscriptions stored before T4; how many it
+   * gave. Reading one without it gives the card too, so this only makes the stored data say so.
+   */
+  async backfillRenewalMethod(): Promise<number> {
+    const result = await this.subscriptions
+      .updateMany({ renewalMethod: { $exists: false } }, { $set: { renewalMethod: 'card' } })
+      .exec();
+    return result.modifiedCount;
   }
 
   /**
@@ -276,7 +312,13 @@ export class SubscriptionsRepository {
   async startPaidPeriod(ref: WorkspaceRef, change: PaidPeriod, tx: Tx): Promise<boolean> {
     const result = await this.subscriptions
       .updateOne(
-        { _id: ref.workspaceId, version: change.fromVersion, trialEndsAt: { $ne: null } },
+        // A trial whose first period was paid before its end starts that one (`rollOver`, T4).
+        {
+          _id: ref.workspaceId,
+          version: change.fromVersion,
+          trialEndsAt: { $ne: null },
+          prepaid: null,
+        },
         {
           $set: {
             planId: change.planId,
@@ -287,6 +329,7 @@ export class SubscriptionsRepository {
             cancelAtPeriodEnd: false,
             scheduledChange: null,
             openInvoiceId: null,
+            renewalInvoiceId: null,
             failedSince: null,
             cardAfterTrial: false,
             updatedAt: change.at,
@@ -317,6 +360,7 @@ export class SubscriptionsRepository {
           version: change.fromVersion,
           trialEndsAt: null,
           periodEnd: change.follows,
+          prepaid: null,
         },
         {
           $set: {
@@ -326,6 +370,7 @@ export class SubscriptionsRepository {
             periodEnd: change.periodEnd,
             scheduledChange: null,
             openInvoiceId: null,
+            renewalInvoiceId: null,
             failedSince: null,
             updatedAt: change.at,
           },
@@ -384,6 +429,149 @@ export class SubscriptionsRepository {
       .updateOne(
         { _id: ref.workspaceId, version: change.fromVersion },
         { $set: { openInvoiceId: change.invoiceId, updatedAt: change.at }, $inc: { version: 1 } },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /** How the next period is paid (T4), from the version read in `tx`. */
+  async setRenewalMethod(
+    ref: WorkspaceRef,
+    change: { method: RenewalMethod; fromVersion: number; at: Date },
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.subscriptions
+      .updateOne(
+        { _id: ref.workspaceId, version: change.fromVersion },
+        { $set: { renewalMethod: change.method, updatedAt: change.at }, $inc: { version: 1 } },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /**
+   * The invoice made before the end for the next period's transfer (T4), or none once a plan
+   * change voided it; from the version read in `tx`, and never while the next period is paid.
+   */
+  async setRenewalInvoice(
+    ref: WorkspaceRef,
+    change: { invoiceId: ObjectId | null; fromVersion: number; at: Date },
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.subscriptions
+      .updateOne(
+        { _id: ref.workspaceId, version: change.fromVersion, prepaid: null },
+        {
+          $set: { renewalInvoiceId: change.invoiceId, updatedAt: change.at },
+          $inc: { version: 1 },
+        },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /**
+   * At the end of the trial or period (T4), the subscription waits for the invoice made before it,
+   * as for any invoice of an ended period (`openInvoiceId`); from the version read in `tx`.
+   */
+  async awaitRenewalInvoice(
+    ref: WorkspaceRef,
+    change: { invoiceId: ObjectId; fromVersion: number; at: Date },
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.subscriptions
+      .updateOne(
+        {
+          _id: ref.workspaceId,
+          version: change.fromVersion,
+          renewalInvoiceId: change.invoiceId,
+          openInvoiceId: null,
+        },
+        {
+          $set: { openInvoiceId: change.invoiceId, renewalInvoiceId: null, updatedAt: change.at },
+          $inc: { version: 1 },
+        },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /**
+   * The early invoice was paid before the trial or period it follows ended (T4): the next period is
+   * held as paid, and starts at that end (`rollOver`). Only while the subscription still waits for
+   * that invoice before that end, from the version read in `tx`.
+   */
+  async prepay(
+    ref: WorkspaceRef,
+    change: { prepaid: PrepaidPeriod; fromVersion: number; at: Date },
+    tx: Tx,
+  ): Promise<boolean> {
+    const { prepaid } = change;
+    const result = await this.subscriptions
+      .updateOne(
+        {
+          _id: ref.workspaceId,
+          version: change.fromVersion,
+          renewalInvoiceId: new Types.ObjectId(prepaid.invoiceId),
+          prepaid: null,
+          $or: [
+            { trialEndsAt: prepaid.periodStart },
+            { trialEndsAt: null, periodEnd: prepaid.periodStart },
+          ],
+        },
+        {
+          $set: {
+            prepaid: prepaidRecordOf(prepaid),
+            renewalInvoiceId: null,
+            updatedAt: change.at,
+          },
+          $inc: { version: 1 },
+        },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  /**
+   * The end of a trial or period whose next one was paid before it (T4): that period starts, on
+   * its plan and cycle (a scheduled change applied), with no charge. From the version read in `tx`.
+   */
+  async rollOver(
+    ref: WorkspaceRef,
+    change: { prepaid: PrepaidPeriod; fromVersion: number; at: Date },
+    tx: Tx,
+  ): Promise<boolean> {
+    const { prepaid } = change;
+    const result = await this.subscriptions
+      .updateOne(
+        {
+          _id: ref.workspaceId,
+          version: change.fromVersion,
+          'prepaid.invoiceId': new Types.ObjectId(prepaid.invoiceId),
+        },
+        {
+          $set: {
+            planId: prepaid.planId,
+            cycle: prepaid.cycle,
+            trialEndsAt: null,
+            periodStart: prepaid.periodStart,
+            periodEnd: prepaid.periodEnd,
+            cancelAtPeriodEnd: false,
+            scheduledChange: null,
+            openInvoiceId: null,
+            renewalInvoiceId: null,
+            prepaid: null,
+            failedSince: null,
+            cardAfterTrial: false,
+            updatedAt: change.at,
+          },
+          $inc: { version: 1 },
+        },
         { session: tx },
       )
       .exec();
@@ -580,6 +768,8 @@ export class SubscriptionsRepository {
           planId: change.from.planId,
           cycle: change.from.cycle,
           periodEnd: change.periodEnd,
+          // The next period was paid on the plan it had (T4): the upgrade would end with it.
+          prepaid: null,
         },
         {
           // The newest choice wins: a downgrade scheduled before the upgrade is dropped (T3).

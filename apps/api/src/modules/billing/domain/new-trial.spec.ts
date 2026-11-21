@@ -19,6 +19,10 @@ describe('a new workspace’s trial (ADR-035)', () => {
       cancelAtPeriodEnd: false,
       paymentMethod: null,
       cardAfterTrial: false,
+      // The card until the owner chooses a bank transfer (T4).
+      renewalMethod: 'card',
+      renewalInvoiceId: null,
+      prepaid: null,
       failedSince: null,
       openInvoiceId: null,
       version: 0,

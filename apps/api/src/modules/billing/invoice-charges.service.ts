@@ -39,6 +39,7 @@ import { InvoiceSettlement, type RecordedCharge } from './invoice-settlement.ser
 import { InvoiceTransfers } from './invoice-transfers.service.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
+import { RenewalTransfers } from './renewal-transfers.service.js';
 import {
   gatewayUnavailable,
   idempotencyKeyReused,
@@ -186,6 +187,7 @@ export class InvoiceCharges {
     private readonly transfers: InvoiceTransfers,
     private readonly notifier: BillingNotifier,
     private readonly purchases: MarketplacePurchaseHooks,
+    private readonly renewals: RenewalTransfers,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -668,6 +670,10 @@ export class InvoiceCharges {
     if (settled.recorded) {
       if (after.status === 'paid') {
         await this.notifier.receipt(after);
+        // A paid upgrade replaced the next period's transfer invoice in its transaction (T4).
+        if (after.kind === 'upgrade') {
+          await this.renewals.complete(ref);
+        }
       }
     } else if (report.outcome === 'succeeded' && !paidBy(after, number)) {
       // Something else decided the invoice while the gateway answered (a transfer that arrived,

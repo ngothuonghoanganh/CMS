@@ -15,6 +15,7 @@ import {
   billingExpiringSoonEmail,
   billingReadOnlyEmail,
   billingReceiptEmail,
+  billingTransferDueEmail,
   billingTrialEndingEmail,
   type KeyedEmail,
   marketplaceReceiptEmail,
@@ -63,7 +64,8 @@ interface NoticeContext {
 
 /**
  * The emails of a workspace's plan to its Chủ sở hữu (ADR-035, T3): the trial's reminder, a refused
- * charge of the job, "Sắp hết hạn", read-only, and the receipt of each paid invoice; and the two of
+ * charge of the job, "Sắp hết hạn", read-only, the receipt of each paid invoice, and the invoice to
+ * pay by bank transfer of a plan renewed so (T4); and the two of
  * the marketplace (ADR-036): the receipt of an item bought, and a member's suggestion to buy one.
  * Each goes once
  * (`billing_notices`, keyed by its idempotency key) to the owner of the moment. A send that fails
@@ -164,6 +166,40 @@ export class BillingNotifier {
         periodEndsOn: vnDateText(facts.periodEnd),
         daysLeft: Math.max(1, Math.ceil((facts.periodEnd.getTime() - at.getTime()) / DAY_MS)),
         reason,
+        paymentsUrl: context.paymentsUrl,
+      }),
+    );
+  }
+
+  /**
+   * The next period's invoice to pay by bank transfer (T4): `issued` once it has the gateway's
+   * details, `due` on its due day (the end of the period it follows) while unpaid. Its grace counts
+   * from that day, as the state does for a period that ended unpaid.
+   */
+  transferDue(invoice: PlanInvoiceRecord, stage: 'issued' | 'due'): Promise<NoticeOutcome> {
+    const transfer = invoice.transfer;
+    if (transfer === null) {
+      return Promise.resolve('nobody');
+    }
+    const dueAt = invoice.periodStart;
+    const graceEndsAt = new Date(dueAt.getTime() + this.catalog.graceDays * DAY_MS);
+    return this.deliver({ workspaceId: invoice.workspaceId }, (context) =>
+      billingTransferDueEmail({
+        invoiceId: invoice._id.toHexString(),
+        workspaceName: context.workspaceName,
+        planName: invoice.planName,
+        cycle: cycleText(invoice.cycle),
+        period: periodText(invoice.periodStart, invoice.periodEnd),
+        invoiceNumber: invoice.number,
+        amount: vndText(invoice.amount),
+        stage,
+        dueOn: vnDateText(dueAt),
+        graceEndsOn: vnDateText(graceEndsAt),
+        bankName: transfer.bankName,
+        accountNumber: transfer.accountNumber,
+        accountName: transfer.accountName,
+        content: transfer.content,
+        replacesInvoiceNumber: invoice.replaces?.number ?? null,
         paymentsUrl: context.paymentsUrl,
       }),
     );

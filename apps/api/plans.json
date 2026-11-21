@@ -4,6 +4,7 @@
   "expiringSoonDays": 7,
   "trialReminderDays": 3,
   "retryDays": [2, 5],
+  "transferLeadDays": 7,
   "plans": [
     {
       "id": "basic",

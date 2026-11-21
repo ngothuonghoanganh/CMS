@@ -93,6 +93,8 @@ const unavailableDetails: Record<PlanChangeUnavailableReason, string> = {
   payment_required:
     'Thời gian dùng thử đã hết hoặc gói đã hủy. Chọn "Thanh toán ngay" để trả cho gói đã chọn và dùng tiếp.',
   unpaid: 'Kỳ này chưa được thanh toán. Thanh toán kỳ này trước, rồi đổi gói.',
+  next_period_paid:
+    'Kỳ sau đã được thanh toán cho gói hiện tại. Đổi gói hay hủy gói được từ ngày kỳ đó bắt đầu.',
 };
 
 /** 409 `plan_change_unavailable`: the choice cannot apply now, for `reason`. */

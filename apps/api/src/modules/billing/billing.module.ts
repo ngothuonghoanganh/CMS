@@ -38,13 +38,15 @@ import { InvoicesController } from './invoices.controller.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import { InvoicesService } from './invoices.service.js';
 import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
+import { RenewalTransfers } from './renewal-transfers.service.js';
 import { SubscriptionBackfill } from './subscription-backfill.service.js';
 import { TestClockController } from './test-clock.controller.js';
 
 /**
  * The endpoints of plans and billing (ADR-035), the trials of workspaces made before them, and
  * payments: the gateway `PAYMENT_PROVIDER` names, cards, billing info, invoices and the gateway's
- * webhook; and the subscriptions' life (T3): the billing job, transfers and the plan's emails. The
+ * webhook; and the subscriptions' life (T3): the billing job, transfers and the plan's emails; and
+ * renewal by bank transfer (T4). The
  * marketplace buys its items through it (ADR-036): `InvoiceCharges` charges them, and the
  * marketplace module registers on `MarketplacePurchaseHooks` what paying one grants; billing
  * never imports the marketplace.
@@ -78,6 +80,7 @@ import { TestClockController } from './test-clock.controller.js';
     InvoiceSettlement,
     InvoiceCharges,
     InvoiceTransfers,
+    RenewalTransfers,
     InvoicesService,
     BillingSchedule,
     BillingNoticesRepository,

@@ -35,6 +35,29 @@ export function awaitsTransfer(invoice: {
   return invoice.status === 'pending' && invoice.method === 'transfer';
 }
 
+/**
+ * The invoice of a renewal by bank transfer (T4), made before its period, still waiting for the
+ * transfer: nothing failed, and no card was tried since.
+ */
+export function awaitsRenewalTransfer(invoice: {
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+  transferRenewal?: boolean;
+}): boolean {
+  return invoice.transferRenewal === true && awaitsTransfer(invoice);
+}
+
+/**
+ * Whether a card charge of the invoice is being decided (`pending` by card) or may have gone
+ * through (`open`): nothing may void it, since the money may be taken.
+ */
+export function chargeUndecided(invoice: {
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+}): boolean {
+  return invoice.status === 'open' || (invoice.status === 'pending' && invoice.method === 'card');
+}
+
 /** The statuses a charge of this invoice may record its outcome from. */
 export function chargeableStatusesOf(invoice: {
   status: InvoiceStatus;

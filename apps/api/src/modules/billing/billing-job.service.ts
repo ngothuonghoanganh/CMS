@@ -20,12 +20,22 @@ import {
   settleAtOf,
 } from './domain/billing-agenda.js';
 import { DAY_MS } from './domain/billing-period.js';
-import { invoicePayable, payableOf, purposeOf } from './domain/invoice-state.js';
+import { toObjectId } from '../../shared/persistence/object-id.js';
+import {
+  awaitsRenewalTransfer,
+  awaitsTransfer,
+  chargeUndecided,
+  invoicePayable,
+  isFinalInvoiceStatus,
+  payableOf,
+  purposeOf,
+} from './domain/invoice-state.js';
 import {
   currentEndOf,
   paymentUnderWay,
   renewalBlockerOf,
   renewalTermsOf,
+  transferInvoiceDue,
 } from './domain/renewal.js';
 import {
   CHARGE_TIMEOUT_MS,
@@ -35,7 +45,10 @@ import {
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
+import { BillingLogRepository } from './billing-log.repository.js';
+import { PlanChangeHooks } from './plan-change-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
+import { RenewalTransfers } from './renewal-transfers.service.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
 /** How long one run of the job holds a subscription: a charge's wait, with room for the rest. */
@@ -54,10 +67,15 @@ const CHARGE_RECORD_MS = 15_000;
  *
  * 1. asks the gateway again, with the same key, about charges whose outcome is unknown; one whose
  *    purpose is over is voided without asking, never charged again;
- * 2. at the end of the trial or period, makes the invoice of the next period (a scheduled change
- *    applied) and charges the saved card, or records why it could not;
- * 3. makes the latest retry due of a refused charge;
- * 4. sends the emails that are due: the trial's reminder, "Sắp hết hạn", read-only;
+ * 2. for a plan renewed by bank transfer (T4), makes the next period's invoice `transferLeadDays`
+ *    before the end, with the gateway's details and the owner's email;
+ * 3. at the end of the trial or period: starts the next period paid before it (T4), or waits for
+ *    the transfer invoice made before it (charging it to the card when the method went back to
+ *    the card), or makes the invoice of the next period (a scheduled change applied) and charges
+ *    the saved card, or records why it could not;
+ * 4. makes the latest retry due of a refused charge;
+ * 5. sends the emails that are due: the trial's reminder, "Sắp hết hạn", the transfer's due day,
+ *    read-only;
  *
  * and lets go with the next `nextActionAt`. Every step reads the facts again and does only what is
  * still due, so a run that stopped half way, or one that runs late, is safe to run again. A charge
@@ -76,6 +94,9 @@ export class BillingJob {
     private readonly schedule: BillingSchedule,
     private readonly notifier: BillingNotifier,
     private readonly purchases: MarketplacePurchaseHooks,
+    private readonly renewals: RenewalTransfers,
+    private readonly log: BillingLogRepository,
+    private readonly hooks: PlanChangeHooks,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -88,6 +109,7 @@ export class BillingJob {
     const run = new JobRun(at);
     try {
       await this.settleUndecided(ref, run, until);
+      await this.issueTransferInvoice(ref, run, until);
       await this.endTrialOrPeriod(ref, run, until);
       await this.retryDue(ref, run, until);
       await this.sendDueNotices(ref, run);
@@ -199,21 +221,63 @@ export class BillingJob {
   }
 
   /**
-   * The end of the trial, or of the paid period: the next period's invoice, charged to the saved
-   * card. Nothing to do after "Hủy gói", or while a payment of the period is under way; a trial
-   * without a card ends read-only (`trial_expired`). Waits while another charge of the workspace
-   * may still go through.
+   * The next period's invoice of a plan renewed by bank transfer, when it is due (T4), then its
+   * transfer details and the owner's email, also for one a request made and could not complete.
+   * Waits while another charge of the workspace may still go through.
+   */
+  private async issueTransferInvoice(ref: WorkspaceRef, run: JobRun, until: Date): Promise<void> {
+    const timeline = await this.schedule.timelineOf(ref);
+    if (transferInvoiceDue(timeline.facts, this.catalog, run.at)) {
+      if (await this.blocked(ref, timeline, run)) {
+        return;
+      }
+      const issued = await this.transactions.run(async (tx) => {
+        if (!(await this.subscriptions.stillHeld(ref, until, tx))) {
+          return null;
+        }
+        return this.renewals.issueIn(ref, { at: run.at, actorId: null }, tx);
+      });
+      if (issued?.kind !== 'issued') {
+        run.again();
+        return;
+      }
+    }
+    // Under the job's hold no card charge of the invoice runs, so a refused one gets them again.
+    if ((await this.renewals.complete(ref, { refillRefused: true })) === 'failed') {
+      run.again();
+    }
+  }
+
+  /**
+   * The end of the trial, or of the paid period: the next period paid before it starts (T4); the
+   * transfer invoice made before it is waited for, or charged to the card; or the next period's
+   * invoice is made and charged to the saved card. Nothing to do after "Hủy gói", or while a
+   * payment of the period is under way; a trial without a card or a transfer invoice ends
+   * read-only (`trial_expired`). Waits while another charge of the workspace may still go through.
    */
   private async endTrialOrPeriod(ref: WorkspaceRef, run: JobRun, until: Date): Promise<void> {
     const timeline = await this.schedule.timelineOf(ref);
     const { facts } = timeline;
     const end = currentEndOf(facts);
+    if (run.at.getTime() < end.getTime()) {
+      return;
+    }
+    if (facts.prepaid !== null) {
+      await this.rollOver(ref, facts, run, until);
+      return;
+    }
+    if (facts.cancelAtPeriodEnd || paymentUnderWay(facts)) {
+      return;
+    }
+    if (facts.renewalInvoiceId !== null) {
+      await this.awaitRenewal(ref, timeline, run, until);
+      return;
+    }
     if (
-      run.at.getTime() < end.getTime() ||
-      facts.cancelAtPeriodEnd ||
-      paymentUnderWay(facts) ||
-      (facts.trialEndsAt !== null && !trialEndCharges(facts))
+      (facts.trialEndsAt !== null && !trialEndCharges(facts)) ||
+      facts.renewalMethod === 'transfer'
     ) {
+      // A paid period renewed by transfer got its invoice in the step before, or waits for it.
       return;
     }
     if (await this.blocked(ref, timeline, run)) {
@@ -268,6 +332,139 @@ export class BillingJob {
       return;
     }
     await this.charge(ref, invoice, facts, run, until);
+  }
+
+  /**
+   * The end of a trial or period whose next one was paid before it (T4): that period starts, on the
+   * plan and cycle paid for (a scheduled change applied now), with no charge.
+   */
+  private async rollOver(
+    ref: WorkspaceRef,
+    facts: SubscriptionFacts,
+    run: JobRun,
+    until: Date,
+  ): Promise<void> {
+    const prepaid = facts.prepaid;
+    if (prepaid === null) {
+      return;
+    }
+    const at = run.at;
+    const from = planOf(this.catalog, facts.planId);
+    const to = planOf(this.catalog, prepaid.planId);
+    const moved = await this.transactions.run(async (tx) => {
+      if (
+        !(await this.subscriptions.stillHeld(ref, until, tx)) ||
+        !(await this.subscriptions.rollOver(ref, { prepaid, fromVersion: facts.version, at }, tx))
+      ) {
+        return false;
+      }
+      const before = { planId: facts.planId, cycle: facts.cycle };
+      const after = { planId: prepaid.planId, cycle: prepaid.cycle };
+      const paid = { invoiceId: toObjectId(prepaid.invoiceId) };
+      await this.log.record(
+        ref,
+        {
+          at,
+          actorId: null,
+          action: facts.trialEndsAt === null ? 'period_renewed' : 'paid_plan_started',
+          from: before,
+          to: after,
+          ...paid,
+        },
+        tx,
+      );
+      if (
+        facts.trialEndsAt === null &&
+        (before.planId !== after.planId || before.cycle !== after.cycle)
+      ) {
+        await this.log.record(
+          ref,
+          {
+            at,
+            actorId: null,
+            action: 'scheduled_change_applied',
+            from: before,
+            to: after,
+            ...paid,
+          },
+          tx,
+        );
+      }
+      if (from.id !== to.id) {
+        await this.hooks.run(ref, { from, to, at, by: null }, tx);
+      }
+      return true;
+    });
+    if (!moved) {
+      run.again();
+    }
+  }
+
+  /**
+   * The end of a trial or period whose next period's transfer invoice is unpaid (T4): the
+   * subscription waits for it, as for any invoice of an ended period, in the grace and without a
+   * failure. When the method went back to the card, the card is charged for that same invoice, by
+   * the card's path of T3. A card charge of it the owner made that is still undecided is learnt
+   * first (`settleUndecided`).
+   */
+  private async awaitRenewal(
+    ref: WorkspaceRef,
+    timeline: BillingTimeline,
+    run: JobRun,
+    until: Date,
+  ): Promise<void> {
+    const { facts, renewal } = timeline;
+    const invoiceId = facts.renewalInvoiceId;
+    if (invoiceId === null) {
+      return;
+    }
+    if (
+      renewal === null ||
+      renewal.kind === 'marketplace' ||
+      isFinalInvoiceStatus(renewal.status)
+    ) {
+      // Paid or voided by something that did not let go of it: the end goes on as without it.
+      await this.transactions.run((tx) =>
+        this.subscriptions.setRenewalInvoice(
+          ref,
+          { invoiceId: null, fromVersion: facts.version, at: run.at },
+          tx,
+        ),
+      );
+      run.again();
+      return;
+    }
+    if (chargeUndecided(renewal)) {
+      run.again();
+      return;
+    }
+    const byCard = facts.renewalMethod === 'card';
+    if (byCard && (await this.blocked(ref, timeline, run))) {
+      return;
+    }
+    const due = await this.transactions.run(async (tx) => {
+      if (
+        !(await this.subscriptions.stillHeld(ref, until, tx)) ||
+        !(await this.subscriptions.awaitRenewalInvoice(
+          ref,
+          { invoiceId: renewal._id, fromVersion: facts.version, at: run.at },
+          tx,
+        ))
+      ) {
+        return null;
+      }
+      // Charged like the job's own invoices, which are `open` until charged (T3).
+      return byCard && awaitsTransfer(renewal)
+        ? await this.invoices.reopenForCard(renewal._id, run.at, tx)
+        : renewal;
+    });
+    if (due === null) {
+      run.again();
+      return;
+    }
+    if (byCard) {
+      await this.charge(ref, due, facts, run, until);
+    }
   }
 
   /** The latest retry that is due of the refused invoice the subscription waits for. */
@@ -345,16 +542,22 @@ export class BillingJob {
     return false;
   }
 
-  /** The emails due now: the trial's reminder, "Sắp hết hạn", and read-only. */
+  /**
+   * The emails due now: the trial's reminder, "Sắp hết hạn" (both for a card renewal only), the
+   * due day of a transfer still awaited (T4), and read-only.
+   */
   private async sendDueNotices(ref: WorkspaceRef, run: JobRun): Promise<void> {
-    const { facts } = await this.schedule.timelineOf(ref);
+    const { facts, due } = await this.schedule.timelineOf(ref);
     const { at } = run;
     const end = currentEndOf(facts);
     const before = (days: number) => end.getTime() - days * DAY_MS;
     const ending =
       !facts.cancelAtPeriodEnd && !paymentUnderWay(facts) && at.getTime() < end.getTime();
+    // A transfer's invoice email replaces both (T4); a paid next period needs neither.
+    const byCard = facts.renewalMethod === 'card' && facts.prepaid === null;
     if (
       ending &&
+      byCard &&
       facts.trialEndsAt !== null &&
       at.getTime() >= before(this.catalog.trialReminderDays)
     ) {
@@ -362,6 +565,7 @@ export class BillingJob {
     }
     if (
       ending &&
+      byCard &&
       facts.trialEndsAt === null &&
       at.getTime() >= before(this.catalog.expiringSoonDays)
     ) {
@@ -371,6 +575,17 @@ export class BillingJob {
       }
     }
     const status = subscriptionStatusOf(facts, this.catalog, at);
+    if (
+      due !== null &&
+      due.kind !== 'marketplace' &&
+      facts.failedSince === null &&
+      awaitsRenewalTransfer(due) &&
+      due.transfer !== null &&
+      at.getTime() >= due.periodStart.getTime() &&
+      status.access === 'full'
+    ) {
+      run.notice(await this.notifier.transferDue(due, 'due'));
+    }
     if (status.access === 'read_only') {
       const since =
         status.state === 'past_due' || status.state === 'pending_payment'

@@ -27,6 +27,7 @@ import {
   renewalBlockerOf,
   renewalTermsOf,
   scheduledChangeOf,
+  transferInvoiceAtOf,
 } from './domain/renewal.js';
 import { qrSvgDataUrl } from './domain/transfer-qr.js';
 import type { Entitlements } from './entitlements.service.js';
@@ -36,37 +37,57 @@ import type { InvoiceAttemptRecord, InvoiceRecord, PlanInvoiceRecord } from './i
 export interface SummaryContext {
   usage: PlanUsage;
   month: VnMonth;
-  policy: Pick<BillingPolicy, 'retryDays'>;
+  policy: Pick<BillingPolicy, 'retryDays' | 'transferLeadDays'>;
   planOf: (planId: string) => Plan;
   /**
-   * The invoice the subscription waits for (`openInvoiceId`), with whether it is payable: always
-   * an invoice of the plan.
+   * The invoice the subscription waits for (`openInvoiceId`, or once the end passed the next
+   * period's invoice made before it), with whether it is payable: always an invoice of the plan.
    */
   due: { invoice: PlanInvoiceRecord; payable: boolean } | null;
+  /** The next period's invoice made before the end (T4): waiting for its transfer, or paid. */
+  renewalInvoice: { invoice: PlanInvoiceRecord; payable: boolean } | null;
+  /** The ended period waits for its renewal invoice made for a transfer (T4). */
+  awaitingTransfer: boolean;
 }
 
 /**
- * The next charge: at the end of the trial or period, for the plan it will have then. None after
+ * The next period: at the end of the trial or period, for the plan it will have then, charged to
+ * the card or paid by transfer of an invoice made before it (T4), maybe paid already. None after
  * "Hủy gói", or once the trial or period ended or a payment of it is under way.
  */
 function renewalOf(
   { facts, at }: Pick<Entitlements, 'facts' | 'at'>,
-  planOf: (planId: string) => Plan,
+  context: Pick<SummaryContext, 'planOf' | 'policy' | 'renewalInvoice'>,
 ): SubscriptionRenewal | null {
   const end = currentEndOf(facts);
   if (facts.cancelAtPeriodEnd || paymentUnderWay(facts) || at.getTime() >= end.getTime()) {
     return null;
   }
-  const terms = renewalTermsOf(facts, planOf);
-  const blocker = renewalBlockerOf(facts.paymentMethod, end);
+  const made = context.renewalInvoice;
+  const terms = renewalTermsOf(facts, context.planOf);
+  const paid = facts.prepaid !== null;
+  const byCard = facts.renewalMethod === 'card';
+  const blocker = byCard && !paid ? renewalBlockerOf(facts.paymentMethod, end) : null;
+  const planned = transferInvoiceAtOf(facts, context.policy);
+  const invoiceAt =
+    made !== null
+      ? made.invoice.createdAt
+      : byCard || paid
+        ? null
+        : new Date(Math.max(planned.getTime(), at.getTime()));
   return {
     at: end.toISOString(),
-    planId: terms.plan.id,
-    planName: terms.plan.name,
-    cycle: terms.cycle,
-    amount: terms.amount,
-    autoRenews: blocker === null,
+    // What the invoice made for it says, once there is one: it was made from these terms.
+    planId: made?.invoice.planId ?? terms.plan.id,
+    planName: made?.invoice.planName ?? terms.plan.name,
+    cycle: made?.invoice.cycle ?? terms.cycle,
+    amount: made?.invoice.amount ?? terms.amount,
+    autoRenews: byCard && !paid && blocker === null,
     blocker,
+    method: facts.renewalMethod,
+    invoiceAt: invoiceAt?.toISOString() ?? null,
+    invoice: made === null ? null : toDueInvoice(made.invoice, made.payable),
+    paid,
   };
 }
 
@@ -93,8 +114,10 @@ export function toBillingSummary(
     graceEndsAt: status.graceEndsAt?.toISOString() ?? null,
     graceDaysLeft: status.graceDaysLeft,
     cancelAt: facts.cancelAtPeriodEnd ? currentEndOf(facts).toISOString() : null,
-    renewal: renewalOf({ facts, at }, context.planOf),
+    renewal: renewalOf({ facts, at }, context),
     dueInvoice: due === null ? null : toDueInvoice(due.invoice, due.payable),
+    renewalMethod: facts.renewalMethod,
+    awaitingTransfer: context.awaitingTransfer,
     failedSince: facts.failedSince?.toISOString() ?? null,
     nextRetryAt: nextRetry?.toISOString() ?? null,
     usage: context.usage,
@@ -119,11 +142,13 @@ function toDueInvoice(invoice: PlanInvoiceRecord, payable: boolean): DueInvoice 
 
 /**
  * The plan every member sees, with `due`, the invoice the subscription waits for: a transfer to
- * confirm or a charge the gateway has not answered make the banners say it waits (T3).
+ * confirm or a charge the gateway has not answered make the banners say it waits (T3), and a
+ * renewal by transfer awaited says "Chờ chuyển khoản" (T4).
  */
 export function toWorkspacePlan(
   { plan, status }: Entitlements,
   due: Pick<InvoiceRecord, 'status'> | null,
+  awaitingTransfer: boolean,
 ): WorkspacePlan {
   return {
     plan: { id: plan.id, name: plan.name, limits: plan.limits, features: plan.features },
@@ -132,6 +157,7 @@ export function toWorkspacePlan(
     trialDaysLeft: status.trialDaysLeft,
     graceDaysLeft: status.graceDaysLeft,
     paymentWaiting: due !== null && (due.status === 'pending' || due.status === 'open'),
+    awaitingTransfer,
   };
 }
 
@@ -151,13 +177,17 @@ export function toPaymentMethodView(
       };
 }
 
-/** What choosing `planId` in `cycle` does now, for board 28's dialog. */
+/**
+ * What choosing `planId` in `cycle` does now, for board 28's dialog, with the early transfer
+ * invoice confirming voids (T4).
+ */
 export function toPlanChangeQuote(
   change: PlanChange,
   choice: { planId: string; cycle: BillingCycle },
   method: PaymentMethod | null,
   at: Date,
   impacts: PlanChangeImpacts | null,
+  renewalInvoiceVoided: PlanChangeQuote['renewalInvoiceVoided'] = null,
 ): PlanChangeQuote {
   const charges = chargesNow(change);
   const view = toPaymentMethodView(method, at);
@@ -176,6 +206,7 @@ export function toPlanChangeQuote(
     effectiveAt: change.mode === 'scheduled' ? change.effectiveAt.toISOString() : null,
     nextAmount: change.mode === 'scheduled' ? change.nextAmount : null,
     impacts,
+    renewalInvoiceVoided,
   };
 }
 

@@ -13,6 +13,7 @@ import { attemptOfIdempotencyKey } from './domain/invoice-state.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoiceSettlement } from './invoice-settlement.service.js';
 import { InjectPlanCatalog } from './plan-catalog.js';
+import { RenewalTransfers } from './renewal-transfers.service.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
 /** What became of an event: applied now, applied before, or ignored with why. */
@@ -42,6 +43,7 @@ export class GatewayWebhookService {
     private readonly schedule: BillingSchedule,
     private readonly notifier: BillingNotifier,
     private readonly clock: BillingClock,
+    private readonly renewals: RenewalTransfers,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -85,6 +87,10 @@ export class GatewayWebhookService {
   private async notify(invoice: InvoiceRecord): Promise<void> {
     if (invoice.status === 'paid') {
       await this.notifier.receipt(invoice);
+      // A paid upgrade replaced the next period's transfer invoice in its transaction (T4).
+      if (invoice.kind === 'upgrade') {
+        await this.renewals.complete({ workspaceId: invoice.workspaceId });
+      }
       return;
     }
     if (invoice.kind === 'marketplace') {
