@@ -1,0 +1,1297 @@
+{
+  "terms": {
+    "version": 1,
+    "summary": "Không bán lại, cho thuê hay chia sẻ mẫu cho workspace khác.",
+    "licence": [
+      "Giấy phép cho phép workspace đã nhận hoặc đã mua mẫu dùng mẫu để tạo trang ở mọi site của workspace đó, kể cả site tạo sau khi mua.",
+      "Giấy phép thuộc về workspace và không chuyển sang workspace khác. Không bán lại, cho thuê hay chia sẻ mẫu, kể cả sau khi đã sửa.",
+      "Trang tạo từ mẫu thuộc về workspace: bạn sửa chữ, ảnh và section trong trình soạn thảo. Chữ trong mẫu là chữ mẫu, cần thay bằng thông tin thật của doanh nghiệp trước khi xuất bản.",
+      "Phiên bản mới của mẫu miễn phí cho workspace đã sở hữu. Cập nhật lên phiên bản mới không đổi các trang đã tạo từ mẫu.",
+      "Hạ gói, gói hết hạn hay mẫu ngừng bán không thu hồi giấy phép: workspace vẫn dùng mẫu như trước.",
+      "Giá đã gồm VAT và trả một lần. Yêu cầu hoàn tiền được xử lý ngoài ứng dụng, theo chính sách hoàn tiền của Payload."
+    ],
+    "support": "Payload hỗ trợ qua email trong giờ làm việc khi mẫu hiển thị sai hoặc không tạo được trang.",
+    "refund": "Hoàn tiền theo chính sách của Payload"
+  },
+  "items": [
+    {
+      "id": "mp-khai-truong-phong-tap",
+      "status": "listed",
+      "name": "Khai trương phòng tập",
+      "description": "Cho chiến dịch khai trương hoặc mở chi nhánh: lịch trình ngày khai trương, lịch lớp học, huấn luyện viên và form giữ chỗ.",
+      "goal": "event",
+      "industry": "fitness",
+      "price": 399000,
+      "versions": [
+        {
+          "version": 1,
+          "releasedOn": "2026-11-21",
+          "note": "Phiên bản đầu tiên.",
+          "composition": {
+            "version": 1,
+            "motion": {
+              "style": "lively",
+              "level": "mid",
+              "accents": {},
+              "reduceOnMobile": false
+            },
+            "sections": [
+              {
+                "id": "mpphongtap01",
+                "type": "navbar",
+                "variant": "logo-cta",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "brandText": "",
+                  "showLogo": true,
+                  "cta": {
+                    "label": "Giữ chỗ",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpphongtap06"
+                    }
+                  }
+                },
+                "samplePaths": ["cta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpphongtap02",
+                "type": "hero",
+                "variant": "split",
+                "colorScheme": "brand",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "eyebrow": "Khai trương ngày … · Mở cửa từ 6:00",
+                  "heading": "Ngày hội khai trương: tập thử miễn phí cùng huấn luyện viên",
+                  "subheading": "Mời bạn đến tham quan phòng tập, tập thử một lớp cùng huấn luyện viên và nhận ưu đãi thẻ tập chỉ có trong tuần khai trương.",
+                  "primaryCta": {
+                    "label": "Giữ chỗ tham dự",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpphongtap06"
+                    }
+                  },
+                  "secondaryCta": {
+                    "label": "",
+                    "link": {
+                      "kind": "none"
+                    }
+                  },
+                  "image": {
+                    "assetId": null,
+                    "alt": "",
+                    "decorative": false
+                  }
+                },
+                "samplePaths": ["eyebrow", "heading", "subheading", "primaryCta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpphongtap03",
+                "type": "benefits",
+                "variant": "steps",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Lịch trình ngày khai trương",
+                  "intro": "Đến lúc nào cũng được, giữ chỗ trước để chắc có suất tập thử.",
+                  "items": [
+                    {
+                      "icon": "clock",
+                      "title": "8:00 · Đón khách và tham quan",
+                      "description": "Đi một vòng khu tập tạ, phòng lớp nhóm và khu thư giãn.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "heart",
+                      "title": "9:30 · Lớp tập thử",
+                      "description": "Tập 45 phút cùng huấn luyện viên, hợp cả người mới bắt đầu.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "star",
+                      "title": "11:00 · Quà và ưu đãi",
+                      "description": "Nhận quà khai trương và đăng ký thẻ tập với giá của tuần đầu.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "intro",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description",
+                  "items.2.title",
+                  "items.2.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpphongtap04",
+                "type": "benefits",
+                "variant": "grid",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Lịch lớp học hằng tuần",
+                  "intro": "",
+                  "items": [
+                    {
+                      "icon": "leaf",
+                      "title": "Yoga buổi sáng",
+                      "description": "Thứ 2, 4, 6 · 6:00–7:00. Nhẹ nhàng, hợp người mới bắt đầu.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "sparkles",
+                      "title": "Cardio theo nhạc",
+                      "description": "Thứ 3, 5, 7 · 18:00–19:00. Vận động cùng cả lớp theo nhạc.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "shield",
+                      "title": "Tập tạ có hướng dẫn",
+                      "description": "Mỗi ngày · 17:00–21:00. Huấn luyện viên chỉnh kỹ thuật cho bạn.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description",
+                  "items.2.title",
+                  "items.2.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpphongtap05",
+                "type": "benefits",
+                "variant": "alternate",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Huấn luyện viên",
+                  "intro": "",
+                  "items": [
+                    {
+                      "icon": "star",
+                      "title": "Tên huấn luyện viên",
+                      "description": "Chứng chỉ, chuyên môn và số năm kinh nghiệm của huấn luyện viên.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "star",
+                      "title": "Tên huấn luyện viên thứ hai",
+                      "description": "Chứng chỉ, chuyên môn và số năm kinh nghiệm của huấn luyện viên.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpphongtap06",
+                "type": "lead_form",
+                "variant": "stacked",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Giữ chỗ ngày khai trương",
+                  "description": "Số chỗ của lớp tập thử có hạn. Để lại tên và số điện thoại, phòng tập gọi lại xác nhận giờ bạn đến.",
+                  "showEmail": false,
+                  "showMessage": false,
+                  "submitLabel": "Giữ chỗ",
+                  "successTitle": "Đã giữ chỗ cho bạn",
+                  "successMessage": "Phòng tập sẽ gọi lại để xác nhận giờ bạn đến dự khai trương."
+                },
+                "samplePaths": [
+                  "heading",
+                  "description",
+                  "submitLabel",
+                  "successTitle",
+                  "successMessage"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpphongtap07",
+                "type": "footer",
+                "variant": "basic",
+                "colorScheme": "dark",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "businessName": "",
+                  "address": "Địa chỉ phòng tập",
+                  "phone": "Số điện thoại",
+                  "hours": "Giờ mở cửa, ví dụ: 6:00–22:00 mỗi ngày",
+                  "links": [],
+                  "copyright": ""
+                },
+                "samplePaths": ["address", "phone", "hours"],
+                "reviewPaths": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "mp-mo-ban-du-an-can-ho",
+      "status": "listed",
+      "name": "Mở bán dự án căn hộ",
+      "description": "Cho đợt mở bán căn hộ: vị trí, tiện ích, loại căn, câu hỏi về pháp lý và thanh toán, với form nhận bảng giá và hẹn xem nhà mẫu.",
+      "goal": "lead",
+      "industry": "real_estate",
+      "price": 499000,
+      "versions": [
+        {
+          "version": 1,
+          "releasedOn": "2026-11-21",
+          "note": "Phiên bản đầu tiên.",
+          "composition": {
+            "version": 1,
+            "motion": {
+              "style": "luxe",
+              "level": "mid",
+              "accents": {},
+              "reduceOnMobile": false
+            },
+            "sections": [
+              {
+                "id": "mpcanho01",
+                "type": "navbar",
+                "variant": "logo-cta",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "brandText": "",
+                  "showLogo": true,
+                  "cta": {
+                    "label": "Nhận bảng giá",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpcanho06"
+                    }
+                  }
+                },
+                "samplePaths": ["cta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpcanho02",
+                "type": "hero",
+                "variant": "split",
+                "colorScheme": "brand",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "eyebrow": "Mở bán đợt 1 · Số lượng căn có hạn",
+                  "heading": "Căn hộ 2–3 phòng ngủ cạnh công viên, bàn giao hoàn thiện",
+                  "subheading": "Giới thiệu ngắn về dự án: chủ đầu tư, vị trí, quy mô, thời gian bàn giao và những giấy tờ pháp lý đã có.",
+                  "primaryCta": {
+                    "label": "Nhận bảng giá",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpcanho06"
+                    }
+                  },
+                  "secondaryCta": {
+                    "label": "",
+                    "link": {
+                      "kind": "none"
+                    }
+                  },
+                  "image": {
+                    "assetId": null,
+                    "alt": "",
+                    "decorative": false
+                  }
+                },
+                "samplePaths": ["eyebrow", "heading", "subheading", "primaryCta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpcanho03",
+                "type": "benefits",
+                "variant": "grid",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Vị trí và tiện ích",
+                  "intro": "Nêu khoảng cách thật tới những nơi cư dân đi lại hằng ngày.",
+                  "items": [
+                    {
+                      "icon": "leaf",
+                      "title": "Cạnh công viên",
+                      "description": "Mô tả mảng xanh quanh dự án và lối đi bộ cho cư dân.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "clock",
+                      "title": "Kết nối thuận tiện",
+                      "description": "Thời gian tới trung tâm, trường học, chợ và bệnh viện gần nhất.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "sparkles",
+                      "title": "Tiện ích nội khu",
+                      "description": "Hồ bơi, phòng tập, sân chơi trẻ em và khu sinh hoạt chung.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "shield",
+                      "title": "An ninh nhiều lớp",
+                      "description": "Bảo vệ, camera và thẻ ra vào cho từng tầng.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "intro",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description",
+                  "items.2.title",
+                  "items.2.description",
+                  "items.3.title",
+                  "items.3.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpcanho04",
+                "type": "benefits",
+                "variant": "alternate",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Các loại căn hộ",
+                  "intro": "",
+                  "items": [
+                    {
+                      "icon": "check",
+                      "title": "Căn 2 phòng ngủ",
+                      "description": "Diện tích, hướng nhìn, cách bố trí phòng và người ở phù hợp với loại căn này.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "check",
+                      "title": "Căn 3 phòng ngủ",
+                      "description": "Diện tích, hướng nhìn, cách bố trí phòng và người ở phù hợp với loại căn này.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpcanho05",
+                "type": "faq",
+                "variant": "accordion",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Câu hỏi về dự án",
+                  "items": [
+                    {
+                      "question": "Dự án đã có những giấy tờ pháp lý nào?",
+                      "answer": "Liệt kê giấy tờ pháp lý đã có và nơi khách xem được bản sao."
+                    },
+                    {
+                      "question": "Tiến độ thanh toán như thế nào?",
+                      "answer": "Nêu các đợt thanh toán và ngân hàng hỗ trợ vay, nếu có."
+                    },
+                    {
+                      "question": "Khi nào nhận nhà?",
+                      "answer": "Nêu thời gian bàn giao dự kiến và tình trạng căn hộ lúc bàn giao."
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.question",
+                  "items.0.answer",
+                  "items.1.question",
+                  "items.1.answer",
+                  "items.2.question",
+                  "items.2.answer"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpcanho06",
+                "type": "lead_form",
+                "variant": "stacked",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Nhận bảng giá và hẹn xem nhà mẫu",
+                  "description": "Để lại tên và số điện thoại, chuyên viên tư vấn gửi bảng giá và hẹn lịch tham quan nhà mẫu với bạn.",
+                  "showEmail": true,
+                  "showMessage": false,
+                  "submitLabel": "Nhận bảng giá",
+                  "successTitle": "Đã nhận yêu cầu của bạn",
+                  "successMessage": "Chuyên viên tư vấn sẽ liên hệ trong giờ làm việc để gửi bảng giá."
+                },
+                "samplePaths": [
+                  "heading",
+                  "description",
+                  "submitLabel",
+                  "successTitle",
+                  "successMessage"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpcanho07",
+                "type": "footer",
+                "variant": "basic",
+                "colorScheme": "dark",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "businessName": "",
+                  "address": "Địa chỉ nhà mẫu hoặc văn phòng bán hàng",
+                  "phone": "Số điện thoại",
+                  "hours": "Giờ đón khách, ví dụ: 8:00–18:00 mỗi ngày",
+                  "links": [],
+                  "copyright": ""
+                },
+                "samplePaths": ["address", "phone", "hours"],
+                "reviewPaths": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "mp-spa-uu-dai-ngay-le",
+      "status": "listed",
+      "name": "Spa ưu đãi ngày lễ",
+      "description": "Cho chương trình ưu đãi dịp lễ: các gói dịch vụ giảm giá có thời hạn, cảm nhận khách hàng, câu hỏi thường gặp và nút gọi, nhắn Zalo đặt lịch.",
+      "goal": "promo",
+      "industry": "spa_beauty",
+      "price": 299000,
+      "versions": [
+        {
+          "version": 1,
+          "releasedOn": "2026-11-21",
+          "note": "Phiên bản đầu tiên.",
+          "composition": {
+            "version": 1,
+            "motion": {
+              "style": "luxe",
+              "level": "mid",
+              "accents": {},
+              "reduceOnMobile": false
+            },
+            "sections": [
+              {
+                "id": "mpspale01",
+                "type": "navbar",
+                "variant": "logo-cta",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "brandText": "",
+                  "showLogo": true,
+                  "cta": {
+                    "label": "Đặt lịch",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpspale07"
+                    }
+                  }
+                },
+                "samplePaths": ["cta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale02",
+                "type": "hero",
+                "variant": "centered",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "eyebrow": "Ưu đãi dịp lễ · Từ ngày … đến ngày …",
+                  "heading": "Quà mùa lễ: giảm 30% các gói chăm sóc da và thư giãn",
+                  "subheading": "Nêu gói dịch vụ đang ưu đãi, mức giảm, thời gian áp dụng và số suất mỗi ngày.",
+                  "primaryCta": {
+                    "label": "Đặt lịch ngay",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpspale07"
+                    }
+                  },
+                  "secondaryCta": {
+                    "label": "",
+                    "link": {
+                      "kind": "none"
+                    }
+                  },
+                  "image": {
+                    "assetId": null,
+                    "alt": "",
+                    "decorative": false
+                  }
+                },
+                "samplePaths": ["eyebrow", "heading", "subheading", "primaryCta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale03",
+                "type": "benefits",
+                "variant": "grid",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Các gói ưu đãi dịp lễ",
+                  "intro": "",
+                  "items": [
+                    {
+                      "icon": "sparkles",
+                      "title": "Chăm sóc da cơ bản",
+                      "description": "Làm sạch sâu, đắp mặt nạ và massage mặt trong 60 phút.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "leaf",
+                      "title": "Thư giãn toàn thân",
+                      "description": "Massage với tinh dầu và xông hơi thảo dược trong 90 phút.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "heart",
+                      "title": "Đi cùng bạn bè",
+                      "description": "Đặt lịch cho hai người cùng lúc để nhận thêm quà tặng.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description",
+                  "items.2.title",
+                  "items.2.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale04",
+                "type": "testimonials",
+                "variant": "cards",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Khách hàng nói gì",
+                  "items": [
+                    {
+                      "quote": "Không gian yên tĩnh, kỹ thuật viên nhẹ tay và chu đáo.",
+                      "name": "Tên khách hàng",
+                      "detail": "Khách hàng thân thiết",
+                      "avatar": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "quote": "Nhắn Zalo đặt lịch rất nhanh, đến nơi không phải chờ.",
+                      "name": "Tên khách hàng",
+                      "detail": "Khách hàng mới",
+                      "avatar": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "quote": "Phòng sạch sẽ, tinh dầu thơm dịu, mình sẽ quay lại.",
+                      "name": "Tên khách hàng",
+                      "detail": "Khách hàng thân thiết",
+                      "avatar": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.quote",
+                  "items.0.name",
+                  "items.0.detail",
+                  "items.1.quote",
+                  "items.1.name",
+                  "items.1.detail",
+                  "items.2.quote",
+                  "items.2.name",
+                  "items.2.detail"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale05",
+                "type": "faq",
+                "variant": "accordion",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Câu hỏi về ưu đãi",
+                  "items": [
+                    {
+                      "question": "Ưu đãi áp dụng đến khi nào?",
+                      "answer": "Nêu ngày bắt đầu, ngày kết thúc và giờ nhận khách trong dịp lễ."
+                    },
+                    {
+                      "question": "Có cần đặt lịch trước không?",
+                      "answer": "Nên đặt trước để giữ giờ, nhất là những ngày lễ đông khách."
+                    },
+                    {
+                      "question": "Có dùng chung với ưu đãi khác được không?",
+                      "answer": "Nêu rõ ưu đãi có cộng dồn với thẻ thành viên hay phiếu quà tặng không."
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.question",
+                  "items.0.answer",
+                  "items.1.question",
+                  "items.1.answer",
+                  "items.2.question",
+                  "items.2.answer"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale06",
+                "type": "cta_band",
+                "variant": "band",
+                "colorScheme": "brand",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Số suất ưu đãi mỗi ngày có hạn",
+                  "text": "Gọi hoặc nhắn Zalo để giữ giờ bạn muốn trong dịp lễ.",
+                  "cta": {
+                    "label": "Giữ giờ ngay",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mpspale07"
+                    }
+                  }
+                },
+                "samplePaths": ["heading", "text", "cta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale07",
+                "type": "quick_contact",
+                "variant": "buttons",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Đặt lịch nhanh",
+                  "text": "Gọi điện hoặc nhắn Zalo, spa xếp lịch cho bạn ngay trong giờ mở cửa.",
+                  "call": {
+                    "label": "Gọi đặt lịch",
+                    "link": {
+                      "kind": "phone",
+                      "phone": ""
+                    }
+                  },
+                  "zalo": {
+                    "label": "Nhắn Zalo",
+                    "link": {
+                      "kind": "zalo",
+                      "phone": ""
+                    }
+                  }
+                },
+                "samplePaths": ["heading", "text", "call.label", "zalo.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mpspale08",
+                "type": "footer",
+                "variant": "basic",
+                "colorScheme": "dark",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "businessName": "",
+                  "address": "Địa chỉ spa",
+                  "phone": "Số điện thoại",
+                  "hours": "Giờ mở cửa, ví dụ: 9:00–21:00 mỗi ngày",
+                  "links": [],
+                  "copyright": ""
+                },
+                "samplePaths": ["address", "phone", "hours"],
+                "reviewPaths": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "mp-khoa-hoc-tieng-anh-tre-em",
+      "status": "listed",
+      "name": "Khóa học tiếng Anh trẻ em",
+      "description": "Cho trung tâm tiếng Anh tuyển sinh lớp thiếu nhi: chương trình theo độ tuổi, các bước học thử, cảm nhận phụ huynh và form đăng ký buổi học thử.",
+      "goal": "lead",
+      "industry": "education",
+      "price": 0,
+      "versions": [
+        {
+          "version": 1,
+          "releasedOn": "2026-11-21",
+          "note": "Phiên bản đầu tiên.",
+          "composition": {
+            "version": 1,
+            "motion": {
+              "style": "lively",
+              "level": "mid",
+              "accents": {},
+              "reduceOnMobile": false
+            },
+            "sections": [
+              {
+                "id": "mptienganh01",
+                "type": "navbar",
+                "variant": "logo-cta",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "brandText": "",
+                  "showLogo": true,
+                  "cta": {
+                    "label": "Đăng ký học thử",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mptienganh07"
+                    }
+                  }
+                },
+                "samplePaths": ["cta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh02",
+                "type": "hero",
+                "variant": "split",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "eyebrow": "Tuyển sinh khóa mới · Lớp cho trẻ 4–12 tuổi",
+                  "heading": "Lớp tiếng Anh cho trẻ: học qua trò chơi, bài hát và dự án nhỏ",
+                  "subheading": "Giới thiệu ngắn về trung tâm: sĩ số mỗi lớp, giáo viên và cách phụ huynh theo dõi việc học của con sau mỗi buổi.",
+                  "primaryCta": {
+                    "label": "Đăng ký học thử miễn phí",
+                    "link": {
+                      "kind": "section",
+                      "sectionId": "mptienganh07"
+                    }
+                  },
+                  "secondaryCta": {
+                    "label": "",
+                    "link": {
+                      "kind": "none"
+                    }
+                  },
+                  "image": {
+                    "assetId": null,
+                    "alt": "",
+                    "decorative": false
+                  }
+                },
+                "samplePaths": ["eyebrow", "heading", "subheading", "primaryCta.label"],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh03",
+                "type": "benefits",
+                "variant": "grid",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Chương trình theo độ tuổi",
+                  "intro": "",
+                  "items": [
+                    {
+                      "icon": "smile",
+                      "title": "Mầm non 4–6 tuổi",
+                      "description": "Làm quen âm và từ vựng qua bài hát, thẻ hình và trò chơi vận động.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "star",
+                      "title": "Tiểu học 7–9 tuổi",
+                      "description": "Nghe nói theo chủ đề quen thuộc, bắt đầu đọc và viết câu ngắn.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "sparkles",
+                      "title": "Lớp lớn 10–12 tuổi",
+                      "description": "Thuyết trình theo nhóm, đọc hiểu và làm quen với các kỳ thi.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description",
+                  "items.2.title",
+                  "items.2.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh04",
+                "type": "benefits",
+                "variant": "steps",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Học thử trong 3 bước",
+                  "intro": "",
+                  "items": [
+                    {
+                      "icon": "check",
+                      "title": "Đăng ký",
+                      "description": "Để lại tên phụ huynh, số điện thoại và độ tuổi của con.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "check",
+                      "title": "Kiểm tra đầu vào",
+                      "description": "Giáo viên trò chuyện với con khoảng 15 phút để xếp lớp phù hợp.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "icon": "check",
+                      "title": "Học thử một buổi",
+                      "description": "Con học cùng lớp thật, phụ huynh nhận nhận xét sau buổi học.",
+                      "image": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.title",
+                  "items.0.description",
+                  "items.1.title",
+                  "items.1.description",
+                  "items.2.title",
+                  "items.2.description"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh05",
+                "type": "testimonials",
+                "variant": "cards",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Phụ huynh nói gì",
+                  "items": [
+                    {
+                      "quote": "Con háo hức đến lớp mỗi tuần, về nhà còn hát lại bài học.",
+                      "name": "Tên phụ huynh",
+                      "detail": "Phụ huynh bé … tuổi",
+                      "avatar": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "quote": "Giáo viên gửi nhận xét sau từng buổi nên tôi biết con đã học gì.",
+                      "name": "Tên phụ huynh",
+                      "detail": "Phụ huynh bé … tuổi",
+                      "avatar": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    },
+                    {
+                      "quote": "Lớp ít học sinh, cô để ý đến từng bạn.",
+                      "name": "Tên phụ huynh",
+                      "detail": "Phụ huynh bé … tuổi",
+                      "avatar": {
+                        "assetId": null,
+                        "alt": "",
+                        "decorative": false
+                      }
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.quote",
+                  "items.0.name",
+                  "items.0.detail",
+                  "items.1.quote",
+                  "items.1.name",
+                  "items.1.detail",
+                  "items.2.quote",
+                  "items.2.name",
+                  "items.2.detail"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh06",
+                "type": "faq",
+                "variant": "accordion",
+                "colorScheme": "soft",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Phụ huynh thường hỏi",
+                  "items": [
+                    {
+                      "question": "Mỗi lớp có bao nhiêu học sinh?",
+                      "answer": "Nêu sĩ số tối đa, số giáo viên và trợ giảng của mỗi lớp."
+                    },
+                    {
+                      "question": "Học phí tính thế nào?",
+                      "answer": "Nêu học phí theo khóa hay theo tháng và ưu đãi cho anh chị em, nếu có."
+                    },
+                    {
+                      "question": "Nếu con nghỉ một buổi thì sao?",
+                      "answer": "Nêu cách học bù hoặc cách trung tâm gửi bài để con ôn ở nhà."
+                    }
+                  ]
+                },
+                "samplePaths": [
+                  "heading",
+                  "items.0.question",
+                  "items.0.answer",
+                  "items.1.question",
+                  "items.1.answer",
+                  "items.2.question",
+                  "items.2.answer"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh07",
+                "type": "lead_form",
+                "variant": "stacked",
+                "colorScheme": "light",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "heading": "Đăng ký buổi học thử miễn phí",
+                  "description": "Để lại tên phụ huynh và số điện thoại, trung tâm gọi lại để hẹn giờ kiểm tra đầu vào cho con.",
+                  "showEmail": false,
+                  "showMessage": true,
+                  "submitLabel": "Đăng ký học thử",
+                  "successTitle": "Đã nhận đăng ký học thử",
+                  "successMessage": "Trung tâm sẽ gọi lại trong giờ làm việc để hẹn lịch học thử cho con."
+                },
+                "samplePaths": [
+                  "heading",
+                  "description",
+                  "submitLabel",
+                  "successTitle",
+                  "successMessage"
+                ],
+                "reviewPaths": []
+              },
+              {
+                "id": "mptienganh08",
+                "type": "footer",
+                "variant": "basic",
+                "colorScheme": "dark",
+                "spacing": "normal",
+                "visibility": {
+                  "desktop": true,
+                  "mobile": true
+                },
+                "mobileOrder": "auto",
+                "content": {
+                  "businessName": "",
+                  "address": "Địa chỉ trung tâm",
+                  "phone": "Số điện thoại",
+                  "hours": "Giờ làm việc, ví dụ: 8:00–20:00 từ thứ Hai đến Chủ nhật",
+                  "links": [],
+                  "copyright": ""
+                },
+                "samplePaths": ["address", "phone", "hours"],
+                "reviewPaths": []
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

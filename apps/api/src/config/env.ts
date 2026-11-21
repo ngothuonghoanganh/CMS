@@ -13,6 +13,11 @@ export const BUNDLED_PLAN_CATALOG_FILE = fileURLToPath(
   new URL('../../plans.json', import.meta.url),
 );
 
+/** The marketplace catalog that comes with the API (ADR-036), next to its package.json. */
+export const BUNDLED_MARKETPLACE_CATALOG_FILE = fileURLToPath(
+  new URL('../../marketplace.json', import.meta.url),
+);
+
 const secret = z.string().min(32, 'must be at least 32 characters');
 
 const baseEnvSchema = z.object({
@@ -192,6 +197,14 @@ const baseEnvSchema = z.object({
    * Unset, the fake gateway signs with a random secret of the process.
    */
   PAYMENT_WEBHOOK_SECRET: secret.optional(),
+
+  /**
+   * The marketplace's items, their prices, versions and compositions, and the licence terms
+   * (ADR-036): a JSON file matching `marketplaceCatalogSchema`, read at startup. The API does not
+   * start when it does not match, or when a composition does not parse with the section registry
+   * or holds an image or a link to another page.
+   */
+  MARKETPLACE_CATALOG_FILE: z.string().min(1).default(BUNDLED_MARKETPLACE_CATALOG_FILE),
 });
 
 /** Emails go to an SMTP server (ADR-018), the default. */
