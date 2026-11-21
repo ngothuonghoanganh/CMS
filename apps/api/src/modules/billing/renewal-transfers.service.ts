@@ -217,7 +217,8 @@ export class RenewalTransfers {
    * for, without the email (the job sends `due`). `refillRefused`: also gives details again to an
    * invoice a refused card dropped them from, only under the billing job's hold, since a card
    * charge of it may otherwise be running. Safe to run again; never throws: `failed` leaves it to
-   * the job, whose timeline has it (`transfer_invoice`).
+   * the job, whose timeline has it (`transfer_invoice`). Past the end, an invoice a refused card
+   * dropped them from follows the retries of T3 and gets none.
    */
   async complete(
     ref: WorkspaceRef,
@@ -233,15 +234,16 @@ export class RenewalTransfers {
       if (invoice === null || invoice.kind === 'marketplace' || invoice.transferRenewal !== true) {
         return 'none';
       }
+      const early = facts.renewalInvoiceId === id;
       if (
         lacksTransferDetails(invoice) &&
-        (invoice.status !== 'failed' || options.refillRefused === true)
+        (invoice.status !== 'failed' || (early && options.refillRefused === true))
       ) {
         invoice = (await this.transfers.fill(ref, invoice)) ?? invoice;
       }
       if (
         invoice.kind !== 'marketplace' &&
-        facts.renewalInvoiceId === id &&
+        early &&
         awaitsRenewalTransfer(invoice) &&
         invoice.transfer !== null
       ) {

@@ -11,7 +11,11 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import { BillingClock } from './billing-clock.js';
 import { BillingNotifier, type NoticeOutcome } from './billing-notifier.service.js';
-import { BillingSchedule, type BillingTimeline } from './billing-schedule.service.js';
+import {
+  BillingSchedule,
+  type BillingTimeline,
+  lacksTransferDetails,
+} from './billing-schedule.service.js';
 import {
   dueRetryOf,
   graceEndOf,
@@ -434,11 +438,13 @@ export class BillingJob {
       run.again();
       return;
     }
-    if (chargeUndecided(renewal)) {
+    const byCard = facts.renewalMethod === 'card';
+    // Awaited without the details to pay it (the gateway failed when it was made, or a card the
+    // owner tried was refused): the step before gets them first.
+    if (chargeUndecided(renewal) || (!byCard && lacksTransferDetails(renewal))) {
       run.again();
       return;
     }
-    const byCard = facts.renewalMethod === 'card';
     if (byCard && (await this.blocked(ref, timeline, run))) {
       return;
     }

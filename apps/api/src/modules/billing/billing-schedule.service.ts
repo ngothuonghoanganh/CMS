@@ -76,11 +76,16 @@ export class BillingSchedule {
     // The early invoice is among them while the owner's card charge of it is unknown (T4).
     const undecided = open.filter((invoice) => invoice._id.toHexString() !== dueId);
     // A renewal by transfer whose invoice still lacks the gateway's details (T4); a card that
-    // replaced the transfer pays it at the end instead.
+    // replaced the transfer pays it at the end instead. Past the end, a card the owner tried
+    // instead and the bank refused leaves the invoice to the retries of T3.
     const lacking =
-      facts.renewalMethod === 'transfer'
-        ? [renewal, due].find((invoice) => lacksTransferDetails(invoice))
-        : undefined;
+      facts.renewalMethod !== 'transfer'
+        ? undefined
+        : lacksTransferDetails(renewal)
+          ? renewal
+          : lacksTransferDetails(due) && due.status !== 'failed'
+            ? due
+            : undefined;
     const items = billingAgendaOf({
       facts,
       policy: this.catalog,

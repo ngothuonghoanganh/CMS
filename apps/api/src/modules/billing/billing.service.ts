@@ -423,8 +423,12 @@ export class BillingService {
       target.id !== current.plan.id
         ? await this.impactsOf(scope, current.plan, target)
         : null;
+    // Paying now ends the trial its transfer invoice was made for.
     const voids =
-      change.mode === 'scheduled' || change.mode === 'trial_change' || change.mode === 'upgrade'
+      change.mode === 'scheduled' ||
+      change.mode === 'trial_change' ||
+      change.mode === 'upgrade' ||
+      change.mode === 'start_paid'
         ? await this.renewalInvoiceVoided(scope, current.facts, current.at)
         : null;
     return toPlanChangeQuote(

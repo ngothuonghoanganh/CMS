@@ -17,10 +17,12 @@ import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import {
   addCard,
+  CARD_DECLINED,
   CARD_OK,
   fakeGateway,
   invoicesOf,
   newEventId,
+  payInvoice,
   postGatewayEvent,
 } from '../../../test/payments.js';
 import { BUNDLED_PLAN_CATALOG_FILE } from '../../config/env.js';
@@ -303,6 +305,50 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
     await runAt(after(late.periodEnd, -2));
     expect(await renewalInvoices(late.workspaceId)).toHaveLength(1);
     expect(transferEmails(late.email, 'issued')).toHaveLength(1);
+  });
+
+  it('completes an invoice the gateway gave no details for, and one a refused card dropped them from', async () => {
+    const { owner, workspaceId, email, periodEnd } = await paying();
+    clock.set(after(periodEnd, -10));
+    await setMethod(owner, workspaceId, 'transfer').expect(200);
+    const startTransfer = vi
+      .spyOn(fakeGateway(t), 'startTransfer')
+      .mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+    const issuedAt = after(periodEnd, -7);
+    await runAt(issuedAt);
+    const [made] = await renewalInvoices(workspaceId);
+    expect(made).toMatchObject({ status: 'pending', method: 'transfer', transfer: null });
+    expect(transferEmails(email, 'issued')).toEqual([]);
+    // The job comes back 15 minutes later for it.
+    const retryAt = await storedTime(workspaceId, 'nextActionAt');
+    expect(retryAt.getTime() - issuedAt.getTime()).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(retryAt.getTime() - issuedAt.getTime()).toBeLessThan(16 * 60_000);
+    await runAt(retryAt);
+    expect(startTransfer).toHaveBeenCalledTimes(2);
+    const invoiceId = String(made?.['_id']);
+    expect((await invoiceOf(owner, workspaceId, invoiceId)).transfer).toMatchObject({
+      accountNumber: '0000000000',
+    });
+    expect(transferEmails(email, 'issued')).toHaveLength(1);
+
+    // The owner pays it by a card the bank refuses: the invoice is not lost to the transfer.
+    await addCard(t, owner, workspaceId, CARD_DECLINED);
+    clock.set(after(periodEnd, -5));
+    await payInvoice(owner, workspaceId, invoiceId).expect(402);
+    const refused = await summaryOf(owner, workspaceId);
+    expect(refused).toMatchObject({
+      state: 'active',
+      failedSince: null,
+      renewal: { method: 'transfer', invoice: { id: invoiceId, status: 'failed' } },
+    });
+    expect(await scheduler.runDue()).toBe(1);
+    expect(await invoiceOf(owner, workspaceId, invoiceId)).toMatchObject({
+      status: 'pending',
+      method: 'transfer',
+      transfer: { content: expect.stringMatching(/^PLP HD-/) as unknown },
+    });
+    expect(transferEmails(email, 'issued')).toHaveLength(1);
+    expect(emailsTo(email, 'billing-charge-failed')).toEqual([]);
   });
 
   it('starts a period paid before its end at that end: no day lost, no card charged, the scheduled change applied then', async () => {
@@ -627,6 +673,65 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
       periodEnd: periodEndOf(trialEnd, 'monthly').toISOString(),
     });
     expect((await logOf(workspaceId)).slice(-2)).toEqual(['renewal_prepaid', 'paid_plan_started']);
+  });
+
+  it('voids the trial’s transfer invoice when the trial is paid now, by transfer or by card', async () => {
+    for (const payWith of ['transfer', 'card'] as const) {
+      clock.set(START);
+      const { client: owner, workspaceId } = await signedUpClient(t.app);
+      const trialEnd = await storedTime(workspaceId, 'trialEndsAt');
+      await setMethod(owner, workspaceId, 'transfer').expect(200);
+      if (payWith === 'card') {
+        await addCard(t, owner, workspaceId, CARD_OK);
+      }
+      await runAt(after(trialEnd, -7));
+      const early = (await summaryOf(owner, workspaceId)).renewal?.invoice;
+      if (early == null) {
+        throw new Error('The trial got no invoice for its transfer');
+      }
+      clock.set(after(trialEnd, -5));
+      const quote = planChangeQuoteSchema.parse(
+        (
+          await owner
+            .get(endpoints.getPlanChangeQuote.path(workspaceId))
+            .query({ planId: 'business', cycle: 'monthly', payNow: 'true' })
+            .expect(200)
+        ).body,
+      );
+      expect(quote).toMatchObject({
+        mode: 'start_paid',
+        renewalInvoiceVoided: { invoiceId: early.id, invoiceNumber: early.number },
+      });
+      const paid = billingSummarySchema.parse(
+        (
+          await owner
+            .post(endpoints.changePlan.path(workspaceId), {
+              planId: 'business',
+              cycle: 'monthly',
+              payNow: true,
+              expectedAmount: quote.amount,
+              ...(payWith === 'transfer' ? { payWith } : {}),
+            })
+            .expect(payWith === 'transfer' ? 202 : 200)
+        ).body,
+      );
+      expect((await invoiceOf(owner, workspaceId, early.id)).status).toBe('void');
+      if (payWith === 'transfer') {
+        // One transfer pays the period: the one of "Thanh toán ngay".
+        expect(paid).toMatchObject({
+          state: 'trialing',
+          dueInvoice: { status: 'pending', method: 'transfer', amount: 1_490_000 },
+          renewal: null,
+        });
+      } else {
+        expect(paid).toMatchObject({
+          state: 'active',
+          plan: { id: 'business' },
+          trialEndsAt: null,
+        });
+      }
+      expect(await logOf(workspaceId)).toContain('renewal_invoice_voided');
+    }
   });
 
   it('gives a trial that ends unpaid the grace, not `trial_expired`, but none when chosen after it', async () => {

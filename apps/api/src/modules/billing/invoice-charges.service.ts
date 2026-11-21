@@ -219,7 +219,9 @@ export class InvoiceCharges {
    *
    * Paid by transfer (`payWith: 'transfer'`, a plan paid now only, T3), nothing is charged: the
    * invoice waits for the gateway's confirmation (`pending`), and the subscription for it. The
-   * gateway gives the transfer's details once the invoice has its number.
+   * gateway gives the transfer's details once the invoice has its number. It voids the trial's own
+   * transfer invoice made before its end (T4), which it replaces; paid by card, that one is voided
+   * when the card's payment applies.
    */
   async checkout(
     scope: WorkspaceScope,
@@ -258,6 +260,26 @@ export class InvoiceCharges {
       await this.invoices.voidRefusedChanges(scope, at, tx);
       const replaced = await this.invoices.voidReplacedTransfers(scope, at, tx);
       await this.subscriptions.stopWaitingFor(scope, replaced, tx);
+      if (byTransfer && facts.renewalInvoiceId !== null) {
+        // The trial's own transfer invoice is replaced too: one transfer pays the period (T4).
+        await this.renewals.voidIn(
+          scope,
+          toObjectId(facts.renewalInvoiceId),
+          { at, actorId: scope.userId },
+          tx,
+        );
+        const current = await this.subscriptions.find(scope, tx);
+        if (
+          current === null ||
+          !(await this.subscriptions.setRenewalInvoice(
+            scope,
+            { invoiceId: null, fromVersion: current.version, at },
+            tx,
+          ))
+        ) {
+          throw subscriptionChanged();
+        }
+      }
       const created = await this.invoices.create(
         {
           workspaceId: scope.workspaceId,
