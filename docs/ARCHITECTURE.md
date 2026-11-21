@@ -3341,6 +3341,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Khung giá chưa có nút: một câu trung tính thay cho "Nhận mẫu" và "Mua mẫu", không có nút bấm không làm gì. MP2 và MP3 thay câu đó bằng các trạng thái ở trên.
     - Mẫu miễn phí: khung giá chỉ ghi "Miễn phí", không có dòng "Một lần · Đã gồm VAT · {terms.refund}", vì không có khoản nào để trả, tính thuế hay hoàn.
     - Mẫu `draft`, `withdrawn` hay mã lạ: trang "Không tìm thấy trang" (API trả 404).
+- **Chi tiết khi làm (lát MP2):**
+  - **Màn 32:** năm cột của board khi danh sách rộng từ 900px (bề rộng board cho nó), đo theo danh sách chứ không theo cửa sổ, vì Sidebar chiếm 248px từ 900px. Hẹp hơn: mỗi dòng có mẫu và nút ở hàng đầu, phiên bản, quyền sử dụng và ngày nhận ở hàng sau, mỗi ô có nhãn; điện thoại: mỗi ô một dòng. Không cuộn ngang như board, để "Cập nhật" và "Tạo trang" luôn trong tầm nhìn.
+  - **Hộp "Nhận mẫu":** "Đọc điều khoản giấy phép" mở `terms.licence` ngay trong hộp, thay cho link ở nhãn ô đồng ý của board, vì trang phía sau bị lớp phủ che.
+  - **Sau khi bấm:** "Cập nhật mẫu" báo "Đã cập nhật “…” lên vM." và đưa focus về tên mẫu của dòng; "Nhận mẫu" đưa focus tới "Tạo trang từ mẫu". Cả hai đọc lại thư viện và "Áp dụng mẫu…" của editor. Bấm hai lần chỉ gửi một request.
+  - **Thiếu `templates.manage`:** màn 32 ghi "Chỉ {vai trò} cập nhật được mẫu lên phiên bản mới." khi có dòng "CÓ BẢN vM"; màn 31 ghi câu đó với link "Sản phẩm đã mua" thay cho "Cập nhật".
+  - **Khung giá của màn 31:** dòng "Một lần · Đã gồm VAT · {terms.refund}" ở dưới "Đã sở hữu" khi giấy phép là `purchase`, như board; giấy phép `free` không có dòng đó, kể cả khi mẫu nay có giá.
+  - **Chỉ đọc:** nút "Nhận mẫu", "Cập nhật mẫu" và "Tạo bản nháp và mở editor" vẫn bấm được, như mọi màn của ADR-035 (banner chỉ đọc báo trước ở mọi màn). 402 trong hộp là cảnh báo với "Theo gói" và "Xem gói & thanh toán", không phải lỗi quyền.
 
 ---
 
