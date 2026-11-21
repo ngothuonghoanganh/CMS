@@ -28,6 +28,11 @@ export interface SubscriptionRecord {
     expMonth: number;
     expYear: number;
   } | null;
+  /**
+   * The card came only after the trial had ended without one (T3): it is not charged for the
+   * trial's end. Missing on subscriptions stored before T3, read as false.
+   */
+  cardAfterTrial?: boolean;
   billingInfo: { companyName: string; taxCode: string; address: string; email: string } | null;
   nextActionAt: Date | null;
   lockedUntil: Date | null;
@@ -85,6 +90,7 @@ export const subscriptionSchema = new Schema<SubscriptionRecord>(
     openInvoiceId: { type: Schema.Types.ObjectId, default: null },
     failedSince: { type: Date, default: null },
     paymentMethod: { type: paymentMethodSchema, default: null },
+    cardAfterTrial: { type: Boolean, default: false },
     billingInfo: { type: billingInfoSchema, default: null },
     nextActionAt: { type: Date, default: null },
     lockedUntil: { type: Date, default: null },

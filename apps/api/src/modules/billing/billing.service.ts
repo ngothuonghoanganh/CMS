@@ -10,6 +10,7 @@ import {
   type PlanChangeQuote,
   type PlanChangeQuoteQuery,
   type PlanLimitKey,
+  trialEndCharges,
   type WorkspacePlan,
 } from '@plp/contracts';
 import { validationFailed } from '../../shared/errors.js';
@@ -201,7 +202,7 @@ export class BillingService {
     if (!facts.cancelAtPeriodEnd) {
       if (at.getTime() >= currentEndOf(facts).getTime()) {
         const expired =
-          facts.trialEndsAt !== null && !paymentUnderWay(facts) && facts.paymentMethod === null;
+          facts.trialEndsAt !== null && !paymentUnderWay(facts) && !trialEndCharges(facts);
         throw planChangeUnavailable(expired ? 'payment_required' : 'unpaid');
       }
       if (facts.trialEndsAt === null && paymentUnderWay(facts)) {

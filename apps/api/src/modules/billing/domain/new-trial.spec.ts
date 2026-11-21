@@ -18,6 +18,7 @@ describe('a new workspace’s trial (ADR-035)', () => {
       nextActionAt: new Date('2026-12-01T08:30:00.000Z'),
       cancelAtPeriodEnd: false,
       paymentMethod: null,
+      cardAfterTrial: false,
       failedSince: null,
       openInvoiceId: null,
       version: 0,

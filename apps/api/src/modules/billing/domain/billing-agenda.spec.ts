@@ -30,6 +30,7 @@ const paid: Facts = {
   openInvoiceId: null,
   failedSince: null,
   paymentMethod: CARD,
+  cardAfterTrial: false,
 };
 const trial: Facts = { ...paid, trialEndsAt: at(14), periodEnd: at(14), paymentMethod: null };
 
@@ -45,10 +46,20 @@ function agenda(facts: Facts, due: AgendaInvoice | null = null, undecided: Agend
 }
 
 describe('the billing job’s timeline (ADR-035, T3)', () => {
-  it('reminds of a trial 3 days before it ends, then ends it', () => {
-    expect(agenda(trial)).toEqual([
+  it('reminds of a trial 3 days before it ends, then charges the card saved meanwhile', () => {
+    expect(agenda({ ...trial, paymentMethod: CARD })).toEqual([
       ['trial_reminder', at(11)],
       ['trial_end', at(14)],
+    ]);
+  });
+
+  it('ends a trial without a card read-only, and never charges a card saved after it', () => {
+    expect(agenda(trial)).toEqual([
+      ['trial_reminder', at(11)],
+      ['read_only_notice', at(14)],
+    ]);
+    expect(agenda({ ...trial, paymentMethod: CARD, cardAfterTrial: true })).toEqual([
+      ['trial_reminder', at(11)],
       ['read_only_notice', at(14)],
     ]);
   });

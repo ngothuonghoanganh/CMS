@@ -4,6 +4,7 @@ import {
   type PlanCatalog,
   type SubscriptionFacts,
   subscriptionStatusOf,
+  trialEndCharges,
 } from '@plp/contracts';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
@@ -170,7 +171,7 @@ export class BillingJob {
       run.at.getTime() < end.getTime() ||
       facts.cancelAtPeriodEnd ||
       paymentUnderWay(facts) ||
-      (facts.trialEndsAt !== null && facts.paymentMethod === null)
+      (facts.trialEndsAt !== null && !trialEndCharges(facts))
     ) {
       return;
     }

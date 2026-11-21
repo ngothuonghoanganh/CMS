@@ -278,6 +278,11 @@ export const subscriptionFactsSchema = z.strictObject({
   /** The first failed charge of the period not paid yet; the grace counts from it. */
   failedSince: z.date().nullable(),
   paymentMethod: paymentMethodSchema.nullable(),
+  /**
+   * The trial ended with no card, and the saved one came only after (T3): the end of the trial
+   * does not charge it, and the trial stays expired until "Thanh toán ngay" pays.
+   */
+  cardAfterTrial: z.boolean(),
   billingInfo: billingInfoSchema.nullable(),
   /** The next job of the subscription: the end of the trial or the period, or a retry. */
   nextActionAt: z.date().nullable(),
@@ -298,6 +303,11 @@ export interface SubscriptionStatus {
   trialDaysLeft: number | null;
   /** When an unpaid workspace turns read-only; null when nothing is overdue. */
   graceEndsAt: Date | null;
+  /**
+   * Whole days left before an unpaid workspace turns read-only, rounded up ("còn 7 ngày"); null
+   * when nothing is overdue or it is read-only already.
+   */
+  graceDaysLeft: number | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -312,13 +322,24 @@ export function cardValidAt(
 }
 
 /**
+ * Whether the end of the trial charges the saved card (ADR-035, T3): only a card saved while the
+ * trial ran. One saved after a trial that ended without a card is not charged for it.
+ */
+export function trialEndCharges(
+  facts: Pick<SubscriptionFacts, 'cardAfterTrial'> & { paymentMethod: object | null },
+): boolean {
+  return facts.paymentMethod !== null && !facts.cardAfterTrial;
+}
+
+/**
  * The state and access level of a subscription at `now` (ADR-035, §2 rule 12). Nothing stores
  * them: they change as time passes, so a job that runs late never leaves a stale state.
  *
  * - A trial is `trialing` until `trialEndsAt`. After it, a trial with a payment method is being
  *   charged: unpaid with the grace (`past_due`) until the charge job records the outcome, never
  *   read-only at once because the job runs after the trial's end. Without a payment method or a
- *   payment under way, the workspace is `trial_expired` and read-only.
+ *   payment under way, the workspace is `trial_expired` and read-only; a card saved after that
+ *   changes nothing (`trialEndCharges`), only paying does (T3).
  * - A paid period that ends with `cancelAtPeriodEnd` is `canceled` and read-only.
  * - A period (or trial) that ended unpaid, or a failed charge, is `past_due`; an invoice waiting
  *   without a failure (a transfer to confirm) is `pending_payment`. Either keeps full access for
@@ -328,7 +349,12 @@ export function cardValidAt(
 export function subscriptionStatusOf(
   facts: Pick<
     SubscriptionFacts,
-    'trialEndsAt' | 'periodEnd' | 'cancelAtPeriodEnd' | 'openInvoiceId' | 'failedSince'
+    | 'trialEndsAt'
+    | 'periodEnd'
+    | 'cancelAtPeriodEnd'
+    | 'openInvoiceId'
+    | 'failedSince'
+    | 'cardAfterTrial'
   > & { paymentMethod: Pick<PaymentMethod, 'expMonth' | 'expYear'> | null },
   policy: SubscriptionPolicy,
   now: Date,
@@ -339,21 +365,24 @@ export function subscriptionStatusOf(
     access,
     trialDaysLeft: null,
     graceEndsAt: null,
+    graceDaysLeft: null,
   });
   const unpaid = (endedAt: Date): SubscriptionStatus => {
     const since = facts.failedSince ?? endedAt;
     const graceEndsAt = new Date(since.getTime() + policy.graceDays * DAY_MS);
+    const inGrace = at < graceEndsAt.getTime();
     return {
       state:
         facts.failedSince === null && facts.openInvoiceId !== null ? 'pending_payment' : 'past_due',
-      access: at >= graceEndsAt.getTime() ? 'read_only' : 'full',
+      access: inGrace ? 'full' : 'read_only',
       trialDaysLeft: null,
       graceEndsAt,
+      graceDaysLeft: inGrace ? Math.ceil((graceEndsAt.getTime() - at) / DAY_MS) : null,
     };
   };
   const paymentUnderWay = facts.failedSince !== null || facts.openInvoiceId !== null;
-  // A saved method is charged at the end of the trial (ADR-035), by a job that runs after it.
-  const charged = paymentUnderWay || facts.paymentMethod !== null;
+  // A card saved during the trial is charged at its end (ADR-035), by a job that runs after it.
+  const charged = paymentUnderWay || trialEndCharges(facts);
 
   if (facts.trialEndsAt !== null) {
     const trialEnd = facts.trialEndsAt.getTime();

@@ -25,6 +25,7 @@ export function newTrial(
     openInvoiceId: null,
     failedSince: null,
     paymentMethod: null,
+    cardAfterTrial: false,
     billingInfo: null,
     nextActionAt: new Date(trialEndsAt.getTime() - catalog.trialReminderDays * DAY_MS),
     lockedUntil: null,

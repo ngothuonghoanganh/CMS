@@ -118,7 +118,10 @@ export class GatewayWebhookService {
     }
   }
 
-  /** The card of a setup the owner started: it replaces the saved one. */
+  /**
+   * The card of a setup the owner started: it replaces the saved one. The first card of a trial
+   * that ended without one is not charged for its end (T3): the trial stays expired.
+   */
   private async methodSaved(
     event: Extract<GatewayEvent, { kind: 'method_saved' }>,
     tx: Tx,
@@ -129,7 +132,21 @@ export class GatewayWebhookService {
     }
     const ref = { workspaceId: setup.workspaceId };
     const at = this.clock.now();
-    if (!(await this.subscriptions.setPaymentMethod(ref, event.method, at, tx))) {
+    const facts = await this.subscriptions.find(ref, tx);
+    if (facts === null) {
+      return { result: 'ignored', why: 'no workspace has this reference' };
+    }
+    const afterTrial =
+      facts.paymentMethod === null &&
+      facts.trialEndsAt !== null &&
+      at.getTime() >= facts.trialEndsAt.getTime();
+    if (
+      !(await this.subscriptions.setPaymentMethod(
+        ref,
+        { method: event.method, afterTrial, at },
+        tx,
+      ))
+    ) {
       return { result: 'ignored', why: 'no workspace has this reference' };
     }
     await this.log.record(ref, { at, actorId: setup.userId, action: 'payment_method_changed' }, tx);

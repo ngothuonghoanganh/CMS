@@ -62,6 +62,7 @@ function toFacts(record: SubscriptionRecord): SubscriptionFacts {
           expYear: record.paymentMethod.expYear,
         }
       : null,
+    cardAfterTrial: record.cardAfterTrial ?? false,
     billingInfo: record.billingInfo
       ? {
           companyName: record.billingInfo.companyName,
@@ -183,17 +184,26 @@ export class SubscriptionsRepository {
     return result.matchedCount === 1;
   }
 
-  /** Stores the card the gateway saved, in place of any earlier one (ADR-035). */
+  /**
+   * Stores the card the gateway saved, in place of any earlier one (ADR-035). `afterTrial`: the
+   * trial ended with no card before this one, which is then not charged for its end (T3).
+   */
   async setPaymentMethod(
     ref: WorkspaceRef,
-    method: PaymentMethod,
-    at: Date,
+    change: { method: PaymentMethod; afterTrial: boolean; at: Date },
     tx: Tx,
   ): Promise<boolean> {
     const result = await this.subscriptions
       .updateOne(
         { _id: ref.workspaceId },
-        { $set: { paymentMethod: method, updatedAt: at }, $inc: { version: 1 } },
+        {
+          $set: {
+            paymentMethod: change.method,
+            ...(change.afterTrial ? { cardAfterTrial: true } : {}),
+            updatedAt: change.at,
+          },
+          $inc: { version: 1 },
+        },
         { session: tx },
       )
       .exec();
@@ -278,6 +288,7 @@ export class SubscriptionsRepository {
             scheduledChange: null,
             openInvoiceId: null,
             failedSince: null,
+            cardAfterTrial: false,
             updatedAt: change.at,
           },
           $inc: { version: 1 },

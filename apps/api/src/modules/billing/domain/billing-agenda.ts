@@ -1,4 +1,9 @@
-import type { ChargeOutcome, InvoiceStatus, SubscriptionFacts } from '@plp/contracts';
+import {
+  type ChargeOutcome,
+  type InvoiceStatus,
+  type SubscriptionFacts,
+  trialEndCharges,
+} from '@plp/contracts';
 import { DAY_MS } from './billing-period.js';
 import { type BillingPolicy, currentEndOf, paymentUnderWay, renewalBlockerOf } from './renewal.js';
 
@@ -43,6 +48,7 @@ export interface AgendaInput {
     | 'openInvoiceId'
     | 'failedSince'
     | 'paymentMethod'
+    | 'cardAfterTrial'
   >;
   policy: BillingPolicy;
   /** The invoice the subscription waits for (`openInvoiceId`); null without one. */
@@ -132,8 +138,8 @@ export function graceEndOf(
 /**
  * Everything the job will do for the subscription, with its time; some may be due already.
  *
- * - A trial: the reminder `trialReminderDays` before its end, then its end (charge the saved card,
- *   or turn read-only without one).
+ * - A trial: the reminder `trialReminderDays` before its end, then its end: charging the card saved
+ *   while it ran, or the read-only notice without one (a card saved after it is not charged).
  * - A paid period: "Sắp hết hạn" `expiringSoonDays` before its end when the card cannot pay then,
  *   and the renewal at its end.
  * - After "Hủy gói": only the read-only notice at the end.
@@ -151,9 +157,8 @@ export function billingAgendaOf(input: AgendaInput): AgendaItem[] {
   } else if (!paymentUnderWay(facts)) {
     if (facts.trialEndsAt !== null) {
       at('trial_reminder', new Date(end.getTime() - policy.trialReminderDays * DAY_MS));
-      at('trial_end', end);
       // Without a card the trial's end is read-only at once (`trial_expired`).
-      at('read_only_notice', end);
+      at(trialEndCharges(facts) ? 'trial_end' : 'read_only_notice', end);
     } else {
       if (renewalBlockerOf(facts.paymentMethod, end) !== null) {
         at('expiring_notice', new Date(end.getTime() - policy.expiringSoonDays * DAY_MS));
