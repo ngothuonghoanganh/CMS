@@ -458,6 +458,20 @@ test.describe('Design capture', () => {
     await capture(page, 'WorkspaceTemplates-saveDialog');
   });
 
+  test('30 Marketplace and 31 MarketplaceItem', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    const workspace = `/workspaces/${board.site.workspaceId}`;
+    await page.goto(`${workspace}/marketplace`);
+    await expect(page.getByRole('article').first()).toBeVisible();
+    await capture(page, 'Marketplace');
+    await page.goto(`${workspace}/marketplace/mp-khai-truong-phong-tap`);
+    await expect(page.getByRole('region', { name: /^Bản xem trước/ })).toBeVisible();
+    await capture(page, 'MarketplaceItem');
+    await page.getByRole('button', { name: 'Điều khoản giấy phép' }).click();
+    await expect(page.getByRole('dialog', { name: 'Điều khoản giấy phép' })).toBeVisible();
+    await capture(page, 'MarketplaceItem-terms');
+  });
+
   test('13 Domains and 14 DomainConnect', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.goto(sitePath('/domain'));

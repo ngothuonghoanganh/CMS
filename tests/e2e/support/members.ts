@@ -9,7 +9,7 @@ export async function joinAs(
   browser: Browser,
   mail: APIRequestContext,
   workspaceId: string,
-  role: 'admin' | 'support',
+  role: 'admin' | 'editor' | 'support',
   siteIds: string[] = [],
 ): Promise<Page> {
   const email = `${role}-${uniqueId()}@example.com`;
