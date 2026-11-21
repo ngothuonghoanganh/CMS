@@ -7,7 +7,7 @@ import {
 } from '@plp/contracts';
 import { Button, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { type RefObject, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { reportUnexpected } from '../shell/problem-message';
@@ -24,6 +24,8 @@ export interface UpdateLicenceDialogProps {
   onUpdated: () => void;
   /** Another member moved it meanwhile (409 `template_changed`): read again and say so. */
   onChangedMeanwhile: () => void;
+  /** Where focus goes once the row's "Cập nhật" is gone, the licence being up to date. */
+  fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
 }
 
 /**
@@ -38,6 +40,7 @@ export function UpdateLicenceDialog({
   onOpenChange,
   onUpdated,
   onChangedMeanwhile,
+  fallbackFocusRef,
 }: UpdateLicenceDialogProps) {
   const [failure, setFailure] = useState<unknown>(null);
   // `isPending` turns true a tick after `mutate`: a double click would update twice before it.
@@ -76,6 +79,7 @@ export function UpdateLicenceDialog({
         onOpenChange(next);
       }}
       title={`Cập nhật “${item.name}” lên v${item.latestVersion}?`}
+      fallbackFocusRef={fallbackFocusRef}
       footer={
         <>
           <Button

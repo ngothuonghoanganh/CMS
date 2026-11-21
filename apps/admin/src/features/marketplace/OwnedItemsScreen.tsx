@@ -20,7 +20,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { formatDate } from '../../lib/format';
 import { marketplaceHref, marketplaceItemHref, templateHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
@@ -65,7 +65,9 @@ export function OwnedItemsScreen({
     opening: number;
   } | null>(null);
   const [creating, setCreating] = useState<{ itemId: string; open: boolean } | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'info' | 'success'; text: string } | null>(null);
+  // Updated, the row loses "Cập nhật": focus goes to the row's name rather than to the page.
+  const updatedName = useRef<HTMLAnchorElement>(null);
 
   // Looked up on every render: after a refresh the dialogs show the row as it is now.
   const updatingItem = items.find((item) => item.itemId === updating?.itemId);
@@ -97,7 +99,7 @@ export function OwnedItemsScreen({
       </header>
 
       <div role="status" className={notice === null ? styles.srOnly : undefined}>
-        {notice === null ? null : <Callout tone="info">{notice}</Callout>}
+        {notice === null ? null : <Callout tone={notice.tone}>{notice.text}</Callout>}
       </div>
 
       {items.length === 0 ? (
@@ -134,6 +136,7 @@ export function OwnedItemsScreen({
                   </span>
                   <span className={styles.names}>
                     <Link
+                      ref={item.itemId === updating?.itemId ? updatedName : undefined}
                       href={marketplaceItemHref(workspace.id, item.itemId)}
                       className={styles.name}
                     >
@@ -217,17 +220,22 @@ export function OwnedItemsScreen({
           workspaceId={workspace.id}
           item={updatingItem}
           open={updating.open}
+          fallbackFocusRef={updatedName}
           onOpenChange={(open) => {
             setUpdating((current) => (current === null ? null : { ...current, open }));
           }}
           onUpdated={() => {
-            setNotice(null);
+            setNotice({
+              tone: 'success',
+              text: `Đã cập nhật “${updatingItem.name}” lên v${updatingItem.latestVersion}.`,
+            });
             readAgain();
           }}
           onChangedMeanwhile={() => {
-            setNotice(
-              `Mẫu “${updatingItem.name}” vừa được cập nhật ở nơi khác. Đã tải lại danh sách.`,
-            );
+            setNotice({
+              tone: 'info',
+              text: `Mẫu “${updatingItem.name}” vừa được cập nhật ở nơi khác. Đã tải lại danh sách.`,
+            });
             readAgain();
           }}
         />
@@ -245,9 +253,10 @@ export function OwnedItemsScreen({
             setCreating((current) => (current === null ? null : { ...current, open }));
           }}
           onTemplateChanged={() => {
-            setNotice(
-              `Mẫu “${creatingItem.name}” vừa được cập nhật. Đã tải lại danh sách; bấm “Tạo trang” để dùng phiên bản mới.`,
-            );
+            setNotice({
+              tone: 'info',
+              text: `Mẫu “${creatingItem.name}” vừa được cập nhật. Đã tải lại danh sách; bấm “Tạo trang” để dùng phiên bản mới.`,
+            });
             setCreating(null);
             router.refresh();
           }}

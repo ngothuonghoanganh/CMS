@@ -1,4 +1,6 @@
 import { type Access, endpoints, type Membership } from '@plp/contracts';
+import { ToastProvider } from '@plp/ui';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,17 +34,31 @@ const workspace: Membership['workspace'] = {
   slug: 'may-xanh-agency',
 };
 
-function renderItem(
-  overrides: Parameters<typeof marketplaceDetailFixture>[0] = {},
-  role: Access = 'owner',
-) {
-  return renderWithProviders(
+type ItemOverrides = Parameters<typeof marketplaceDetailFixture>[0];
+
+function itemScreen(overrides: ItemOverrides, role: Access) {
+  return (
     <MarketplaceItemScreen
       workspace={workspace}
       role={role}
       item={marketplaceDetailFixture(overrides)}
-    />,
+    />
   );
+}
+
+function renderItem(overrides: ItemOverrides = {}, role: Access = 'owner') {
+  const rendered = renderWithProviders(itemScreen(overrides, role));
+  return {
+    ...rendered,
+    /** The server's render after `router.refresh()`, with the item as it is now. */
+    refreshed: (now: ItemOverrides) => {
+      rendered.rerender(
+        <QueryClientProvider client={rendered.queryClient}>
+          <ToastProvider>{itemScreen({ ...overrides, ...now }, role)}</ToastProvider>
+        </QueryClientProvider>,
+      );
+    },
+  };
 }
 
 describe('MarketplaceItemScreen (board 31)', () => {
@@ -166,6 +182,27 @@ describe('MarketplaceItemScreen (board 31)', () => {
         expect(router.refresh).toHaveBeenCalled();
       });
       expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByRole('status')).toHaveTextContent('Đã nhận “Khai trương phòng tập”');
+    });
+
+    it('keeps focus in the price box once the item is owned and "Nhận mẫu" is gone', async () => {
+      const user = userEvent.setup();
+      apiMock.mockResolvedValueOnce(licenceFixture());
+      const { refreshed } = renderItem({ price: 0, version: 1 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      await user.click(screen.getByRole('checkbox'));
+      await user.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Nhận mẫu' }),
+      );
+      await vi.waitFor(() => {
+        expect(router.refresh).toHaveBeenCalled();
+      });
+
+      refreshed({ licence: licenceFixture() });
+      expect(screen.queryByRole('button', { name: 'Nhận mẫu' })).toBeNull();
+      await vi.waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Tạo trang từ mẫu' })).toHaveFocus();
+      });
       expect(screen.getByRole('status')).toHaveTextContent('Đã nhận “Khai trương phòng tập”');
     });
 

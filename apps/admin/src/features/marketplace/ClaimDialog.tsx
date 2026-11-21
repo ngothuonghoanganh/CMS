@@ -7,7 +7,7 @@ import {
 } from '@plp/contracts';
 import { Button, Checkbox, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+import { type RefObject, useId, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { reportUnexpected } from '../shell/problem-message';
 import { DialogFailure } from './DialogFailure';
@@ -25,6 +25,8 @@ export interface ClaimDialogProps {
    * price now (409 `item_not_free`): the screen reads the item again and asks again.
    */
   onChanged: (message: string) => void;
+  /** Where focus goes once "Nhận mẫu" is gone, the workspace owning the item. */
+  fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
 }
 
 /**
@@ -40,6 +42,7 @@ export function ClaimDialog({
   onOpenChange,
   onClaimed,
   onChanged,
+  fallbackFocusRef,
 }: ClaimDialogProps) {
   const termsId = useId();
   const [agreed, setAgreed] = useState(false);
@@ -91,6 +94,7 @@ export function ClaimDialog({
         onOpenChange(next);
       }}
       title="Nhận mẫu"
+      fallbackFocusRef={fallbackFocusRef}
       description="Mẫu miễn phí: không có hóa đơn và không bị trừ tiền."
       footer={
         <>

@@ -1,4 +1,6 @@
 import { type Access, endpoints, type Membership } from '@plp/contracts';
+import { ToastProvider } from '@plp/ui';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,22 +43,37 @@ const bought = ownedItemFixture({
 });
 const free = ownedItemFixture({ grantedAt: '2026-08-15T03:00:00.000Z' });
 
-function renderScreen(
-  options: {
-    role?: Access;
-    items?: ReturnType<typeof ownedItemFixture>[];
-    sites?: (typeof smile)[];
-  } = {},
-) {
-  return renderWithProviders(
+interface ScreenOptions {
+  role?: Access;
+  items?: ReturnType<typeof ownedItemFixture>[];
+  sites?: (typeof smile)[];
+}
+
+function screenOf(options: ScreenOptions) {
+  return (
     <OwnedItemsScreen
       workspace={workspace}
       role={options.role ?? 'owner'}
       items={options.items ?? [bought, free]}
       sites={options.sites ?? [smile]}
       initialSiteId={SITE_ID}
-    />,
+    />
   );
+}
+
+function renderScreen(options: ScreenOptions = {}) {
+  const rendered = renderWithProviders(screenOf(options));
+  return {
+    ...rendered,
+    /** The server's render after `router.refresh()`, with the licences as they are now. */
+    refreshed: (items: ReturnType<typeof ownedItemFixture>[]) => {
+      rendered.rerender(
+        <QueryClientProvider client={rendered.queryClient}>
+          <ToastProvider>{screenOf({ ...options, items })}</ToastProvider>
+        </QueryClientProvider>,
+      );
+    },
+  };
 }
 
 beforeEach(() => {
@@ -182,6 +199,26 @@ describe('OwnedItemsScreen (board 32)', () => {
     expect(queryClient.getQueryState(templateQueryKeys.all(WORKSPACE_ID))?.isInvalidated).toBe(
       true,
     );
+  });
+
+  it('says the update was made, and keeps focus on the row once "Cập nhật" is gone', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValueOnce(licenceFixture({ version: 2 }));
+    const { refreshed } = renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Cập nhật Khai trương phòng tập' }));
+    await user.click(screen.getByRole('button', { name: 'Cập nhật mẫu' }));
+    await vi.waitFor(() => {
+      expect(router.refresh).toHaveBeenCalled();
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Đã cập nhật “Khai trương phòng tập” lên v2.',
+    );
+
+    refreshed([{ ...bought, version: 2, newVersions: [] }, free]);
+    expect(screen.queryByRole('button', { name: 'Cập nhật Khai trương phòng tập' })).toBeNull();
+    await vi.waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Khai trương phòng tập' })).toHaveFocus();
+    });
   });
 
   it('leaves the licence alone on "Để sau"', async () => {

@@ -11,7 +11,7 @@ import { Button, ButtonLink, Callout, Card, CheckIcon } from '@plp/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { marketplaceOwnedHref, templateHref } from '../shell/navigation';
 import { templateQueryKeys } from '../templates/queries';
 import { ClaimDialog } from './ClaimDialog';
@@ -36,6 +36,8 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
   const [claimKey, setClaimKey] = useState(0);
   const [claimed, setClaimed] = useState(false);
   const [changed, setChanged] = useState<string | null>(null);
+  // Claimed, "Nhận mẫu" gives way to "Tạo trang từ mẫu": focus goes there, not to the page.
+  const createLink = useRef<HTMLAnchorElement>(null);
   const { licence } = item;
   const hasNewer = licence !== null && item.version > licence.version;
 
@@ -62,7 +64,12 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
             <CheckIcon size={15} strokeWidth={2.4} />
             Workspace đã sở hữu · v{licence.version}
           </p>
-          <ButtonLink as={Link} href={templateHref(workspace.id, item.id)} fullWidth>
+          <ButtonLink
+            as={Link}
+            ref={createLink}
+            href={templateHref(workspace.id, item.id)}
+            fullWidth
+          >
             Tạo trang từ mẫu
           </ButtonLink>
           {hasNewer ? (
@@ -97,6 +104,7 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
               item={item}
               open={claimOpen}
               onOpenChange={setClaimOpen}
+              fallbackFocusRef={createLink}
               onClaimed={() => {
                 setClaimed(true);
                 // The library and the editor's "Áp dụng mẫu…" list the item from now on.
