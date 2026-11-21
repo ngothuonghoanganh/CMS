@@ -5,6 +5,7 @@ import {
   type Plan,
   type PlanCatalog,
   type RenewalBlocker,
+  type ScheduledChange,
   type SubscriptionFacts,
 } from '@plp/contracts';
 import { periodEndOf } from './billing-period.js';
@@ -70,6 +71,23 @@ export function renewalBlockerOf(
 /** When the trial or the paid period ends: what renews, or stops. */
 export function currentEndOf(facts: Pick<SubscriptionFacts, 'trialEndsAt' | 'periodEnd'>): Date {
   return facts.trialEndsAt ?? facts.periodEnd;
+}
+
+/**
+ * The change scheduled for the end of the period while a renewal may still apply it (ADR-035,
+ * T3). "Hủy gói" leaves it stored, so "Giữ lại gói" brings back the renewal the owner chose; it
+ * applies only then, since no renewal follows a cancellation. Once the canceled plan has stopped,
+ * nothing is left to apply it to.
+ */
+export function scheduledChangeOf(
+  facts: Pick<
+    SubscriptionFacts,
+    'trialEndsAt' | 'periodEnd' | 'cancelAtPeriodEnd' | 'scheduledChange'
+  >,
+  at: Date,
+): ScheduledChange | null {
+  const stopped = facts.cancelAtPeriodEnd && at.getTime() >= currentEndOf(facts).getTime();
+  return stopped ? null : facts.scheduledChange;
 }
 
 /**

@@ -601,6 +601,54 @@ describe('the life of a plan (ADR-035, T3)', () => {
       expect((await logOf(workspaceId)).at(-1)).toBe('plan_restarted');
     });
 
+    it('keeps a downgrade through "Hủy gói" for "Giữ lại gói", and has none once the plan stopped', async () => {
+      const { owner, workspaceId, periodEnd, trialEnd } = await paying();
+      const downgrade = { planId: 'basic', cycle: 'monthly' } as const;
+      clock.set(after(trialEnd, 10));
+      await owner.post(endpoints.changePlan.path(workspaceId), downgrade).expect(200);
+      await owner.post(endpoints.cancelPlan.path(workspaceId)).expect(200);
+      // No renewal follows "Hủy gói", so the change cannot apply while it stands; it stays stored.
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'cancel_scheduled',
+        cancelAt: periodEnd.toISOString(),
+        scheduledChange: downgrade,
+        renewal: null,
+      });
+
+      // "Giữ lại gói" brings back the renewal the owner chose, on the scheduled plan.
+      await owner.post(endpoints.keepPlan.path(workspaceId)).expect(200);
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'active',
+        cancelAt: null,
+        scheduledChange: downgrade,
+        renewal: {
+          at: periodEnd.toISOString(),
+          planId: 'basic',
+          cycle: 'monthly',
+          amount: 199_000,
+        },
+      });
+
+      // Canceled again: the plan stops with no charge, and the change has nothing left to apply to.
+      await owner.post(endpoints.cancelPlan.path(workspaceId)).expect(200);
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      await runAt(periodEnd);
+      expect(charge).not.toHaveBeenCalled();
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'canceled',
+        plan: { id: 'agency' },
+        scheduledChange: null,
+        renewal: null,
+      });
+      await owner.delete(endpoints.cancelScheduledChange.path(workspaceId)).expect(200);
+      expect((await logOf(workspaceId)).slice(-4)).toEqual([
+        'change_scheduled',
+        'cancel_scheduled',
+        'cancel_withdrawn',
+        'cancel_scheduled',
+      ]);
+    });
+
     it('starts a fresh period when its renewal is paid after that period ended, with one charge', async () => {
       const { owner, workspaceId, email, periodEnd } = await paying();
       await addCard(t, owner, workspaceId, CARD_DECLINED);

@@ -1,7 +1,7 @@
 import type { Plan } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { periodEndOf } from './billing-period.js';
-import { renewalBlockerOf, renewalTermsOf } from './renewal.js';
+import { renewalBlockerOf, renewalTermsOf, scheduledChangeOf } from './renewal.js';
 
 const DAY = 86_400_000;
 const START = new Date('2026-11-01T03:00:00.000Z');
@@ -74,5 +74,28 @@ describe('renewalBlockerOf', () => {
     expect(renewalBlockerOf({ expMonth: 12, expYear: 2030 }, at(30))).toBeNull();
     expect(renewalBlockerOf({ expMonth: 11, expYear: 2026 }, at(29))).toBeNull();
     expect(renewalBlockerOf({ expMonth: 11, expYear: 2026 }, at(30))).toBe('card_expires');
+  });
+});
+
+describe('scheduledChangeOf', () => {
+  const downgrade = {
+    ...paid,
+    cancelAtPeriodEnd: false,
+    scheduledChange: { planId: 'basic', cycle: 'monthly' as const },
+  };
+
+  it('is the change the renewal applies, kept while "Hủy gói" stands', () => {
+    expect(scheduledChangeOf(downgrade, at(10))).toEqual({ planId: 'basic', cycle: 'monthly' });
+    // Still stored and still shown: "Giữ lại gói" before the end brings it back with the renewal.
+    const canceled = { ...downgrade, cancelAtPeriodEnd: true };
+    expect(scheduledChangeOf(canceled, at(29))).toEqual({ planId: 'basic', cycle: 'monthly' });
+    // An unpaid renewal still charges the plan it names.
+    expect(scheduledChangeOf(downgrade, at(31))).toEqual({ planId: 'basic', cycle: 'monthly' });
+  });
+
+  it('is none once the canceled plan has stopped: nothing is left to apply it to', () => {
+    const canceled = { ...downgrade, cancelAtPeriodEnd: true };
+    expect(scheduledChangeOf(canceled, at(30))).toBeNull();
+    expect(scheduledChangeOf(canceled, at(45))).toBeNull();
   });
 });

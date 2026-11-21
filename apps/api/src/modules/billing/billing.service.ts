@@ -24,7 +24,7 @@ import { toBillingSummary, toPlanChangeQuote, toWorkspacePlan } from './billing-
 import { BillingSchedule } from './billing-schedule.service.js';
 import { invoicePayable } from './domain/invoice-state.js';
 import { type PlanChange, planChangeOf } from './domain/plan-change.js';
-import { currentEndOf, paymentUnderWay } from './domain/renewal.js';
+import { currentEndOf, paymentUnderWay, scheduledChangeOf } from './domain/renewal.js';
 import { type Entitlements, EntitlementsService } from './entitlements.service.js';
 import { InvoiceCharges } from './invoice-charges.service.js';
 import { InvoicesRepository } from './invoices.repository.js';
@@ -165,9 +165,9 @@ export class BillingService {
   }
 
   /**
-   * Drops the change scheduled for the end of the period (T3); nothing to drop is fine. Not once
-   * the period ended or its payment is under way (409 `unpaid`): the renewal invoice charges the
-   * scheduled plan, and paying it applies that plan.
+   * Drops the change scheduled for the end of the period (T3); nothing to drop is fine, as after a
+   * canceled plan stopped (`scheduledChangeOf`). Not once the period ended or its payment is under
+   * way (409 `unpaid`): the renewal invoice charges the scheduled plan, and paying it applies it.
    */
   async cancelScheduledChange(
     user: AuthenticatedUser,
@@ -176,7 +176,7 @@ export class BillingService {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'billing.manage');
     const { facts, plan, at } = await this.entitlements.of(scope);
-    const scheduled = facts.scheduledChange;
+    const scheduled = scheduledChangeOf(facts, at);
     if (scheduled !== null) {
       if (at.getTime() >= facts.periodEnd.getTime() || paymentUnderWay(facts)) {
         throw planChangeUnavailable('unpaid');
@@ -207,7 +207,8 @@ export class BillingService {
 
   /**
    * "Hủy gói" (T3): the plan stops at the end of the trial or period; nothing is refunded (§6).
-   * Not while a payment is due (`unpaid`), nor once nothing runs (`payment_required`).
+   * Not while a payment is due (`unpaid`), nor once nothing runs (`payment_required`). A change
+   * scheduled for the period's end stays: it applies only if the plan is kept.
    */
   async cancel(user: AuthenticatedUser, workspaceId: string): Promise<BillingSummary> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
@@ -227,7 +228,10 @@ export class BillingService {
     return this.summaryOf(scope);
   }
 
-  /** "Giữ lại gói" (T3): before the end of the trial or period, the plan goes on. */
+  /**
+   * "Giữ lại gói" (T3): before the end of the trial or period, the plan goes on, and renews with
+   * the change scheduled for the period's end, if any.
+   */
   async keep(user: AuthenticatedUser, workspaceId: string): Promise<BillingSummary> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'billing.manage');

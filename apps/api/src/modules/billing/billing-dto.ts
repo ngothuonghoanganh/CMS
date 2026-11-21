@@ -26,6 +26,7 @@ import {
   paymentUnderWay,
   renewalBlockerOf,
   renewalTermsOf,
+  scheduledChangeOf,
 } from './domain/renewal.js';
 import { qrSvgDataUrl } from './domain/transfer-qr.js';
 import type { Entitlements } from './entitlements.service.js';
@@ -85,7 +86,7 @@ export function toBillingSummary(
     periodStart: facts.periodStart.toISOString(),
     periodEnd: facts.periodEnd.toISOString(),
     cancelAtPeriodEnd: facts.cancelAtPeriodEnd,
-    scheduledChange: facts.scheduledChange,
+    scheduledChange: scheduledChangeOf(facts, at),
     graceEndsAt: status.graceEndsAt?.toISOString() ?? null,
     graceDaysLeft: status.graceDaysLeft,
     cancelAt: facts.cancelAtPeriodEnd ? currentEndOf(facts).toISOString() : null,
