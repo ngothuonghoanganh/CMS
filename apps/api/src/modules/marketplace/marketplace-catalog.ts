@@ -10,10 +10,19 @@ export const MARKETPLACE_CATALOG = Symbol('MARKETPLACE_CATALOG');
 export const InjectMarketplaceCatalog = (): ParameterDecorator => Inject(MARKETPLACE_CATALOG);
 
 /**
+ * The compositions as the file writes them. `marketplaceCatalogSchema` checks their frame but
+ * drops unknown keys and fills defaults, and the file must be exactly what a page receives.
+ */
+const writtenCompositionsSchema = z.object({
+  items: z.array(z.object({ versions: z.array(z.object({ composition: z.unknown() })) })),
+});
+
+/**
  * Reads the marketplace catalog file (`MARKETPLACE_CATALOG_FILE`, ADR-036). It throws when the
  * file cannot be read, does not match `marketplaceCatalogSchema`, or holds a composition the
- * section registry refuses or that has an image or a link to another page, so the API does not
- * start with templates it cannot sell. Every problem of every version is named at once.
+ * section registry refuses or would change, or that has an image, a link to another page or a
+ * business's phone, Zalo or web address, so the API does not start with templates it cannot sell.
+ * Every problem of every version is named at once.
  */
 export function loadMarketplaceCatalog(file: string): MarketplaceCatalog {
   let raw: unknown;
@@ -28,11 +37,15 @@ export function loadMarketplaceCatalog(file: string): MarketplaceCatalog {
   if (!result.success) {
     throw new Error(`Invalid marketplace catalog ${file}:\n${z.prettifyError(result.error)}`);
   }
+  // It matches the catalog schema, so it has every item and version the schema read.
+  const written = writtenCompositionsSchema.parse(raw);
   const problems: string[] = [];
-  const items = result.data.items.map((item) => ({
+  const items = result.data.items.map((item, itemIndex) => ({
     ...item,
-    versions: item.versions.map((version) => {
-      const check = checkCatalogComposition(version.composition);
+    versions: item.versions.map((version, versionIndex) => {
+      const check = checkCatalogComposition(
+        written.items[itemIndex]?.versions[versionIndex]?.composition,
+      );
       if (!check.valid) {
         problems.push(
           ...check.problems.map((problem) => `${item.id} v${version.version}: ${problem}`),

@@ -213,6 +213,39 @@ describe('loading a catalog file', () => {
     );
   });
 
+  it('stops the API on a key the schemas would drop, or a default they would fill in', () => {
+    const catalog = bundledMarketplaceCatalog();
+    const [first] = catalog.items;
+    const v1 = first?.versions[0];
+    const [navbar, hero, ...rest] = v1?.composition.sections ?? [];
+    if (first === undefined || v1 === undefined || navbar === undefined || hero === undefined) {
+      throw new Error('The bundled catalog has no item with a navbar and a hero');
+    }
+    const { reviewPaths: _reviewPaths, ...heroWithoutReviewPaths } = hero;
+    const path = file({
+      ...catalog,
+      items: [
+        {
+          ...first,
+          versions: [
+            {
+              ...v1,
+              composition: {
+                ...v1.composition,
+                theme: { x: 1 },
+                sections: [{ ...navbar, foo: 1 }, heroWithoutReviewPaths, ...rest],
+              },
+            },
+          ],
+        },
+        ...catalog.items.slice(1),
+      ],
+    });
+    expect(() => loadMarketplaceCatalog(path)).toThrow(
+      /✖ mp-khai-truong-phong-tap v1: sections\.0: differs[\s\S]*✖ mp-khai-truong-phong-tap v1: sections\.1: differs[\s\S]*✖ mp-khai-truong-phong-tap v1: theme: a composition has no such key/,
+    );
+  });
+
   it('stops the API on an image or a link to another page, and names every problem at once', () => {
     const path = file(
       withSections((sections) =>

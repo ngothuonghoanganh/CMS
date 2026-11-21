@@ -26,7 +26,22 @@ function changed(
   };
 }
 
-function problemsOf(composition: Composition): string[] {
+/** `composition` with one key of its sections at `index` written as the file would write it. */
+function writtenWith(
+  composition: Composition,
+  index: number,
+  change: (section: Record<string, unknown>) => Record<string, unknown>,
+): unknown {
+  return {
+    ...composition,
+    sections: composition.sections.map((section, at) => (at === index ? change(section) : section)),
+  };
+}
+
+const DIFFERS =
+  'differs from what the registry makes of it; write it as parsed (no key its schema does not know, reviewPaths written out, sample paths of its texts only, no motion that changes nothing)';
+
+function problemsOf(composition: unknown): string[] {
   const check = checkCatalogComposition(composition);
   return check.valid ? [] : check.problems;
 }
@@ -64,9 +79,7 @@ describe('a composition of the marketplace catalog (ADR-036)', () => {
           content: { ...hero.content, subtitle: 'Một khóa không ai đọc' },
         })),
       ),
-    ).toEqual([
-      'sections.1: differs from what the registry makes of it; write it as parsed (no key its schema does not know, sample paths of its texts only, no motion that changes nothing)',
-    ]);
+    ).toEqual([`sections.1: ${DIFFERS}`]);
     expect(
       problemsOf(
         changed(spa(), 'hero', (hero) => ({
@@ -81,6 +94,35 @@ describe('a composition of the marketplace catalog (ADR-036)', () => {
         motion: { style: 'none', level: 'mid', accents: {}, reduceOnMobile: false },
       }),
     ).toEqual(['motion: differs from what the registry makes of it; leave out the default']);
+  });
+
+  it('is compared with the file as written, not with what the schemas keep of it', () => {
+    // The frame's schema drops these keys and fills `reviewPaths`; a page would not get them.
+    expect(problemsOf(writtenWith(spa(), 0, (navbar) => ({ ...navbar, foo: 1 })))).toEqual([
+      `sections.0: ${DIFFERS}`,
+    ]);
+    expect(
+      problemsOf(
+        writtenWith(spa(), 2, ({ reviewPaths: _reviewPaths, ...benefits }) => ({ ...benefits })),
+      ),
+    ).toEqual([`sections.2: ${DIFFERS}`]);
+    expect(problemsOf({ ...spa(), theme: { x: 1 } })).toEqual([
+      'theme: a composition has no such key',
+    ]);
+    expect(
+      problemsOf(
+        writtenWith(spa(), 1, (hero) => ({
+          ...hero,
+          visibility: { desktop: true, mobile: true, tablet: false },
+        })),
+      ),
+    ).toEqual([`sections.1: ${DIFFERS}`]);
+  });
+
+  it('names what is wrong with the frame itself', () => {
+    expect(problemsOf({ version: 2, sections: [] })).toEqual([
+      'version: Invalid input: expected 1',
+    ]);
   });
 
   it('has empty image frames, the hidden ones included', () => {
@@ -133,6 +175,54 @@ describe('a composition of the marketplace catalog (ADR-036)', () => {
         })),
       ),
     ).toEqual(['sections.5.content.cta: links to section "khongco01", not on this page']);
+  });
+
+  it('leaves the phone, Zalo and web targets of its buttons empty', () => {
+    const contact = spa().sections.findIndex((section) => section.type === 'quick_contact');
+    expect(contact).toBe(6);
+    expect(
+      problemsOf(
+        changed(spa(), 'quick_contact', (section) => ({
+          ...section,
+          content: {
+            ...section.content,
+            call: { label: 'Gọi ngay', link: { kind: 'phone', phone: '0901234567' } },
+            zalo: { label: 'Nhắn Zalo', link: { kind: 'zalo', phone: '0901234567' } },
+          },
+        })),
+      ),
+    ).toEqual([
+      'sections.6.content.call: holds the number "0901234567"; a template leaves it empty',
+      'sections.6.content.zalo: holds the number "0901234567"; a template leaves it empty',
+    ]);
+    expect(
+      problemsOf(
+        changed(spa(), 'navbar', (navbar) => ({
+          ...navbar,
+          content: {
+            ...navbar.content,
+            cta: { label: 'Đặt lịch', link: { kind: 'url', url: 'https://evil.example' } },
+          },
+        })),
+      ),
+    ).toEqual([
+      'sections.0.content.cta: leads to "https://evil.example"; a template leaves the address empty',
+    ]);
+    // Buttons that only call or message keep their kind with nothing to call, as in the file.
+    expect(
+      spa().sections[contact]?.content['call'] as { link: { kind: string; phone: string } },
+    ).toMatchObject({ link: { kind: 'phone', phone: '' } });
+    expect(
+      problemsOf(
+        changed(spa(), 'navbar', (navbar) => ({
+          ...navbar,
+          content: {
+            ...navbar.content,
+            cta: { label: 'Đặt lịch', link: { kind: 'url', url: '' } },
+          },
+        })),
+      ),
+    ).toEqual([]);
   });
 
   it('keeps every text as sample text, with nothing left to review', () => {

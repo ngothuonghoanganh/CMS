@@ -82,8 +82,10 @@ export const marketplaceItemVersionSchema = z.strictObject({
   releasedOn: marketplaceReleaseDateSchema,
   note: marketplaceVersionNoteSchema,
   /**
-   * The page a new draft starts from, with sample section ids. The API also parses it with the
-   * section registry at startup and refuses images and links to other pages.
+   * The page a new draft starts from, with sample section ids. This schema checks its frame only.
+   * At startup the API also parses the file's own text of it with the section registry, refuses
+   * anything the registry would change, images, links to other pages and a business's phone,
+   * Zalo or web address.
    */
   composition: compositionSchema,
 });
