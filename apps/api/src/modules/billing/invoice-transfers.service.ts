@@ -18,6 +18,7 @@ import {
   paymentInProgress,
   paymentsDisabled,
   paymentUndecided,
+  purchaseNotByTransfer,
 } from './payment-problems.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
@@ -50,6 +51,9 @@ export class InvoiceTransfers {
     const invoice = await this.invoices.findOfWorkspace(scope, invoiceId);
     if (invoice === null) {
       throw notFound('Không tìm thấy hóa đơn');
+    }
+    if (invoice.kind === 'marketplace') {
+      throw purchaseNotByTransfer();
     }
     if (awaitsTransfer(invoice) && invoice.transfer !== null) {
       return invoice;

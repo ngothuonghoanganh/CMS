@@ -51,22 +51,23 @@ export interface InvoiceTransferRecord {
 }
 
 /**
- * An invoice in the master DB (ADR-035): payment records outlive the workspace's data, and the
- * gateway's events find it by its id. It is written only through `InvoicesRepository`, which
- * never changes a paid or void one.
+ * What a `marketplace` invoice pays for (ADR-036): the item at the version that was quoted, its
+ * name when it was bought, and the terms the owner agreed to, which the licence records when the
+ * invoice is paid, however late.
  */
-export interface InvoiceRecord {
+export interface InvoiceItemRecord {
+  itemId: string;
+  name: string;
+  version: number;
+  termsVersion: number;
+}
+
+/** What every invoice has, whatever it pays for. */
+interface InvoiceRecordBase {
   _id: Types.ObjectId;
   /** `HD-{năm}-{6 chữ số}`, from `invoice_counters`. */
   number: string;
   workspaceId: Types.ObjectId;
-  kind: InvoiceKind;
-  planId: string;
-  /** The plan's name when the invoice was made, as the receipt shows it. */
-  planName: string;
-  cycle: BillingCycle;
-  periodStart: Date;
-  periodEnd: Date;
   /** In đồng, VAT included. */
   amount: number;
   /** "Thông tin xuất hóa đơn" as it was when the invoice was made. */
@@ -76,6 +77,23 @@ export interface InvoiceRecord {
   card: { brand: string; last4: string } | null;
   status: InvoiceStatus;
   attempts: InvoiceAttemptRecord[];
+  /** The bank transfer it waits for or was paid by (T3); null for a card. */
+  transfer: InvoiceTransferRecord | null;
+  paidAt: Date | null;
+  voidedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** An invoice of the plan (ADR-035): a period, the end of a trial, or an upgrade. */
+export interface PlanInvoiceRecord extends InvoiceRecordBase {
+  kind: Exclude<InvoiceKind, 'marketplace'>;
+  planId: string;
+  /** The plan's name when the invoice was made, as the receipt shows it. */
+  planName: string;
+  cycle: BillingCycle;
+  periodStart: Date;
+  periodEnd: Date;
   /**
    * The plan a change paid now moves from (or a canceled plan paid for again); null for the job's
    * charge at the end of a trial or period (T3).
@@ -83,15 +101,40 @@ export interface InvoiceRecord {
   from: InvoicePlanChoice | null;
   /** Paying it ends the trial and starts the first paid period. */
   endsTrial: boolean;
-  /** The bank transfer it waits for or was paid by (T3); null for a card. */
-  transfer: InvoiceTransferRecord | null;
   /** The member who chose the change; null for the subscription's own jobs (T3). */
   createdBy: Types.ObjectId | null;
-  paidAt: Date | null;
-  voidedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  item: null;
+  requestKey: null;
 }
+
+/**
+ * The purchase of a marketplace item (ADR-036): no plan, no period; paying it grants the licence.
+ * The member who bought it is the licence's `grantedBy`, and the purchase's `Idempotency-Key`
+ * (`requestKey`) finds it again, once per workspace.
+ */
+export interface MarketplaceInvoiceRecord extends InvoiceRecordBase {
+  kind: 'marketplace';
+  planId: null;
+  planName: null;
+  cycle: null;
+  periodStart: null;
+  periodEnd: null;
+  from: null;
+  endsTrial: false;
+  createdBy: Types.ObjectId;
+  item: InvoiceItemRecord;
+  requestKey: string;
+}
+
+/**
+ * An invoice in the master DB (ADR-035): payment records outlive the workspace's data, and the
+ * gateway's events find it by its id. It is written only through `InvoicesRepository`, which
+ * never changes a paid or void one. An invoice of the plan, or of a marketplace item (ADR-036).
+ */
+export type InvoiceRecord = PlanInvoiceRecord | MarketplaceInvoiceRecord;
+
+/** Invoices whose `requestKey` is a purchase's `Idempotency-Key`: once per workspace. */
+export const INVOICES_REQUEST_KEY_INDEX = 'invoices_workspace_request_key';
 
 const choiceSchema = new Schema<InvoicePlanChoice>(
   {
@@ -144,16 +187,33 @@ const cardSchema = new Schema(
   { _id: false },
 );
 
+const itemSchema = new Schema<InvoiceItemRecord>(
+  {
+    itemId: { type: String, required: true },
+    name: { type: String, required: true },
+    version: { type: Number, required: true, min: 1 },
+    termsVersion: { type: Number, required: true, min: 1 },
+  },
+  { _id: false },
+);
+
+/** A plan's fields are set for an invoice of the plan only, the item for a marketplace one. */
+function forPlan(this: { kind?: InvoiceKind }): boolean {
+  return this.kind !== 'marketplace';
+}
+
 export const invoiceSchema = new Schema<InvoiceRecord>(
   {
     number: { type: String, required: true },
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     kind: { type: String, enum: invoiceKinds, required: true },
-    planId: { type: String, required: true },
-    planName: { type: String, required: true },
-    cycle: { type: String, enum: billingCycles, required: true },
-    periodStart: { type: Date, required: true },
-    periodEnd: { type: Date, required: true },
+    planId: { type: String, default: null, required: forPlan },
+    planName: { type: String, default: null, required: forPlan },
+    cycle: { type: String, enum: [...billingCycles, null], default: null, required: forPlan },
+    periodStart: { type: Date, default: null, required: forPlan },
+    periodEnd: { type: Date, default: null, required: forPlan },
+    item: { type: itemSchema, default: null },
+    requestKey: { type: String, default: null },
     amount: { type: Number, required: true, min: 0 },
     billingInfo: { type: invoiceBillingInfoSchema, default: null },
     method: { type: String, enum: invoicePaymentMethods, required: true },
@@ -176,6 +236,16 @@ invoiceSchema.index({ number: 1 }, { unique: true });
 invoiceSchema.index({ workspaceId: 1, createdAt: -1, _id: -1 });
 // A charge being decided blocks another; a new change voids the unpaid ones it replaces.
 invoiceSchema.index({ workspaceId: 1, status: 1 });
+// A purchase sent again with its `Idempotency-Key` finds its invoice (ADR-036); invoices of the
+// plan have none.
+invoiceSchema.index(
+  { workspaceId: 1, requestKey: 1 },
+  {
+    name: INVOICES_REQUEST_KEY_INDEX,
+    unique: true,
+    partialFilterExpression: { requestKey: { $type: 'string' } },
+  },
+);
 
 /** `invoice_counters`: the last number given in a year, `_id` "HD-2026". */
 export interface InvoiceCounterRecord {

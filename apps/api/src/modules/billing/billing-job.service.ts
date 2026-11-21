@@ -20,7 +20,7 @@ import {
   settleAtOf,
 } from './domain/billing-agenda.js';
 import { DAY_MS } from './domain/billing-period.js';
-import { invoicePayable, purposeOf } from './domain/invoice-state.js';
+import { invoicePayable, payableOf, purposeOf } from './domain/invoice-state.js';
 import {
   currentEndOf,
   paymentUnderWay,
@@ -34,6 +34,7 @@ import {
 } from './invoice-charges.service.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
+import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
@@ -74,6 +75,7 @@ export class BillingJob {
     private readonly charges: InvoiceCharges,
     private readonly schedule: BillingSchedule,
     private readonly notifier: BillingNotifier,
+    private readonly purchases: MarketplacePurchaseHooks,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -112,7 +114,7 @@ export class BillingJob {
       if (settleAtOf(invoice).getTime() > run.at.getTime()) {
         continue;
       }
-      if (this.lapsed(invoice, facts, run.at)) {
+      if (await this.lapsed(ref, invoice, facts, run.at)) {
         await this.voidUndecided(ref, invoice, run, 'what it paid for no longer applies');
         continue;
       }
@@ -149,9 +151,19 @@ export class BillingJob {
 
   /**
    * Whether an undecided invoice's purpose is over: paying it no longer applies, or its period
-   * ended. A renewal never is: the subscription waits for it, and it is asked about until known.
+   * ended. A renewal never is: the subscription waits for it, and it is asked about until known. A
+   * marketplace item's is over once the workspace holds the item another way (ADR-036).
    */
-  private lapsed(invoice: InvoiceRecord, facts: SubscriptionFacts, at: Date): boolean {
+  private async lapsed(
+    ref: WorkspaceRef,
+    invoice: InvoiceRecord,
+    facts: SubscriptionFacts,
+    at: Date,
+  ): Promise<boolean> {
+    if (invoice.kind === 'marketplace') {
+      const standings = await this.purchases.standingsOf(ref, [invoice]);
+      return !payableOf(invoice, facts, at, standings.get(invoice.item.itemId));
+    }
     const purpose = purposeOf(invoice);
     if (purpose === 'renewal' || purpose === 'trial_end') {
       return false;
@@ -229,6 +241,8 @@ export class BillingJob {
             from: null,
             endsTrial: facts.trialEndsAt !== null,
             createdBy: null,
+            item: null,
+            requestKey: null,
           },
           run.at,
           tx,
@@ -297,17 +311,19 @@ export class BillingJob {
    * email of an event, one that fails is logged and not sent again.
    */
   private async afterAttempt(ref: WorkspaceRef, attempt: ChargeAttempt): Promise<void> {
-    if (attempt.outcome !== 'failed' || attempt.code === null) {
+    const { invoice } = attempt;
+    // A marketplace item's refusal never concerns the plan (ADR-036).
+    if (attempt.outcome !== 'failed' || attempt.code === null || invoice.kind === 'marketplace') {
       return;
     }
     const facts = await this.subscriptions.find(ref);
-    if (facts?.failedSince == null || facts.openInvoiceId !== attempt.invoice._id.toHexString()) {
+    if (facts?.failedSince == null || facts.openInvoiceId !== invoice._id.toHexString()) {
       return;
     }
-    await this.notifier.chargeFailed(attempt.invoice, {
+    await this.notifier.chargeFailed(invoice, {
       attempt: attempt.number,
       code: attempt.code,
-      nextRetryAt: nextRetryOf(facts.failedSince, this.catalog.retryDays, attempt.invoice.attempts),
+      nextRetryAt: nextRetryOf(facts.failedSince, this.catalog.retryDays, invoice.attempts),
       graceEndsAt: graceEndOf(facts, this.catalog),
     });
   }

@@ -37,13 +37,17 @@ import { InvoiceTransfers } from './invoice-transfers.service.js';
 import { InvoicesController } from './invoices.controller.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import { InvoicesService } from './invoices.service.js';
+import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 import { SubscriptionBackfill } from './subscription-backfill.service.js';
 import { TestClockController } from './test-clock.controller.js';
 
 /**
  * The endpoints of plans and billing (ADR-035), the trials of workspaces made before them, and
  * payments: the gateway `PAYMENT_PROVIDER` names, cards, billing info, invoices and the gateway's
- * webhook; and the subscriptions' life (T3): the billing job, transfers and the plan's emails.
+ * webhook; and the subscriptions' life (T3): the billing job, transfers and the plan's emails. The
+ * marketplace buys its items through it (ADR-036): `InvoiceCharges` charges them, and the
+ * marketplace module registers on `MarketplacePurchaseHooks` what paying one grants; billing
+ * never imports the marketplace.
  */
 @Module({
   imports: [
@@ -85,6 +89,8 @@ import { TestClockController } from './test-clock.controller.js';
     FakeWebhookSender,
     PaymentGatewaySignatureGuard,
     SubscriptionBackfill,
+    MarketplacePurchaseHooks,
   ],
+  exports: [InvoiceCharges, InvoicesService, BillingNotifier, MarketplacePurchaseHooks],
 })
 export class BillingModule {}

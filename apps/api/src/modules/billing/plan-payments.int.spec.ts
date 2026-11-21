@@ -429,7 +429,7 @@ describe('paying for plans (ADR-035, T2)', () => {
         ],
       });
       // The first period starts when it is paid, not when it was quoted.
-      expect(Date.parse(paid.invoice.periodStart)).toBeGreaterThanOrEqual(at(1).getTime());
+      expect(Date.parse(paid.invoice.periodStart ?? '')).toBeGreaterThanOrEqual(at(1).getTime());
       expect(charge.mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
         `${invoiceId}-2`,
         `${invoiceId}-3`,

@@ -19,6 +19,7 @@ export interface BillingLogEntry {
   to?: PlanChoice | null;
   invoiceId?: ObjectId | null;
   amount?: number | null;
+  itemId?: string | null;
 }
 
 /** `billing_log` of the master DB (ADR-035): written in the transaction of the change it records. */
@@ -38,6 +39,7 @@ export class BillingLogRepository {
           to: entry.to ?? null,
           invoiceId: entry.invoiceId ?? null,
           amount: entry.amount ?? null,
+          itemId: entry.itemId ?? null,
         },
       ],
       { session: tx },

@@ -30,7 +30,7 @@ import {
 } from './domain/renewal.js';
 import { qrSvgDataUrl } from './domain/transfer-qr.js';
 import type { Entitlements } from './entitlements.service.js';
-import type { InvoiceAttemptRecord, InvoiceRecord } from './invoice.schema.js';
+import type { InvoiceAttemptRecord, InvoiceRecord, PlanInvoiceRecord } from './invoice.schema.js';
 
 /** What board 28 and 29's banners need beyond the plan (T3): the due invoice and the policy. */
 export interface SummaryContext {
@@ -38,8 +38,11 @@ export interface SummaryContext {
   month: VnMonth;
   policy: Pick<BillingPolicy, 'retryDays'>;
   planOf: (planId: string) => Plan;
-  /** The invoice the subscription waits for (`openInvoiceId`), with whether it is payable. */
-  due: { invoice: InvoiceRecord; payable: boolean } | null;
+  /**
+   * The invoice the subscription waits for (`openInvoiceId`), with whether it is payable: always
+   * an invoice of the plan.
+   */
+  due: { invoice: PlanInvoiceRecord; payable: boolean } | null;
 }
 
 /**
@@ -101,9 +104,17 @@ export function toBillingSummary(
 }
 
 /** The due invoice of board 28's banners, without the card (board 29 only). */
-function toDueInvoice(invoice: InvoiceRecord, payable: boolean): DueInvoice {
+function toDueInvoice(invoice: PlanInvoiceRecord, payable: boolean): DueInvoice {
   const { card: _card, ...summary } = toInvoiceSummary(invoice, payable);
-  return summary;
+  return {
+    ...summary,
+    planId: invoice.planId,
+    planName: invoice.planName,
+    cycle: invoice.cycle,
+    periodStart: invoice.periodStart.toISOString(),
+    periodEnd: invoice.periodEnd.toISOString(),
+    item: null,
+  };
 }
 
 /**
@@ -177,7 +188,10 @@ function toAttempt(attempt: InvoiceAttemptRecord): InvoiceAttempt {
   };
 }
 
-/** A row of "Lịch sử giao dịch"; `payable` says whether "Thanh toán lại" can charge it now. */
+/**
+ * A row of "Lịch sử giao dịch"; `payable` says whether "Thanh toán lại" can charge it now. A
+ * marketplace invoice has its item and no plan (ADR-036).
+ */
 export function toInvoiceSummary(invoice: InvoiceRecord, payable: boolean): InvoiceSummary {
   const last = invoice.attempts.at(-1);
   return {
@@ -187,8 +201,12 @@ export function toInvoiceSummary(invoice: InvoiceRecord, payable: boolean): Invo
     planId: invoice.planId,
     planName: invoice.planName,
     cycle: invoice.cycle,
-    periodStart: invoice.periodStart.toISOString(),
-    periodEnd: invoice.periodEnd.toISOString(),
+    periodStart: invoice.periodStart?.toISOString() ?? null,
+    periodEnd: invoice.periodEnd?.toISOString() ?? null,
+    item:
+      invoice.kind === 'marketplace'
+        ? { itemId: invoice.item.itemId, name: invoice.item.name, version: invoice.item.version }
+        : null,
     amount: invoice.amount,
     method: invoice.method,
     card: invoice.card ? { brand: invoice.card.brand, last4: invoice.card.last4 } : null,

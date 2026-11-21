@@ -24,7 +24,7 @@ import { BillingNoticesRepository } from './billing-notices.repository.js';
 import { DAY_MS } from './domain/billing-period.js';
 import { cardText, cycleText, periodText, vnDateText, vndText } from './domain/billing-text.js';
 import { renewalBlockerOf } from './domain/renewal.js';
-import type { InvoiceRecord } from './invoice.schema.js';
+import type { InvoiceRecord, PlanInvoiceRecord } from './invoice.schema.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
 import { readOnlyReasonOf } from './plan-problems.js';
 
@@ -99,7 +99,7 @@ export class BillingNotifier {
 
   /** A charge of the job did not go through: why, when it is tried again, until when it is free. */
   chargeFailed(
-    invoice: InvoiceRecord,
+    invoice: PlanInvoiceRecord,
     failure: {
       attempt: number;
       code: PaymentDeclineCode;
@@ -168,10 +168,13 @@ export class BillingNotifier {
     );
   }
 
-  /** The receipt of a paid invoice, whoever or whatever paid it. */
+  /**
+   * The receipt of a paid invoice, whoever or whatever paid it. `billing-receipt` is the plan's:
+   * its data needs a plan and a period, which a marketplace invoice has not (ADR-036).
+   */
   receipt(invoice: InvoiceRecord): Promise<NoticeOutcome> {
     const paidAt = invoice.paidAt;
-    if (invoice.status !== 'paid' || paidAt === null) {
+    if (invoice.status !== 'paid' || paidAt === null || invoice.kind === 'marketplace') {
       return Promise.resolve('nobody');
     }
     const invoiceId = invoice._id.toHexString();

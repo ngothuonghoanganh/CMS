@@ -8,7 +8,7 @@ export const BILLING_LOG_MODEL = 'BillingLogEntry';
  * plan now (which ends the trial), an upgrade paid for the days left, a new card, new billing
  * info; and from T3 a change scheduled for the period's end and its withdrawal, "Hủy gói" and
  * "Giữ lại gói", a period renewed (with the scheduled change it applied), a canceled plan paid
- * for again, and a transfer started.
+ * for again, and a transfer started; and a marketplace item bought (ADR-036).
  */
 export const billingLogActions = [
   'plan_changed',
@@ -24,6 +24,7 @@ export const billingLogActions = [
   'period_renewed',
   'plan_restarted',
   'transfer_started',
+  'marketplace_purchased',
 ] as const;
 export type BillingLogAction = (typeof billingLogActions)[number];
 
@@ -49,6 +50,8 @@ export interface BillingLogRecord {
   /** The invoice that paid for a change, and its amount; null for the other actions. */
   invoiceId: Types.ObjectId | null;
   amount: number | null;
+  /** The marketplace item bought (`marketplace_purchased`); null for the other actions. */
+  itemId: string | null;
 }
 
 const planChoiceSchema = new Schema<PlanChoice>(
@@ -69,6 +72,7 @@ export const billingLogSchema = new Schema<BillingLogRecord>(
     to: { type: planChoiceSchema, default: null },
     invoiceId: { type: Schema.Types.ObjectId, default: null },
     amount: { type: Number, default: null },
+    itemId: { type: String, default: null },
   },
   // Only written so far; whoever lists it adds the index of that list.
   { collection: 'billing_log', versionKey: false },

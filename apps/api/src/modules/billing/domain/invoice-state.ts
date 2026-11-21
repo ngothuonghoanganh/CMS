@@ -4,6 +4,7 @@ import type {
   InvoiceKind,
   InvoicePaymentMethod,
   InvoiceStatus,
+  PaymentDeclineCode,
   SubscriptionFacts,
 } from '@plp/contracts';
 import { periodEndOf } from './billing-period.js';
@@ -26,14 +27,18 @@ export function isFinalInvoiceStatus(status: InvoiceStatus): boolean {
 }
 
 /** A transfer waits for the gateway's confirmation: `pending`, paid by transfer. */
-export function awaitsTransfer(invoice: Pick<InvoicePurpose, 'status' | 'method'>): boolean {
+export function awaitsTransfer(invoice: {
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+}): boolean {
   return invoice.status === 'pending' && invoice.method === 'transfer';
 }
 
 /** The statuses a charge of this invoice may record its outcome from. */
-export function chargeableStatusesOf(
-  invoice: Pick<InvoicePurpose, 'status' | 'method'>,
-): readonly InvoiceStatus[] {
+export function chargeableStatusesOf(invoice: {
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+}): readonly InvoiceStatus[] {
   return awaitsTransfer(invoice) ? WITH_TRANSFER_WAITING : CHARGEABLE_INVOICE_STATUSES;
 }
 
@@ -79,9 +84,9 @@ export function attemptOfIdempotencyKey(invoiceId: string, key: string): number 
   return match?.[1] === invoiceId && match[2] !== undefined ? Number(match[2]) : null;
 }
 
-/** What an invoice pays for, as far as deciding whether it still applies. */
-export interface InvoicePurpose {
-  kind: InvoiceKind;
+/** What an invoice of the plan pays for, as far as deciding whether it still applies. */
+export interface PlanInvoicePurpose {
+  kind: Exclude<InvoiceKind, 'marketplace'>;
   status: InvoiceStatus;
   method: InvoicePaymentMethod;
   /** The plan it changes from; null for the charge at the end of a trial or period (T3). */
@@ -93,20 +98,50 @@ export interface InvoicePurpose {
   periodEnd: Date;
 }
 
+/** What a marketplace invoice pays for (ADR-036): one item, at the amount it was quoted for. */
+export interface MarketplaceInvoicePurpose {
+  kind: 'marketplace';
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+  amount: number;
+  item: { itemId: string };
+}
+
+export type InvoicePurpose = PlanInvoicePurpose | MarketplaceInvoicePurpose;
+
 /**
- * What an invoice is for (ADR-035, T2 and T3):
+ * What a marketplace invoice's item is to its workspace now (ADR-036): whether it is on sale, its
+ * price, and whether the workspace holds its licence. The marketplace module answers it
+ * (`MarketplacePurchaseHooks`).
+ */
+export interface ItemStanding {
+  listed: boolean;
+  price: number;
+  licensed: boolean;
+}
+
+/**
+ * What an invoice is for (ADR-035, T2 and T3; ADR-036):
  *
  * - `start_paid`: "Thanh toán ngay" during or after the trial; its period starts when it is paid;
  * - `upgrade`: a higher plan for the days left of a paid period;
  * - `trial_end`: the job's charge when the trial ends, for the period from the trial's end;
  * - `renewal`: the job's charge when a period ends, for the next period from that end;
- * - `restart`: "Thanh toán ngay" after a canceled plan stopped; its period starts when paid.
+ * - `restart`: "Thanh toán ngay" after a canceled plan stopped; its period starts when paid;
+ * - `marketplace`: one item of the template marketplace; paying it grants the licence and never
+ *   changes the plan.
  */
-export type InvoicePurposeKind = 'start_paid' | 'upgrade' | 'trial_end' | 'renewal' | 'restart';
+export type InvoicePurposeKind =
+  'start_paid' | 'upgrade' | 'trial_end' | 'renewal' | 'restart' | 'marketplace';
 
-export function purposeOf(
-  invoice: Pick<InvoicePurpose, 'kind' | 'from' | 'endsTrial'>,
-): InvoicePurposeKind {
+export function purposeOf(invoice: {
+  kind: InvoiceKind;
+  from: PlanInvoicePurpose['from'];
+  endsTrial: boolean;
+}): InvoicePurposeKind {
+  if (invoice.kind === 'marketplace') {
+    return 'marketplace';
+  }
   if (invoice.kind === 'upgrade') {
     return 'upgrade';
   }
@@ -118,7 +153,7 @@ export function purposeOf(
 
 /** Its period starts when it is paid, however late after it was quoted. */
 export function startsWhenPaid(
-  invoice: Pick<InvoicePurpose, 'kind' | 'from' | 'endsTrial'>,
+  invoice: Pick<PlanInvoicePurpose, 'kind' | 'from' | 'endsTrial'>,
 ): boolean {
   const purpose = purposeOf(invoice);
   return purpose === 'start_paid' || purpose === 'restart';
@@ -133,7 +168,7 @@ export function startsWhenPaid(
  * the period stays as invoiced.
  */
 export function periodPaidAt(
-  invoice: Pick<InvoicePurpose, 'kind' | 'from' | 'endsTrial' | 'periodEnd'> & {
+  invoice: Pick<PlanInvoicePurpose, 'kind' | 'from' | 'endsTrial' | 'periodEnd'> & {
     cycle: BillingCycle;
   },
   at: Date,
@@ -162,7 +197,7 @@ export function periodPaidAt(
  * charge with the same key, and is how the owner learns whether it went through.
  */
 export function invoicePayable(
-  invoice: InvoicePurpose,
+  invoice: PlanInvoicePurpose,
   facts: Pick<
     SubscriptionFacts,
     'planId' | 'cycle' | 'trialEndsAt' | 'periodEnd' | 'cancelAtPeriodEnd'
@@ -173,6 +208,8 @@ export function invoicePayable(
     return false;
   }
   switch (purposeOf(invoice)) {
+    case 'marketplace':
+      return false;
     case 'start_paid':
       return facts.trialEndsAt !== null;
     case 'trial_end':
@@ -193,10 +230,55 @@ export function invoicePayable(
 }
 
 /**
+ * Whether "Thanh toán lại" may charge a marketplace invoice now (ADR-036). One whose outcome is
+ * unknown (`open`) may: paying again asks the gateway about that charge with the same key, and
+ * pays for the item whatever became of it on the marketplace. A refused one (`failed`) only while
+ * the item is still on sale at the amount of the invoice. Neither once the workspace holds the
+ * item: what it paid for is gone, and the billing job voids it when it is still undecided.
+ */
+export function marketplaceInvoicePayable(
+  invoice: Pick<MarketplaceInvoicePurpose, 'status' | 'method' | 'amount'>,
+  standing: ItemStanding,
+): boolean {
+  if (standing.licensed) {
+    return false;
+  }
+  switch (invoice.status) {
+    case 'open':
+      return true;
+    case 'failed':
+      return standing.listed && standing.price === invoice.amount;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Whether "Thanh toán lại" may charge the invoice now, whatever it pays for: the plan's rules
+ * (`invoicePayable`), or a marketplace item's (`marketplaceInvoicePayable`) with its `standing`.
+ */
+export function payableOf(
+  invoice: InvoicePurpose,
+  facts: Parameters<typeof invoicePayable>[1],
+  now: Date,
+  standing: ItemStanding | undefined,
+): boolean {
+  if (invoice.kind !== 'marketplace') {
+    return invoicePayable(invoice, facts, now);
+  }
+  if (standing === undefined) {
+    throw new Error(
+      `No standing of ${invoice.item.itemId} to decide whether its invoice is payable`,
+    );
+  }
+  return marketplaceInvoicePayable(invoice, standing);
+}
+
+/**
  * Whether "Chuyển khoản" may start for the invoice (T3): a period's charge (a renewal, the end of a
  * trial, a plan paid now) that the card did not pay, or whose transfer already waits (asked
  * again). Never one whose charge may have gone through (`open`), nor an upgrade, whose amount
- * holds for the day of its quote only.
+ * holds for the day of its quote only, nor a marketplace item, which is paid by card only.
  */
 export function invoiceTransferable(
   invoice: InvoicePurpose,
@@ -211,7 +293,7 @@ export function invoiceTransferable(
 }
 
 function upgradePayable(
-  invoice: InvoicePurpose,
+  invoice: PlanInvoicePurpose,
   facts: Pick<SubscriptionFacts, 'planId' | 'cycle' | 'trialEndsAt' | 'periodEnd'>,
   now: Date,
 ): boolean {
@@ -227,4 +309,43 @@ function upgradePayable(
     (invoice.status === 'open' ||
       daysLeftOf(invoice.periodEnd, invoice.periodStart) === daysLeftOf(invoice.periodEnd, now))
   );
+}
+
+/** What a purchase sent again with its `Idempotency-Key` answers (`purchaseReplayOf`). */
+export type PurchaseReplay =
+  | { kind: 'paid' }
+  | { kind: 'pending' }
+  /** No charge of it was recorded (the API stopped before): charge it with attempt 1's key. */
+  | { kind: 'charge' }
+  | { kind: 'unknown' }
+  | { kind: 'failed'; code: PaymentDeclineCode }
+  | { kind: 'not_payable' };
+
+/**
+ * What a purchase sent again with its `Idempotency-Key` answers (ADR-036): its invoice as it is
+ * now, never a second charge. Paid: 200; a charge the gateway is deciding: 202; refused: 402;
+ * unknown: 503, and "Thanh toán lại" asks the gateway. One voided after a refusal (a new purchase
+ * of the item replaced it) answers its refusal; one voided without one (its purpose was gone) is no
+ * longer payable. One whose charge the API never recorded is charged now, with attempt 1's key, so
+ * the gateway answers that charge if it got there.
+ */
+export function purchaseReplayOf(invoice: {
+  status: InvoiceStatus;
+  attempts: readonly { outcome: ChargeOutcome; code: PaymentDeclineCode | null }[];
+}): PurchaseReplay {
+  const last = invoice.attempts.at(-1);
+  switch (invoice.status) {
+    case 'paid':
+      return { kind: 'paid' };
+    case 'pending':
+      return { kind: 'pending' };
+    case 'open':
+      return last === undefined ? { kind: 'charge' } : { kind: 'unknown' };
+    case 'failed':
+      return { kind: 'failed', code: last?.code ?? 'card_declined' };
+    case 'void':
+      return last?.outcome === 'failed'
+        ? { kind: 'failed', code: last.code ?? 'card_declined' }
+        : { kind: 'not_payable' };
+  }
 }
