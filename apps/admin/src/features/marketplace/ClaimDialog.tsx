@@ -7,7 +7,7 @@ import {
 } from '@plp/contracts';
 import { Button, Checkbox, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { reportUnexpected } from '../shell/problem-message';
 import { DialogFailure } from './DialogFailure';
@@ -45,6 +45,8 @@ export function ClaimDialog({
   const [agreed, setAgreed] = useState(false);
   const [termsShown, setTermsShown] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  // `isPending` turns true a tick after `mutate`: a double click would claim twice before it.
+  const sending = useRef(false);
   const claim = useMutation({
     mutationFn: () =>
       api(endpoints.claimMarketplaceItem, [workspaceId, item.id], {
@@ -72,6 +74,9 @@ export function ClaimDialog({
       }
       reportUnexpected('Claiming a marketplace item failed', error);
       setFailure(error);
+    },
+    onSettled: () => {
+      sending.current = false;
     },
   });
 
@@ -102,6 +107,10 @@ export function ClaimDialog({
             disabled={!agreed}
             loading={claim.isPending}
             onClick={() => {
+              if (sending.current) {
+                return;
+              }
+              sending.current = true;
               setFailure(null);
               claim.mutate();
             }}

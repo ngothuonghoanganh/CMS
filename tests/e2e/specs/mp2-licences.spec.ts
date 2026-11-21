@@ -244,6 +244,26 @@ test.describe('MP2 · Licences of marketplace items', () => {
     }
   });
 
+  test('a double click on the confirm button claims once', async ({ page }) => {
+    const { site } = await setUpSite(page.request);
+    const workspace = `/workspaces/${site.workspaceId}`;
+    const claims: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().endsWith(`/items/${FREE_ID}/claim`)) {
+        claims.push(request.url());
+      }
+    });
+    await page.goto(`${workspace}/marketplace/${FREE_ID}`);
+    const priceBox = page.getByRole('complementary', { name: 'Giá' });
+    await priceBox.getByRole('button', { name: 'Nhận mẫu' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Nhận mẫu' });
+    await dialog.getByRole('checkbox', { name: 'Tôi đồng ý với điều khoản giấy phép' }).check();
+    await dialog.getByRole('button', { name: 'Nhận mẫu' }).dblclick();
+    await expect(dialog).toBeHidden();
+    await expect(priceBox.getByText('Workspace đã sở hữu · v1')).toBeVisible();
+    expect(claims).toHaveLength(1);
+  });
+
   test('updates an item whose version changed, and new pages follow the new version', async ({
     page,
   }) => {

@@ -1,5 +1,5 @@
 import { type Access, endpoints, type Membership } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -144,6 +144,28 @@ describe('OwnedItemsScreen (board 32)', () => {
       expect(router.refresh).toHaveBeenCalled();
     });
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('updates once when "Cập nhật mẫu" is clicked twice in a row', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValueOnce(licenceFixture({ version: 2 }));
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Cập nhật Khai trương phòng tập' }));
+    const confirm = screen.getByRole('button', { name: 'Cập nhật mẫu' });
+    // Both clicks land before the mutation reports itself pending, as a double click does.
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await vi.waitFor(() => {
+      expect(router.refresh).toHaveBeenCalled();
+    });
+    expect(lastCallTo(apiMock, endpoints.updateMarketplaceLicenceVersion).options).toEqual({
+      body: { baseVersion: 1 },
+    });
+    expect(
+      apiMock.mock.calls.filter(
+        ([endpoint]) => endpoint === endpoints.updateMarketplaceLicenceVersion,
+      ),
+    ).toHaveLength(1);
   });
 
   it('leaves the licence alone on "Để sau"', async () => {

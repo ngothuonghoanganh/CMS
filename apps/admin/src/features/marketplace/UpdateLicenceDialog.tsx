@@ -7,7 +7,7 @@ import {
 } from '@plp/contracts';
 import { Button, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { reportUnexpected } from '../shell/problem-message';
@@ -39,6 +39,8 @@ export function UpdateLicenceDialog({
   onChangedMeanwhile,
 }: UpdateLicenceDialogProps) {
   const [failure, setFailure] = useState<unknown>(null);
+  // `isPending` turns true a tick after `mutate`: a double click would update twice before it.
+  const sending = useRef(false);
   const update = useMutation({
     mutationFn: () =>
       api(endpoints.updateMarketplaceLicenceVersion, [workspaceId, item.itemId], {
@@ -56,6 +58,9 @@ export function UpdateLicenceDialog({
       }
       reportUnexpected('Updating a marketplace licence failed', error);
       setFailure(error);
+    },
+    onSettled: () => {
+      sending.current = false;
     },
   });
 
@@ -87,6 +92,10 @@ export function UpdateLicenceDialog({
           <Button
             loading={update.isPending}
             onClick={() => {
+              if (sending.current) {
+                return;
+              }
+              sending.current = true;
               setFailure(null);
               update.mutate();
             }}

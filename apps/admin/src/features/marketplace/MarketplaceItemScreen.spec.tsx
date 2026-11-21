@@ -1,5 +1,5 @@
 import { type Access, endpoints, type Membership } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -193,6 +193,23 @@ describe('MarketplaceItemScreen (board 31)', () => {
 
       await user.click(toggle);
       expect(within(dialog).queryByRole('region', { name: 'Điều khoản giấy phép v1' })).toBeNull();
+    });
+
+    it('claims once when the confirm button is clicked twice in a row', async () => {
+      const user = userEvent.setup();
+      apiMock.mockResolvedValueOnce(licenceFixture());
+      renderItem({ price: 0 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      const dialog = screen.getByRole('dialog', { name: 'Nhận mẫu' });
+      await user.click(within(dialog).getByRole('checkbox'));
+      const confirm = within(dialog).getByRole('button', { name: 'Nhận mẫu' });
+      // Both clicks land before the mutation reports itself pending, as a double click does.
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+      await vi.waitFor(() => {
+        expect(router.refresh).toHaveBeenCalled();
+      });
+      expect(apiMock).toHaveBeenCalledTimes(1);
     });
 
     it('does not send anything on "Hủy"', async () => {
