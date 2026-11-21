@@ -4,6 +4,7 @@ import {
   billingInfoSchema,
   paymentMethodSchema,
   planIdSchema,
+  planLimitKeySchema,
   vndAmountSchema,
 } from './billing.js';
 import { idSchema, isoDateTimeSchema } from './common.js';
@@ -23,12 +24,17 @@ export const paymentProviders = ['none', 'fake'] as const;
 export const paymentProviderSchema = z.enum(paymentProviders);
 export type PaymentProvider = z.infer<typeof paymentProviderSchema>;
 
-/** Why a gateway refused a charge; an adapter maps its own codes to these. */
+/**
+ * Why a charge did not go through: a gateway's refusal, which an adapter maps to these codes, or
+ * the subscription's job finding nothing to charge (T3): `no_payment_method` when no card is
+ * saved, `expired_card` when the saved one has expired; the gateway is not called then.
+ */
 export const paymentDeclineCodes = [
   'card_declined',
   'insufficient_funds',
   'expired_card',
   'processing_error',
+  'no_payment_method',
 ] as const;
 export const paymentDeclineCodeSchema = z.enum(paymentDeclineCodes);
 export type PaymentDeclineCode = z.infer<typeof paymentDeclineCodeSchema>;
@@ -39,6 +45,7 @@ export const paymentDeclineLabels: Record<PaymentDeclineCode, string> = {
   insufficient_funds: 'Thẻ không đủ hạn mức',
   expired_card: 'Thẻ đã hết hạn',
   processing_error: 'Cổng thanh toán gặp lỗi',
+  no_payment_method: 'Chưa có thẻ thanh toán',
 };
 
 /*
@@ -108,6 +115,11 @@ export const transferInstructionsSchema = z.object({
   amount: vndAmountSchema,
   /** The VietQR payload to draw as a QR code; null when the gateway gives none. */
   qrPayload: z.string().max(2000).nullable(),
+  /**
+   * The gateway's own page for this transfer, when it has one: the fake gateway's page that
+   * confirms it ("Xác nhận đã nhận tiền"). Null for a gateway that only gives the account.
+   */
+  pageUrl: z.url().nullable(),
 });
 export type TransferInstructions = z.infer<typeof transferInstructionsSchema>;
 
@@ -157,6 +169,13 @@ export const METHOD_SETUP_RESULT_PARAM = 'paymentMethod';
 export const methodSetupResults = ['saved', 'canceled'] as const;
 export const methodSetupResultSchema = z.enum(methodSetupResults);
 export type MethodSetupResult = z.infer<typeof methodSetupResultSchema>;
+
+/**
+ * Query parameter of board 29 when a gateway's transfer page leads back to it (T3): `received`
+ * once the transfer was confirmed (its event has reached the API by then with the fake gateway).
+ */
+export const TRANSFER_RESULT_PARAM = 'transfer';
+export const TRANSFER_RECEIVED = 'received';
 
 /*
  * "Thông tin xuất hóa đơn" (board 29): copied onto each invoice when it is made, so a change
@@ -245,14 +264,39 @@ export const invoiceSummarySchema = z.object({
 });
 export type InvoiceSummary = z.infer<typeof invoiceSummarySchema>;
 
+/**
+ * "Chuyển khoản" of an invoice (T3): where to send the money, with a QR code the API draws itself
+ * (an SVG data URL for `<img src>`, no outside service). The invoice is `pending` until the gateway
+ * confirms the transfer.
+ */
+export const invoiceTransferSchema = z.object({
+  bankName: z.string(),
+  accountNumber: z.string(),
+  accountName: z.string(),
+  /** "Nội dung chuyển khoản": it names the invoice. */
+  content: z.string(),
+  amount: vndAmountSchema,
+  /** `data:image/svg+xml;base64,…`; null when the gateway gives no QR payload. */
+  qrDataUrl: z.string().startsWith('data:image/svg+xml;base64,').nullable(),
+  /** The gateway's page for the transfer (the fake gateway's confirmation page); usually null. */
+  pageUrl: z.url().nullable(),
+  startedAt: isoDateTimeSchema,
+});
+export type InvoiceTransfer = z.infer<typeof invoiceTransferSchema>;
+
 /** One invoice with its charges and the billing info copied onto it. */
 export const invoiceSchema = invoiceSummarySchema.extend({
   attempts: z.array(invoiceAttemptSchema),
   billingInfo: billingInfoSchema.nullable(),
-  /** The plan it changes from (a plan change paid now); null for a period's renewal. */
+  /**
+   * The plan it changes from: a plan change paid now, or a canceled plan started again; null for
+   * the charge at the end of a trial or a period (a renewal).
+   */
   from: planChoiceSchema.nullable(),
   /** Paying it ends the trial and starts the first paid period. */
   endsTrial: z.boolean(),
+  /** The bank transfer it waits for, or was paid by; null for a card. */
+  transfer: invoiceTransferSchema.nullable(),
 });
 export type Invoice = z.infer<typeof invoiceSchema>;
 
@@ -277,6 +321,10 @@ export type InvoiceReceipt = z.infer<typeof invoiceReceiptSchema>;
 export const payInvoiceResponseSchema = z.object({ invoice: invoiceSchema });
 export type PayInvoiceResponse = z.infer<typeof payInvoiceResponseSchema>;
 
+/** "Chuyển khoản" (T3): the invoice, now `pending` with its `transfer` details. */
+export const startTransferResponseSchema = z.object({ invoice: invoiceSchema });
+export type StartTransferResponse = z.infer<typeof startTransferResponseSchema>;
+
 /*
  * What choosing a plan does now (board 28's dialog), before the owner confirms it.
  */
@@ -284,10 +332,13 @@ export type PayInvoiceResponse = z.infer<typeof payInvoiceResponseSchema>;
 /**
  * - `unchanged`: the plan and cycle the workspace has;
  * - `trial_change`: during the trial, at once and free;
- * - `start_paid`: `payNow` during or after the trial: the trial ends and the first period of the
- *   chosen plan is charged in full, from now;
+ * - `start_paid`: `payNow` during or after the trial, or after the plan was canceled (T3): the
+ *   trial ends (or the plan starts again) and the first period of the chosen plan is charged in
+ *   full, from now;
  * - `upgrade`: a higher price in the same cycle during a paid period: at once, the difference for
  *   the days left is charged, rounded up to 1.000đ;
+ * - `scheduled` (T3): a lower or equal price, or another cycle, during a paid period: nothing is
+ *   charged now; the change applies at the end of the period, which charges the new plan;
  * - `unavailable`: see `planChangeUnavailableReasons`.
  */
 export const planChangeModes = [
@@ -295,22 +346,18 @@ export const planChangeModes = [
   'trial_change',
   'start_paid',
   'upgrade',
+  'scheduled',
   'unavailable',
 ] as const;
 export const planChangeModeSchema = z.enum(planChangeModes);
 export type PlanChangeMode = z.infer<typeof planChangeModeSchema>;
 
 /**
- * - `payment_required`: the trial is over; only paying now (`payNow`) chooses a plan;
- * - `unpaid`: the period ended or its payment is due; it is paid first (T3);
- * - `scheduled_change`: a lower or equal price, or another cycle, applies at the period's end
- *   (T3).
+ * - `payment_required`: the trial is over, or the plan was canceled; only paying now (`payNow`)
+ *   chooses a plan;
+ * - `unpaid`: the period ended or its payment is due; its invoice is paid first.
  */
-export const planChangeUnavailableReasons = [
-  'payment_required',
-  'unpaid',
-  'scheduled_change',
-] as const;
+export const planChangeUnavailableReasons = ['payment_required', 'unpaid'] as const;
 export const planChangeUnavailableReasonSchema = z.enum(planChangeUnavailableReasons);
 export type PlanChangeUnavailableReason = z.infer<typeof planChangeUnavailableReasonSchema>;
 
@@ -324,6 +371,28 @@ export const planChangeQuoteQuerySchema = z.object({
     .transform((value) => value === 'true'),
 });
 export type PlanChangeQuoteQuery = z.infer<typeof planChangeQuoteQuerySchema>;
+
+/**
+ * What a change to a lower plan does to the workspace (board 28's dialog): nothing is removed; what
+ * is over the new limits is only blocked from growing (ADR-035).
+ */
+export const planChangeImpactsSchema = z.object({
+  /** Limits the workspace already uses past the new plan's ("4 site, vượt hạn mức Gói Cơ bản"). */
+  overLimits: z.array(
+    z.object({
+      limit: planLimitKeySchema,
+      used: z.number().int().nonnegative(),
+      max: z.number().int().nonnegative(),
+    }),
+  ),
+  /** Enabled automations the change pauses (`pausedReason: plan`); 0 when it keeps automation. */
+  automationsToPause: z.number().int().nonnegative(),
+  /** AI uses each month now and on the new plan. */
+  aiUses: z.object({ from: z.number().int().nonnegative(), to: z.number().int().nonnegative() }),
+  /** Members, with pending invitations, who all keep their access ("7 thành viên giữ nguyên quyền"). */
+  members: z.number().int().nonnegative(),
+});
+export type PlanChangeImpacts = z.infer<typeof planChangeImpactsSchema>;
 
 export const planChangeQuoteSchema = z.object({
   mode: planChangeModeSchema,
@@ -342,6 +411,12 @@ export const planChangeQuoteSchema = z.object({
   /** The change charges and no valid card is saved: "Thêm thẻ" first. */
   paymentMethodRequired: z.boolean(),
   unavailableReason: planChangeUnavailableReasonSchema.nullable(),
+  /** When a `scheduled` change applies: the end of the period ("từ 01/12"); null otherwise. */
+  effectiveAt: isoDateTimeSchema.nullable(),
+  /** What the next period costs on the chosen plan (`scheduled`): "Phí kỳ sau"; null otherwise. */
+  nextAmount: vndAmountSchema.nullable(),
+  /** For a change to another plan that applies later or now for free (`scheduled`, `trial_change`). */
+  impacts: planChangeImpactsSchema.nullable(),
 });
 export type PlanChangeQuote = z.infer<typeof planChangeQuoteSchema>;
 

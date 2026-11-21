@@ -9,13 +9,17 @@ import {
 import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
   billingInfoSchema,
-  billingSummarySchema,
   changePlanRequestSchema,
   planCatalogResponseSchema,
   setTestClockRequestSchema,
   testClockSchema,
   workspacePlanSchema,
 } from './billing.js';
+import {
+  billingSummarySchema,
+  billingWorkRunSchema,
+  setTestClockResponseSchema,
+} from './billing-lifecycle.js';
 import {
   billingInfoResponseSchema,
   gatewayWebhookResponseSchema,
@@ -28,6 +32,7 @@ import {
   planChangeQuoteQuerySchema,
   planChangeQuoteSchema,
   startMethodSetupRequestSchema,
+  startTransferResponseSchema,
 } from './billing-payments.js';
 import {
   assetListQuerySchema,
@@ -442,20 +447,60 @@ export const endpoints = {
     response: planChangeQuoteSchema,
   }),
   /**
-   * `billing.manage`, as the quote says (ADR-035, T2): during the trial a free change; with
-   * `payNow` during or after the trial, the first period charged in full; in a paid period an
-   * upgrade charged for the days left. A change that charges needs `expectedAmount` equal to the
-   * quote (409 `quote_changed` otherwise) and a saved card (422 `payment_method_required`). 200
-   * once applied; 202 while the gateway decides (the plan changes when it confirms). A refused
-   * charge is 402 `payment_failed`, an unknown outcome 503 `gateway_unavailable`, another charge
-   * under way 409 `payment_in_progress` (with the invoice when an earlier charge's outcome is
-   * unknown: "Thanh toán lại" on it first), a payment the gateway took for an invoice decided
-   * meanwhile 409 `payment_not_applied`, anything else 409 `plan_change_unavailable` (`reason`).
+   * `billing.manage`, as the quote says (ADR-035, T2, T3): during the trial a free change; with
+   * `payNow` during or after the trial, or after the plan was canceled, the first period charged
+   * in full; in a paid period an upgrade charged for the days left, or a lower price or another
+   * cycle scheduled for the period's end (200, `scheduledChange` set, nothing charged). A change
+   * that charges needs `expectedAmount` equal to the quote (409 `quote_changed` otherwise) and a
+   * saved card (422 `payment_method_required`), unless `payWith: 'transfer'` (`payNow` only),
+   * which answers 202 with the invoice waiting in `dueInvoice` (its transfer details on
+   * `getInvoice`). 200 once applied; 202 while the gateway decides (the plan changes when it
+   * confirms). A refused charge is 402 `payment_failed`, an unknown outcome 503
+   * `gateway_unavailable`, another charge under way 409 `payment_in_progress` (with the invoice
+   * when an earlier charge's outcome is unknown: "Thanh toán lại" on it first), a payment the
+   * gateway took for an invoice decided meanwhile 409 `payment_not_applied`, anything else 409
+   * `plan_change_unavailable` (`reason`).
    */
   changePlan: endpoint({
     method: 'POST',
     path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/plan`,
     request: changePlanRequestSchema,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /**
+   * `billing.manage` (T3): drops the change scheduled for the end of the period; 200 also when none
+   * was scheduled.
+   */
+  cancelScheduledChange: endpoint({
+    method: 'DELETE',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/plan/scheduled-change`,
+    request: null,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /**
+   * `billing.manage` (T3), "Hủy gói": the plan stops at the end of the period or trial
+   * (`cancelAt`), nothing is refunded. 200, also when it was already set; 409
+   * `plan_change_unavailable` with `unpaid` while a payment is due, `payment_required` once
+   * nothing runs (trial over, canceled).
+   */
+  cancelPlan: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/cancel`,
+    request: null,
+    query: null,
+    response: billingSummarySchema,
+  }),
+  /**
+   * `billing.manage` (T3), "Giữ lại gói": withdraws "Hủy gói" before the end of the period or
+   * trial. 200, also when nothing was canceled; 409 `plan_change_unavailable` `payment_required`
+   * once the plan stopped ("Chọn gói mới" pays with `payNow`).
+   */
+  keepPlan: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/billing/keep`,
+    request: null,
     query: null,
     response: billingSummarySchema,
   }),
@@ -536,6 +581,22 @@ export const endpoints = {
     response: payInvoiceResponseSchema,
   }),
   /**
+   * `billing.manage` (T3), "Chuyển khoản": pays an unpaid invoice of a period (a renewal, the end
+   * of a trial, a plan paid now) by bank transfer. The invoice becomes `pending` with its
+   * `transfer` details; the gateway's `transfer_received` pays it. Asking again answers the same
+   * details. 409 `invoice_not_payable` (paid, void, an upgrade, or what it pays for is gone), 409
+   * `payment_in_progress` (a card charge being decided, or one whose outcome is unknown: "Thanh
+   * toán lại" first), 503 `payments_disabled`.
+   */
+  startInvoiceTransfer: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, invoiceId: string) =>
+      `/workspaces/${e(workspaceId)}/billing/invoices/${e(invoiceId)}/transfer`,
+    request: null,
+    query: null,
+    response: startTransferResponseSchema,
+  }),
+  /**
    * The payment gateway's events (no session, no Origin): the raw body, signed by the gateway.
    * 401 for a bad signature, 400 for a body that is no event, 404 for another provider; 200 for
    * every signed event, applied once, already applied or ignored.
@@ -555,13 +616,28 @@ export const endpoints = {
     query: null,
     response: testClockSchema,
   }),
-  /** Moves the billing clock of the whole API process; `{ now: null }` goes back to real time. */
+  /**
+   * Moves the billing clock of the whole API process; `{ now: null }` goes back to real time. It
+   * answers once the billing work due at the new time has run (T3): renewals, retries, emails.
+   */
   setTestClock: endpoint({
     method: 'PUT',
     path: () => '/testing/clock',
     request: setTestClockRequestSchema,
     query: null,
-    response: testClockSchema,
+    response: setTestClockResponseSchema,
+  }),
+  /**
+   * Only with `BILLING_TEST_CLOCK=on` (404 otherwise), no session: runs the billing work due at the
+   * clock's time now, without moving it (T3). With the test clock, billing work runs only here and
+   * when the clock moves.
+   */
+  runDueBillingWork: endpoint({
+    method: 'POST',
+    path: () => '/testing/billing/run-due',
+    request: null,
+    query: null,
+    response: billingWorkRunSchema,
   }),
 
   // Members (ADR-021): `members.manage`, except where noted

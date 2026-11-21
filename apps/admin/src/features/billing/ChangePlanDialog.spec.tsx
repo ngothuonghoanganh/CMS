@@ -438,13 +438,13 @@ describe('"Đổi gói" in a paid period', () => {
     expect(await screen.findByText('Đã đổi sang Gói Doanh nghiệp')).toBeInTheDocument();
   });
 
-  it('says why a lower plan cannot change now', async () => {
+  it('says why a plan cannot change now', async () => {
     const user = userEvent.setup();
     route({
       free: quoteFixture({
         mode: 'unavailable',
         planId: 'basic',
-        unavailableReason: 'scheduled_change',
+        unavailableReason: 'unpaid',
       }),
     });
     renderBilling({ initial: active });
@@ -452,7 +452,9 @@ describe('"Đổi gói" in a paid period', () => {
     const dialog = await openDialog(user);
     await user.click(within(dialog).getByRole('radio', { name: /Gói Cơ bản/ }));
 
-    expect(await within(dialog).findByText(/chỉ áp dụng khi hết kỳ hiện tại/)).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/Thanh toán kỳ này trước khi đổi gói/),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Đổi gói' })).toBeDisabled();
   });
 });

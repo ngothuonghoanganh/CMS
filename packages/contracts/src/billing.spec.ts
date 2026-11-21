@@ -14,6 +14,8 @@ const CATALOG: PlanCatalog = {
   trial: { planId: 'agency', days: 14 },
   graceDays: 7,
   expiringSoonDays: 7,
+  trialReminderDays: 3,
+  retryDays: [2, 5],
   plans: [
     {
       id: 'basic',
@@ -117,6 +119,15 @@ describe('the plan catalog', () => {
     expect(issuesOf({ ...CATALOG, plans: [runs, agency] })).toEqual([
       'plans.0.limits.automationRuns',
     ]);
+  });
+
+  it('reminds of the end of a trial within it, and retries a failed charge on later days only', () => {
+    expect(issuesOf({ ...CATALOG, trialReminderDays: 14 })).toEqual(['trialReminderDays']);
+    expect(issuesOf({ ...CATALOG, retryDays: [] })).toEqual([]);
+    expect(issuesOf({ ...CATALOG, retryDays: [5, 2] })).toEqual(['retryDays.1']);
+    expect(issuesOf({ ...CATALOG, retryDays: [2, 2] })).toEqual(['retryDays.1']);
+    expect(issuesOf({ ...CATALOG, retryDays: [0] })).toEqual(['retryDays.0']);
+    expect(issuesOf({ ...CATALOG, retryDays: [1, 2, 3, 4, 5, 6] })).toEqual(['retryDays']);
   });
 });
 

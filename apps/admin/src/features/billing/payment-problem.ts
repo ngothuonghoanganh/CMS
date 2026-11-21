@@ -78,8 +78,6 @@ export function paymentProblemOf(error: unknown): PaymentProblem | null {
 export const unavailableReasonText: Record<PlanChangeUnavailableReason, string> = {
   payment_required: 'Thời gian dùng thử đã hết. Chọn "Thanh toán ngay" để dùng tiếp gói bạn chọn.',
   unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi đổi gói.',
-  scheduled_change:
-    'Gói thấp hơn hoặc đổi chu kỳ chỉ áp dụng khi hết kỳ hiện tại; việc này chưa làm được ở đây.',
 };
 
 /** The sentence a payment problem shows; null for a problem that is not about payments. */

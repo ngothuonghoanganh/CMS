@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { emailSchema } from './auth.js';
-import { vnDaySchema, vnMonthSchema } from './calendar.js';
 import { idSchema, isoDateTimeSchema } from './common.js';
 import { CUSTOM_DOMAINS_MAX } from './domains.js';
 import { MEMBERS_MAX } from './members.js';
@@ -103,6 +102,13 @@ export const planCatalogSchema = z
     graceDays: z.number().int().min(0).max(60),
     /** "Sắp hết hạn" this many days before a period ends that cannot renew by itself. */
     expiringSoonDays: z.number().int().min(1).max(60),
+    /** The owner is told this many days before the trial ends ("Dùng thử sắp hết"). */
+    trialReminderDays: z.number().int().min(1).max(30),
+    /**
+     * Days after the first failed charge of an unpaid period on which the job charges again, in
+     * order; none after the last, when only the owner pays (ADR-035).
+     */
+    retryDays: z.array(z.number().int().min(1).max(60)).max(5),
     plans: z.array(planSchema).min(1).max(10),
   })
   .superRefine((catalog, context) => {
@@ -150,6 +156,23 @@ export const planCatalogSchema = z
         path: ['trial', 'planId'],
       });
     }
+    if (catalog.trialReminderDays >= catalog.trial.days) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Nhắc trước khi hết dùng thử phải ít ngày hơn thời gian dùng thử',
+        path: ['trialReminderDays'],
+      });
+    }
+    catalog.retryDays.forEach((day, index) => {
+      const before = catalog.retryDays[index - 1];
+      if (before !== undefined && day <= before) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Các ngày thử lại phải tăng dần',
+          path: ['retryDays', index],
+        });
+      }
+    });
   });
 export type PlanCatalog = z.infer<typeof planCatalogSchema>;
 
@@ -385,27 +408,6 @@ export const planUsageSchema = z.strictObject({
 });
 export type PlanUsage = z.infer<typeof planUsageSchema>;
 
-/** Board 28 "Gói & mức dùng" (`billing.view`): the plan with its limits and features, and usage. */
-export const billingSummarySchema = z.object({
-  plan: planSchema,
-  cycle: billingCycleSchema,
-  state: subscriptionStateSchema,
-  access: accessLevelSchema,
-  trialEndsAt: isoDateTimeSchema.nullable(),
-  trialDaysLeft: z.number().int().nonnegative().nullable(),
-  periodStart: isoDateTimeSchema,
-  periodEnd: isoDateTimeSchema,
-  cancelAtPeriodEnd: z.boolean(),
-  scheduledChange: scheduledChangeSchema.nullable(),
-  /** When an unpaid workspace turns read-only. */
-  graceEndsAt: isoDateTimeSchema.nullable(),
-  usage: planUsageSchema,
-  /** The month AI uses and automation runs count in, and when they come back. */
-  usageMonth: vnMonthSchema,
-  usageResetsOn: vnDaySchema,
-});
-export type BillingSummary = z.infer<typeof billingSummarySchema>;
-
 /**
  * The workspace's plan for every member (`pages.view`): "Workspace · Gói {tên}" in Sidebar v2,
  * the "Nâng cấp" chips of features it lacks and the read-only banner.
@@ -420,14 +422,20 @@ export type WorkspacePlan = z.infer<typeof workspacePlanSchema>;
 
 /**
  * "Đổi gói" (`billing.manage`). During the trial a change is free; `payNow` pays for the chosen
- * plan at once instead, which ends the trial (ADR-035, T2). A change that charges (paying now, or
- * an upgrade of a paid period) names the amount of the quote the owner confirmed.
+ * plan at once instead, which ends the trial (ADR-035, T2), or starts a canceled plan again (T3).
+ * A change that charges (paying now, or an upgrade of a paid period) names the amount of the quote
+ * the owner confirmed. A lower price or another cycle in a paid period is scheduled for its end.
  */
 export const changePlanRequestSchema = z.strictObject({
   planId: planIdSchema,
   cycle: billingCycleSchema,
   payNow: z.boolean().default(false),
   expectedAmount: vndAmountSchema.optional(),
+  /**
+   * How a payment now is made (T3): the saved card (unset), or a bank transfer, which leaves the
+   * invoice waiting for the gateway's confirmation and changes the plan when it arrives.
+   */
+  payWith: z.enum(['card', 'transfer']).optional(),
 });
 export type ChangePlanRequest = z.infer<typeof changePlanRequestSchema>;
 
