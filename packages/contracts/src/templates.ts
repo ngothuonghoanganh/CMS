@@ -78,6 +78,15 @@ export const templateRefSchema = z.discriminatedUnion('source', [
 export type TemplateRef = z.infer<typeof templateRefSchema>;
 
 /**
+ * `context` of 409 `template_changed`: the version pages are made from now. For a marketplace
+ * template it is the version of the workspace's licence (ADR-036).
+ */
+export const templateChangedProblemContextSchema = z.object({
+  currentVersion: templateVersionSchema,
+});
+export type TemplateChangedProblemContext = z.infer<typeof templateChangedProblemContextSchema>;
+
+/**
  * Whether a template's id names a workspace template (24 hex digits) rather than a system one,
  * whose ids always hold a hyphen.
  */
