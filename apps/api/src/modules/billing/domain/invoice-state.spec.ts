@@ -9,6 +9,7 @@ import {
   isFinalInvoiceStatus,
   nextAttemptNumber,
   purposeOf,
+  periodPaidAt,
   startsWhenPaid,
   statusAfterCharge,
 } from './invoice-state.js';
@@ -208,5 +209,83 @@ describe('invoice purposes (T3)', () => {
       false,
     );
     expect(invoiceTransferable(upgrade, paidPeriod, NOW)).toBe(false);
+  });
+});
+
+describe('the period a payment gives (ADR-035, T2 and T3)', () => {
+  /** An instant given as Vietnamese wall time. */
+  const vn = (local: string) => new Date(`${local}+07:00`);
+  /** The renewal of a month that was to run from 30/11 to 30/12. */
+  const renewal = {
+    kind: 'subscription' as const,
+    from: null,
+    endsTrial: false,
+    cycle: 'monthly' as const,
+    periodEnd: vn('2026-12-30T10:00:00.000'),
+  };
+
+  it('keeps the period invoiced when it is paid before that period ends', () => {
+    expect(periodPaidAt(renewal, vn('2026-12-07T09:00:00.000'))).toBeNull();
+    expect(periodPaidAt(renewal, vn('2026-12-30T09:59:59.999'))).toBeNull();
+    expect(periodPaidAt({ ...renewal, endsTrial: true }, vn('2026-12-01T00:00:00.000'))).toBeNull();
+  });
+
+  it('starts a fresh period from the payment once the period invoiced has ended, at its end too', () => {
+    const atEnd = vn('2026-12-30T10:00:00.000');
+    expect(periodPaidAt(renewal, atEnd)).toEqual({
+      start: atEnd,
+      end: vn('2027-01-30T10:00:00.000'),
+    });
+    // Paid two weeks after the month it was made for ended: that month is not paid for.
+    const late = vn('2027-01-14T16:20:00.000');
+    expect(periodPaidAt(renewal, late)).toEqual({
+      start: late,
+      end: vn('2027-02-14T16:20:00.000'),
+    });
+    // The end of a trial is the first period's charge: the same rule.
+    expect(periodPaidAt({ ...renewal, endsTrial: true }, late)).toEqual({
+      start: late,
+      end: vn('2027-02-14T16:20:00.000'),
+    });
+  });
+
+  it('counts the fresh period by the calendar rule: the 31st, a year', () => {
+    const on31st = vn('2027-01-31T08:00:00.000');
+    expect(periodPaidAt(renewal, on31st)).toEqual({
+      start: on31st,
+      end: vn('2027-02-28T08:00:00.000'),
+    });
+    const yearly = {
+      ...renewal,
+      cycle: 'yearly' as const,
+      periodEnd: vn('2027-11-30T10:00:00.000'),
+    };
+    const lateYear = vn('2028-02-29T11:00:00.000');
+    expect(periodPaidAt(yearly, vn('2027-11-29T10:00:00.000'))).toBeNull();
+    expect(periodPaidAt(yearly, lateYear)).toEqual({
+      start: lateYear,
+      end: vn('2029-02-28T11:00:00.000'),
+    });
+  });
+
+  it('starts a plan paid now from the payment, early or late, and never moves an upgrade', () => {
+    const from = { planId: 'agency', cycle: 'monthly' as const };
+    const early = vn('2026-12-01T10:00:00.000');
+    const late = vn('2027-02-01T10:00:00.000');
+    for (const paidNow of [
+      { ...renewal, from },
+      { ...renewal, from, endsTrial: true },
+    ]) {
+      expect(periodPaidAt(paidNow, early)).toEqual({
+        start: early,
+        end: vn('2027-01-01T10:00:00.000'),
+      });
+      expect(periodPaidAt(paidNow, late)).toEqual({
+        start: late,
+        end: vn('2027-03-01T10:00:00.000'),
+      });
+    }
+    expect(periodPaidAt({ ...renewal, kind: 'upgrade', from }, early)).toBeNull();
+    expect(periodPaidAt({ ...renewal, kind: 'upgrade', from }, late)).toBeNull();
   });
 });

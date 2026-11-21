@@ -17,7 +17,6 @@ import {
   graceEndOf,
   nextActionAfter,
   nextRetryOf,
-  overdueAt,
   settleAtOf,
 } from './domain/billing-agenda.js';
 import { DAY_MS } from './domain/billing-period.js';
@@ -364,18 +363,11 @@ export class BillingJob {
     }
   }
 
-  /**
-   * Lets go of the subscription with its next time: the timeline's, sooner for a step to redo. Work
-   * still overdue after the run is one: a payment recorded while it ran (a transfer, an answer of
-   * the gateway) can leave a period to renew that had ended too.
-   */
+  /** Lets go of the subscription with its next time: the timeline's, sooner for a step to redo. */
   private async finish(ref: WorkspaceRef, run: JobRun, until: Date): Promise<void> {
     try {
       await this.transactions.run(async (tx) => {
         const { items } = await this.schedule.timelineOf(ref, tx);
-        if (overdueAt(items, run.at)) {
-          run.again();
-        }
         const next = run.nextAfter(nextActionAfter(items, run.at));
         await this.subscriptions.finishRun(ref, { until, next }, tx);
       });

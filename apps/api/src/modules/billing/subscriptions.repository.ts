@@ -300,18 +300,23 @@ export class SubscriptionsRepository {
   }
 
   /**
-   * The next period of a paid plan once its renewal is paid (ADR-035, T3): the plan and cycle the
-   * invoice charged (a scheduled change applied), from the end of the period it follows, only
-   * while the subscription still waits for that period and from the version read in `tx`.
+   * The next period of a paid plan once its renewal is paid (ADR-035, T3): the plan, cycle and
+   * period the invoice was paid for (a scheduled change applied; from the payment when the period
+   * it was made for had ended by then), only while the subscription still waits for a period
+   * after the one that ends at `follows`, and from the version read in `tx`.
    */
-  async renewPeriod(ref: WorkspaceRef, change: PaidPeriod, tx: Tx): Promise<boolean> {
+  async renewPeriod(
+    ref: WorkspaceRef,
+    change: PaidPeriod & { follows: Date },
+    tx: Tx,
+  ): Promise<boolean> {
     const result = await this.subscriptions
       .updateOne(
         {
           _id: ref.workspaceId,
           version: change.fromVersion,
           trialEndsAt: null,
-          periodEnd: change.periodStart,
+          periodEnd: change.follows,
         },
         {
           $set: {

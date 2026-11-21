@@ -49,7 +49,7 @@ export interface InvoiceChange {
   status: Exclude<InvoiceStatus, 'void'>;
   card?: { brand: string; last4: string };
   paidAt?: Date;
-  /** A trial paid late starts its period when it is paid. */
+  /** The period it was paid for, when not the one it was made for (`periodPaidAt`). */
   period?: { start: Date; end: Date };
 }
 

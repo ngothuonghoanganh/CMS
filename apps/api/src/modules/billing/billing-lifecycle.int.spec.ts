@@ -2,9 +2,11 @@ import {
   type BillingSummary,
   billingSummarySchema,
   endpoints,
+  invoiceReceiptSchema,
   invoiceSchema,
   payInvoiceResponseSchema,
   problemSchema,
+  startTransferResponseSchema,
   workspacePlanSchema,
 } from '@plp/contracts';
 import { Logger } from '@nestjs/common';
@@ -21,12 +23,15 @@ import {
   CARD_OK,
   fakeGateway,
   invoicesOf,
+  newEventId,
   payInvoice,
+  postGatewayEvent,
 } from '../../../test/payments.js';
 import { BUNDLED_PLAN_CATALOG_FILE } from '../../config/env.js';
 import { BillingClock } from './billing-clock.js';
 import { BillingScheduler } from './billing-scheduler.service.js';
 import { periodEndOf } from './domain/billing-period.js';
+import { vnDateText } from './domain/billing-text.js';
 import { type PlanChange, PlanChangeHooks } from './plan-change-hooks.js';
 
 const DAY_MS = 86_400_000;
@@ -100,6 +105,46 @@ describe('the life of a plan (ADR-035, T3)', () => {
       throw new Error(`The subscription has no ${field}`);
     }
     return value;
+  }
+
+  /**
+   * The period a paid invoice pays for, as the invoice and its receipt both say, and when it was
+   * paid.
+   */
+  async function paidPeriodOf(owner: TestClient, workspaceId: string, invoiceId: string) {
+    const invoice = invoiceSchema.parse(
+      (await owner.get(endpoints.getInvoice.path(workspaceId, invoiceId)).expect(200)).body,
+    );
+    const receipt = invoiceReceiptSchema.parse(
+      (await owner.get(endpoints.getInvoiceReceipt.path(workspaceId, invoiceId)).expect(200)).body,
+    );
+    expect(invoice.status).toBe('paid');
+    expect(receipt.invoice).toMatchObject({
+      periodStart: invoice.periodStart,
+      periodEnd: invoice.periodEnd,
+    });
+    return {
+      paidAt: new Date(invoice.paidAt ?? ''),
+      period: { start: new Date(invoice.periodStart), end: new Date(invoice.periodEnd) },
+    };
+  }
+
+  /** The plan works again for `period`, whose end is the job's next work: its renewal. */
+  async function expectFreshPeriod(
+    owner: TestClient,
+    workspaceId: string,
+    period: { start: Date; end: Date },
+  ): Promise<void> {
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      state: 'active',
+      access: 'full',
+      periodStart: period.start.toISOString(),
+      periodEnd: period.end.toISOString(),
+      failedSince: null,
+      dueInvoice: null,
+      renewal: { at: period.end.toISOString(), amount: 599_000 },
+    });
+    expect(await subscriptionOf(workspaceId)).toMatchObject({ nextActionAt: period.end });
   }
 
   /**
@@ -556,45 +601,74 @@ describe('the life of a plan (ADR-035, T3)', () => {
       expect((await logOf(workspaceId)).at(-1)).toBe('plan_restarted');
     });
 
-    it('renews the next period at once when its renewal is paid after that period ended too', async () => {
-      const { owner, workspaceId, periodEnd } = await paying();
+    it('starts a fresh period when its renewal is paid after that period ended, with one charge', async () => {
+      const { owner, workspaceId, email, periodEnd } = await paying();
       await addCard(t, owner, workspaceId, CARD_DECLINED);
       await runAt(periodEnd);
       await runAt(after(periodEnd, 9));
-      const { dueInvoice } = await summaryOf(owner, workspaceId);
+      const { dueInvoice, access } = await summaryOf(owner, workspaceId);
+      expect(access).toBe('read_only');
       expect(await subscriptionOf(workspaceId)).toMatchObject({ nextActionAt: null });
+      const invoiceId = dueInvoice?.id ?? '';
 
-      // Paid 45 days late: the period it pays, from the old end, is over by then.
-      const nextEnd = periodEndOf(periodEnd, 'monthly');
+      // "Thanh toán lại" 45 days late: the period it was made for, from the old end, is over.
+      expect(after(periodEnd, 45).getTime()).toBeGreaterThan(
+        periodEndOf(periodEnd, 'monthly').getTime(),
+      );
       clock.set(after(periodEnd, 45));
       await addCard(t, owner, workspaceId, CARD_OK);
-      await payInvoice(owner, workspaceId, dueInvoice?.id ?? '').expect(200);
-      expect(await summaryOf(owner, workspaceId)).toMatchObject({
-        periodStart: periodEnd.toISOString(),
-        periodEnd: nextEnd.toISOString(),
-        access: 'read_only',
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      await payInvoice(owner, workspaceId, invoiceId).expect(200);
+      const { period, paidAt } = await paidPeriodOf(owner, workspaceId, invoiceId);
+      expect(period.start).toEqual(paidAt);
+      expect(period.end).toEqual(periodEndOf(paidAt, 'monthly'));
+      await expectFreshPeriod(owner, workspaceId, period);
+      expect(emailsTo(email, 'billing-receipt').at(-1)?.data).toMatchObject({
+        period: `${vnDateText(period.start)} – ${vnDateText(period.end)}`,
       });
-      // The job is due at once for the period after it, instead of never again.
-      const due = await storedTime(workspaceId, 'nextActionAt');
-      expect(due.getTime()).toBeLessThanOrEqual(clock.now().getTime());
 
-      expect(await scheduler.runDue()).toBe(1);
+      // The job has nothing to do before the new period ends: no charge for a cycle missed.
+      expect(await scheduler.runDue()).toBe(0);
+      await runAt(after(period.end, -1));
+      expect(charge).toHaveBeenCalledTimes(1);
+      expect((await invoicesOf(owner, workspaceId)).items).toHaveLength(2);
       expect(await summaryOf(owner, workspaceId)).toMatchObject({
         state: 'active',
-        access: 'full',
-        periodStart: nextEnd.toISOString(),
-        periodEnd: periodEndOf(nextEnd, 'monthly').toISOString(),
-        dueInvoice: null,
+        periodStart: period.start.toISOString(),
       });
-      const renewals = (await invoicesOf(owner, workspaceId)).items.filter(
-        (item) => item.status === 'paid',
+    });
+
+    it('starts a fresh period when a transfer for its renewal arrives after that period ended', async () => {
+      const { owner, workspaceId, periodEnd } = await paying();
+      await addCard(t, owner, workspaceId, CARD_DECLINED);
+      await runAt(periodEnd);
+      const { dueInvoice } = await summaryOf(owner, workspaceId);
+      const invoiceId = dueInvoice?.id ?? '';
+      const started = startTransferResponseSchema.parse(
+        (await owner.post(endpoints.startInvoiceTransfer.path(workspaceId, invoiceId)).expect(200))
+          .body,
       );
-      expect(renewals.map((item) => item.periodStart)).toEqual(
-        expect.arrayContaining([periodEnd.toISOString(), nextEnd.toISOString()]),
-      );
-      expect(await subscriptionOf(workspaceId)).toMatchObject({
-        nextActionAt: periodEndOf(nextEnd, 'monthly'),
-      });
+      await runAt(after(periodEnd, 9));
+      expect((await summaryOf(owner, workspaceId)).access).toBe('read_only');
+
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      clock.set(after(periodEnd, 45));
+      await postGatewayEvent(t, {
+        kind: 'transfer_received',
+        eventId: newEventId(),
+        occurredAt: new Date().toISOString(),
+        reference: invoiceId,
+        amount: started.invoice.amount,
+      }).expect(200);
+      const { period, paidAt } = await paidPeriodOf(owner, workspaceId, invoiceId);
+      expect(period.start).toEqual(paidAt);
+      expect(period.end).toEqual(periodEndOf(paidAt, 'monthly'));
+      await expectFreshPeriod(owner, workspaceId, period);
+
+      expect(await scheduler.runDue()).toBe(0);
+      await runAt(after(period.end, -1));
+      expect(charge).not.toHaveBeenCalled();
+      expect((await invoicesOf(owner, workspaceId)).items).toHaveLength(2);
     });
 
     it('keeps a downgrade scheduled for its end once the renewal charges it, unpaid', async () => {

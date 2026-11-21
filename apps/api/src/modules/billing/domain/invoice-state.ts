@@ -6,6 +6,7 @@ import type {
   InvoiceStatus,
   SubscriptionFacts,
 } from '@plp/contracts';
+import { periodEndOf } from './billing-period.js';
 import { daysLeftOf } from './proration.js';
 
 /** A paid or void invoice never changes again (ADR-035, §2 rule 12). */
@@ -121,6 +122,29 @@ export function startsWhenPaid(
 ): boolean {
   const purpose = purposeOf(invoice);
   return purpose === 'start_paid' || purpose === 'restart';
+}
+
+/**
+ * The period a payment at `at` gives the invoice instead of the one it was made for; null when
+ * that one stays (ADR-035, T2 and T3). A plan paid now starts when it is paid. The charge of a
+ * period (the end of a trial, a renewal) paid once that period has ended, at its end or after,
+ * starts a fresh one when it is paid, on the same plan and cycle: nobody pays for a cycle that
+ * passed, and no charge for the next one is due at once. Paid before its end, and for an upgrade,
+ * the period stays as invoiced.
+ */
+export function periodPaidAt(
+  invoice: Pick<InvoicePurpose, 'kind' | 'from' | 'endsTrial' | 'periodEnd'> & {
+    cycle: BillingCycle;
+  },
+  at: Date,
+): { start: Date; end: Date } | null {
+  const purpose = purposeOf(invoice);
+  const ended =
+    (purpose === 'renewal' || purpose === 'trial_end') &&
+    at.getTime() >= invoice.periodEnd.getTime();
+  return startsWhenPaid(invoice) || ended
+    ? { start: at, end: periodEndOf(at, invoice.cycle) }
+    : null;
 }
 
 /**

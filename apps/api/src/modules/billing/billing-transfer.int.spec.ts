@@ -31,6 +31,7 @@ import { BUNDLED_PLAN_CATALOG_FILE } from '../../config/env.js';
 import { BillingClock } from './billing-clock.js';
 import { BillingScheduler } from './billing-scheduler.service.js';
 import { periodEndOf } from './domain/billing-period.js';
+import { vnDateText } from './domain/billing-text.js';
 import { FakeWebhookSender } from './gateway/fake/fake-webhook-sender.js';
 
 const DAY_MS = 86_400_000;
@@ -217,6 +218,53 @@ describe('paying by bank transfer (ADR-035, T3)', () => {
         (sent) => sent.template === 'billing-receipt' && sent.to.includes(email),
       ),
     ).toHaveLength(1);
+  });
+
+  it('pays the end of the trial from when it arrives once the first period ended, and charges nothing', async () => {
+    const { owner, workspaceId, email, trialEnd, due } = await refused();
+    const invoice = await transferOf(owner, workspaceId, due);
+    await runAt(after(trialEnd, 8));
+    expect((await summaryOf(owner, workspaceId)).access).toBe('read_only');
+    const charge = vi.spyOn(fakeGateway(t), 'charge');
+    clock.set(after(periodEndOf(trialEnd, 'monthly'), 3));
+    await postGatewayEvent(t, received(invoice)).expect(200);
+
+    const paid = invoiceSchema.parse(
+      (await owner.get(endpoints.getInvoice.path(workspaceId, due)).expect(200)).body,
+    );
+    const paidAt = new Date(paid.paidAt ?? '');
+    const periodEnd = periodEndOf(paidAt, 'monthly');
+    expect(paid).toMatchObject({
+      status: 'paid',
+      periodStart: paidAt.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+    });
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      state: 'active',
+      access: 'full',
+      trialEndsAt: null,
+      periodStart: paidAt.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+      renewal: { at: periodEnd.toISOString() },
+    });
+    expect(await storedTime(workspaceId, 'nextActionAt')).toEqual(periodEnd);
+    expect(
+      t.emails.sent.filter(
+        (sent) => sent.template === 'billing-receipt' && sent.to.includes(email),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({
+          period: `${vnDateText(paidAt)} – ${vnDateText(periodEnd)}`,
+        }) as unknown,
+      }),
+    ]);
+
+    // Nothing for the job before the new period ends: the card is never charged for a lost month.
+    expect(await scheduler.runDue()).toBe(0);
+    await runAt(after(periodEnd, -1));
+    expect(charge).not.toHaveBeenCalled();
+    expect((await invoicesOf(owner, workspaceId)).items).toHaveLength(1);
   });
 
   it('is confirmed on the fake gateway’s page, once, which leads back to board 29', async () => {

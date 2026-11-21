@@ -20,7 +20,10 @@ export interface RenewalTerms {
   plan: Plan;
   cycle: BillingCycle;
   amount: number;
-  /** The old period's (or trial's) end: a late payment never moves the calendar. */
+  /**
+   * The old period's (or trial's) end. A payment once this period has ended starts it when paid
+   * instead (`periodPaidAt`).
+   */
   periodStart: Date;
   periodEnd: Date;
 }
@@ -29,7 +32,7 @@ export interface RenewalTerms {
  * The period that follows the trial or the current period (ADR-035, T3). A trial's plan changed
  * at once while it lasted, so its plan and cycle are the ones charged; a paid period moves to its
  * scheduled change, if any. The new period starts where the old one ended, by the calendar rule
- * of `periodEndOf`, whenever it is paid.
+ * of `periodEndOf`, when it is paid before its own end.
  */
 export function renewalTermsOf(
   facts: Pick<

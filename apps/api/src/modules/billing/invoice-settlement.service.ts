@@ -4,8 +4,7 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import { BillingLogRepository } from './billing-log.repository.js';
 import { BillingSchedule } from './billing-schedule.service.js';
-import { periodEndOf } from './domain/billing-period.js';
-import { purposeOf, startsWhenPaid, statusAfterCharge } from './domain/invoice-state.js';
+import { periodPaidAt, purposeOf, statusAfterCharge } from './domain/invoice-state.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { type InvoiceChange, InvoicesRepository } from './invoices.repository.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
@@ -50,6 +49,7 @@ export interface RecordedCharge {
  * charges the API makes and the gateway's events alike. A paid invoice applies what it pays for in
  * the same transaction: the first paid period that ends the trial, the upgrade, the next period of
  * a renewal, or a canceled plan started again, with its `billing_log` entry and `PlanChangeHooks`.
+ * The period paid for starts when it is paid when it would have ended by then (`periodPaidAt`).
  * A refused charge of the invoice the subscription waits for starts its grace and retries (T3).
  * The billing job's next time follows. Nothing here leaves the database, so a transaction that
  * runs again does it again safely.
@@ -79,15 +79,13 @@ export class InvoiceSettlement {
     tx: Tx,
   ): Promise<RecordedCharge> {
     const status = statusAfterCharge(report.outcome);
+    // Written with `paid`: until this write the invoice is unpaid, so its period may still move.
+    const period = status === 'paid' ? periodPaidAt(invoice, report.at) : null;
     const change: InvoiceChange = {
       status,
       ...(report.card ? { card: report.card } : {}),
       ...(status === 'paid' ? { paidAt: report.at } : {}),
-      // A plan paid now starts its period when it is paid, however late after the quote; a
-      // renewal keeps the calendar of the period it follows.
-      ...(status === 'paid' && startsWhenPaid(invoice)
-        ? { period: { start: report.at, end: periodEndOf(report.at, invoice.cycle) } }
-        : {}),
+      ...(period === null ? {} : { period }),
     };
     const after = await this.invoices.recordCharge(
       invoice._id,
@@ -109,7 +107,8 @@ export class InvoiceSettlement {
     }
     const ref = { workspaceId: after.workspaceId };
     if (after.status === 'paid') {
-      await this.applyPaid(after, report.at, tx);
+      // A renewal follows the period that ended where the invoice's own period was to start.
+      await this.applyPaid(after, { at: report.at, follows: invoice.periodStart }, tx);
     } else if (after.status === 'failed') {
       await this.subscriptions.recordFailure(ref, { invoiceId: after._id, at: report.at }, tx);
     }
@@ -123,11 +122,16 @@ export class InvoiceSettlement {
   }
 
   /**
-   * What a paid invoice pays for. When it no longer applies (the trial was paid, or the plan moved
-   * on, while the payment was decided), the payment stays recorded and is reported for a refund
-   * outside the system (ADR-035): it is never applied over a newer choice.
+   * What a paid invoice pays for, with the period it was paid for. When it no longer applies (the
+   * trial was paid, or the plan moved on, while the payment was decided), the payment stays
+   * recorded and is reported for a refund outside the system (ADR-035): it is never applied over a
+   * newer choice. `follows`: where the period was to start when the invoice was made.
    */
-  private async applyPaid(invoice: InvoiceRecord, at: Date, tx: Tx): Promise<void> {
+  private async applyPaid(
+    invoice: InvoiceRecord,
+    { at, follows }: { at: Date; follows: Date },
+    tx: Tx,
+  ): Promise<void> {
     const ref = { workspaceId: invoice.workspaceId };
     const facts = await this.subscriptions.find(ref, tx);
     if (facts === null) {
@@ -152,7 +156,7 @@ export class InvoiceSettlement {
         applied = await this.subscriptions.startPaidPeriod(ref, period, tx);
         break;
       case 'renewal':
-        applied = await this.subscriptions.renewPeriod(ref, period, tx);
+        applied = await this.subscriptions.renewPeriod(ref, { ...period, follows }, tx);
         break;
       case 'restart':
         applied = await this.subscriptions.restartPeriod(ref, period, tx);
