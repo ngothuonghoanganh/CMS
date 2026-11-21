@@ -303,3 +303,9 @@ export const GridIcon = createIcon(
 
 /** A payment card: "Gói & thanh toán" (Sidebar v2). */
 export const CreditCardIcon = createIcon('credit-card', <path d="M3 6h18v12H3zM3 10h18M7 15h3" />);
+
+/** A shop front: "Marketplace" (Sidebar v2). */
+export const StoreIcon = createIcon(
+  'store',
+  <path d="M4 9l1.5-5h13L20 9M5 9v11h14V9M4 9h16M10 20v-5h4v5" />,
+);

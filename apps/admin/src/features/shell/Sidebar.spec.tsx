@@ -184,7 +184,14 @@ describe('Sidebar', () => {
     });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Sites 2 site', 'Templates', 'Trang 6 trang', 'Hiệu quả', 'Cài đặt site']);
+    ).toEqual([
+      'Sites 2 site',
+      'Templates',
+      'Marketplace',
+      'Trang 6 trang',
+      'Hiệu quả',
+      'Cài đặt site',
+    ]);
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Biên tập · 2 site');
     unmount();
 
@@ -198,6 +205,7 @@ describe('Sidebar', () => {
     ).toEqual([
       'Sites 1 site',
       'Templates',
+      'Marketplace',
       'Trang 6 trang',
       'Leads',
       'Khách hàng',
@@ -223,6 +231,7 @@ describe('Sidebar', () => {
     ).toEqual([
       'Sites 2 site',
       'Templates',
+      'Marketplace',
       'Trang 6 trang',
       'Leads',
       'Khách hàng',
@@ -262,6 +271,7 @@ describe('Sidebar', () => {
     ).toEqual([
       'Sites 2 site',
       'Templates',
+      'Marketplace',
       'Thành viên 7 thành viên',
       'Vai trò & quyền',
       'Gói & thanh toán',
@@ -288,6 +298,7 @@ describe('Sidebar', () => {
     });
     expect(screen.getByRole('link', { name: 'Sites 2 site' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Templates' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Marketplace' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Thành viên/ })).not.toBeInTheDocument();
   });
 
@@ -300,6 +311,21 @@ describe('Sidebar', () => {
     });
     expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('link', { name: 'Sites 2 site' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('marks "Marketplace" on the catalog and on an item, not "Templates" (ADR-036)', () => {
+    pathname.current = `/workspaces/${WORKSPACE_ID}/marketplace/mp-spa-uu-dai-ngay-le`;
+    renderSidebar({
+      membership: { ...agency, role: 'viewer' },
+      memberCount: null,
+      leadCounts: null,
+    });
+    expect(screen.getByRole('link', { name: 'Marketplace' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    expect(screen.getByRole('link', { name: 'Templates' })).not.toHaveAttribute('aria-current');
+    expect(screen.queryByText('Nâng cấp')).toBeNull();
   });
 
   it('counts the members again after a change on "Thành viên" (ADR-028)', async () => {

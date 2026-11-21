@@ -101,7 +101,10 @@ function wordsOf(text: string): string[] {
  * or goal, so "nha" does not find "cảm nhận"; the last one may be a beginning, as it is still
  * being typed ("nha kh").
  */
-export function matchesQuery(template: TemplateSummary, query: string): boolean {
+export function matchesQuery(
+  template: Pick<TemplateSummary, 'name' | 'description' | 'goal' | 'industry'>,
+  query: string,
+): boolean {
   const words = wordsOf(query);
   const last = words.pop();
   if (last === undefined) {

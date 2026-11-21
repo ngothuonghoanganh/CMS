@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   leadRecipientsHref,
   leadsHref,
+  marketplaceHref,
+  marketplaceItemHref,
   navCurrent,
   newLeadsHref,
   newAiPageHref,
@@ -69,7 +71,7 @@ describe('siteNavItems', () => {
     ]);
   });
 
-  it('lists the workspace sections, "Sites" and "Templates" first for every role, each behind its permission', () => {
+  it('lists the workspace sections, "Sites", "Templates" and "Marketplace" first for every role, each behind its permission', () => {
     expect(workspaceNavItems('64b0000000000000000000aa')).toEqual([
       {
         key: 'sites',
@@ -81,6 +83,12 @@ describe('siteNavItems', () => {
         key: 'templates',
         label: 'Templates',
         href: '/workspaces/64b0000000000000000000aa/templates',
+        permissions: ['pages.view'],
+      },
+      {
+        key: 'marketplace',
+        label: 'Marketplace',
+        href: '/workspaces/64b0000000000000000000aa/marketplace',
         permissions: ['pages.view'],
       },
       {
@@ -201,5 +209,27 @@ describe('billing addresses', () => {
       '/workspaces/w1/billing/payments?paymentMethod=saved',
     );
     expect(receiptHref('w1', 'i1')).toBe('/workspaces/w1/billing/receipts/i1');
+  });
+});
+
+describe('marketplace addresses (ADR-036)', () => {
+  it('opens the catalog and one item inside the workspace', () => {
+    expect(marketplaceHref('64b0000000000000000000aa')).toBe(
+      '/workspaces/64b0000000000000000000aa/marketplace',
+    );
+    expect(marketplaceItemHref('64b0000000000000000000aa', 'mp-spa-uu-dai-ngay-le')).toBe(
+      '/workspaces/64b0000000000000000000aa/marketplace/mp-spa-uu-dai-ngay-le',
+    );
+  });
+
+  it('marks "Marketplace" on the catalog and on an item, and not "Templates"', () => {
+    const [, templates, marketplace] = workspaceNavItems('64b0000000000000000000aa');
+    if (!templates || !marketplace) {
+      throw new Error('missing items');
+    }
+    const base = '/workspaces/64b0000000000000000000aa';
+    expect(navCurrent(`${base}/marketplace`, marketplace)).toBe('page');
+    expect(navCurrent(`${base}/marketplace/mp-spa-uu-dai-ngay-le`, marketplace)).toBe('true');
+    expect(navCurrent(`${base}/marketplace`, templates)).toBeUndefined();
   });
 });
