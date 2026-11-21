@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { DNS_ZONE_FILE } from './support/dns.js';
+import { writeE2eCatalog } from './support/marketplace-catalog.js';
 import { WEBHOOK_RECEIVER_URL } from './support/webhook-receiver.js';
 import { urls } from './urls.js';
 
@@ -40,6 +41,8 @@ const apiEnv = {
   AUTOMATION_SECRET_KEY: 'e2e-automation-secret-key-0123456789abcdef',
   // Webhooks pass the address rules, then go to the specs' receiver (support/webhook-receiver.ts).
   WEBHOOK_TEST_RECEIVER: WEBHOOK_RECEIVER_URL,
+  // ADR-036: the bundled catalog plus a withdrawn item with two versions (mp2-licences.spec.ts).
+  MARKETPLACE_CATALOG_FILE: writeE2eCatalog(),
 };
 
 // Servers are never reused: one started outside this config may point at another database. A

@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  endpoints,
-  type TemplateRef,
-  type TemplateSummary,
-  templateUsableIn,
-} from '@plp/contracts';
+import { endpoints, type TemplateSummary, templateRefOf, templateUsableIn } from '@plp/contracts';
 import { Button, Callout, Dialog, Field, Select } from '@plp/ui';
 import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
@@ -28,12 +23,6 @@ function libraryQuery(workspaceId: string) {
   };
 }
 
-function refOf(template: TemplateSummary): TemplateRef {
-  return template.source === 'system'
-    ? { source: 'system', templateId: template.id, version: template.version }
-    : { source: 'workspace', templateId: template.id, version: template.version };
-}
-
 /** "Thay toàn bộ section" in words, with the draft's and the template's real counts. */
 export function replaceSentence(current: number, template: Pick<TemplateSummary, 'sections'>) {
   const next = template.sections.length;
@@ -49,8 +38,10 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
   const pageId = useEditor((state) => state.page.id);
   const current = useEditor((state) => state.draft.composition.sections.length);
   const library = useQuery(libraryQuery(site.workspaceId));
-  const usable = (library.data?.items ?? []).filter((template) =>
-    templateUsableIn(template.siteIds, site.id),
+  // A marketplace item the workspace does not hold is not applied from here (ADR-036).
+  const usable = (library.data?.items ?? []).filter(
+    (template) =>
+      templateUsableIn(template.siteIds, site.id) && template.marketplace?.owned !== false,
   );
   const [templateId, setTemplateId] = useState<string | null>(null);
   // The first template until the user picks one; a pick that left the list (archived meanwhile)
@@ -65,7 +56,7 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
   const prepare = useMutation({
     mutationKey: preparingKey,
     mutationFn: (template: TemplateSummary) =>
-      api(endpoints.templateComposition, [site.id, pageId], { body: refOf(template) }),
+      api(endpoints.templateComposition, [site.id, pageId], { body: templateRefOf(template) }),
     onSuccess: (result) => {
       // The images first, so the canvas never shows them missing.
       store.getState().addAssets(result.assets);
@@ -108,6 +99,7 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
 
   const system = usable.filter((template) => template.source === 'system');
   const own = usable.filter((template) => template.source === 'workspace');
+  const marketplace = usable.filter((template) => template.source === 'marketplace');
 
   return (
     <form noValidate onSubmit={submit} className={styles.form}>
@@ -143,6 +135,15 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
             {own.length === 0 ? null : (
               <optgroup label="Của workspace">
                 {own.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} · v{template.version}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {marketplace.length === 0 ? null : (
+              <optgroup label="Đã sở hữu từ Marketplace">
+                {marketplace.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name} · v{template.version}
                   </option>

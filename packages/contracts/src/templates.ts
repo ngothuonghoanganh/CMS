@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { assetSchema } from './asset.js';
+import { vndAmountSchema } from './billing.js';
 import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 import { compositionSchema, sectionTypeSchema } from './composition.js';
 import { pageGoalSchema } from './goals.js';
@@ -8,15 +9,17 @@ import { colorSchemeIdSchema } from './themes.js';
 
 /**
  * Where a template comes from (ADR-030): the system templates live in code, the workspace's own
- * in its database. Both are in the same library and the same create request.
+ * in its database, and the marketplace's in its catalog, used with the workspace's licence
+ * (ADR-036). All three are in the same library and the same create request.
  */
-export const templateSources = ['system', 'workspace'] as const;
+export const templateSources = ['system', 'workspace', 'marketplace'] as const;
 export const templateSourceSchema = z.enum(templateSources);
 export type TemplateSource = z.infer<typeof templateSourceSchema>;
 
 export const templateSourceLabels: Record<TemplateSource, string> = {
   system: 'Hệ thống',
   workspace: 'Workspace',
+  marketplace: 'Marketplace',
 };
 
 /** At most this many templates in a workspace, archived ones included: no list is unbounded. */
@@ -45,22 +48,42 @@ export const templateIndustryLabels: Record<TemplateIndustry, string> = {
   fitness: 'Thể hình',
 };
 
+/** Every marketplace item id starts with it; no system template id does (ADR-036). */
+export const MARKETPLACE_ITEM_ID_PREFIX = 'mp-';
+
 /**
  * A system template's id: kebab-case with at least one hyphen ("nha-khoa-uu-dai"). It is stable
  * across versions, and never reads as an ObjectId, so one path segment names a system template or
- * a workspace template without saying which (`isWorkspaceTemplateId`).
+ * a workspace template without saying which (`isWorkspaceTemplateId`). No system template's id
+ * starts with `MARKETPLACE_ITEM_ID_PREFIX` (a unit test of the catalog), so a marketplace item's
+ * id names that item (`isMarketplaceItemId`).
  */
 export const systemTemplateIdSchema = z
   .string()
   .max(60)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)+$/, 'Mã mẫu không hợp lệ');
 
+/**
+ * "mp-" and kebab-case ("mp-khai-truong-phong-tap"), stable across versions. One path segment
+ * still names a template of any source: a workspace template's id is 24 hex digits, and a system
+ * template's never starts with "mp-".
+ */
+export const marketplaceItemIdSchema = z
+  .string()
+  .max(60)
+  .regex(/^mp(?:-[a-z0-9]+)+$/, 'Mã mẫu marketplace không hợp lệ');
+
+export function isMarketplaceItemId(id: string): boolean {
+  return marketplaceItemIdSchema.safeParse(id).success;
+}
+
 /** Bumped whenever a template's content changes; a page records the version it was made from. */
 export const templateVersionSchema = z.number().int().positive();
 
 /**
- * A template at the version the user previewed: a system template by its kebab-case id, or a
- * workspace template by its ObjectId (ADR-030). A newer version is refused (409
+ * A template at the version the user previewed: a system template by its kebab-case id, a
+ * workspace template by its ObjectId (ADR-030), or a marketplace item by its "mp-" id, at the
+ * version of the workspace's licence (ADR-036). Another version is refused (409
  * `template_changed`) rather than used unseen.
  */
 export const templateRefSchema = z.discriminatedUnion('source', [
@@ -74,8 +97,34 @@ export const templateRefSchema = z.discriminatedUnion('source', [
     templateId: idSchema,
     version: templateVersionSchema,
   }),
+  z.object({
+    source: z.literal('marketplace'),
+    templateId: marketplaceItemIdSchema,
+    version: templateVersionSchema,
+  }),
 ]);
 export type TemplateRef = z.infer<typeof templateRefSchema>;
+
+/**
+ * The ref of a library card or of board 18, at the version it shows: what creating a page or
+ * applying the template sends, whatever its source.
+ */
+export function templateRefOf(template: {
+  source: TemplateSource;
+  id: string;
+  version: number;
+}): TemplateRef {
+  return { source: template.source, templateId: template.id, version: template.version };
+}
+
+/**
+ * `context` of 409 `template_changed`: the version pages are made from now. For a marketplace
+ * template it is the version of the workspace's licence (ADR-036).
+ */
+export const templateChangedProblemContextSchema = z.object({
+  currentVersion: templateVersionSchema,
+});
+export type TemplateChangedProblemContext = z.infer<typeof templateChangedProblemContextSchema>;
 
 /**
  * Whether a template's id names a workspace template (24 hex digits) rather than a system one,
@@ -103,6 +152,18 @@ export const templateSectionSchema = z.object({
 });
 export type TemplateSection = z.infer<typeof templateSectionSchema>;
 
+/**
+ * What a library card of a marketplace item adds (ADR-036): whether the workspace holds its
+ * licence ("MARKETPLACE · ĐÃ SỞ HỮU"; without it, only "Xem trên Marketplace") and its price
+ * ("MARKETPLACE · TRẢ PHÍ" or "MIỄN PHÍ" at 0, and "Ẩn mẫu trả phí").
+ */
+export const templateMarketplaceInfoSchema = z.object({
+  owned: z.boolean(),
+  /** Whole đồng, VAT included; 0 is free. */
+  price: vndAmountSchema,
+});
+export type TemplateMarketplaceInfo = z.infer<typeof templateMarketplaceInfoSchema>;
+
 /** A card of the library (board 17). */
 export const templateSummarySchema = z.object({
   id: z.string(),
@@ -121,15 +182,21 @@ export const templateSummarySchema = z.object({
   sections: z.array(templateSectionSchema),
   /**
    * The sites a workspace template may be used in (`templateUsableIn`); null for every site of the
-   * workspace, and for the system templates.
+   * workspace, and for the system and marketplace templates (a licence covers every site).
    */
   siteIds: z.array(idSchema).nullable(),
+  /** A marketplace item's licence and price; null for the other sources. */
+  marketplace: templateMarketplaceInfoSchema.nullable(),
 });
 export type TemplateSummary = z.infer<typeof templateSummarySchema>;
 
 /**
- * Every template the member may use: the system templates, then the workspace's own that are not
- * archived and that a site of the member may use. Bounded (12 + `MAX_WORKSPACE_TEMPLATES`).
+ * The library: the system templates, then the workspace's own that are not archived and that a
+ * site of the member may use, then the marketplace items the workspace holds a licence of, at
+ * that licence's version (withdrawn items included, the newest licence first), then the listed
+ * items it does not hold, at their current version, in the catalog's order (ADR-036). Bounded:
+ * 12 + `MAX_WORKSPACE_TEMPLATES` + the catalog's at most 100 items, each once. Tabs and filters
+ * run in the admin: "Đã sở hữu từ Marketplace" (`?source=marketplace`) shows the items held.
  */
 export const templateListResponseSchema = z.object({
   items: z.array(templateSummarySchema),
@@ -141,7 +208,8 @@ export const templateDetailQuerySchema = z.object({
   siteId: idSchema.optional(),
   /**
    * An earlier version of a workspace template, for "Xem trước" of its version history (board 19);
-   * the current one when absent. A system template keeps its current version only.
+   * the current one when absent. A system template keeps its current version only, and a
+   * marketplace item the version of the workspace's licence only.
    */
   version: z.coerce.number().int().positive().optional(),
 });
@@ -165,11 +233,18 @@ export const templateSiteReadinessSchema = z.object({
 });
 export type TemplateSiteReadiness = z.infer<typeof templateSiteReadinessSchema>;
 
-/** Board 18: the template, its preview and what the chosen site still needs. */
+/**
+ * Board 18: the template, its preview and what the chosen site still needs. A marketplace item
+ * is found only with the workspace's licence (404 "Không tìm thấy mẫu" otherwise, ADR-036), at the
+ * licence's version: `version` and `currentVersion` are that version.
+ */
 export const templateDetailSchema = templateSummarySchema.extend({
   /** What the template is for, under its name. */
   details: z.string(),
-  /** The version pages are made from now; `version` is the one shown, this or an earlier one. */
+  /**
+   * The version pages are made from now; `version` is the one shown, this or an earlier one. For
+   * a marketplace item, the licence's version, which "Cập nhật" on board 32 moves forward.
+   */
   currentVersion: templateVersionSchema,
   /** A workspace template that was archived: it is shown, but nothing is made from it. */
   archived: z.boolean(),
@@ -177,7 +252,10 @@ export const templateDetailSchema = templateSummarySchema.extend({
   composition: compositionSchema,
   /** The template's own copies of its images, by the asset id its composition uses (ADR-030). */
   images: z.record(z.string(), publicImageSchema),
-  /** Pages made from this template, any version, in the sites the member may open. */
+  /**
+   * Pages made from this template, any version, in the sites the member may open: "Đã dùng"
+   * (`createdFrom` with this source and id).
+   */
   usedCount: z.number().int().nonnegative(),
   /** For the `siteId` asked for; null without one. */
   site: templateSiteReadinessSchema.nullable(),

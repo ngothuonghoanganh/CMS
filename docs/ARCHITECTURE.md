@@ -3341,6 +3341,34 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Khung giá chưa có nút: một câu trung tính thay cho "Nhận mẫu" và "Mua mẫu", không có nút bấm không làm gì. MP2 và MP3 thay câu đó bằng các trạng thái ở trên.
     - Mẫu miễn phí: khung giá chỉ ghi "Miễn phí", không có dòng "Một lần · Đã gồm VAT · {terms.refund}", vì không có khoản nào để trả, tính thuế hay hoàn.
     - Mẫu `draft`, `withdrawn` hay mã lạ: trang "Không tìm thấy trang" (API trả 404).
+- **Chi tiết khi làm (lát MP2):**
+  - **Màn 32:** năm cột của board khi danh sách rộng từ 900px (bề rộng board cho nó), đo theo danh sách chứ không theo cửa sổ, vì Sidebar chiếm 248px từ 900px. Hẹp hơn: mỗi dòng có mẫu và nút ở hàng đầu, phiên bản, quyền sử dụng và ngày nhận ở hàng sau, mỗi ô có nhãn; điện thoại: mỗi ô một dòng. Không cuộn ngang như board, để "Cập nhật" và "Tạo trang" luôn trong tầm nhìn.
+  - **Hộp "Nhận mẫu":** "Đọc điều khoản giấy phép" mở `terms.licence` ngay trong hộp, thay cho link ở nhãn ô đồng ý của board, vì trang phía sau bị lớp phủ che.
+  - **Sau khi bấm:** "Cập nhật mẫu" báo "Đã cập nhật “…” lên vM." và đưa focus về tên mẫu của dòng; "Nhận mẫu" đưa focus tới "Tạo trang từ mẫu". Cả hai đọc lại thư viện và "Áp dụng mẫu…" của editor. Bấm hai lần chỉ gửi một request.
+  - **Thiếu `templates.manage`:** màn 32 ghi "Chỉ {vai trò} cập nhật được mẫu lên phiên bản mới." khi có dòng "CÓ BẢN vM"; màn 31 ghi câu đó với link "Sản phẩm đã mua" thay cho "Cập nhật".
+  - **Khung giá của màn 31:** dòng "Một lần · Đã gồm VAT · {terms.refund}" ở dưới "Đã sở hữu" khi giấy phép là `purchase`, như board; giấy phép `free` không có dòng đó, kể cả khi mẫu nay có giá.
+  - **Chỉ đọc:** nút "Nhận mẫu", "Cập nhật mẫu" và "Tạo bản nháp và mở editor" vẫn bấm được, như mọi màn của ADR-035 (banner chỉ đọc báo trước ở mọi màn). 402 trong hộp là cảnh báo với "Theo gói" và "Xem gói & thanh toán", không phải lỗi quyền.
+  - **Giấy phép** (collection `marketplace_licences` ở master DB, khóa duy nhất `{workspaceId, itemId}`):
+    - Trường: `source` (`purchase` hay `free`), `version`, `versionHash`, `invoiceId` (`null` với `free`), `termsVersion`, `grantedAt`, `grantedBy`, `updatedAt`, `updatedBy`. `versionHash` là SHA-256 của JSON chuẩn tắc (khóa sắp xếp) của composition; hash của danh mục đi kèm được ghim trong test.
+    - `grant` là upsert `$setOnInsert`: giấy phép đã có thì giữ nguyên và trả `granted: false`. Trong transaction, khóa trùng được ném lại vì nó làm hỏng transaction; MP3 gọi `find` trước rồi `grant` trong transaction của hóa đơn.
+    - Cập nhật chỉ đi tới phiên bản hiện tại, ghi với điều kiện `version = baseVersion`; thua cuộc đua thì đọc lại: đã mới nhất thì 200, không thì 409.
+    - `MarketplaceCoreModule` không import module tính năng nào; templates và pages dùng nó qua `MarketplaceLicences`. Giấy phép không bao giờ bị thu hồi.
+  - **Kiểm lúc khởi động** (`MarketplaceLicenceCheck.onModuleInit`, trước mọi job): một `$group` theo `{itemId, version, versionHash}` (tối đa 2001 nhóm); API từ chối chạy khi danh mục mất mẫu, đánh dấu `draft`, mất phiên bản hay đổi nội dung một phiên bản đã cấp, mỗi vấn đề một dòng `✖ {itemId} v{N}: …`. Mẫu `withdrawn` hay phiên bản thêm vào vẫn qua.
+  - **API:**
+    - Nhận mẫu trả 200 cả khi cấp lẫn khi workspace đã có (không đổi gì); mẫu trả phí 409 `item_not_free`, phiên bản hay điều khoản khác lúc xem 409 `item_changed`. Không hóa đơn, email hay activity.
+    - 409 `template_changed` của giấy phép dùng khóa ngữ cảnh `currentVersion` (phiên bản của giấy phép), như mẫu workspace.
+    - Mỗi dòng màn 32 có thêm `hasForm` và `sections` của phiên bản trong giấy phép (cho ảnh nhỏ và hộp "Tạo trang") và `usedCount` (số trang đã tạo, đếm như "Đã dùng" ở màn 18) trên cùng endpoint, không thêm endpoint.
+    - Mẫu `withdrawn` chỉ hiện với workspace có giấy phép; `draft` không bao giờ hiện. `popularRank` chỉ xếp mẫu đang bán.
+  - **Mẫu marketplace là nguồn thứ ba của template** (`templateSources`: `system`, `workspace`, `marketplace`):
+    - Thư viện trả mẫu hệ thống, mẫu của workspace, rồi mẫu marketplace: trước hết mẫu đã sở hữu ở phiên bản của giấy phép (cả `withdrawn`), sau đó mọi mẫu đang bán chưa sở hữu ở phiên bản hiện tại. Thẻ có `marketplace {owned, price} | null`; server liệt kê hết, admin lọc tab.
+    - Màn 18 và mọi lệnh tạo trang hay áp mẫu cần giấy phép (không có thì 404 "Không tìm thấy mẫu"); phiên bản khác giấy phép thì 409 `template_changed`. `?version=` khác phiên bản của giấy phép là 404. Một giấy phép dùng cho mọi site của workspace.
+    - Trang nhận bản sao nội dung (id section mới) và ghi `createdFrom` nguồn `marketplace`; cập nhật giấy phép sau này không đổi trang, bản nháp hay bản phát hành nào.
+    - `templateRefOf` và `marketplaceItemIdSchema` nằm ở `@plp/contracts` (templates.ts) để tránh vòng import. `PagesRepository.countCreatedFromEach` thay cho bộ đếm riêng của mẫu workspace.
+  - **Admin:**
+    - Thẻ chưa sở hữu chỉ có "Xem trên Marketplace"; tab "Đã sở hữu từ Marketplace" chỉ giữ mẫu đã sở hữu; "Ẩn mẫu trả phí" là một bộ lọc như các bộ lọc khác. "Áp dụng mẫu…" ở editor có nhóm "Đã sở hữu từ Marketplace".
+    - Màn 30: "Đã sở hữu · N" nay là link tới màn 32 (thay cho chữ thường của MP1). Khung giá màn 31 có bốn trạng thái; mẫu trả phí chưa sở hữu vẫn là câu trung tính của MP1 cho tới MP3.
+    - "Tạo trang" ở màn 32 thành link "Xem mẫu" khi vai trò thiếu `pages.edit` hay chưa có site.
+  - **E2E:** API của E2E và capture đọc danh mục sinh bởi `tests/e2e/support/marketplace-catalog.ts` (danh mục đi kèm cộng một mẫu `withdrawn` hai phiên bản), nên màn 30 vẫn 4 mẫu; test chống lệch so với danh mục đi kèm. Giấy phép gieo bằng driver `mongodb` (devDependency của `@plp/e2e`, đã có trong lockfile).
 
 ---
 
@@ -3501,7 +3529,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
 | MP0 | ADR-036 cho board 30–32, bổ sung ADR-025, 030, 035, §1, §2 quy tắc 12, §6 và README thiết kế                                                                                                                                                               | —                  | Xong       |
 | MP1 | Danh mục `marketplace.json` (schema, registry, kiểm lúc khởi động) với 4 mẫu tạm, danh sách và chi tiết mẫu chỉ xem: tìm, lọc giá và ngành, sắp xếp, preview, "Gồm những gì", giấy phép và điều khoản, mục "Marketplace" của Sidebar v2                    | 30, 31, Sidebar v2 | Xong       |
-| MP2 | Giấy phép của workspace (`marketplace_licences`, `versionHash`, kiểm lúc khởi động), "Nhận mẫu" miễn phí, màn Sản phẩm đã mua, mẫu marketplace trong thư viện (tab, thẻ chưa sở hữu, "Ẩn mẫu trả phí"), màn 18, tạo trang và áp mẫu, cập nhật phiên bản    | 32, 31, 17, 18, 03 | Chưa làm   |
+| MP2 | Giấy phép của workspace (`marketplace_licences`, `versionHash`, kiểm lúc khởi động), "Nhận mẫu" miễn phí, màn Sản phẩm đã mua, mẫu marketplace trong thư viện (tab, thẻ chưa sở hữu, "Ẩn mẫu trả phí"), màn 18, tạo trang và áp mẫu, cập nhật phiên bản    | 32, 31, 17, 18, 03 | Xong       |
 | MP3 | Mua mẫu qua cổng thanh toán (adapter giả): báo giá, hộp xác nhận, hóa đơn `marketplace`, cấp giấy phép khi trả xong, webhook, "Thanh toán lại", biên nhận và dòng của màn 29, email `marketplace-receipt` và `marketplace-suggestion`, chỉ đọc và cổng tắt | 31, 29             | Chưa làm   |
 
 MP2 đi trước MP3: giấy phép miễn phí đủ để làm và kiểm thử trọn đường từ giấy phép tới trang đã xuất bản, rồi MP3 chỉ thêm đường tiền vào giấy phép đã có.

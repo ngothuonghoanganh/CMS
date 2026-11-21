@@ -704,8 +704,9 @@ export class WorkspaceTemplatesService {
           version: template.currentVersion,
         })),
       ),
-      this.pages.countCreatedFromWorkspaceTemplates(
+      this.pages.countCreatedFromEach(
         scope,
+        'workspace',
         templates.map((template) => template._id.toHexString()),
         scope.siteIds,
       ),

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   can,
+  isMarketplaceItemId,
   isWorkspaceTemplateId,
   type PublicImage,
   type TemplateDetail,
@@ -13,6 +14,7 @@ import { notFound } from '../../shared/errors.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { AssetsService } from '../assets/assets.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { MarketplaceLicences } from '../marketplace/marketplace-licences.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { ConsentVersionsRepository } from '../privacy/consent-versions.repository.js';
 import { siteLeadCaptureGaps } from '../publishing/release-presentation.js';
@@ -22,6 +24,7 @@ import { SITE_NOT_FOUND } from '../sites/sites.service.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { templateVisibleTo, visibleSiteIds } from './domain/template-scope.js';
+import { marketplaceLibrary, marketplaceTemplateSummary } from './marketplace-templates.js';
 import {
   previewSectionIds,
   systemTemplateOrNotFound,
@@ -41,9 +44,9 @@ import { TemplatesRepository } from './templates.repository.js';
 type DetailContent = Omit<TemplateDetail, 'usedCount' | 'site'>;
 
 /**
- * The template library of a workspace (ADR-030): the system templates, then the workspace's own.
- * Every member sees it: browsing makes nothing, and creating a page from a template is
- * `POST /sites/:siteId/pages`, which needs `pages.edit` on the target site.
+ * The template library of a workspace (ADR-030): the system templates, then the workspace's own,
+ * then the marketplace's (ADR-036). Every member sees it: browsing makes nothing, and creating a
+ * page from a template is `POST /sites/:siteId/pages`, which needs `pages.edit` on the target site.
  */
 @Injectable()
 export class TemplatesService {
@@ -55,15 +58,22 @@ export class TemplatesService {
     private readonly templates: TemplatesRepository,
     private readonly versions: TemplateVersionsRepository,
     private readonly assets: AssetsService,
+    private readonly marketplace: MarketplaceLicences,
   ) {}
 
   /**
    * The system templates in the catalog's order, then the workspace templates the member sees and
-   * that are not archived, last changed first (ADR-030). Bounded: 12 and at most 100.
+   * that are not archived, last changed first (ADR-030), then the marketplace items the workspace
+   * holds and those on sale it does not (`marketplaceLibrary`, ADR-036). Bounded: 12, at most 100,
+   * and at most the catalog's 100 items.
    */
   async list(user: AuthenticatedUser, workspaceId: string): Promise<TemplateListResponse> {
     const scope = await this.scope(user, workspaceId);
-    const own = (await this.templates.listForWorkspace(scope)).filter(
+    const [stored, held] = await Promise.all([
+      this.templates.listForWorkspace(scope),
+      this.marketplace.heldItems(scope),
+    ]);
+    const own = stored.filter(
       (template) =>
         template.archivedAt === null && templateVisibleTo(template.scope, scope.siteIds),
     );
@@ -77,6 +87,7 @@ export class TemplatesService {
         ...own.map((template) =>
           this.workspaceSummary(scope, template, outlineOf(outlines, template)),
         ),
+        ...marketplaceLibrary(held, this.marketplace.listedItems()),
       ],
     };
   }
@@ -84,7 +95,8 @@ export class TemplatesService {
   /**
    * A template with its preview, and how many pages of the member's sites were made from it. With
    * a site, what that site still needs before a page with the template's form can go live. A
-   * 24-hex id names a workspace template the member sees, at `version` or its current one.
+   * 24-hex id names a workspace template the member sees, at `version` or its current one; an
+   * "mp-" id a marketplace item the workspace holds, at its licence's version.
    */
   async detail(
     user: AuthenticatedUser,
@@ -95,7 +107,9 @@ export class TemplatesService {
     const scope = await this.scope(user, workspaceId);
     const content = isWorkspaceTemplateId(templateId)
       ? await this.workspaceDetail(scope, toObjectId(templateId), query.version)
-      : this.systemDetail(templateId, query.version);
+      : isMarketplaceItemId(templateId)
+        ? await this.marketplaceDetail(scope, templateId, query.version)
+        : this.systemDetail(templateId, query.version);
     const [usedCount, site] = await Promise.all([
       this.pages.countCreatedFrom(
         scope,
@@ -127,6 +141,32 @@ export class TemplatesService {
       archived: false,
       composition: templateComposition(template, previewSectionIds()),
       // Its image frames are empty (ADR-030).
+      images: {},
+    };
+  }
+
+  /**
+   * A marketplace item only with the workspace's licence, whatever its status (a withdrawn item
+   * stays with its holders), and only at the licence's version: the one pages are made from
+   * (ADR-036). Without a licence, or at another version, it is not found, as a template limited to
+   * other sites. Its image frames are empty, as a system template's.
+   */
+  private async marketplaceDetail(
+    scope: WorkspaceScope,
+    itemId: string,
+    requested: number | undefined,
+  ): Promise<DetailContent> {
+    const held = await this.marketplace.heldItem(scope, itemId);
+    if (held === null || (requested !== undefined && requested !== held.licence.version)) {
+      throw notFound(TEMPLATE_NOT_FOUND);
+    }
+    return {
+      ...marketplaceTemplateSummary(held.item, held.version, true),
+      details: held.item.description,
+      currentVersion: held.licence.version,
+      archived: false,
+      // With the catalog's sample section ids, which the registry parsed at startup.
+      composition: held.version.composition,
       images: {},
     };
   }
@@ -177,6 +217,7 @@ export class TemplatesService {
       hasForm: version.hasForm,
       sections: version.sections,
       siteIds: visibleSiteIds(template.scope, scope.siteIds),
+      marketplace: null,
     };
   }
 

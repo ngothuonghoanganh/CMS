@@ -538,6 +538,9 @@ importers:
       '@plp/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      mongodb:
+        specifier: 7.8.0
+        version: 7.8.0
 
 packages:
 

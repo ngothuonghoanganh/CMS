@@ -16,17 +16,6 @@
   max-width: 640px;
 }
 
-/*
- * Plain text: the board draws an outlined link to board 32, which comes with the licences (MP2).
- * Until then it leads nowhere, so it must not look like a control.
- */
-.owned {
-  font-size: var(--text-body);
-  font-weight: 600;
-  color: var(--color-ink-2);
-  white-space: nowrap;
-}
-
 .toolbar {
   display: flex;
   flex-wrap: wrap;

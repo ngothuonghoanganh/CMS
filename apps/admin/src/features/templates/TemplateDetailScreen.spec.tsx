@@ -356,4 +356,19 @@ describe('TemplateDetailScreen', () => {
       'Tên site',
     );
   });
+
+  it('shows an owned marketplace item with its chip and the version of the licence (ADR-036)', () => {
+    renderDetail({
+      template: detailFixture('nha-khoa-uu-dai', {
+        id: 'mp-khai-truong-phong-tap',
+        source: 'marketplace',
+        version: 2,
+        currentVersion: 2,
+        marketplace: { owned: true, price: 399_000 },
+      }),
+    });
+    expect(screen.getByText('MARKETPLACE · ĐÃ SỞ HỮU')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tạo trang từ mẫu' })).toBeInTheDocument();
+    expect(screen.queryByText(/Bạn đang xem v/)).toBeNull();
+  });
 });

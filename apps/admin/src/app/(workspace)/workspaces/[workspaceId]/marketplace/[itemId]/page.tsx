@@ -22,5 +22,11 @@ export async function generateMetadata(props: MarketplaceItemPageProps): Promise
 /** One marketplace item (board 31, ADR-036). An unknown, draft or withdrawn item is a 404. */
 export default async function MarketplaceItemPage(props: MarketplaceItemPageProps) {
   const { context, item } = await load(props);
-  return <MarketplaceItemScreen workspace={context.membership.workspace} item={item} />;
+  return (
+    <MarketplaceItemScreen
+      workspace={context.membership.workspace}
+      role={context.membership.role}
+      item={item}
+    />
+  );
 }

@@ -4,6 +4,7 @@ import {
   leadsHref,
   marketplaceHref,
   marketplaceItemHref,
+  marketplaceOwnedHref,
   navCurrent,
   newLeadsHref,
   newAiPageHref,
@@ -231,5 +232,13 @@ describe('marketplace addresses (ADR-036)', () => {
     expect(navCurrent(`${base}/marketplace`, marketplace)).toBe('page');
     expect(navCurrent(`${base}/marketplace/mp-spa-uu-dai-ngay-le`, marketplace)).toBe('true');
     expect(navCurrent(`${base}/marketplace`, templates)).toBeUndefined();
+    // Board 32 belongs to the same section.
+    expect(navCurrent(`${base}/marketplace/owned`, marketplace)).toBe('true');
+  });
+
+  it('opens the items the workspace owns (board 32)', () => {
+    expect(marketplaceOwnedHref('64b0000000000000000000aa')).toBe(
+      '/workspaces/64b0000000000000000000aa/marketplace/owned',
+    );
   });
 });

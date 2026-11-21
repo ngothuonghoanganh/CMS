@@ -3,7 +3,12 @@ import { checkCountsSchema, checksResultSchema } from './checks.js';
 import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { briefSchema, pageGoalSchema, pageStyleSchema } from './goals.js';
-import { systemTemplateIdSchema, templateRefSchema, templateVersionSchema } from './templates.js';
+import {
+  marketplaceItemIdSchema,
+  systemTemplateIdSchema,
+  templateRefSchema,
+  templateVersionSchema,
+} from './templates.js';
 
 /**
  * Paths the renderer answers itself, so a page published there could never be served at its URL:
@@ -202,8 +207,9 @@ export const pageDetailResponseSchema = z.object({
   draft: draftSchema,
   checks: checksResultSchema,
   /**
-   * The template the page was made from (ADR-030), null for a blank or goal page. The editor
-   * names its motion style and the styles that suit its industry (ADR-032).
+   * The template the page was made from (ADR-030), null for a blank or goal page: a copy of it,
+   * which a later version of the template or of a marketplace licence never changes (ADR-036).
+   * The editor names its motion style and the styles that suit its industry (ADR-032).
    */
   createdFrom: templateRefSchema.nullable().optional(),
 });
@@ -268,7 +274,8 @@ export const createPageRequestSchema = z.object({
     /**
      * A template of the library (ADR-030), at the version the user previewed: a newer one is
      * refused (409 `template_changed`) rather than made unseen. A system template by its
-     * kebab-case id, a workspace template by its ObjectId.
+     * kebab-case id, a workspace template by its ObjectId, a marketplace item by its "mp-" id at
+     * the version of the workspace's licence (ADR-036; without a licence, 404).
      */
     z.discriminatedUnion('source', [
       z.object({
@@ -281,6 +288,12 @@ export const createPageRequestSchema = z.object({
         kind: z.literal('template'),
         source: z.literal('workspace'),
         templateId: idSchema,
+        version: templateVersionSchema,
+      }),
+      z.object({
+        kind: z.literal('template'),
+        source: z.literal('marketplace'),
+        templateId: marketplaceItemIdSchema,
         version: templateVersionSchema,
       }),
     ]),

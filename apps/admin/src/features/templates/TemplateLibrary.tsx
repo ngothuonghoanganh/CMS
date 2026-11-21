@@ -8,7 +8,6 @@ import {
   type Membership,
   type Site,
   type TemplateSummary,
-  templateSourceLabels,
   templateUsableIn,
 } from '@plp/contracts';
 import {
@@ -31,19 +30,28 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
-import { newAiPageHref, newSiteHref, templateHref, templatesHref } from '../shell/navigation';
+import {
+  marketplaceHref,
+  marketplaceItemHref,
+  newAiPageHref,
+  newSiteHref,
+  templateHref,
+  templatesHref,
+} from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { CreateFromTemplateDialog } from './CreateFromTemplateDialog';
 import {
   emptyMessage,
   filterChips,
   filterGroups,
+  HIDE_PAID_LABEL,
   templateMeta,
   hasFilters,
   type LibraryFilters,
   type LibraryTab,
   libraryTabs,
   NO_FILTERS,
+  sourceChip,
   tabCounts,
   visibleTemplates,
   WITH_FORM_LABEL,
@@ -90,6 +98,7 @@ interface CardProps {
   href: string;
   themePresetId: Site['themePresetId'];
   workspaceName: string;
+  workspaceId: string;
   onUse: (() => void) | null;
   /** The template is limited to other sites than the one chosen ("Tạo trang cho"). */
   otherSites: boolean;
@@ -100,10 +109,15 @@ function TemplateCard({
   href,
   themePresetId,
   workspaceName,
+  workspaceId,
   onUse,
   otherSites,
 }: CardProps) {
   const headingId = useId();
+  const chip = sourceChip(template);
+  // A marketplace item the workspace does not hold opens on the marketplace, even a free one:
+  // claiming needs the licence terms of board 31 (ADR-036).
+  const unowned = template.marketplace !== null && !template.marketplace.owned;
   return (
     <li className={styles.cardItem}>
       <article className={styles.card} aria-labelledby={headingId}>
@@ -117,8 +131,8 @@ function TemplateCard({
         </div>
         <div className={styles.cardBody}>
           <div className={styles.badges}>
-            <Badge size="sm" tone={template.source === 'workspace' ? 'info' : 'neutral'}>
-              {templateSourceLabels[template.source].toUpperCase()}
+            <Badge size="sm" tone={chip.tone}>
+              {chip.label}
             </Badge>
             {template.hasForm ? <Badge size="sm">Có form</Badge> : null}
           </div>
@@ -131,13 +145,27 @@ function TemplateCard({
             <p className={styles.cardMeta}>Mẫu này chỉ dùng cho các site đã chọn khi lưu.</p>
           ) : null}
           <div className={styles.cardActions}>
-            <ButtonLink as={Link} href={href} variant="secondary" size="sm" fullWidth>
-              Xem trước <VisuallyHidden>{template.name}</VisuallyHidden>
-            </ButtonLink>
-            {onUse === null ? null : (
-              <Button size="sm" fullWidth onClick={onUse}>
-                Dùng mẫu <VisuallyHidden>{template.name}</VisuallyHidden>
-              </Button>
+            {unowned ? (
+              <ButtonLink
+                as={Link}
+                href={marketplaceItemHref(workspaceId, template.id)}
+                variant="secondary"
+                size="sm"
+                fullWidth
+              >
+                Xem trên Marketplace <VisuallyHidden>{template.name}</VisuallyHidden>
+              </ButtonLink>
+            ) : (
+              <>
+                <ButtonLink as={Link} href={href} variant="secondary" size="sm" fullWidth>
+                  Xem trước <VisuallyHidden>{template.name}</VisuallyHidden>
+                </ButtonLink>
+                {onUse === null ? null : (
+                  <Button size="sm" fullWidth onClick={onUse}>
+                    Dùng mẫu <VisuallyHidden>{template.name}</VisuallyHidden>
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -200,7 +228,7 @@ export function TemplateLibrary({
     (next ?? searchRef.current)?.focus();
   }, [filters]);
 
-  const empty = emptyMessage({ query, filters });
+  const empty = emptyMessage({ query, filters, tab });
 
   return (
     <PageContainer>
@@ -343,6 +371,18 @@ export function TemplateLibrary({
                 </span>
               }
             />
+            <Checkbox
+              className={styles.option}
+              checked={groups.hidePaid.checked}
+              onChange={(event) => {
+                setFilters({ ...filters, hidePaid: event.target.checked });
+              }}
+              label={
+                <span className={styles.optionLabel}>
+                  <span>{HIDE_PAID_LABEL}</span> <FilterCount count={groups.hidePaid.count} />
+                </span>
+              }
+            />
           </fieldset>
         </aside>
 
@@ -391,6 +431,9 @@ export function TemplateLibrary({
                       Xóa bộ lọc
                     </Button>
                   ) : null}
+                  <ButtonLink as={Link} href={marketplaceHref(workspace.id)} variant="secondary">
+                    Tìm trên Marketplace
+                  </ButtonLink>
                   {/* No template fits: the AI drafts the page from a brief (board 17, ADR-031). */}
                   {canCreate && siteId !== null ? (
                     <ButtonLink as={Link} href={newAiPageHref(siteId)}>
@@ -412,6 +455,7 @@ export function TemplateLibrary({
                     href={templateHref(workspace.id, template.id, siteId ?? undefined)}
                     themePresetId={themePresetId}
                     workspaceName={workspace.name}
+                    workspaceId={workspace.id}
                     otherSites={targets.length > 0 && !usable}
                     onUse={
                       targets.length > 0 && usable

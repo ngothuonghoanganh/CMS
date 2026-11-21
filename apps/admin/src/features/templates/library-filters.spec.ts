@@ -3,9 +3,11 @@ import {
   emptyMessage,
   filterChips,
   filterGroups,
+  isPaidUnowned,
   type LibraryQuery,
   matchesQuery,
   NO_FILTERS,
+  sourceChip,
   tabCounts,
   tabOf,
   templateMeta,
@@ -14,7 +16,12 @@ import {
   withGoal,
   withIndustry,
 } from './library-filters';
-import { summaryFixture, templateSummaries, workspaceSummaryFixture } from './test-fixtures';
+import {
+  marketplaceSummaryFixture,
+  summaryFixture,
+  templateSummaries,
+  workspaceSummaryFixture,
+} from './test-fixtures';
 
 const ALL: LibraryQuery = { tab: 'all', query: '', filters: NO_FILTERS };
 
@@ -27,11 +34,16 @@ describe('tabs', () => {
     expect(tabOf('system')).toBe('system');
     expect(tabOf(undefined)).toBe('all');
     expect(tabOf('all')).toBe('all');
-    expect(tabOf('marketplace')).toBe('all');
+    expect(tabOf('store')).toBe('all');
   });
 
   it('counts the templates of each tab', () => {
-    expect(tabCounts(templateSummaries)).toEqual({ all: 12, system: 12, workspace: 0 });
+    expect(tabCounts(templateSummaries)).toEqual({
+      all: 12,
+      system: 12,
+      workspace: 0,
+      marketplace: 0,
+    });
     expect(names({ tab: 'system' })).toHaveLength(12);
   });
 
@@ -39,9 +51,24 @@ describe('tabs', () => {
     const own = workspaceSummaryFixture();
     const library = [...templateSummaries, own];
     expect(tabOf('workspace')).toBe('workspace');
-    expect(tabCounts(library)).toEqual({ all: 13, system: 12, workspace: 1 });
+    expect(tabCounts(library)).toEqual({ all: 13, system: 12, workspace: 1, marketplace: 0 });
     expect(visibleTemplates(library, { ...ALL, tab: 'workspace' })).toEqual([own]);
     expect(visibleTemplates(library, ALL)).toContain(own);
+  });
+
+  it('lists the marketplace items held in “Đã sở hữu từ Marketplace”, all of them in “Tất cả” (ADR-036)', () => {
+    const owned = marketplaceSummaryFixture({ owned: true });
+    const unowned = marketplaceSummaryFixture({
+      id: 'mp-spa-uu-dai-ngay-le',
+      name: 'Spa ưu đãi ngày lễ',
+      owned: false,
+    });
+    const library = [...templateSummaries, owned, unowned];
+    expect(tabOf('marketplace')).toBe('marketplace');
+    expect(tabCounts(library)).toEqual({ all: 14, system: 12, workspace: 0, marketplace: 1 });
+    expect(visibleTemplates(library, { ...ALL, tab: 'marketplace' })).toEqual([owned]);
+    expect(visibleTemplates(library, ALL)).toEqual(expect.arrayContaining([owned, unowned]));
+    expect(visibleTemplates(library, { ...ALL, tab: 'system' })).not.toContain(owned);
   });
 });
 
@@ -170,6 +197,7 @@ describe('chips', () => {
       goals: ['event' as const],
       industries: ['real_estate' as const],
       withForm: true,
+      hidePaid: false,
     };
     const chips = filterChips(filters);
     expect(chips.map((chip) => chip.label)).toEqual([
@@ -208,5 +236,52 @@ describe('the empty list', () => {
         filters: { ...withGoal(NO_FILTERS, 'about', true), withForm: true },
       }).title,
     ).toBe('Không có mẫu nào khớp bộ lọc');
+  });
+});
+
+describe('marketplace cards (ADR-036)', () => {
+  const owned = marketplaceSummaryFixture({ owned: true });
+  const paid = marketplaceSummaryFixture({
+    id: 'mp-mo-ban-du-an-can-ho',
+    name: 'Mở bán dự án căn hộ',
+    owned: false,
+    price: 499_000,
+  });
+  const free = marketplaceSummaryFixture({
+    id: 'mp-khoa-hoc-tieng-anh-tre-em',
+    name: 'Khóa học tiếng Anh trẻ em',
+    owned: false,
+    price: 0,
+  });
+  const library = [...templateSummaries, owned, paid, free];
+
+  it('names the source of a card as board 17 does', () => {
+    expect(sourceChip(owned)).toEqual({ label: 'MARKETPLACE · ĐÃ SỞ HỮU', tone: 'success' });
+    expect(sourceChip(paid)).toEqual({ label: 'MARKETPLACE · TRẢ PHÍ', tone: 'warning' });
+    expect(sourceChip(free)).toEqual({ label: 'MARKETPLACE · MIỄN PHÍ', tone: 'success' });
+    expect(sourceChip(workspaceSummaryFixture()).label).toBe('WORKSPACE');
+    expect(sourceChip(summaryFixture('nha-khoa-uu-dai')).label).toBe('HỆ THỐNG');
+  });
+
+  it('hides only the paid items the workspace does not own', () => {
+    expect([owned, paid, free].map(isPaidUnowned)).toEqual([false, true, false]);
+    const shown = visibleTemplates(library, {
+      ...ALL,
+      filters: { ...NO_FILTERS, hidePaid: true },
+    });
+    expect(shown).toContain(owned);
+    expect(shown).toContain(free);
+    expect(shown).not.toContain(paid);
+  });
+
+  it('counts the paid items "Ẩn mẫu trả phí" would hide, and chips it', () => {
+    expect(filterGroups(library, ALL).hidePaid).toEqual({ count: 1, checked: false });
+    const filters = { ...NO_FILTERS, hidePaid: true };
+    expect(filterGroups(library, { ...ALL, filters }).hidePaid).toEqual({
+      count: 1,
+      checked: true,
+    });
+    expect(filterChips(filters).map((chip) => chip.label)).toEqual(['Ẩn mẫu trả phí']);
+    expect(filterChips(filters)[0]?.without).toEqual(NO_FILTERS);
   });
 });

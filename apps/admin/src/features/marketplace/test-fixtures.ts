@@ -1,5 +1,7 @@
 import type {
   MarketplaceItemCard,
+  MarketplaceLicence,
+  MarketplaceOwnedItem,
   MarketplaceItemDetail,
   MarketplaceListResponse,
   MarketplaceTerms,
@@ -108,6 +110,40 @@ export function marketplaceDetailFixture(
     withdrawn: false,
     licence: null,
     ownerName: 'Ngọc Anh',
+    ...overrides,
+  };
+}
+
+export function licenceFixture(overrides: Partial<MarketplaceLicence> = {}): MarketplaceLicence {
+  return {
+    source: 'free',
+    version: 1,
+    termsVersion: 1,
+    grantedAt: '2026-11-21T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** A row of board 32 for the first item, at v1 with nothing newer, made free by default. */
+export function ownedItemFixture(
+  overrides: Partial<MarketplaceOwnedItem> = {},
+): MarketplaceOwnedItem {
+  const [, , , free] = itemFixtures;
+  if (free === undefined) {
+    throw new Error('No marketplace item fixture');
+  }
+  return {
+    itemId: free.id,
+    name: free.name,
+    source: 'free',
+    version: 1,
+    latestVersion: 1,
+    newVersions: [],
+    grantedAt: '2026-11-21T08:00:00.000Z',
+    withdrawn: false,
+    hasForm: free.hasForm,
+    sections: free.sections,
+    usedCount: 0,
     ...overrides,
   };
 }

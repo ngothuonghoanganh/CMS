@@ -384,9 +384,7 @@ export class PagesService {
       createdFrom:
         from === null
           ? null
-          : from.source === 'system'
-            ? { source: 'system', templateId: from.templateId, version: from.version }
-            : { source: 'workspace', templateId: from.templateId, version: from.version },
+          : { source: from.source, templateId: from.templateId, version: from.version },
     };
   }
 

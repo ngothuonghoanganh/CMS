@@ -32,7 +32,7 @@ const MEMBER_ROLES = ['admin', 'editor', 'contributor', 'support', 'viewer'] as 
 /**
  * Browsing the marketplace (ADR-036, MP1): every member of a workspace, whatever their role, lists
  * the listed items and opens one, also while the workspace is read-only. Drafts, withdrawn items
- * (no workspace holds a licence before MP2) and other workspaces' members find nothing.
+ * the workspace holds no licence of, and other workspaces' members find nothing.
  */
 describe('marketplace', () => {
   let t: TestApp;
@@ -80,7 +80,7 @@ describe('marketplace', () => {
       FREE_ID,
       TWO_VERSIONS_ITEM_ID,
     ]);
-    // No workspace holds a licence before MP2: nothing owned, every item equally used.
+    // No workspace holds a licence yet: nothing owned, every item equally used.
     expect(ownedCount).toBe(0);
     expect(new Set(items.map((item) => item.owned))).toEqual(new Set([false]));
     expect(new Set(items.map((item) => item.popularRank))).toEqual(new Set([1]));

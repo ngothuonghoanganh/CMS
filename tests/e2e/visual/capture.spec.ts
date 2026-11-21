@@ -1,10 +1,16 @@
 import { fileURLToPath } from 'node:url';
 import { type Cookie, expect, type Page, test } from '@playwright/test';
+import { endpoints, meResponseSchema } from '@plp/contracts';
 import { fillAiBrief, openAiAssistant } from '../support/ai.js';
 import { animationsSettled } from '../support/axe.js';
 import { type Board, seedBoard } from '../support/board.js';
 import { billingSummaryOf, dateOf, MINUTE_MS, setBillingClock } from '../support/billing-clock.js';
 import { Editor } from '../support/editor.js';
+import {
+  seedLicence,
+  VERSIONED_ITEM_ID,
+  VERSIONED_ITEM_NAME,
+} from '../support/marketplace-catalog.js';
 import { accountLink, waitForEmail } from '../support/mailpit.js';
 import {
   addCardViaGateway,
@@ -12,7 +18,7 @@ import {
   CARD_OK,
   paymentsPath,
 } from '../support/payments.js';
-import { setUpSite, uniqueId } from '../support/setup.js';
+import { call, setUpSite, uniqueId } from '../support/setup.js';
 import { WebhookReceiver } from '../support/webhook-receiver.js';
 import { siteOrigin } from '../urls.js';
 
@@ -470,6 +476,62 @@ test.describe('Design capture', () => {
     await page.getByRole('button', { name: 'Điều khoản giấy phép' }).click();
     await expect(page.getByRole('dialog', { name: 'Điều khoản giấy phép' })).toBeVisible();
     await capture(page, 'MarketplaceItem-terms');
+  });
+
+  test('31 MarketplaceItem when free, 32 Purchases and the library tab of owned items', async ({
+    page,
+  }) => {
+    // A workspace of its own: a claim here must not change the boards' marketplace above.
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    const { site } = await setUpSite(page.request);
+    const workspace = `/workspaces/${site.workspaceId}`;
+    const me = await call(page.request, 'GET', endpoints.me.path(), meResponseSchema);
+    await seedLicence('plp_visual', site.workspaceId, me.user.id);
+
+    await page.goto(`${workspace}/marketplace/mp-khoa-hoc-tieng-anh-tre-em`);
+    await expect(page.getByRole('region', { name: /^Bản xem trước/ })).toBeVisible();
+    await capture(page, 'MarketplaceItem-free');
+    await page.getByRole('button', { name: 'Nhận mẫu' }).click();
+    const claim = page.getByRole('dialog', { name: 'Nhận mẫu' });
+    await expect(claim).toBeVisible();
+    await capture(page, 'MarketplaceItem-claim');
+    await claim.getByRole('checkbox', { name: 'Tôi đồng ý với điều khoản giấy phép' }).check();
+    await claim.getByRole('button', { name: 'Nhận mẫu' }).click();
+    await expect(page.getByText('Workspace đã sở hữu · v1')).toBeVisible();
+    await capture(page, 'MarketplaceItem-owned');
+
+    await page.goto(`${workspace}/marketplace/${VERSIONED_ITEM_ID}`);
+    await expect(
+      page
+        .getByRole('complementary', { name: 'Giá' })
+        .getByText('Mẫu đã ngừng bán. Workspace vẫn dùng và cập nhật được.'),
+    ).toBeVisible();
+    await capture(page, 'MarketplaceItem-withdrawn');
+
+    await page.goto(`${workspace}/marketplace/owned`);
+    await expect(page.getByRole('region', { name: 'Template đã sở hữu' })).toContainText(
+      VERSIONED_ITEM_NAME,
+    );
+    await capture(page, 'Purchases');
+    await page.getByRole('button', { name: `Cập nhật ${VERSIONED_ITEM_NAME}` }).click();
+    await expect(page.getByRole('dialog', { name: /^Cập nhật/ })).toBeVisible();
+    await capture(page, 'Purchases-update');
+    await page.keyboard.press('Escape');
+
+    await page.goto(`${workspace}/templates?source=marketplace&site=${site.id}`);
+    await expect(page.getByRole('article').first()).toBeVisible();
+    await capture(page, 'TemplateLibrary-marketplace');
+    await page.goto(`${workspace}/templates?site=${site.id}`);
+    await expect(page.getByRole('article').first()).toBeVisible();
+    await capture(page, 'TemplateLibrary-unowned');
+
+    // Nothing received yet: board 32's empty state.
+    const empty = await setUpSite(page.request);
+    await page.goto(`/workspaces/${empty.site.workspaceId}/marketplace/owned`);
+    await expect(
+      page.getByRole('heading', { name: 'Workspace chưa có mẫu nào từ Marketplace' }),
+    ).toBeVisible();
+    await capture(page, 'Purchases-empty');
   });
 
   test('13 Domains and 14 DomainConnect', async ({ page }) => {

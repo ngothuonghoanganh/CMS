@@ -4,6 +4,7 @@ import { isoDateTimeSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { pageGoalSchema } from './goals.js';
 import {
+  marketplaceItemIdSchema,
   templateIndustrySchema,
   templateSectionSchema,
   templateVersionSchema,
@@ -15,22 +16,8 @@ import {
  * (ADR-030) plus a price, a status and every version ever released, since a licence names one.
  */
 
-/** Every marketplace item id starts with it; no system template id does (ADR-030). */
-export const MARKETPLACE_ITEM_ID_PREFIX = 'mp-';
-
-/**
- * "mp-" and kebab-case ("mp-khai-truong-phong-tap"), stable across versions. One path segment
- * still names a template of any source: a workspace template's id is 24 hex digits, and a system
- * template's never starts with "mp-".
- */
-export const marketplaceItemIdSchema = z
-  .string()
-  .max(60)
-  .regex(/^mp(?:-[a-z0-9]+)+$/, 'Mã mẫu marketplace không hợp lệ');
-
-export function isMarketplaceItemId(id: string): boolean {
-  return marketplaceItemIdSchema.safeParse(id).success;
-}
+// An item's id (`marketplaceItemIdSchema`, `isMarketplaceItemId`) is in templates.ts with the
+// other sources' ids: the template library and a page's `createdFrom` name items too.
 
 /** At most this many items in the catalog: the marketplace screen has no pagination. */
 export const MAX_MARKETPLACE_ITEMS = 100;
@@ -162,8 +149,8 @@ export const marketplaceLicenceSourceLabels: Record<MarketplaceLicenceSource, st
 
 /**
  * The workspace's licence of an item, as board 31 shows it: "Workspace đã sở hữu · v{version}".
- * It covers every site of the workspace and is never taken back (ADR-036). Licences arrive with
- * MP2: until then no workspace holds one.
+ * It covers every site of the workspace and is never taken back (ADR-036): a plan that ends or
+ * an item that is withdrawn leaves it as it is.
  */
 export const marketplaceLicenceSchema = z.object({
   source: marketplaceLicenceSourceSchema,
@@ -232,6 +219,92 @@ export const marketplaceItemDetailSchema = marketplaceItemCardSchema.extend({
   ownerName: z.string(),
 });
 export type MarketplaceItemDetail = z.infer<typeof marketplaceItemDetailSchema>;
+
+/**
+ * "Nhận mẫu" of a free item (board 31): the version and the terms the member saw and agreed to.
+ * Either changed meanwhile: 409 `item_changed`, and the admin reads the screen again.
+ */
+export const claimMarketplaceItemRequestSchema = z.object({
+  version: templateVersionSchema,
+  termsVersion: z.number().int().positive(),
+});
+export type ClaimMarketplaceItemRequest = z.infer<typeof claimMarketplaceItemRequestSchema>;
+
+/**
+ * "Cập nhật" on board 32: moves the licence from `baseVersion`, the one the dialog showed the
+ * notes after, to the item's current version. Another member moved it meanwhile: 409
+ * `template_changed` with the licence's version.
+ */
+export const updateMarketplaceLicenceVersionRequestSchema = z.object({
+  baseVersion: templateVersionSchema,
+});
+export type UpdateMarketplaceLicenceVersionRequest = z.infer<
+  typeof updateMarketplaceLicenceVersionRequestSchema
+>;
+
+/** A version released after the licence's: "CÓ BẢN vM" and the notes of the update dialog. */
+export const marketplaceVersionNoteEntrySchema = z.object({
+  version: templateVersionSchema,
+  releasedOn: marketplaceReleaseDateSchema,
+  note: z.string(),
+});
+export type MarketplaceVersionNoteEntry = z.infer<typeof marketplaceVersionNoteEntrySchema>;
+
+/** A row of board 32: an item the workspace holds a licence of. */
+export const marketplaceOwnedItemSchema = z.object({
+  itemId: marketplaceItemIdSchema,
+  name: z.string(),
+  /** "Payload · Đã mua" or "Payload · Miễn phí". */
+  source: marketplaceLicenceSourceSchema,
+  /** The licence's version: the one new pages are made from. */
+  version: templateVersionSchema,
+  /** The item's current version; above `version`, the row offers "Cập nhật". */
+  latestVersion: templateVersionSchema,
+  /** The versions after `version`, oldest first: empty when the licence is at the latest. */
+  newVersions: z.array(marketplaceVersionNoteEntrySchema).max(MAX_MARKETPLACE_ITEM_VERSIONS),
+  /** "NHẬN NGÀY". */
+  grantedAt: isoDateTimeSchema,
+  /** No longer sold: the workspace still uses and updates it. */
+  withdrawn: z.boolean(),
+  /** Of the licence's version: "Tạo trang" asks for a form's setup like any template. */
+  hasForm: z.boolean(),
+  /** Of the licence's version, for the thumbnail (TemplateThumb). */
+  sections: z.array(templateSectionSchema),
+  /**
+   * Pages made from the item, any version, in the sites the member may open, counted as "Đã
+   * dùng" on board 18: "N trang đã tạo từ mẫu này không đổi" in the update dialog.
+   */
+  usedCount: z.number().int().nonnegative(),
+});
+export type MarketplaceOwnedItem = z.infer<typeof marketplaceOwnedItemSchema>;
+
+/**
+ * Board 32: every licence of the workspace, withdrawn items included, the newest first. A
+ * workspace holds at most one licence per item, so at most `MAX_MARKETPLACE_ITEMS`.
+ */
+export const marketplaceLicenceListResponseSchema = z.object({
+  items: z.array(marketplaceOwnedItemSchema).max(MAX_MARKETPLACE_ITEMS),
+});
+export type MarketplaceLicenceListResponse = z.infer<typeof marketplaceLicenceListResponseSchema>;
+
+/** `context` of 409 `item_not_free`: the item has a price, so it is bought, not claimed. */
+export const marketplaceItemNotFreeProblemContextSchema = z.object({ price: vndAmountSchema });
+export type MarketplaceItemNotFreeProblemContext = z.infer<
+  typeof marketplaceItemNotFreeProblemContextSchema
+>;
+
+/**
+ * `context` of 409 `item_changed`: what the item is now, when the version, the price or the terms
+ * the member saw are no longer current.
+ */
+export const marketplaceItemChangedProblemContextSchema = z.object({
+  version: templateVersionSchema,
+  price: vndAmountSchema,
+  termsVersion: z.number().int().positive(),
+});
+export type MarketplaceItemChangedProblemContext = z.infer<
+  typeof marketplaceItemChangedProblemContextSchema
+>;
 
 /** The price filter of board 30. */
 export const marketplacePriceFilters = ['all', 'free', 'paid'] as const;

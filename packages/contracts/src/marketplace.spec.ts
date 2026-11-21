@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isMarketplaceItemId,
-  MARKETPLACE_ITEM_ID_PREFIX,
+  claimMarketplaceItemRequestSchema,
   type MarketplaceCatalog,
   marketplaceCatalogSchema,
+  marketplaceItemChangedProblemContextSchema,
   marketplaceItemDetailSchema,
-  marketplaceItemIdSchema,
+  marketplaceLicenceListResponseSchema,
   marketplaceListResponseSchema,
   MAX_MARKETPLACE_ITEM_VERSIONS,
   MAX_MARKETPLACE_ITEMS,
+  updateMarketplaceLicenceVersionRequestSchema,
 } from './marketplace.js';
-import { systemTemplateIdSchema } from './templates.js';
+import {
+  isMarketplaceItemId,
+  MARKETPLACE_ITEM_ID_PREFIX,
+  marketplaceItemIdSchema,
+  systemTemplateIdSchema,
+} from './templates.js';
 
 const TERMS = {
   version: 1,
@@ -279,5 +285,68 @@ describe('the answers of the marketplace screens', () => {
       marketplaceItemDetailSchema.safeParse({ ...detail, licence: { ...licence, source: 'gift' } })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('the licences of a workspace (MP2)', () => {
+  const row = {
+    itemId: 'mp-mau-hai-phien-ban',
+    name: 'Mẫu có hai phiên bản',
+    source: 'purchase',
+    version: 1,
+    latestVersion: 2,
+    newVersions: [{ version: 2, releasedOn: '2026-10-20', note: 'Đổi tiêu đề của Hero.' }],
+    grantedAt: '2026-11-21T08:00:00.000Z',
+    withdrawn: false,
+    hasForm: true,
+    sections: [],
+    usedCount: 2,
+  };
+
+  it('claims a version under the terms the member agreed to', () => {
+    expect(claimMarketplaceItemRequestSchema.parse({ version: 2, termsVersion: 1 })).toEqual({
+      version: 2,
+      termsVersion: 1,
+    });
+    for (const body of [{ version: 0, termsVersion: 1 }, { version: 1 }, { termsVersion: 1 }]) {
+      expect(claimMarketplaceItemRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
+
+  it('updates from the version the dialog showed', () => {
+    expect(updateMarketplaceLicenceVersionRequestSchema.parse({ baseVersion: 1 })).toEqual({
+      baseVersion: 1,
+    });
+    expect(updateMarketplaceLicenceVersionRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      updateMarketplaceLicenceVersionRequestSchema.safeParse({ baseVersion: 1.5 }).success,
+    ).toBe(false);
+  });
+
+  it('lists the items held, at most one row per item of the catalog', () => {
+    expect(marketplaceLicenceListResponseSchema.parse({ items: [row] })).toEqual({
+      items: [row],
+    });
+    expect(
+      marketplaceLicenceListResponseSchema.safeParse({
+        items: Array.from({ length: MAX_MARKETPLACE_ITEMS + 1 }, () => row),
+      }).success,
+    ).toBe(false);
+    expect(
+      marketplaceLicenceListResponseSchema.safeParse({ items: [{ ...row, itemId: 'nha-khoa' }] })
+        .success,
+    ).toBe(false);
+    // "N trang đã tạo từ mẫu này không đổi" of the update dialog.
+    for (const usedCount of [-1, 1.5, undefined]) {
+      expect(
+        marketplaceLicenceListResponseSchema.safeParse({ items: [{ ...row, usedCount }] }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('says what the item is now when the member saw it otherwise', () => {
+    expect(
+      marketplaceItemChangedProblemContextSchema.parse({ version: 2, price: 0, termsVersion: 3 }),
+    ).toEqual({ version: 2, price: 0, termsVersion: 3 });
   });
 });

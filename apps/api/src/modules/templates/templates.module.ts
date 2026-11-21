@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AssetsModule } from '../assets/assets.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { MarketplaceCoreModule } from '../marketplace/marketplace-core.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { PrivacyCoreModule } from '../privacy/privacy-core.module.js';
 import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
@@ -15,10 +16,11 @@ import { WorkspaceTemplatesService } from './workspace-templates.service.js';
 
 /**
  * The template library (ADR-030). System templates live in `@plp/sections/schema`, the workspace's
- * own in its database (`TemplatesCoreModule`). This module lists and previews both, counts the
- * pages made from them (pages), says what a site still needs for a form (sites, consent versions),
- * and saves a page's draft or live release as a workspace template (releases, activity). Making a
- * page or a draft from a template is in the pages module.
+ * own in its database (`TemplatesCoreModule`), the marketplace's in its catalog with the
+ * workspace's licences (`MarketplaceCoreModule`, ADR-036). This module lists and previews them,
+ * counts the pages made from them (pages), says what a site still needs for a form (sites, consent
+ * versions), and saves a page's draft or live release as a workspace template (releases,
+ * activity). Making a page or a draft from a template is in the pages module.
  */
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { WorkspaceTemplatesService } from './workspace-templates.service.js';
     ActivityModule,
     AssetsModule,
     AuthModule,
+    MarketplaceCoreModule,
     TemplatesCoreModule,
   ],
   controllers: [TemplatesController, WorkspaceTemplatesController],

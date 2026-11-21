@@ -6,10 +6,12 @@ import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { AssetRecord } from '../assets/asset.schema.js';
 import type { CreateAssetInput } from '../assets/assets.repository.js';
+import { MarketplaceLicences } from '../marketplace/marketplace-licences.js';
 import type { PageCreatedFromRecord } from '../pages/page.schema.js';
 import { newSectionId } from '../pages/section-id.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { templateUsableIn } from './domain/template-scope.js';
+import { marketplaceComposition, marketplaceTemplateForRef } from './marketplace-templates.js';
 import { TemplateAssets } from './template-assets.js';
 import {
   systemTemplateForRef,
@@ -29,14 +31,18 @@ export interface MaterializedTemplate {
   createdFrom: PageCreatedFromRecord;
   /** Fresh section ids, parsed by the registry, naming only the site's own assets. */
   composition: Composition;
-  /** The images copied into the site, to insert with the page's write; none for a system one. */
+  /**
+   * The images copied into the site, to insert with the page's write; none for a system or a
+   * marketplace template, whose image frames are empty.
+   */
   assets: CreateAssetInput[];
 }
 
 /**
  * Makes a template of the library into a site's content (ADR-030): a new page, a draft that takes
  * it (board 18) or the editor's "Áp dụng mẫu…". It checks the template the member asked for, at the
- * version they previewed, then copies its images into the site.
+ * version they previewed, then copies its images into the site. The page gets a copy: a later
+ * version of the template, or of a marketplace licence, never changes it (ADR-036).
  */
 @Injectable()
 export class TemplateMaterializer {
@@ -44,37 +50,83 @@ export class TemplateMaterializer {
     private readonly templates: TemplatesRepository,
     private readonly versions: TemplateVersionsRepository,
     private readonly assets: TemplateAssets,
+    private readonly marketplace: MarketplaceLicences,
   ) {}
 
   /**
    * The template for the site. A system template is in code; a workspace template must be one the
    * member sees and the site may use (404 otherwise, as any resource), not archived (409
-   * `template_archived`), at the version given (409 `template_changed`). The site's access was
-   * checked by the caller. The images are copied now: `insert` records them in the caller's
-   * transaction, and `discard` deletes them when it fails.
+   * `template_archived`), at the version given (409 `template_changed`); a marketplace item needs
+   * the workspace's licence, which covers every site (404 otherwise), at its version (409
+   * `template_changed`). The site's access was checked by the caller. The images are copied now:
+   * `insert` records them in the caller's transaction, and `discard` deletes them when it fails.
    */
   async materialize(
     scope: WorkspaceScope,
     siteId: ObjectId,
     ref: TemplateRef,
   ): Promise<MaterializedTemplate> {
-    if (ref.source === 'system') {
-      // Fresh section ids for every page: two pages from one template never share one.
-      const template = systemTemplateForRef(ref);
-      return {
-        name: template.name,
-        version: template.version,
-        goal: template.goal,
-        createdFrom: {
-          kind: 'template',
-          source: 'system',
-          templateId: template.id,
-          version: template.version,
-        },
-        composition: templateComposition(template, newSectionId),
-        assets: [],
-      };
+    switch (ref.source) {
+      case 'system':
+        return this.systemTemplate(ref);
+      case 'marketplace':
+        return this.marketplaceTemplate(scope, ref);
+      case 'workspace':
+        return this.workspaceTemplate(scope, siteId, ref);
     }
+  }
+
+  private systemTemplate(ref: TemplateRef): MaterializedTemplate {
+    // Fresh section ids for every page: two pages from one template never share one.
+    const template = systemTemplateForRef(ref);
+    return {
+      name: template.name,
+      version: template.version,
+      goal: template.goal,
+      createdFrom: {
+        kind: 'template',
+        source: 'system',
+        templateId: template.id,
+        version: template.version,
+      },
+      composition: templateComposition(template, newSectionId),
+      assets: [],
+    };
+  }
+
+  /**
+   * A marketplace item at the version of the workspace's licence (ADR-036). The licence is in the
+   * master DB and never taken back, so it still holds when the page is written; one updated
+   * meanwhile leaves the page at the version the member previewed.
+   */
+  private async marketplaceTemplate(
+    scope: WorkspaceScope,
+    ref: TemplateRef,
+  ): Promise<MaterializedTemplate> {
+    const held = marketplaceTemplateForRef(
+      await this.marketplace.heldItem(scope, ref.templateId),
+      ref,
+    );
+    return {
+      name: held.item.name,
+      version: held.licence.version,
+      goal: held.item.goal,
+      createdFrom: {
+        kind: 'template',
+        source: 'marketplace',
+        templateId: held.item.id,
+        version: held.licence.version,
+      },
+      composition: marketplaceComposition(held, newSectionId),
+      assets: [],
+    };
+  }
+
+  private async workspaceTemplate(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    ref: TemplateRef,
+  ): Promise<MaterializedTemplate> {
     const id = toObjectId(ref.templateId, TEMPLATE_NOT_FOUND);
     const template = await this.templates.findVisible(scope, id);
     if (template === null || !templateUsableIn(template.scope, siteId)) {

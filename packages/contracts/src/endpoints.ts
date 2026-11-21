@@ -187,7 +187,14 @@ import {
   leadRecipientListResponseSchema,
   leadRecipientSchema,
 } from './lead-recipients.js';
-import { marketplaceItemDetailSchema, marketplaceListResponseSchema } from './marketplace.js';
+import {
+  claimMarketplaceItemRequestSchema,
+  marketplaceItemDetailSchema,
+  marketplaceLicenceListResponseSchema,
+  marketplaceLicenceSchema,
+  marketplaceListResponseSchema,
+  updateMarketplaceLicenceVersionRequestSchema,
+} from './marketplace.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
 import {
   consentVersionListQuerySchema,
@@ -1599,7 +1606,8 @@ export const endpoints = {
     response: workspaceTemplateSchema,
   }),
 
-  // Marketplace (ADR-036): every member browses it, like the template library (`pages.view`)
+  // Marketplace (ADR-036): every member browses it and the workspace's licences (`pages.view`),
+  // like the template library; claiming and updating a licence take `templates.manage`
   /** Board 30: every listed item at its current version, and how many the workspace holds. */
   listMarketplace: endpoint({
     method: 'GET',
@@ -1620,6 +1628,40 @@ export const endpoints = {
     request: null,
     query: null,
     response: marketplaceItemDetailSchema,
+  }),
+  /**
+   * "Nhận mẫu" (`templates.manage`): a free licence of a listed free item at the version and terms
+   * the member agreed to. Already held: that licence, unchanged. 409 `item_not_free` for an item
+   * with a price, `item_changed` when the version or the terms are no longer current.
+   */
+  claimMarketplaceItem: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, itemId: string) =>
+      `/workspaces/${e(workspaceId)}/marketplace/items/${e(itemId)}/claim`,
+    request: claimMarketplaceItemRequestSchema,
+    query: null,
+    response: marketplaceLicenceSchema,
+  }),
+  /** Board 32: every licence of the workspace, the newest first. */
+  listMarketplaceLicences: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/marketplace/licences`,
+    request: null,
+    query: null,
+    response: marketplaceLicenceListResponseSchema,
+  }),
+  /**
+   * "Cập nhật" (`templates.manage`): the licence moves to the item's current version; pages made
+   * from it stay as they are. Already there: unchanged. 404 without a licence, 409
+   * `template_changed` when it is no longer at `baseVersion`.
+   */
+  updateMarketplaceLicenceVersion: endpoint({
+    method: 'POST',
+    path: (workspaceId: string, itemId: string) =>
+      `/workspaces/${e(workspaceId)}/marketplace/licences/${e(itemId)}/version`,
+    request: updateMarketplaceLicenceVersionRequestSchema,
+    query: null,
+    response: marketplaceLicenceSchema,
   }),
 
   // Pages and drafts

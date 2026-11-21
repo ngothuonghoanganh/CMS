@@ -38,6 +38,8 @@ export const errorCodes = [
   'template_archived',
   'template_limit_reached',
   'template_version_limit_reached',
+  'item_not_free',
+  'item_changed',
   'page_not_live',
   'rate_limited',
   'ai_disabled',

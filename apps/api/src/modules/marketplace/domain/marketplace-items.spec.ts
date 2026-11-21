@@ -10,11 +10,15 @@ import {
 } from '../../../../test/marketplace.js';
 import {
   currentVersionOf,
+  findMarketplaceItem,
+  itemVersionOf,
   itemVisibleTo,
+  listedItems,
   type MarketplaceHoldings,
   marketplaceDetail,
   marketplaceList,
   NO_HOLDINGS,
+  ownedItemOf,
   popularRankOf,
 } from './marketplace-items.js';
 
@@ -53,6 +57,18 @@ describe('marketplace items (ADR-036)', () => {
       note: 'Đổi tiêu đề của Hero.',
     });
     expect(currentVersionOf(itemOf('mp-khai-truong-phong-tap')).version).toBe(1);
+  });
+
+  it('are found by id, at any version they released', () => {
+    expect(findMarketplaceItem(catalog, TWO_VERSIONS_ITEM_ID)?.name).toBe('Mẫu có hai phiên bản');
+    expect(findMarketplaceItem(catalog, 'mp-khong-co')).toBeUndefined();
+    const twice = itemOf(TWO_VERSIONS_ITEM_ID);
+    expect(itemVersionOf(twice, 1)?.releasedOn).toBe('2026-10-01');
+    expect(itemVersionOf(twice, 2)?.note).toBe('Đổi tiêu đề của Hero.');
+    expect(itemVersionOf(twice, 3)).toBeUndefined();
+    expect(listedItems(catalog).map((item) => item.status)).toEqual(
+      Array.from({ length: 5 }, () => 'listed'),
+    );
   });
 
   it('are seen when listed; a draft never; a withdrawn item only with its licence', () => {
@@ -168,5 +184,49 @@ describe('board 31', () => {
     expect(
       marketplaceDetail(catalog, WITHDRAWN_ITEM_ID, holding({ [WITHDRAWN_ITEM_ID]: LICENCE })),
     ).toMatchObject({ withdrawn: true, owned: true, licence: LICENCE });
+  });
+});
+
+describe('board 32', () => {
+  it('shows a licence behind its item with the notes of every newer version', () => {
+    const twice = itemOf(TWO_VERSIONS_ITEM_ID);
+    const v1 = itemVersionOf(twice, 1);
+    expect(ownedItemOf(twice, LICENCE, 3)).toEqual({
+      itemId: TWO_VERSIONS_ITEM_ID,
+      name: 'Mẫu có hai phiên bản',
+      source: 'purchase',
+      version: 1,
+      latestVersion: 2,
+      newVersions: [{ version: 2, releasedOn: '2026-10-20', note: 'Đổi tiêu đề của Hero.' }],
+      grantedAt: LICENCE.grantedAt,
+      withdrawn: false,
+      hasForm: true,
+      // The thumbnail is the licence's version, which new pages are made from.
+      sections: v1 === undefined ? [] : compositionOutline(v1.composition),
+      // "3 trang đã tạo từ mẫu này không đổi", counted by the caller.
+      usedCount: 3,
+    });
+    expect(ownedItemOf(twice, LICENCE, 0).sections[1]?.label).not.toContain(V2_HEADING);
+  });
+
+  it('has nothing new at the latest version, and says when the item is withdrawn', () => {
+    const free = { ...LICENCE, source: 'free' as const };
+    expect(ownedItemOf(itemOf(TWO_VERSIONS_ITEM_ID), { ...free, version: 2 }, 0)).toMatchObject({
+      source: 'free',
+      version: 2,
+      latestVersion: 2,
+      newVersions: [],
+      usedCount: 0,
+    });
+    expect(ownedItemOf(itemOf(WITHDRAWN_ITEM_ID), LICENCE, 0)).toMatchObject({
+      withdrawn: true,
+      newVersions: [],
+    });
+  });
+
+  it('refuses a licence of a version the item never released: the startup check prevents it', () => {
+    expect(() => ownedItemOf(itemOf(TWO_VERSIONS_ITEM_ID), { ...LICENCE, version: 3 }, 0)).toThrow(
+      /has no v3/,
+    );
   });
 });

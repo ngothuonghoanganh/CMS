@@ -58,6 +58,37 @@ export function workspaceSummaryFixture(overrides: Partial<TemplateSummary> = {}
     hasForm: template.hasForm,
     sections: template.sections,
     siteIds: null,
+    marketplace: null,
+    ...overrides,
+  };
+}
+
+/**
+ * The library card of a marketplace item (ADR-036): "Khai trương phòng tập" at v1, held by the
+ * workspace unless `owned` is false, with the sections of the gym system template.
+ */
+export function marketplaceSummaryFixture({
+  owned = true,
+  price = 399_000,
+  ...overrides
+}: Partial<TemplateSummary> & { owned?: boolean; price?: number } = {}): TemplateSummary {
+  const template = findSystemTemplate('phong-tap-khai-truong');
+  if (!template) {
+    throw new Error('No system template "phong-tap-khai-truong"');
+  }
+  return {
+    id: 'mp-khai-truong-phong-tap',
+    source: 'marketplace',
+    version: 1,
+    updatedAt: '2026-11-21T00:00:00.000Z',
+    name: 'Khai trương phòng tập',
+    description: 'Ra mắt phòng tập với ưu đãi tuần đầu và form giữ chỗ.',
+    goal: 'event',
+    industry: 'fitness',
+    hasForm: true,
+    sections: templateSections(template),
+    siteIds: null,
+    marketplace: { owned, price },
     ...overrides,
   };
 }
@@ -99,6 +130,7 @@ function summaryOf(template: SystemTemplate): TemplateSummary {
     hasForm: templateHasForm(template),
     sections: templateSections(template),
     siteIds: null,
+    marketplace: null,
   };
 }
 
