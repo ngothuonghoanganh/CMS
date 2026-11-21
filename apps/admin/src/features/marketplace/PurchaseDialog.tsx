@@ -20,7 +20,7 @@ import { paymentProblemOf } from '../billing/payment-problem';
 import { answerLost } from '../billing/use-pay-invoice';
 import { useMethodSetup } from '../billing/use-method-setup';
 import { marketplaceOwnedHref, paymentsHref, templateHref } from '../shell/navigation';
-import { reportUnexpected } from '../shell/problem-message';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { templateQueryKeys } from '../templates/queries';
 import { DialogFailure } from './DialogFailure';
 import { LicenceTerms } from './LicenceTerms';
@@ -51,7 +51,11 @@ type Phase =
   | { kind: 'pending' }
   | { kind: 'declined'; message: string; invoiceId: string | null }
   | { kind: 'unknown' }
-  | { kind: 'in_progress'; message: string };
+  /**
+   * Another charge holds the workspace; `invoiceNumber` names its invoice when the gateway decides
+   * it or its outcome is unknown, and is null for a charge that merely holds the workspace now.
+   */
+  | { kind: 'in_progress'; message: string; invoiceNumber: string | null };
 
 type Attempt = { kind: 'buy' } | { kind: 'retry'; invoiceId: string };
 
@@ -196,6 +200,12 @@ export function PurchaseDialog({
         );
         return;
       }
+      if (error instanceof ApiError && error.code === 'payment_not_applied') {
+        // Paid, but the workspace held the item already: it is owned, and the money goes back.
+        onOpenChange(false);
+        onChanged(`${problemMessage(error)} Đã tải lại trang.`);
+        return;
+      }
       const problem = paymentProblemOf(error);
       if (problem?.kind === 'declined') {
         const why =
@@ -229,6 +239,7 @@ export function PurchaseDialog({
             problem.invoiceNumber === null
               ? 'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.'
               : `Hóa đơn ${problem.invoiceNumber} chưa có kết quả. Xem nó ở Thanh toán & hóa đơn rồi mua lại.`,
+          invoiceNumber: problem.invoiceNumber,
         });
         return;
       }
@@ -267,9 +278,12 @@ export function PurchaseDialog({
         ? 'Thanh toán chưa thành công'
         : phase.kind === 'pending'
           ? 'Đang chờ cổng thanh toán'
-          : phase.kind === 'unknown' || phase.kind === 'in_progress'
+          : phase.kind === 'unknown' ||
+              (phase.kind === 'in_progress' && phase.invoiceNumber !== null)
             ? 'Chưa rõ kết quả thanh toán'
-            : 'Xác nhận mua mẫu';
+            : phase.kind === 'in_progress'
+              ? 'Đang có một thanh toán chưa xong'
+              : 'Xác nhận mua mẫu';
   const confirming = phase.kind === 'confirm' || busy;
   const canPay = quoted !== undefined && quoted.paymentsEnabled && !quoted.paymentMethodRequired;
 
@@ -294,6 +308,7 @@ export function PurchaseDialog({
         }
         onOpenChange(next);
       }}
+      dismissible={!busy}
       title={title}
       fallbackFocusRef={fallbackFocusRef}
       description={confirming ? 'Mua một lần, dùng cho mọi site trong workspace.' : undefined}
@@ -445,30 +460,31 @@ export function PurchaseDialog({
                 Thử lại sau ít phút.
               </Callout>
             )}
-            {/* The board's own words, announced when the gateway is asked. */}
-            <div role="status" aria-live="polite">
-              {busy ? (
-                <p className={styles.waiting}>
-                  <Spinner size={18} />
-                  Đang chờ cổng thanh toán xác nhận…
-                </p>
-              ) : null}
-            </div>
           </>
         ) : null}
 
-        {phase.kind === 'paid' ? (
-          <p className={styles.line} role="status">
-            Mẫu đã có trong Templates của workspace, dùng được cho mọi site. Biên nhận gửi tới Chủ
-            sở hữu và có ở <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>.
-          </p>
-        ) : null}
-        {phase.kind === 'pending' ? (
-          <Callout tone="info" role="status" title="Đang xử lý thanh toán">
-            Mẫu sẽ có trong workspace khi cổng xác nhận. Bạn xem kết quả ở{' '}
-            <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>.
-          </Callout>
-        ) : null}
+        {/*
+         * One live region for the whole dialog, there before its words: the wait (the board's own
+         * words), then what came of it. A region that mounts with its text may not be announced.
+         */}
+        <div role="status" aria-live="polite" className={styles.statuses}>
+          {busy ? (
+            <p className={styles.waiting}>
+              <Spinner size={18} />
+              Đang chờ cổng thanh toán xác nhận…
+            </p>
+          ) : phase.kind === 'paid' ? (
+            <p className={styles.line}>
+              Mẫu đã có trong Templates của workspace, dùng được cho mọi site. Biên nhận gửi tới Chủ
+              sở hữu và có ở <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>.
+            </p>
+          ) : phase.kind === 'pending' ? (
+            <Callout tone="info" title="Đang xử lý thanh toán">
+              Mẫu sẽ có trong workspace khi cổng xác nhận. Bạn xem kết quả ở{' '}
+              <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>.
+            </Callout>
+          ) : null}
+        </div>
         {phase.kind === 'declined' ? (
           <Callout tone="danger" role="alert">
             {phase.message}
@@ -481,7 +497,12 @@ export function PurchaseDialog({
           </Callout>
         ) : null}
         {phase.kind === 'in_progress' ? (
-          <Callout tone="warning" role="alert" title="Đang có một thanh toán chưa xong">
+          <Callout
+            tone="warning"
+            role="alert"
+            // The dialog's title says it already when no charge of an invoice is named.
+            title={phase.invoiceNumber === null ? undefined : 'Đang có một thanh toán chưa xong'}
+          >
             {phase.message} <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>
           </Callout>
         ) : null}

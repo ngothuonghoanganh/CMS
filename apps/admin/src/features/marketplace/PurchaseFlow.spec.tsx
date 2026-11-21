@@ -224,11 +224,32 @@ describe('"Xác nhận mua mẫu" (board 31, ADR-036)', () => {
     expect(await within(dialog).findByText('Đang chờ cổng thanh toán xác nhận…')).toBeVisible();
     expect(within(dialog).getByRole('heading', { name: 'Đang thanh toán…' })).toBeVisible();
     expect(within(dialog).getByRole('button', { name: 'Hủy' })).toBeDisabled();
+    // The close button says it does nothing now, rather than doing nothing silently.
+    const close = within(dialog).getByRole('button', { name: 'Đóng' });
+    expect(close).toHaveAttribute('aria-disabled', 'true');
     await user.keyboard('{Escape}');
-    await user.click(within(dialog).getByRole('button', { name: 'Đóng' }));
+    await user.click(close);
     expect(screen.getByRole('dialog')).toBeVisible();
     finish(paidAnswer());
     expect(await screen.findByRole('heading', { name: /Đã mua/ })).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Đóng' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it('announces the wait and what came of it in one live region, there from the start', async () => {
+    route({ purchase: paidAnswer });
+    const user = userEvent.setup();
+    renderItem();
+    const dialog = await openDialog(user);
+    await within(dialog).findByText('Thanh toán bằng', { exact: false });
+    const region = within(dialog).getByRole('status');
+    expect(region).toBeEmptyDOMElement();
+    await confirm(user, dialog);
+
+    await within(dialog).findByRole('heading', { name: /Đã mua/ });
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent('Mẫu đã có trong Templates của workspace');
   });
 
   it('says a charge still being decided (202) and leads to the invoices', async () => {
@@ -377,6 +398,55 @@ describe('"Xác nhận mua mẫu" (board 31, ADR-036)', () => {
     const dialog = await openDialog(user);
     await confirm(user, dialog);
     expect(await within(dialog).findByText(/Hóa đơn HD-2026-000008 chưa có kết quả/)).toBeVisible();
+    expect(
+      within(dialog).getByRole('heading', { name: 'Chưa rõ kết quả thanh toán' }),
+    ).toBeVisible();
+  });
+
+  it('calls a charge that merely holds the workspace a payment not finished, not an unknown one', async () => {
+    route({
+      purchase: () => {
+        throw problem(409, 'payment_in_progress', 'Đang có một thanh toán chưa xong');
+      },
+    });
+    const user = userEvent.setup();
+    renderItem();
+    const dialog = await openDialog(user);
+    await confirm(user, dialog);
+    expect(
+      await within(dialog).findByRole('heading', { name: 'Đang có một thanh toán chưa xong' }),
+    ).toBeVisible();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.',
+    );
+    expect(within(dialog).queryByText(/Chưa rõ kết quả/)).toBeNull();
+  });
+
+  it('shows the item owned when it was paid for but held already (409 payment_not_applied)', async () => {
+    route({
+      purchase: () => {
+        throw new ApiError(409, {
+          type: 'about:blank',
+          title: 'Lần mua không được áp dụng',
+          status: 409,
+          code: 'payment_not_applied',
+          detail:
+            'Cổng thanh toán đã trừ tiền cho hóa đơn HD-2026-000009, nhưng workspace đã sở hữu mẫu này trước đó nên lần mua không được áp dụng. Khoản tiền này sẽ được hoàn lại.',
+          context: { invoiceId: INVOICE_ID, invoiceNumber: 'HD-2026-000009' },
+        });
+      },
+    });
+    const user = userEvent.setup();
+    renderItem();
+    const dialog = await openDialog(user);
+    await confirm(user, dialog);
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(router.refresh).toHaveBeenCalled();
+    expect(screen.getByRole('complementary', { name: 'Giá' })).toHaveTextContent(
+      'Khoản tiền này sẽ được hoàn lại. Đã tải lại trang.',
+    );
   });
 
   it('says a read-only workspace cannot buy, with the way to the plan', async () => {
@@ -457,6 +527,22 @@ describe('"Xác nhận mua mẫu" (board 31, ADR-036)', () => {
     expect(window.location.pathname).toBe(`/workspaces/${WORKSPACE_ID}/marketplace/${itemId}`);
   });
 
+  it('says what the gateway did only in the dialog it led back to, not when opened again', async () => {
+    route();
+    const user = userEvent.setup();
+    renderItem({}, 'owner', 'saved');
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('Đã lưu thẻ')).toBeVisible();
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    const again = await openDialog(user);
+    await within(again).findByText('Thanh toán bằng', { exact: false });
+    expect(within(again).queryByText('Đã lưu thẻ')).toBeNull();
+  });
+
   it('says the card is not there yet when the gateway has not reported it', async () => {
     route({ quote: quoteFixture({ paymentMethod: null, paymentMethodRequired: true }) });
     renderItem({}, 'owner', 'saved');
@@ -476,10 +562,20 @@ describe('"Đề xuất {owner} mua" (board 31)', () => {
     route({ suggest: { alreadySuggested: false, message: 'Đã gửi đề xuất tới Ngọc Anh.' } });
     const user = userEvent.setup();
     renderItem({}, 'editor');
+    const regions = within(screen.getByRole('complementary', { name: 'Giá' })).getAllByRole(
+      'status',
+    );
     await user.click(screen.getByRole('button', { name: 'Đề xuất Ngọc Anh mua' }));
     expect(await screen.findByText('Đã đề xuất Ngọc Anh mua')).toBeVisible();
-    expect(screen.getByText('Đã gửi đề xuất tới Ngọc Anh.')).toBeVisible();
+    const sentence = screen.getByText('Đã gửi đề xuất tới Ngọc Anh.');
+    expect(sentence).toBeVisible();
     expect(screen.queryByRole('button', { name: /Đề xuất/ })).toBeNull();
+    // Announced by a region that was there before; focus goes to what took the button's place.
+    const region = sentence.closest('[role="status"]');
+    expect(regions).toContain(region);
+    await waitFor(() => {
+      expect(region?.firstElementChild).toHaveFocus();
+    });
     expect(apiMock).toHaveBeenCalledWith(endpoints.suggestMarketplaceItem, [WORKSPACE_ID, itemId]);
   });
 

@@ -155,6 +155,20 @@
   gap: 8px;
 }
 
+/*
+ * The live region of "Đề xuất … mua": always there, so the sentence that comes into it is
+ * announced. Empty, it takes no room: its negative margin cancels the box's gap.
+ */
+.suggestion:empty {
+  margin-top: -12px;
+}
+
+/* The sent notice takes the focus of the button it replaced. */
+.suggestion > :focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
 /* Board 31's green line for what the workspace already has. */
 .owned {
   display: inline-flex;

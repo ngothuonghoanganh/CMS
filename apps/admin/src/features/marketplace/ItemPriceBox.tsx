@@ -49,6 +49,8 @@ export function ItemPriceBox({ workspace, role, item, returned = null }: ItemPri
   const [buyOpen, setBuyOpen] = useState(returned !== null && buyer && licence === null);
   const [buyKey, setBuyKey] = useState(0);
   const [bought, setBought] = useState(false);
+  // What the gateway said is for the dialog it led back to, not for one opened again later.
+  const [gatewayNotice, setGatewayNotice] = useState(returned);
   useEffect(() => {
     // The address the gateway led back to is not kept: a reload does not say it twice.
     if (returned !== null) {
@@ -168,6 +170,7 @@ export function ItemPriceBox({ workspace, role, item, returned = null }: ItemPri
           fullWidth
           onClick={() => {
             setChanged(null);
+            setGatewayNotice(null);
             setBuyKey((key) => key + 1);
             setBuyOpen(true);
           }}
@@ -191,7 +194,7 @@ export function ItemPriceBox({ workspace, role, item, returned = null }: ItemPri
           item={item}
           open={buyOpen}
           onOpenChange={setBuyOpen}
-          returned={returned}
+          returned={gatewayNotice}
           fallbackFocusRef={createLink}
           onPurchased={() => {
             setBought(true);

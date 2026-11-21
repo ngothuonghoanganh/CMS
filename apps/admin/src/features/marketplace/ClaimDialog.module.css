@@ -118,3 +118,17 @@
   font-size: var(--text-body);
   line-height: 1.5;
 }
+
+/*
+ * The live region of "Xác nhận mua mẫu": always there, so what comes into it is announced. Empty,
+ * it takes no room: its negative margin cancels the body's gap.
+ */
+.statuses {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.statuses:empty {
+  margin-top: -12px;
+}
