@@ -88,15 +88,20 @@ export function renewalMethodStatus(renewal: BillingSummary['renewal']): string 
 
 /**
  * The warning a plan change, a cancellation or a scheduled change carries when it voids the early
- * renewal invoice of a bank transfer (T4). `replaced`: another invoice follows at once.
+ * renewal invoice of a bank transfer (T4). `replaced`: another invoice follows at once (the plan
+ * still renews by transfer). `whenPaid`: an upgrade voids it only once its card payment went
+ * through; refused or dismissed, the invoice and its details stay valid.
  */
 export function voidedInvoiceNotice(
   voided: NonNullable<PlanChangeQuote['renewalInvoiceVoided']>,
   replaced: boolean,
+  whenPaid = false,
 ): string {
-  return `Thông tin chuyển khoản của hóa đơn ${voided.invoiceNumber} không còn dùng được${
-    replaced ? '; hóa đơn mới sẽ được gửi.' : '. Đừng chuyển khoản cho hóa đơn đó.'
-  }`;
+  const lead = `${whenPaid ? 'Khi thanh toán xong, thông tin' : 'Thông tin'} chuyển khoản của hóa đơn ${voided.invoiceNumber} không còn dùng được`;
+  if (replaced) {
+    return `${lead}; hóa đơn mới sẽ được gửi.`;
+  }
+  return whenPaid ? `${lead}.` : `${lead}. Đừng chuyển khoản cho hóa đơn đó.`;
 }
 
 /**

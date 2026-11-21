@@ -133,6 +133,17 @@ describe('the words of a transfer renewal (T4)', () => {
     expect(voidedInvoiceNotice(voided, false)).toContain('Đừng chuyển khoản cho hóa đơn đó.');
   });
 
+  it('says an upgrade voids them only once it is paid', () => {
+    const voided = { invoiceId: 'a', invoiceNumber: 'HD-2026-000001' };
+    expect(voidedInvoiceNotice(voided, true, true)).toBe(
+      'Khi thanh toán xong, thông tin chuyển khoản của hóa đơn HD-2026-000001 không còn dùng được; hóa đơn mới sẽ được gửi.',
+    );
+    // Back to the card: no new invoice, and until then the transfer still pays it.
+    expect(voidedInvoiceNotice(voided, false, true)).toBe(
+      'Khi thanh toán xong, thông tin chuyển khoản của hóa đơn HD-2026-000001 không còn dùng được.',
+    );
+  });
+
   it('finds the invoice a change would void, and says what replaced it afterwards', () => {
     const old = invoice({ id: 'old', number: 'HD-1' });
     const next = invoice({ id: 'new', number: 'HD-2' });

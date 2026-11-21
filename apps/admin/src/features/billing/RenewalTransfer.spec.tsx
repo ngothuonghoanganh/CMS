@@ -5,7 +5,7 @@ import {
   type Invoice,
   type SubscriptionRenewal,
 } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -445,12 +445,36 @@ describe('"Đổi gói" with an early renewal invoice (T4)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
     await user.click(within(dialog).getByRole('radio', { name: /Gói Cơ bản/ }));
 
-    expect(
-      await within(dialog).findByText('Hóa đơn chuyển khoản đang chờ sẽ bị thay'),
-    ).toBeInTheDocument();
+    const title = await within(dialog).findByText('Hóa đơn chuyển khoản đang chờ sẽ bị thay');
     expect(dialog).toHaveTextContent(
       'Thông tin chuyển khoản của hóa đơn HD-2026-000011 không còn dùng được; hóa đơn mới sẽ được gửi.',
     );
+    // Announced with the quote it comes with.
+    expect(title.closest('[aria-live="polite"]')).not.toBeNull();
+  });
+
+  it('says an upgrade voids the invoice only once it is paid', async () => {
+    const user = userEvent.setup();
+    answerQuotes(
+      quoteFixture({
+        mode: 'upgrade',
+        planId: 'business',
+        amount: 300_000,
+        paymentMethod: visaCard,
+        renewalInvoiceVoided: voided,
+      }),
+    );
+    renderBilling(activeSummary({ renewal: renewalOf({ invoice: dueInvoice }) }));
+
+    await user.click(screen.getByRole('button', { name: 'Đổi gói' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Đổi gói' });
+    await user.click(within(dialog).getByRole('radio', { name: /Gói Doanh nghiệp/ }));
+
+    expect(
+      await within(dialog).findByText(
+        'Khi thanh toán xong, thông tin chuyển khoản của hóa đơn HD-2026-000011 không còn dùng được; hóa đơn mới sẽ được gửi.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('tells a trial the notice of each of its two choices', async () => {
@@ -492,6 +516,77 @@ describe('"Đổi gói" with an early renewal invoice (T4)', () => {
     await within(dialog).findByRole('button', { name: 'Lên lịch hạ gói' });
 
     expect(within(dialog).queryByText('Hóa đơn chuyển khoản đang chờ sẽ bị thay')).toBeNull();
+  });
+});
+
+describe('"Hủy thay đổi" with an early renewal invoice (T4)', () => {
+  const scheduled = (overrides: Parameters<typeof activeSummary>[0] = {}) =>
+    activeSummary({
+      scheduledChange: { planId: 'basic', cycle: 'monthly' },
+      renewal: renewalOf({ planId: 'basic', planName: 'Cơ bản', amount: 199_000 }),
+      ...overrides,
+    });
+
+  function renderBilling(summary: ReturnType<typeof summaryFixture>) {
+    return renderWithProviders(
+      <BillingScreen
+        workspaceId={WORKSPACE_ID}
+        workspaceName="Mây Xanh Agency"
+        canManage
+        initial={summary}
+        catalog={catalog}
+        loadedAt={Date.now()}
+      />,
+    );
+  }
+
+  it('asks first, saying the old transfer details stop working', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.cancelScheduledChange
+        ? Promise.resolve(scheduled({ scheduledChange: null }))
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderBilling(
+      scheduled({
+        renewal: renewalOf({
+          planId: 'basic',
+          planName: 'Cơ bản',
+          amount: 199_000,
+          invoice: { ...dueInvoice, amount: 199_000 },
+        }),
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Hủy thay đổi' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Hủy thay đổi đã lên lịch?' });
+    expect(confirm).toHaveTextContent(
+      'Thông tin chuyển khoản của hóa đơn HD-2026-000011 không còn dùng được; hóa đơn mới sẽ được gửi.',
+    );
+    expect(
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.cancelScheduledChange),
+    ).toHaveLength(0);
+
+    await user.click(within(confirm).getByRole('button', { name: 'Hủy thay đổi' }));
+    expect(lastCallTo(apiMock, endpoints.cancelScheduledChange).args).toEqual([WORKSPACE_ID]);
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+  });
+
+  it('drops it at once when no invoice waits', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.cancelScheduledChange
+        ? Promise.resolve(scheduled({ scheduledChange: null }))
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderBilling(scheduled());
+
+    await user.click(screen.getByRole('button', { name: 'Hủy thay đổi' }));
+
+    expect(lastCallTo(apiMock, endpoints.cancelScheduledChange).args).toEqual([WORKSPACE_ID]);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });
 

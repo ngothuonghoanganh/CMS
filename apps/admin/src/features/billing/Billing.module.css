@@ -345,6 +345,10 @@
 }
 
 /* One sentence per choice in the "hóa đơn chuyển khoản sẽ bị thay" notice (T4). */
+.voidedNotice {
+  margin-bottom: 16px;
+}
+
 .voidedLine {
   display: block;
 }

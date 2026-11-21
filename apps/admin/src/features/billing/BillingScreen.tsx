@@ -5,7 +5,7 @@ import {
   type MethodSetupResult,
   type PlanCatalogResponse,
 } from '@plp/contracts';
-import { Badge, Button, ButtonLink, Callout, useToast } from '@plp/ui';
+import { Badge, Button, ButtonLink, Callout, ConfirmDialog, useToast } from '@plp/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -34,7 +34,11 @@ import {
   usageMeters,
 } from './plan-presentation';
 import { adoptSummary, billingQueryKeys, useBillingSummary, usePaymentMethod } from './queries';
-import { replacedInvoiceNote } from './renewal-presentation';
+import {
+  pendingRenewalInvoice,
+  replacedInvoiceNote,
+  voidedInvoiceNotice,
+} from './renewal-presentation';
 import { TRANSFER_DETAILS_ID } from './TransferInstructions';
 import { usePlanLifecycle } from './use-plan-lifecycle';
 import styles from './Billing.module.css';
@@ -70,6 +74,7 @@ export function BillingScreen({
   const { toast } = useToast();
   const [changing, setChanging] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [droppingSchedule, setDroppingSchedule] = useState(false);
   const lifecycle = usePlanLifecycle(workspaceId);
   // Only Chủ sở hữu adds a card. Kept in state: the address loses its parameter below.
   const [notice, setNotice] = useState(canManage ? returned : null);
@@ -87,6 +92,17 @@ export function BillingScreen({
       ? undefined
       : catalog.plans.find((plan) => plan.id === summary.scheduledChange?.planId);
   const scheduledLine = nextPlan === undefined ? null : scheduledChangeLine(summary, nextPlan.name);
+  // Dropping the schedule voids the early renewal invoice of a bank transfer and sends another at
+  // the plan's own price (T4): the owner, who may have sent the money already, confirms first.
+  const voidedBySchedule = pendingRenewalInvoice(summary);
+
+  function dropSchedule() {
+    lifecycle.dropSchedule.mutate(undefined, {
+      onSettled: () => {
+        setDroppingSchedule(false);
+      },
+    });
+  }
   const meters = usageMeters(summary.plan, summary.usage, summary.usageResetsOn);
   const rows = comparisonRows(catalog.plans);
 
@@ -250,9 +266,13 @@ export function BillingScreen({
               <Button
                 variant="ghost"
                 size="sm"
-                loading={lifecycle.dropSchedule.isPending}
+                loading={lifecycle.dropSchedule.isPending && !droppingSchedule}
                 onClick={() => {
-                  lifecycle.dropSchedule.mutate();
+                  if (voidedBySchedule === null) {
+                    dropSchedule();
+                  } else {
+                    setDroppingSchedule(true);
+                  }
                 }}
               >
                 Hủy thay đổi
@@ -365,6 +385,22 @@ export function BillingScreen({
             });
           }}
         />
+      ) : null}
+      {canManage && droppingSchedule && voidedBySchedule !== null ? (
+        <ConfirmDialog
+          open
+          onOpenChange={setDroppingSchedule}
+          title="Hủy thay đổi đã lên lịch?"
+          description={`Gói ${summary.plan.name} gia hạn như hiện tại.`}
+          confirmLabel="Hủy thay đổi"
+          cancelLabel="Giữ lịch đổi gói"
+          pending={lifecycle.dropSchedule.isPending}
+          onConfirm={dropSchedule}
+        >
+          <Callout tone="warning" title="Hóa đơn chuyển khoản đang chờ sẽ bị thay">
+            {voidedInvoiceNotice(voidedBySchedule, summary.renewalMethod === 'transfer')}
+          </Callout>
+        </ConfirmDialog>
       ) : null}
       {canManage && changing ? (
         // Mounted only while open, so each opening starts from the plan in force.

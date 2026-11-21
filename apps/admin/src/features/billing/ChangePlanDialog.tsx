@@ -218,11 +218,16 @@ export function ChangePlanDialog({
     scheduledPlan === undefined ? null : scheduledChangeLine(summary, scheduledPlan.name);
 
   // The early renewal invoice of a bank transfer that this choice voids (T4): what the owner sees
-  // before confirming, so no one transfers to details that no longer work.
+  // before confirming, so no one transfers to details that no longer work. A replacement follows
+  // while the plan renews by transfer; an upgrade voids it only once paid.
   const voidedNotices: string[] = [];
   if (freeQuote?.renewalInvoiceVoided != null && freeQuote.mode !== 'start_paid') {
     voidedNotices.push(
-      `${inTrial ? 'Nếu đổi miễn phí: ' : ''}${voidedInvoiceNotice(freeQuote.renewalInvoiceVoided, true)}`,
+      `${inTrial ? 'Nếu đổi miễn phí: ' : ''}${voidedInvoiceNotice(
+        freeQuote.renewalInvoiceVoided,
+        summary.renewalMethod === 'transfer',
+        freeQuote.mode === 'upgrade',
+      )}`,
     );
   }
   if (paidQuote?.renewalInvoiceVoided != null && paidQuote.mode === 'start_paid') {
@@ -444,16 +449,21 @@ export function ChangePlanDialog({
             fillRow
           />
           {impacts.length === 0 ? null : <ImpactList impacts={impacts} />}
-          {voidedNotices.length === 0 || waiting ? null : (
-            <Callout tone="warning" title="Hóa đơn chuyển khoản đang chờ sẽ bị thay">
-              {voidedNotices.map((text) => (
-                <span key={text} className={styles.voidedLine}>
-                  {text}
-                </span>
-              ))}
-            </Callout>
-          )}
+          {/* Said with the quote it comes with: what the owner must know before confirming. */}
           <div className={styles.quote} aria-live="polite" aria-busy={waiting}>
+            {voidedNotices.length === 0 || waiting ? null : (
+              <Callout
+                tone="warning"
+                title="Hóa đơn chuyển khoản đang chờ sẽ bị thay"
+                className={styles.voidedNotice}
+              >
+                {voidedNotices.map((text) => (
+                  <span key={text} className={styles.voidedLine}>
+                    {text}
+                  </span>
+                ))}
+              </Callout>
+            )}
             {waiting ? (
               <p className={styles.quoteLine}>Đang tính số tiền…</p>
             ) : chargeQuote !== null ? (
