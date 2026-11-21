@@ -17,3 +17,46 @@
   line-height: 1.55;
   color: var(--color-ink-2);
 }
+
+.terms {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* A text-like button flush with the note above it. */
+.termsToggle {
+  margin-inline-start: -10px;
+}
+
+/* The full terms, scrolled within the dialog so the box and the buttons stay in view. */
+.termsText {
+  align-self: stretch;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-hover);
+}
+
+.termsText[hidden] {
+  display: none;
+}
+
+.termsText:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.termsText ol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: var(--text-body-sm);
+  line-height: 1.6;
+  color: var(--color-ink-2);
+}

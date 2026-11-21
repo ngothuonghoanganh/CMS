@@ -169,6 +169,32 @@ describe('MarketplaceItemScreen (board 31)', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Đã nhận “Khai trương phòng tập”');
     });
 
+    it('lets the member read the terms they agree to without leaving the dialog', async () => {
+      const user = userEvent.setup();
+      renderItem({ price: 0 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      const dialog = screen.getByRole('dialog', { name: 'Nhận mẫu' });
+      expect(within(dialog).queryByRole('region', { name: 'Điều khoản giấy phép v1' })).toBeNull();
+      const toggle = within(dialog).getByRole('button', { name: 'Đọc điều khoản giấy phép' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(toggle).toHaveAccessibleName('Ẩn điều khoản giấy phép');
+      const terms = within(dialog).getByRole('region', { name: 'Điều khoản giấy phép v1' });
+      expect(
+        within(terms)
+          .getAllByRole('listitem')
+          .map((item) => item.textContent),
+      ).toEqual(termsFixture.licence);
+      // Reading the terms neither ticks the box nor sends anything.
+      expect(within(dialog).getByRole('checkbox')).not.toBeChecked();
+      expect(apiMock).not.toHaveBeenCalled();
+
+      await user.click(toggle);
+      expect(within(dialog).queryByRole('region', { name: 'Điều khoản giấy phép v1' })).toBeNull();
+    });
+
     it('does not send anything on "Hủy"', async () => {
       const user = userEvent.setup();
       renderItem({ price: 0 });

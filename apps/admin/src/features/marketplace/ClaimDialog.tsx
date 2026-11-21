@@ -7,7 +7,7 @@ import {
 } from '@plp/contracts';
 import { Button, Checkbox, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { reportUnexpected } from '../shell/problem-message';
 import { DialogFailure } from './DialogFailure';
@@ -29,8 +29,9 @@ export interface ClaimDialogProps {
 
 /**
  * "Nhận mẫu" of a free item (board 31, ADR-036): the name, the version and the terms the member
- * agrees to, unticked. Nothing is paid: no invoice, no gateway, no email. The screen gives it a new
- * `key` for every opening, so the box is never ticked from an earlier one.
+ * agrees to, unticked, readable here since the page behind is out of reach. Nothing is paid: no
+ * invoice, no gateway, no email. The screen gives it a new `key` for every opening, so the box is
+ * never ticked from an earlier one.
  */
 export function ClaimDialog({
   workspaceId,
@@ -40,7 +41,9 @@ export function ClaimDialog({
   onClaimed,
   onChanged,
 }: ClaimDialogProps) {
+  const termsId = useId();
   const [agreed, setAgreed] = useState(false);
+  const [termsShown, setTermsShown] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const claim = useMutation({
     mutationFn: () =>
@@ -112,10 +115,35 @@ export function ClaimDialog({
         <p className={styles.item}>
           {item.name} · v{item.version}
         </p>
-        <p className={styles.note}>
-          Giấy phép dùng cho mọi site trong workspace. Đọc điều khoản ở thẻ “Giấy phép” của trang
-          này.
-        </p>
+        <p className={styles.note}>Giấy phép dùng cho mọi site trong workspace.</p>
+        <div className={styles.terms}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={styles.termsToggle}
+            aria-expanded={termsShown}
+            aria-controls={termsId}
+            onClick={() => {
+              setTermsShown((shown) => !shown);
+            }}
+          >
+            {termsShown ? 'Ẩn điều khoản giấy phép' : 'Đọc điều khoản giấy phép'}
+          </Button>
+          {/* Focusable so a keyboard scrolls the terms; the region names their version. */}
+          <section
+            id={termsId}
+            hidden={!termsShown}
+            aria-label={`Điều khoản giấy phép v${item.terms.version}`}
+            tabIndex={0}
+            className={styles.termsText}
+          >
+            <ol>
+              {item.terms.licence.map((paragraph, index) => (
+                <li key={index}>{paragraph}</li>
+              ))}
+            </ol>
+          </section>
+        </div>
         <Checkbox
           checked={agreed}
           onChange={(event) => {
