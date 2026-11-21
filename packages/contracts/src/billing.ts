@@ -336,6 +336,11 @@ export const subscriptionFactsSchema = z.strictObject({
   /** How the next period is paid (T4). */
   renewalMethod: renewalMethodSchema,
   /**
+   * When the owner last chose `renewalMethod` (T4); null while it is the default. A trial whose
+   * transfer was chosen before it ended waits for its invoice in the grace (`trialEndAwaitsTransfer`).
+   */
+  renewalMethodChosenAt: z.date().nullable(),
+  /**
    * The next period's invoice, made before the trial or period ended for a bank transfer (T4):
    * until it is paid (`prepaid`), voided by a plan change, or the end makes it `openInvoiceId`.
    */
@@ -402,6 +407,24 @@ export function trialEndCharges(
 }
 
 /**
+ * Whether the end of the trial waits for a bank transfer (T4): the owner chose the transfer before
+ * the trial ended. Its invoice is made before the end, or after it when it could not be in time
+ * (a card charge still being decided, the job or the gateway down), and the trial ends in the
+ * grace either way, never `trial_expired`. A transfer chosen once the trial was over opens no
+ * grace, like a card saved then (`trialEndCharges`): only paying does.
+ */
+export function trialEndAwaitsTransfer(
+  facts: Pick<SubscriptionFacts, 'trialEndsAt' | 'renewalMethod' | 'renewalMethodChosenAt'>,
+): boolean {
+  return (
+    facts.trialEndsAt !== null &&
+    facts.renewalMethod === 'transfer' &&
+    facts.renewalMethodChosenAt !== null &&
+    facts.renewalMethodChosenAt.getTime() < facts.trialEndsAt.getTime()
+  );
+}
+
+/**
  * The state and access level of a subscription at `now` (ADR-035, §2 rule 12). Nothing stores
  * them: they change as time passes, so a job that runs late never leaves a stale state.
  *
@@ -416,9 +439,10 @@ export function trialEndCharges(
  *   `graceDays` from `failedSince`, or from the end of the period when no charge has failed yet,
  *   so a renewal job that never ran still ends in read-only.
  * - Renewed by bank transfer (T4): the invoice made before the end waits for the transfer, so the
- *   end of an unpaid period or trial is `pending_payment` with the grace, never `trial_expired`,
- *   and a period renewed so is never `expiring_soon`. A next period paid before the end
- *   (`prepaid`) is `active` past it, until the job moves the subscription to it.
+ *   end of an unpaid period or trial is `pending_payment` with the grace, never `trial_expired`
+ *   when the transfer was chosen before the trial ended (`trialEndAwaitsTransfer`), and a period
+ *   renewed so is never `expiring_soon`. A next period paid before the end (`prepaid`) is `active`
+ *   past it, until the job moves the subscription to it.
  */
 export function subscriptionStatusOf(
   facts: Pick<
@@ -430,6 +454,7 @@ export function subscriptionStatusOf(
     | 'failedSince'
     | 'cardAfterTrial'
     | 'renewalMethod'
+    | 'renewalMethodChosenAt'
     | 'renewalInvoiceId'
     | 'prepaid'
   > & { paymentMethod: Pick<PaymentMethod, 'expMonth' | 'expYear'> | null },
@@ -444,10 +469,9 @@ export function subscriptionStatusOf(
     graceEndsAt: null,
     graceDaysLeft: null,
   });
-  // Past the end, the invoice made before it for a transfer is what the period waits for (T4).
-  const waiting =
-    facts.openInvoiceId !== null ||
-    (facts.renewalInvoiceId !== null && facts.renewalMethod === 'transfer');
+  // Past the end of a plan renewed by transfer, the period waits for that transfer, nothing failed:
+  // the invoice made before the end, or the one made late (T4).
+  const waiting = facts.openInvoiceId !== null || facts.renewalMethod === 'transfer';
   const unpaid = (endedAt: Date): SubscriptionStatus => {
     const since = facts.failedSince ?? endedAt;
     const graceEndsAt = new Date(since.getTime() + policy.graceDays * DAY_MS);
@@ -462,8 +486,12 @@ export function subscriptionStatusOf(
   };
   const paymentUnderWay = facts.failedSince !== null || facts.openInvoiceId !== null;
   // A card saved during the trial is charged at its end (ADR-035), by a job that runs after it;
-  // an invoice made before it for the trial's end is paid then (T4).
-  const charged = paymentUnderWay || trialEndCharges(facts) || facts.renewalInvoiceId !== null;
+  // an invoice made before it for the trial's end, or a transfer chosen before it, is paid then (T4).
+  const charged =
+    paymentUnderWay ||
+    trialEndCharges(facts) ||
+    facts.renewalInvoiceId !== null ||
+    trialEndAwaitsTransfer(facts);
 
   if (facts.trialEndsAt !== null) {
     const trialEnd = facts.trialEndsAt.getTime();

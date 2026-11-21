@@ -12,6 +12,7 @@ import {
   type PlanLimitKey,
   type SetRenewalMethodRequest,
   type SubscriptionFacts,
+  trialEndAwaitsTransfer,
   trialEndCharges,
   type WorkspacePlan,
 } from '@plp/contracts';
@@ -32,8 +33,8 @@ import { InvoiceCharges } from './invoice-charges.service.js';
 import type { InvoiceRecord, PlanInvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import {
-  paymentPending,
   paymentInProgress,
+  paymentPending,
   paymentUndecided,
   quoteChanged,
   subscriptionChanged,
@@ -276,7 +277,10 @@ export class BillingService {
     if (!facts.cancelAtPeriodEnd) {
       if (at.getTime() >= currentEndOf(facts).getTime()) {
         const expired =
-          facts.trialEndsAt !== null && !paymentUnderWay(facts) && !trialEndCharges(facts);
+          facts.trialEndsAt !== null &&
+          !paymentUnderWay(facts) &&
+          !trialEndCharges(facts) &&
+          !trialEndAwaitsTransfer(facts);
         throw planChangeUnavailable(expired ? 'payment_required' : 'unpaid');
       }
       if (facts.trialEndsAt === null && paymentUnderWay(facts)) {

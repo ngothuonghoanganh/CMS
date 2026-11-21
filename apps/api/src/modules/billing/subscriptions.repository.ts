@@ -77,6 +77,7 @@ function toFacts(record: SubscriptionRecord): SubscriptionFacts {
       : null,
     cardAfterTrial: record.cardAfterTrial ?? false,
     renewalMethod: record.renewalMethod ?? 'card',
+    renewalMethodChosenAt: record.renewalMethodChosenAt ?? null,
     renewalInvoiceId: record.renewalInvoiceId?.toHexString() ?? null,
     prepaid: record.prepaid
       ? {
@@ -435,7 +436,7 @@ export class SubscriptionsRepository {
     return result.matchedCount === 1;
   }
 
-  /** How the next period is paid (T4), from the version read in `tx`. */
+  /** How the next period is paid, chosen at `at` (T4), from the version read in `tx`. */
   async setRenewalMethod(
     ref: WorkspaceRef,
     change: { method: RenewalMethod; fromVersion: number; at: Date },
@@ -444,7 +445,14 @@ export class SubscriptionsRepository {
     const result = await this.subscriptions
       .updateOne(
         { _id: ref.workspaceId, version: change.fromVersion },
-        { $set: { renewalMethod: change.method, updatedAt: change.at }, $inc: { version: 1 } },
+        {
+          $set: {
+            renewalMethod: change.method,
+            renewalMethodChosenAt: change.at,
+            updatedAt: change.at,
+          },
+          $inc: { version: 1 },
+        },
         { session: tx },
       )
       .exec();

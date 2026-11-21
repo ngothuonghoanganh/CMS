@@ -7,6 +7,7 @@ import {
   type RenewalBlocker,
   type ScheduledChange,
   type SubscriptionFacts,
+  trialEndAwaitsTransfer,
 } from '@plp/contracts';
 import { DAY_MS, periodEndOf } from './billing-period.js';
 
@@ -103,9 +104,10 @@ export function transferInvoiceAtOf(
 
 /**
  * Whether the next period's invoice for a bank transfer is to be made at `at` (T4): the plan renews
- * by transfer, nothing is due or paid for that period yet, and its time came. A paid period's
- * invoice is made at its end at the latest; a trial's only before the trial ends, so choosing the
- * transfer once the trial is over gives no grace (as `cardAfterTrial`).
+ * by transfer, nothing is due or paid for that period yet, and its time came. One that could not be
+ * made in time is made late: a paid period's, and a trial's whose transfer was chosen before the
+ * trial ended (`trialEndAwaitsTransfer`). Choosing the transfer once the trial is over gives no
+ * invoice and no grace (as `cardAfterTrial`).
  */
 export function transferInvoiceDue(
   facts: Pick<
@@ -116,6 +118,7 @@ export function transferInvoiceDue(
     | 'failedSince'
     | 'openInvoiceId'
     | 'renewalMethod'
+    | 'renewalMethodChosenAt'
     | 'renewalInvoiceId'
     | 'prepaid'
   >,
@@ -130,7 +133,9 @@ export function transferInvoiceDue(
     facts.renewalInvoiceId === null &&
     facts.prepaid === null &&
     time >= transferInvoiceAtOf(facts, policy).getTime() &&
-    (facts.trialEndsAt === null || time < facts.trialEndsAt.getTime())
+    (facts.trialEndsAt === null ||
+      time < facts.trialEndsAt.getTime() ||
+      trialEndAwaitsTransfer(facts))
   );
 }
 

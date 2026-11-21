@@ -860,6 +860,47 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
     expect(await renewalInvoices(late.workspaceId)).toHaveLength(0);
   });
 
+  it('makes the invoice of a trial late when the job could not before its end, and waits for it in the grace', async () => {
+    clock.set(START);
+    const { client: owner, workspaceId, me } = await signedUpClient(t.app);
+    const trialEnd = await storedTime(workspaceId, 'trialEndsAt');
+    await setMethod(owner, workspaceId, 'transfer').expect(200);
+    // The job was down from before the invoice's day until after the trial ended.
+    clock.set(after(trialEnd, 1));
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      state: 'pending_payment',
+      access: 'full',
+      graceEndsAt: after(trialEnd, 7).toISOString(),
+    });
+    expect(await runAt(after(trialEnd, 1))).toBe(1);
+    const [late] = await renewalInvoices(workspaceId);
+    expect(late).toMatchObject({
+      status: 'pending',
+      endsTrial: true,
+      periodStart: trialEnd,
+      amount: 599_000,
+    });
+    const invoice = { id: String(late?.['_id']), amount: 599_000 };
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      state: 'pending_payment',
+      access: 'full',
+      awaitingTransfer: true,
+      dueInvoice: { id: invoice.id, status: 'pending', method: 'transfer' },
+      graceEndsAt: after(trialEnd, 7).toISOString(),
+    });
+    expect(transferEmails(me.user.email, 'issued')).toHaveLength(1);
+    expect(transferEmails(me.user.email, 'due')).toHaveLength(1);
+
+    clock.set(after(trialEnd, 2));
+    await postGatewayEvent(t, received(invoice)).expect(200);
+    expect(await summaryOf(owner, workspaceId)).toMatchObject({
+      state: 'active',
+      trialEndsAt: null,
+      periodStart: trialEnd.toISOString(),
+      periodEnd: periodEndOf(trialEnd, 'monthly').toISOString(),
+    });
+  });
+
   it('keeps each workspace’s renewal to itself', async () => {
     const a = await invoiced();
     clock.set(after(a.periodEnd, -5));

@@ -56,6 +56,7 @@ function paid(overrides: Partial<SubscriptionFacts> = {}): SubscriptionFacts {
     paymentMethod: { token: 'tok_1', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030 },
     cardAfterTrial: false,
     renewalMethod: 'card',
+    renewalMethodChosenAt: null,
     renewalInvoiceId: null,
     prepaid: null,
     billingInfo: null,
@@ -388,10 +389,11 @@ describe('the state of a subscription (ADR-035)', () => {
     });
 
     it('waits for the transfer at its end, `pending_payment` with the grace from the end', () => {
-      // Before the job made it `openInvoiceId`, and after.
+      // Before the job made it `openInvoiceId`, and after; before the job made it at all.
       for (const facts of [
         paid({ renewalMethod: 'transfer', renewalInvoiceId: INVOICE }),
         paid({ renewalMethod: 'transfer', openInvoiceId: INVOICE }),
+        paid({ renewalMethod: 'transfer' }),
       ]) {
         expect(statusAt(facts, at(30))).toMatchObject({
           state: 'pending_payment',
@@ -432,9 +434,27 @@ describe('the state of a subscription (ADR-035)', () => {
       expect(statusAt(transfer, at(21)).access).toBe('read_only');
     });
 
-    it('expires a trial whose transfer was chosen too late for an invoice, and never charges its card', () => {
-      const late = trial({ renewalMethod: 'transfer', paymentMethod: paid().paymentMethod });
-      expect(statusAt(late, at(14))).toMatchObject({ state: 'trial_expired', access: 'read_only' });
+    it('expires a trial whose transfer was chosen after it ended, and never charges its card', () => {
+      const late = trial({
+        renewalMethod: 'transfer',
+        renewalMethodChosenAt: at(15),
+        paymentMethod: paid().paymentMethod,
+      });
+      expect(statusAt(late, at(15))).toMatchObject({ state: 'trial_expired', access: 'read_only' });
+    });
+
+    it('gives a trial whose transfer was chosen in time the grace, though its invoice came late', () => {
+      const chosen = trial({ renewalMethod: 'transfer', renewalMethodChosenAt: at(12) });
+      expect(statusAt(chosen, at(13)).state).toBe('trialing');
+      expect(statusAt(chosen, at(14))).toMatchObject({
+        state: 'pending_payment',
+        access: 'full',
+        graceEndsAt: at(21),
+      });
+      expect(statusAt({ ...chosen, openInvoiceId: INVOICE }, at(20)).access).toBe('full');
+      expect(statusAt(chosen, at(21)).access).toBe('read_only');
+      // Back to the card with none saved: expired, as any trial with no way to pay.
+      expect(statusAt({ ...chosen, renewalMethod: 'card' }, at(14)).state).toBe('trial_expired');
     });
 
     it('keeps a trial paid before its end `trialing`, then `active` past it', () => {

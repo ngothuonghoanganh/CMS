@@ -40,6 +40,8 @@ export interface SubscriptionRecord {
   cardAfterTrial?: boolean;
   /** How the next period is paid (T4). Missing on subscriptions stored before T4, read as card. */
   renewalMethod?: RenewalMethod;
+  /** When the owner last chose it (T4); missing or null while it is the default. */
+  renewalMethodChosenAt?: Date | null;
   /**
    * The next period's invoice, made before the end for a bank transfer (T4). Missing before T4,
    * read as null.
@@ -126,6 +128,7 @@ export const subscriptionSchema = new Schema<SubscriptionRecord>(
     paymentMethod: { type: paymentMethodSchema, default: null },
     cardAfterTrial: { type: Boolean, default: false },
     renewalMethod: { type: String, enum: renewalMethods, default: 'card' },
+    renewalMethodChosenAt: { type: Date, default: null },
     renewalInvoiceId: { type: Schema.Types.ObjectId, default: null },
     prepaid: { type: prepaidSchema, default: null },
     billingInfo: { type: billingInfoSchema, default: null },

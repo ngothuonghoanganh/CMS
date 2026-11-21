@@ -115,6 +115,7 @@ describe('the next period’s invoice for a bank transfer (T4)', () => {
     failedSince: null,
     openInvoiceId: null,
     renewalMethod: 'transfer' as const,
+    renewalMethodChosenAt: at(1),
     renewalInvoiceId: null,
     prepaid: null,
   };
@@ -126,13 +127,18 @@ describe('the next period’s invoice for a bank transfer (T4)', () => {
     expect(transferInvoiceDue(transfer, POLICY, at(23))).toBe(true);
   });
 
-  it('is made late, at the end of a paid period at the latest, but never after a trial', () => {
+  it('is made late, after a paid period or a trial it was chosen in, never after it for a trial', () => {
     expect(transferInvoiceDue(transfer, POLICY, at(30))).toBe(true);
     expect(transferInvoiceDue(transfer, POLICY, at(31))).toBe(true);
     const trial = { ...transfer, trialEndsAt: at(14), periodEnd: at(14) };
     expect(transferInvoiceDue(trial, POLICY, at(13))).toBe(true);
+    // Chosen during the trial and not made in time (the job or the gateway down): made late.
+    expect(transferInvoiceDue(trial, POLICY, at(14))).toBe(true);
+    expect(transferInvoiceDue(trial, POLICY, at(16))).toBe(true);
     // Choosing the transfer once the trial is over gives no grace.
-    expect(transferInvoiceDue(trial, POLICY, at(14))).toBe(false);
+    expect(transferInvoiceDue({ ...trial, renewalMethodChosenAt: at(15) }, POLICY, at(15))).toBe(
+      false,
+    );
   });
 
   it('is made once, and not for a card, a cancellation, a payment due or a paid period', () => {

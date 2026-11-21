@@ -39,6 +39,7 @@ const paid: Facts = {
   paymentMethod: CARD,
   cardAfterTrial: false,
   renewalMethod: 'card',
+  renewalMethodChosenAt: null,
   renewalInvoiceId: null,
   prepaid: null,
 };
@@ -161,12 +162,18 @@ describe('the billing job’s timeline renewed by bank transfer (T4)', () => {
     expect(agenda({ ...transfer, prepaid: PREPAID })).toEqual([['renewal', at(30)]]);
   });
 
-  it('owes the invoice of a trial until the trial ends, and never reminds of the trial', () => {
-    const trialing: Facts = { ...trial, renewalMethod: 'transfer' };
+  it('owes the invoice of a trial until it is made, and never reminds of the trial', () => {
+    const trialing: Facts = { ...trial, renewalMethod: 'transfer', renewalMethodChosenAt: at(2) };
     const items = billingAgendaOf({ facts: trialing, policy: POLICY, due: null, undecided: [] });
+    // Chosen while the trial ran: made late if it could not be in time, and the end waits for it.
     expect(items).toEqual([
+      { kind: 'transfer_invoice', at: at(7) },
+      { kind: 'trial_end', at: at(14) },
+    ]);
+    // Chosen once the trial was over: nothing is owed, and the trial's end is read-only.
+    const late: Facts = { ...trialing, renewalMethodChosenAt: at(15) };
+    expect(billingAgendaOf({ facts: late, policy: POLICY, due: null, undecided: [] })).toEqual([
       { kind: 'transfer_invoice', at: at(7), until: at(14) },
-      // Without an invoice made before it, the trial's end is read-only.
       { kind: 'read_only_notice', at: at(14) },
     ]);
     expect(agenda({ ...trialing, renewalInvoiceId: 'inv' })).toEqual([['trial_end', at(14)]]);
@@ -199,19 +206,21 @@ describe('the billing job’s timeline renewed by bank transfer (T4)', () => {
     ]);
   });
 
-  it('wakes the job at once for an invoice still owed past its time, a trial’s until its end', () => {
+  it('wakes the job at once for an invoice still owed past its time, a trial’s too', () => {
     const owed = billingAgendaOf({ facts: transfer, policy: POLICY, due: null, undecided: [] });
     expect(outstandingAt(owed, at(22))).toBeNull();
     expect(outstandingAt(owed, at(25))).toEqual(at(25));
     expect(outstandingAt(owed, at(31))).toEqual(at(31));
-    const trialing = billingAgendaOf({
-      facts: { ...trial, renewalMethod: 'transfer' },
-      policy: POLICY,
-      due: null,
-      undecided: [],
-    });
-    expect(outstandingAt(trialing, at(10))).toEqual(at(10));
-    expect(outstandingAt(trialing, at(14))).toBeNull();
+    const trialOf = (renewalMethodChosenAt: Date) =>
+      billingAgendaOf({
+        facts: { ...trial, renewalMethod: 'transfer', renewalMethodChosenAt },
+        policy: POLICY,
+        due: null,
+        undecided: [],
+      });
+    expect(outstandingAt(trialOf(at(2)), at(10))).toEqual(at(10));
+    expect(outstandingAt(trialOf(at(2)), at(15))).toEqual(at(15));
+    expect(outstandingAt(trialOf(at(15)), at(15))).toBeNull();
     // Past times of other work were done by the run they woke.
     expect(
       outstandingAt(

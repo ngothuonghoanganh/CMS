@@ -2,6 +2,7 @@ import {
   type ChargeOutcome,
   type InvoiceStatus,
   type SubscriptionFacts,
+  trialEndAwaitsTransfer,
   trialEndCharges,
 } from '@plp/contracts';
 import { DAY_MS } from './billing-period.js';
@@ -38,8 +39,9 @@ export interface AgendaItem {
   kind: AgendaKind;
   at: Date;
   /**
-   * For work still owed once its time passed (`OUTSTANDING_KINDS`): when it stops being owed. A
-   * trial's transfer invoice is owed until the trial ends.
+   * For work still owed once its time passed (`OUTSTANDING_KINDS`): when it stops being owed. The
+   * transfer invoice of a trial whose transfer was chosen once it was over is owed until it ended,
+   * so never.
    */
   until?: Date;
 }
@@ -69,6 +71,7 @@ export interface AgendaInput {
     | 'paymentMethod'
     | 'cardAfterTrial'
     | 'renewalMethod'
+    | 'renewalMethodChosenAt'
     | 'renewalInvoiceId'
     | 'prepaid'
   >;
@@ -189,19 +192,22 @@ export function billingAgendaOf(input: AgendaInput): AgendaItem[] {
     const byCard = facts.renewalMethod === 'card' && facts.prepaid === null;
     // The next period's invoice made before the end, waiting or paid (T4).
     const early = facts.renewalInvoiceId !== null || facts.prepaid !== null;
+    // A trial whose transfer was chosen before it ended waits for it, its invoice made late or not.
+    const awaited = trialEndAwaitsTransfer(facts);
     if (facts.renewalMethod === 'transfer' && !early) {
       items.push({
         kind: 'transfer_invoice',
         at: transferInvoiceAtOf(facts, policy),
-        ...(facts.trialEndsAt === null ? {} : { until: end }),
+        ...(facts.trialEndsAt === null || awaited ? {} : { until: end }),
       });
     }
     if (facts.trialEndsAt !== null) {
       if (byCard) {
         at('trial_reminder', new Date(end.getTime() - policy.trialReminderDays * DAY_MS));
       }
-      // Without a card or an invoice made before it, the trial's end is read-only at once.
-      at(trialEndCharges(facts) || early ? 'trial_end' : 'read_only_notice', end);
+      // Without a card, an invoice made before it or a transfer chosen in time, the trial's end is
+      // read-only at once.
+      at(trialEndCharges(facts) || early || awaited ? 'trial_end' : 'read_only_notice', end);
     } else {
       if (byCard && renewalBlockerOf(facts.paymentMethod, end) !== null) {
         at('expiring_notice', new Date(end.getTime() - policy.expiringSoonDays * DAY_MS));
