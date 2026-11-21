@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReceiptView } from './ReceiptView';
-import { invoiceFixture } from './test-fixtures';
+import { invoiceFixture, marketplaceInvoiceSummaryFixture } from './test-fixtures';
 
 const WORKSPACE_ID = '64b0000000000000000000a1';
 
@@ -37,6 +37,27 @@ describe('ReceiptView', () => {
     const table = screen.getByRole('table');
     expect(within(table).getAllByText('1.490.000 ₫')).toHaveLength(2);
     expect(screen.getByText(/không phải hóa đơn điện tử/)).toBeInTheDocument();
+  });
+
+  it('shows the item and its version, not a plan and a period, for a marketplace invoice', () => {
+    render(
+      <ReceiptView
+        workspaceId={WORKSPACE_ID}
+        receipt={{
+          workspaceName: 'Mây Xanh Agency',
+          invoice: invoiceFixture({
+            ...marketplaceInvoiceSummaryFixture(),
+            from: null,
+            endsTrial: false,
+          }),
+        }}
+      />,
+    );
+    const table = screen.getByRole('table');
+    expect(within(table).getByText(/Mẫu “Mở bán dự án căn hộ” · Marketplace/)).toBeVisible();
+    expect(table).toHaveTextContent('Phiên bản v1 · Một lần');
+    expect(table).not.toHaveTextContent('Chu kỳ');
+    expect(table).not.toHaveTextContent('Gói');
   });
 
   it('names the workspace when no billing info was filled', () => {

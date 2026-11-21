@@ -129,16 +129,25 @@ describe('MarketplaceItemScreen (board 31)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('shows the price and the refund line, with a neutral note for a paid item not owned (MP3 buys)', () => {
+  it('shows the price and the refund line, with "Mua mẫu" for the owner of a paid item not owned', () => {
     renderItem();
     const box = screen.getByRole('complementary', { name: 'Giá' });
     expect(box).toHaveTextContent('399.000đ');
     expect(box).toHaveTextContent('Một lần · Đã gồm VAT · Hoàn tiền theo chính sách của Payload');
-    expect(box).toHaveTextContent('Mua mẫu chưa mở trong bản này.');
-    expect(within(box).queryByRole('button')).toBeNull();
+    expect(within(box).getByRole('button', { name: 'Mua mẫu' })).toBeEnabled();
     expect(within(box).queryByRole('link')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Mua mẫu|Nhận mẫu|Đề xuất/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Nhận mẫu|Đề xuất/ })).toBeNull();
     expect(screen.queryByText(/nhà cung cấp/i)).toBeNull();
+    // Nothing is asked or charged by looking.
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('offers a member who cannot pay to suggest it, not "Mua mẫu"', () => {
+    renderItem({}, 'admin');
+    const box = screen.getByRole('complementary', { name: 'Giá' });
+    expect(within(box).getByRole('button', { name: 'Đề xuất Ngọc Anh mua' })).toBeEnabled();
+    expect(box).toHaveTextContent('Chỉ Chủ sở hữu workspace mua được.');
+    expect(screen.queryByRole('button', { name: 'Mua mẫu' })).toBeNull();
   });
 
   it('leaves the VAT and refund line out for a free item, as nothing is paid', () => {
