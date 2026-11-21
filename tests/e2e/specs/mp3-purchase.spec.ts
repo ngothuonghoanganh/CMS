@@ -181,7 +181,7 @@ test.describe('MP3 · Buying a marketplace item', () => {
     }
   });
 
-  test('a read-only workspace cannot buy, and a marketplace invoice offers no transfer', async ({
+  test('a read-only workspace cannot buy, nor pay a refused purchase again, and a marketplace invoice offers no transfer', async ({
     page,
     request,
   }) => {
@@ -213,6 +213,11 @@ test.describe('MP3 · Buying a marketplace item', () => {
     const failed = await billingSummaryOf(page.request, workspaceId);
     await setBillingClock(request, new Date(dateOf(failed.graceEndsAt).getTime() + MINUTE_MS));
     expect((await billingSummaryOf(page.request, workspaceId)).access).toBe('read_only');
+
+    // Paying the refused purchase again would buy the item anew: no longer offered (ADR-036).
+    await page.goto(paymentsPath(workspaceId));
+    await expect(row).toContainText('Ngân hàng từ chối thẻ');
+    await expect(row.getByRole('button', { name: /^Thanh toán lại/ })).toHaveCount(0);
 
     dialog = await openBuyDialog(page, workspace, APARTMENT.id);
     await tickAndPay(dialog);
