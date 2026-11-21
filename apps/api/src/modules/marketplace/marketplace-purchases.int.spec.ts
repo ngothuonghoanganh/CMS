@@ -429,6 +429,29 @@ describe('buying a marketplace item (ADR-036, MP3)', () => {
     });
   });
 
+  describe('other payments of the workspace', () => {
+    it('are not blocked by a plan’s transfer waiting for the bank: they pay for other things', async () => {
+      const { owner, workspaceId } = await owning();
+      await owner
+        .post(endpoints.changePlan.path(workspaceId), {
+          planId: 'agency',
+          cycle: 'monthly',
+          payNow: true,
+          payWith: 'transfer',
+          expectedAmount: 599_000,
+        })
+        .expect(202);
+      expect(bought(await purchaseItem(owner, workspaceId).expect(200)).invoice.status).toBe(
+        'paid',
+      );
+      // The transfer still waits, and the plan still waits for it.
+      const summary = billingSummarySchema.parse(
+        (await owner.get(endpoints.getBillingSummary.path(workspaceId)).expect(200)).body,
+      );
+      expect(summary.dueInvoice).toMatchObject({ status: 'pending', method: 'transfer' });
+    });
+  });
+
   describe('the item’s checks, in order', () => {
     it('refuses what is not on sale, a free item, and a quote that moved', async () => {
       const { owner, workspaceId, ownerId } = await owning();
