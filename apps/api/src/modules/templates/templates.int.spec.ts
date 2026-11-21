@@ -15,6 +15,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
+import { bundledMarketplaceCatalog } from '../../../test/marketplace.js';
 import { uniqueSlug } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient, RECIPIENT_EMAIL } from '../../../test/recipients.js';
@@ -82,8 +83,10 @@ describe('template library', () => {
     for (const client of [owner, viewer.client]) {
       const response = await client.get(`/workspaces/${workspaceId}/templates`).expect(200);
       const { items } = templateListResponseSchema.parse(response.body);
-      expect(items.map((item) => item.id)).toEqual(systemTemplates.map((item) => item.id));
-      expect(new Set(items.map((item) => item.source))).toEqual(new Set(['system']));
+      const system = items.slice(0, systemTemplates.length);
+      expect(system.map((item) => item.id)).toEqual(systemTemplates.map((item) => item.id));
+      expect(new Set(system.map((item) => item.source))).toEqual(new Set(['system']));
+      expect(system.every((item) => item.marketplace === null)).toBe(true);
       expect(items.find((item) => item.id === TEMPLATE_ID)).toMatchObject({
         name: TEMPLATE_NAME,
         version: TEMPLATE_VERSION,
@@ -91,6 +94,18 @@ describe('template library', () => {
         industry: 'dental_health',
         hasForm: true,
       });
+      // Then the marketplace items on sale, none held yet, in the catalog's order (ADR-036).
+      expect(
+        items
+          .slice(systemTemplates.length)
+          .map(({ id, source, marketplace }) => ({ id, source, marketplace })),
+      ).toEqual(
+        bundledMarketplaceCatalog().items.map(({ id, price }) => ({
+          id,
+          source: 'marketplace',
+          marketplace: { owned: false, price },
+        })),
+      );
     }
   });
 

@@ -295,6 +295,8 @@ describe('marketplace licences', () => {
         withdrawn: false,
         hasForm: true,
         sections: compositionOutline(v1.composition),
+        // No page made from it yet: "0 trang đã tạo từ mẫu này không đổi".
+        usedCount: 0,
       });
       expect(rows[1]).toMatchObject({ source: 'free', version: 1, newVersions: [] });
       expect(rows[0]).toMatchObject({ withdrawn: true, name: 'Mẫu ngừng bán' });
