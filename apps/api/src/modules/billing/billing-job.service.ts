@@ -178,38 +178,47 @@ export class BillingJob {
       return;
     }
     const terms = renewalTermsOf(facts, (planId) => planOf(this.catalog, planId));
-    const invoice = await this.transactions.run(async (tx) => {
-      if (!(await this.subscriptions.stillHeld(ref, until, tx))) {
-        return null;
+    let invoice: InvoiceRecord;
+    try {
+      invoice = await this.transactions.run(async (tx) => {
+        if (!(await this.subscriptions.stillHeld(ref, until, tx))) {
+          throw new RunOvertaken();
+        }
+        const created = await this.invoices.create(
+          {
+            workspaceId: ref.workspaceId,
+            kind: 'subscription',
+            planId: terms.plan.id,
+            planName: terms.plan.name,
+            cycle: terms.cycle,
+            periodStart: terms.periodStart,
+            periodEnd: terms.periodEnd,
+            amount: terms.amount,
+            billingInfo: facts.billingInfo,
+            method: 'card',
+            card: null,
+            from: null,
+            endsTrial: facts.trialEndsAt !== null,
+            createdBy: null,
+          },
+          run.at,
+          tx,
+        );
+        const waiting = await this.subscriptions.waitFor(
+          ref,
+          { invoiceId: created._id, fromVersion: facts.version, at: run.at },
+          tx,
+        );
+        if (!waiting) {
+          // Rolls the invoice back with the transaction.
+          throw new RunOvertaken();
+        }
+        return created;
+      });
+    } catch (error) {
+      if (!(error instanceof RunOvertaken)) {
+        throw error;
       }
-      const created = await this.invoices.create(
-        {
-          workspaceId: ref.workspaceId,
-          kind: 'subscription',
-          planId: terms.plan.id,
-          planName: terms.plan.name,
-          cycle: terms.cycle,
-          periodStart: terms.periodStart,
-          periodEnd: terms.periodEnd,
-          amount: terms.amount,
-          billingInfo: facts.billingInfo,
-          method: 'card',
-          card: null,
-          from: null,
-          endsTrial: facts.trialEndsAt !== null,
-          createdBy: null,
-        },
-        run.at,
-        tx,
-      );
-      const waiting = await this.subscriptions.waitFor(
-        ref,
-        { invoiceId: created._id, fromVersion: facts.version, at: run.at },
-        tx,
-      );
-      return waiting ? created : null;
-    });
-    if (invoice === null) {
       // Another instance took over, or the owner changed the plan meanwhile: the next run sees.
       run.again();
       return;
@@ -338,6 +347,14 @@ export class BillingJob {
         'Ending a run of the billing job failed',
       );
     }
+  }
+}
+
+/** The facts a run read changed before it wrote, or its hold went to another instance. */
+class RunOvertaken extends Error {
+  constructor() {
+    super('The subscription changed, or another run holds it');
+    this.name = 'RunOvertaken';
   }
 }
 

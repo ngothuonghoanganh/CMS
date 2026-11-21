@@ -403,7 +403,21 @@ describe('the life of a plan (ADR-035, T3)', () => {
       expect(summary.dueInvoice).not.toHaveProperty('card');
       expect(emailsTo(email, 'billing-charge-failed').at(-1)?.data).toMatchObject({
         reason: 'Thẻ đã hết hạn',
+        card: null,
       });
+
+      // A new card pays the renewal: the next period runs from the end of the old one.
+      clock.set(after(periodEnd, 3));
+      await addCard(t, owner, workspaceId, CARD_OK);
+      await payInvoice(owner, workspaceId, summary.dueInvoice?.id ?? '').expect(200);
+      expect(await summaryOf(owner, workspaceId)).toMatchObject({
+        state: 'active',
+        periodStart: periodEnd.toISOString(),
+        periodEnd: periodEndOf(periodEnd, 'monthly').toISOString(),
+        failedSince: null,
+        dueInvoice: null,
+      });
+      expect((await logOf(workspaceId)).at(-1)).toBe('period_renewed');
     });
 
     it('applies a downgrade scheduled for its end with the renewal, and what the plan stops', async () => {
