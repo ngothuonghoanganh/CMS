@@ -4,6 +4,8 @@ import {
   planCatalogResponseSchema,
   problemSchema,
   siteListResponseSchema,
+  billingWorkRunSchema,
+  setTestClockResponseSchema,
   testClockSchema,
   vnMonthOf,
   workspacePlanSchema,
@@ -422,6 +424,24 @@ describe('plans and billing (ADR-035)', () => {
       expect((await summaryOf(client, workspaceId)).trialDaysLeft).toBe(14);
       await client.put('/testing/clock', { now: 'ngày mai' }).expect(422);
     });
+
+    it('runs the billing work due at the time it moves to, and on demand (T3)', async () => {
+      const { client, workspaceId } = await signedUpClient(t.app);
+      const stored = await subscriptionOf(workspaceId);
+      const trialEnd = stored?.['trialEndsAt'] as Date;
+      const moved = setTestClockResponseSchema.parse(
+        (await client.put('/testing/clock', { now: trialEnd.toISOString() }).expect(200)).body,
+      );
+      expect(moved.handled).toBeGreaterThanOrEqual(1);
+      expect(await subscriptionOf(workspaceId)).toMatchObject({ nextActionAt: null });
+      expect((await summaryOf(client, workspaceId)).state).toBe('trial_expired');
+      const run = billingWorkRunSchema.parse(
+        (await client.post('/testing/billing/run-due').expect(200)).body,
+      );
+      expect(run).toMatchObject({ handled: 0 });
+      expect(Date.parse(run.now)).toBeGreaterThanOrEqual(trialEnd.getTime());
+      await client.put('/testing/clock', { now: null }).expect(200);
+    });
   });
 
   describe('workspaces made before plans', () => {
@@ -481,6 +501,7 @@ describe('the billing clock outside lifecycle tests', () => {
     const { client } = await signedUpClient(t.app);
     await client.get('/testing/clock').expect(404);
     await client.put('/testing/clock', { now: new Date().toISOString() }).expect(404);
+    await client.post('/testing/billing/run-due').expect(404);
     expect(() => {
       t.app.get(BillingClock).set(new Date());
     }).toThrow('BILLING_TEST_CLOCK=on');

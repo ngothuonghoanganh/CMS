@@ -33,7 +33,11 @@ import { publishableDraft } from '../../../test/compositions.js';
 import { pointHere } from '../../../test/domains.js';
 import { createLiveFormPage, leadBody, submitLead } from '../../../test/leads.js';
 import { MAIL_TEMPLATES, templateDataProblems } from '../../../test/mail-templates.js';
+import { addCard, CARD_OK } from '../../../test/payments.js';
 import { AutomationScheduler } from '../automations/automation-scheduler.service.js';
+import { BillingClock } from '../billing/billing-clock.js';
+import { BillingScheduler } from '../billing/billing-scheduler.service.js';
+import { periodEndOf } from '../billing/domain/billing-period.js';
 import { newEmail } from '../../../test/members.js';
 import {
   createPage,
@@ -247,7 +251,13 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     t = await createTestApp('plp_test_sqs_transport', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
       realEmail: true,
-      env: { MAIL_TRANSPORT: 'sqs', MAIL_QUEUE_URL: stub.queueUrl(), MAIL_QUEUE_REGION: REGION },
+      env: {
+        MAIL_TRANSPORT: 'sqs',
+        MAIL_QUEUE_URL: stub.queueUrl(),
+        MAIL_QUEUE_REGION: REGION,
+        // The emails of the plan follow its life, which the test moves through (ADR-035, T3).
+        BILLING_TEST_CLOCK: 'on',
+      },
       // 1 and 5 minutes in production; the schedule itself is checked in
       // notification-schedule.int.spec.ts.
       notificationRetryDelaysMs: [100, 300],
@@ -355,7 +365,46 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     return domainSchema.parse(response.body);
   }
 
-  it('queues each of the 15 emails, once, with data its template renders', async () => {
+  /**
+   * The emails of the plan (ADR-035, T3), on a workspace of their own, along its life: the trial's
+   * reminder, its end paid, "Sắp hết hạn" of a card that expires first, the renewal it cannot pay,
+   * and read-only after the grace.
+   */
+  async function planLife(): Promise<string> {
+    const billing = await signedUpClient(t.app);
+    const clock = t.app.get(BillingClock);
+    const scheduler = t.app.get(BillingScheduler);
+    const stored = await t.connection
+      .collection('subscriptions')
+      .findOne({ _id: new Types.ObjectId(billing.workspaceId) });
+    const trialEnd: unknown = stored?.['trialEndsAt'];
+    if (!(trialEnd instanceof Date)) {
+      throw new Error('The workspace has no trial');
+    }
+    // It pays the end of the trial, and expires before the end of the month it starts.
+    await addCard(t, billing.client, billing.workspaceId, CARD_OK, {
+      expMonth: trialEnd.getUTCMonth() + 1,
+      expYear: trialEnd.getUTCFullYear(),
+    });
+    const runAt = async (at: Date) => {
+      clock.set(at);
+      await scheduler.runDue();
+    };
+    const day = 86_400_000;
+    const periodEnd = periodEndOf(trialEnd, 'monthly');
+    try {
+      await runAt(new Date(trialEnd.getTime() - 3 * day));
+      await runAt(trialEnd);
+      await runAt(new Date(periodEnd.getTime() - 7 * day));
+      await runAt(periodEnd);
+      await runAt(new Date(periodEnd.getTime() + 8 * day));
+    } finally {
+      clock.set(null);
+    }
+    return billing.me.user.email;
+  }
+
+  it('queues each of the 20 emails, once, with data its template renders', async () => {
     const ownerEmail = owner.me.user.email;
 
     // Account emails (ADR-026); the owner's own sign-up queued the first confirmation.
@@ -456,8 +505,19 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     pointHere(t.dns, hostname, tokenOf(claim));
     expect((await checkDomain(other, claim.id)).status).toBe('active');
 
+    const billingOwner = await planLife();
+
     const requests = requestsIn(stub);
     expect(new Set(requests.map((request) => request.template))).toEqual(new Set(MAIL_TEMPLATES));
+    for (const template of [
+      'billing-trial-ending',
+      'billing-receipt',
+      'billing-expiring-soon',
+      'billing-charge-failed',
+      'billing-read-only',
+    ] as const) {
+      expect(queued(template).some((request) => request.to.join() === billingOwner)).toBe(true);
+    }
     for (const request of requests) {
       expect(templateDataProblems(request.template as EmailTemplate, request.data)).toEqual([]);
     }
