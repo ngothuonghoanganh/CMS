@@ -7,16 +7,18 @@ const POLICY = { graceDays: 7, expiringSoonDays: 7 };
 
 describe('a new workspace’s trial (ADR-035)', () => {
   it('runs the catalog’s plan for its days from now, with nothing to pay', () => {
-    const trial = newTrial({ trial: { planId: 'agency', days: 14 } }, NOW);
+    const trial = newTrial({ trial: { planId: 'agency', days: 14 }, trialReminderDays: 3 }, NOW);
     expect(trial).toMatchObject({
       planId: 'agency',
       cycle: 'monthly',
       trialEndsAt: new Date('2026-12-04T08:30:00.000Z'),
       periodStart: NOW,
       periodEnd: new Date('2026-12-04T08:30:00.000Z'),
-      nextActionAt: new Date('2026-12-04T08:30:00.000Z'),
+      // Its first job is the reminder 3 days before the end (T3).
+      nextActionAt: new Date('2026-12-01T08:30:00.000Z'),
       cancelAtPeriodEnd: false,
       paymentMethod: null,
+      cardAfterTrial: false,
       failedSince: null,
       openInvoiceId: null,
       version: 0,
@@ -25,12 +27,16 @@ describe('a new workspace’s trial (ADR-035)', () => {
 
   it('shows "Dùng thử · còn 14 ngày" when it starts', () => {
     expect(
-      subscriptionStatusOf(newTrial({ trial: { planId: 'agency', days: 14 } }, NOW), POLICY, NOW),
+      subscriptionStatusOf(
+        newTrial({ trial: { planId: 'agency', days: 14 }, trialReminderDays: 3 }, NOW),
+        POLICY,
+        NOW,
+      ),
     ).toMatchObject({ state: 'trialing', access: 'full', trialDaysLeft: 14 });
   });
 
   it('takes the number of days from the catalog, not from code', () => {
-    const trial = newTrial({ trial: { planId: 'business', days: 30 } }, NOW);
+    const trial = newTrial({ trial: { planId: 'business', days: 30 }, trialReminderDays: 3 }, NOW);
     expect(trial.planId).toBe('business');
     expect(trial.trialEndsAt).toEqual(new Date('2026-12-20T08:30:00.000Z'));
   });

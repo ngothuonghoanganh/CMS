@@ -83,6 +83,22 @@ export function paymentUndecided(invoice: InvoiceRef): AppError {
 }
 
 /**
+ * 409 `payment_in_progress` with the invoice (T3): it waits for a bank transfer, which may be on
+ * its way. Another payment now could pay the period twice; the owner waits for the transfer, or
+ * pays that invoice by card instead on board 29.
+ */
+export function paymentAwaitingTransfer(invoice: InvoiceRef): AppError {
+  return new AppError(409, 'payment_in_progress', 'Một hóa đơn đang chờ chuyển khoản', {
+    detail: `Hóa đơn ${invoice.number} đang chờ chuyển khoản. Chờ xác nhận, hoặc thanh toán hóa đơn đó bằng thẻ ở "Thanh toán & hóa đơn".`,
+    context: {
+      invoiceId: invoice._id.toHexString(),
+      invoiceNumber: invoice.number,
+      awaiting: 'transfer',
+    } satisfies InvoiceProblemContext,
+  });
+}
+
+/**
  * 409 `payment_not_applied`: the gateway took the payment of an invoice that was decided while it
  * answered, so nothing changed. The payment is reported for a refund outside the system (ADR-035).
  */

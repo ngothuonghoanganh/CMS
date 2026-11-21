@@ -27,6 +27,7 @@ const trial: Facts = {
   trialEndsAt: at(14),
   periodStart: START,
   periodEnd: at(14),
+  cancelAtPeriodEnd: false,
   failedSince: null,
   openInvoiceId: null,
 };
@@ -103,12 +104,37 @@ describe('planChangeOf in a paid period', () => {
     expect(choose(paid, BUSINESS, { now: at(18), payNow: true }).mode).toBe('upgrade');
   });
 
-  it('keeps a lower or equal price, or another cycle, for the end of the period (T3)', () => {
-    const later = { mode: 'unavailable', reason: 'scheduled_change' };
-    expect(choose(paid, BASIC)).toEqual(later);
-    expect(choose(paid, SAME_PRICE)).toEqual(later);
-    expect(choose(paid, AGENCY, { cycle: 'yearly' })).toEqual(later);
-    expect(choose(paid, BUSINESS, { cycle: 'yearly' })).toEqual(later);
+  it('schedules a lower or equal price, or another cycle, for the end of the period (T3)', () => {
+    const later = (nextAmount: number) => ({ mode: 'scheduled', effectiveAt: at(30), nextAmount });
+    expect(choose(paid, BASIC)).toEqual(later(199_000));
+    expect(choose(paid, SAME_PRICE)).toEqual(later(599_000));
+    expect(choose(paid, AGENCY, { cycle: 'yearly' })).toEqual(later(5_990_000));
+    expect(choose(paid, BUSINESS, { cycle: 'yearly' })).toEqual(later(14_900_000));
+    expect(chargesNow(choose(paid, BASIC))).toBe(false);
+    // A cancellation still to come does not stop a schedule; "Giữ lại gói" keeps both.
+    expect(choose({ ...paid, cancelAtPeriodEnd: true }, BASIC)).toEqual(later(199_000));
+  });
+
+  it('starts a canceled plan again only when paid now, from now and without a trial (T3)', () => {
+    const canceled = { ...paid, cancelAtPeriodEnd: true };
+    expect(choose(canceled, BASIC, { now: at(31) })).toEqual({
+      mode: 'unavailable',
+      reason: 'payment_required',
+    });
+    expect(choose(canceled, AGENCY, { now: at(31) })).toEqual({
+      mode: 'unavailable',
+      reason: 'payment_required',
+    });
+    expect(choose(canceled, AGENCY, { now: at(31), payNow: true })).toEqual({
+      mode: 'start_paid',
+      amount: 599_000,
+      periodStart: at(31),
+      periodEnd: periodEndOf(at(31), 'monthly'),
+    });
+    expect(choose(canceled, BASIC, { now: at(30), payNow: true, cycle: 'yearly' })).toMatchObject({
+      mode: 'start_paid',
+      amount: 1_990_000,
+    });
   });
 
   it('asks for the unpaid period first', () => {

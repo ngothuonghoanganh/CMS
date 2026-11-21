@@ -34,6 +34,12 @@ export interface RadioCardGroupProps<V extends string> {
    */
   minColumnWidth?: number | undefined;
   /**
+   * Stretch the cards to fill the row: a group of three in a wide container makes three columns,
+   * not three of four with an empty one. Without it empty columns are kept, so cards keep
+   * `minColumnWidth` as their width however few there are (goal cards sit in a fixed rhythm).
+   */
+  fillRow?: boolean | undefined;
+  /**
    * Id of a message about the whole group, such as an error shown under it: each radio is
    * described by it after its own description.
    */
@@ -55,6 +61,7 @@ export function RadioCardGroup<V extends string>({
   value,
   onChange,
   minColumnWidth = 220,
+  fillRow = false,
   describedBy,
   invalid = false,
   className,
@@ -67,7 +74,7 @@ export function RadioCardGroup<V extends string>({
       <div
         className={styles.grid}
         style={{
-          gridTemplateColumns: `repeat(auto-fill, minmax(min(${minColumnWidth}px, 100%), 1fr))`,
+          gridTemplateColumns: `repeat(${fillRow ? 'auto-fit' : 'auto-fill'}, minmax(min(${minColumnWidth}px, 100%), 1fr))`,
         }}
       >
         {options.map((option, index) => {

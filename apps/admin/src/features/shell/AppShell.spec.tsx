@@ -140,8 +140,24 @@ describe('AppShell', () => {
       expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
     });
 
+    it('leaves board 29 and the receipts to their own banners too', () => {
+      onTestFinished(() => {
+        navigation.pathname = '';
+      });
+      for (const path of ['billing/payments', 'billing/receipts/64b0000000000000000000f1']) {
+        navigation.pathname = `/workspaces/${WORKSPACE_ID}/${path}`;
+        const { unmount } = renderShell(lapsed);
+        expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
+        unmount();
+      }
+      // A grace banner is left out there as well: board 29 has its failed and waiting banners.
+      navigation.pathname = `/workspaces/${WORKSPACE_ID}/billing/payments`;
+      renderShell(workspacePlanFixture({ state: 'past_due', graceDaysLeft: 3 }));
+      expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
+    });
+
     it('shows nothing while the workspace has full access', () => {
-      renderShell(workspacePlanFixture({ state: 'past_due' }));
+      renderShell(workspacePlanFixture());
 
       expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
     });

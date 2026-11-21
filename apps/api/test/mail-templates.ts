@@ -26,6 +26,12 @@ export const MAIL_TEMPLATES: readonly EmailTemplate[] = [
   'approval-rejected',
   // Written here first (ADR-034): plp-mailer needs the same template before it sends it.
   'automation-notice',
+  // Written here first too (ADR-035, T3): the emails of the plan.
+  'billing-trial-ending',
+  'billing-charge-failed',
+  'billing-expiring-soon',
+  'billing-read-only',
+  'billing-receipt',
 ];
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

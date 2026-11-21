@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import {
   type BillingSummary,
   type ChangePlanRequest,
@@ -62,5 +62,34 @@ export class BillingController {
     const outcome = await this.billing.changePlan(user, workspaceId, body);
     response.status(outcome.pending ? 202 : 200);
     return outcome.summary;
+  }
+
+  /** Drops the change scheduled for the end of the period (T3). */
+  @Delete('workspaces/:workspaceId/billing/plan/scheduled-change')
+  cancelScheduledChange(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId') workspaceId: string,
+  ): Promise<BillingSummary> {
+    return this.billing.cancelScheduledChange(user, workspaceId);
+  }
+
+  /** "Hủy gói" (T3): the plan stops at the end of the period. */
+  @Post('workspaces/:workspaceId/billing/cancel')
+  @HttpCode(200)
+  cancel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId') workspaceId: string,
+  ): Promise<BillingSummary> {
+    return this.billing.cancel(user, workspaceId);
+  }
+
+  /** "Giữ lại gói" (T3). */
+  @Post('workspaces/:workspaceId/billing/keep')
+  @HttpCode(200)
+  keep(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId') workspaceId: string,
+  ): Promise<BillingSummary> {
+    return this.billing.keep(user, workspaceId);
   }
 }

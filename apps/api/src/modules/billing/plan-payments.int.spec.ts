@@ -173,6 +173,15 @@ describe('paying for plans (ADR-035, T2)', () => {
         paymentMethod: null,
         paymentMethodRequired: false,
         unavailableReason: null,
+        // T3: what the lower plan does to the workspace, at once during the trial.
+        effectiveAt: null,
+        nextAmount: null,
+        impacts: {
+          overLimits: [],
+          automationsToPause: 0,
+          aiUses: { from: 100, to: 20 },
+          members: 1,
+        },
       });
       const paidNow = await quote(owner, workspaceId, {
         planId: 'business',
@@ -525,7 +534,7 @@ describe('paying for plans (ADR-035, T2)', () => {
       expect(toldOf(workspaceId).at(-1)).toEqual(['agency', 'business']);
     });
 
-    it('keeps downgrades, equal prices and cycle changes for the end of the period (T3)', async () => {
+    it('schedules downgrades, equal prices and cycle changes for the end of the period (T3)', async () => {
       const paid = await paying();
       const { owner, workspaceId } = paid;
       for (const choice of [
@@ -533,13 +542,13 @@ describe('paying for plans (ADR-035, T2)', () => {
         { planId: 'agency', cycle: 'yearly' as const },
         { planId: 'business', cycle: 'yearly' as const },
       ]) {
-        const refused = await choose(owner, workspaceId, choice).expect(409);
-        expect(problemSchema.parse(refused.body)).toMatchObject({
-          code: 'plan_change_unavailable',
-          context: { reason: 'scheduled_change' },
-        });
+        const scheduled = summaryOf(await choose(owner, workspaceId, choice).expect(200));
+        expect(scheduled).toMatchObject({ plan: { id: 'agency' }, scheduledChange: choice });
       }
       await choose(owner, workspaceId, { planId: 'agency', cycle: 'monthly' }).expect(200);
+      expect(await invoicesOf(owner, workspaceId)).toMatchObject({
+        items: [{ kind: 'subscription' }],
+      });
       intoPeriod(paid, 30);
       const unpaid = await choose(owner, workspaceId, {
         planId: 'business',
@@ -700,12 +709,18 @@ describe('paying for plans (ADR-035, T2)', () => {
       const problem = problemSchema.parse(unknown.body);
       expect(problem.code).toBe('gateway_unavailable');
       const invoiceId = String(problem.context?.['invoiceId']);
-      expect(await invoice(owner, workspaceId, invoiceId)).toMatchObject({
+      const undecided = await invoice(owner, workspaceId, invoiceId);
+      expect(undecided).toMatchObject({
         status: 'open',
         payable: true,
         attempts: [{ number: 1, outcome: 'unknown', code: null }],
       });
-      expect(await subscriptionOf(workspaceId)).toEqual(before);
+      // Nothing changes but the billing job's time: it asks the gateway again in 15 minutes (T3).
+      const askedAt = new Date(undecided.attempts[0]?.at ?? '');
+      expect(await subscriptionOf(workspaceId)).toEqual({
+        ...before,
+        nextActionAt: new Date(askedAt.getTime() + 15 * 60_000),
+      });
 
       // The hold is released: paying again goes at once, with the first attempt's key.
       const settled = payInvoiceResponseSchema.parse(

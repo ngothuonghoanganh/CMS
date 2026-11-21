@@ -11,10 +11,8 @@ import {
   NOTHING_DUE,
 } from './job-wakeup.schema.js';
 
-/** A change stream on `job_wakeups`, as the scheduler reads it. */
-export type WakeupStream = mongo.ChangeStream<JobWakeupRecord>;
-export type WakeupChange = mongo.ChangeStreamDocument<JobWakeupRecord>;
-export type WakeupResumeToken = mongo.ResumeToken;
+/** The workspaces' queues, without the billing job's document (ADR-035). */
+const AUTOMATION_QUEUES = { queue: { $exists: false } } as const;
 
 /** The earliest due time of each workspace's queue, in the master (ADR-034). */
 @Injectable()
@@ -52,7 +50,7 @@ export class JobWakeupsRepository {
   /** The earliest due time of all; `NOTHING_DUE` when no queue waits. */
   async earliest(): Promise<Date> {
     const first = await this.wakeups
-      .findOne({}, { dueAt: 1 })
+      .findOne(AUTOMATION_QUEUES, { dueAt: 1 })
       .sort({ dueAt: 1 })
       .lean<Pick<JobWakeupRecord, 'dueAt'>>()
       .exec();
@@ -62,7 +60,7 @@ export class JobWakeupsRepository {
   /** The workspaces due by `now`, earliest first. */
   due(now: Date, limit: number): Promise<JobWakeupRecord[]> {
     return this.wakeups
-      .find({ dueAt: { $lte: now } })
+      .find({ dueAt: { $lte: now }, ...AUTOMATION_QUEUES })
       .sort({ dueAt: 1 })
       .limit(limit)
       .lean<JobWakeupRecord[]>()
@@ -92,7 +90,14 @@ export class JobWakeupsRepository {
     resumeAfter?: mongo.ResumeToken,
   ): mongo.ChangeStream<JobWakeupRecord, mongo.ChangeStreamDocument<JobWakeupRecord>> {
     return this.wakeups.collection.watch<JobWakeupRecord>(
-      [{ $match: { operationType: { $in: ['insert', 'update', 'replace'] } } }],
+      [
+        {
+          $match: {
+            operationType: { $in: ['insert', 'update', 'replace'] },
+            'fullDocument.queue': { $exists: false },
+          },
+        },
+      ],
       { fullDocument: 'updateLookup', ...(resumeAfter === undefined ? {} : { resumeAfter }) },
     );
   }

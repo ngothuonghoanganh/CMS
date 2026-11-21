@@ -25,11 +25,29 @@ export interface InvoiceAttemptRecord {
   code: PaymentDeclineCode | null;
   /** The `Idempotency-Key` of the "Thanh toán lại" request that made it; null otherwise. */
   requestKey: string | null;
+  /**
+   * A bank transfer that arrived (T3), rather than a card charge, which is the default and what
+   * attempts stored before T3 are.
+   */
+  transfer?: boolean;
 }
 
 export interface InvoicePlanChoice {
   planId: string;
   cycle: BillingCycle;
+}
+
+/** "Chuyển khoản" (T3): what the gateway gave for the transfer, and when it started. */
+export interface InvoiceTransferRecord {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  content: string;
+  /** What the QR code encodes; null when the gateway gives none. */
+  qrPayload: string | null;
+  /** The gateway's page for the transfer (the fake gateway's confirmation page); usually null. */
+  pageUrl: string | null;
+  startedAt: Date;
 }
 
 /**
@@ -58,10 +76,15 @@ export interface InvoiceRecord {
   card: { brand: string; last4: string } | null;
   status: InvoiceStatus;
   attempts: InvoiceAttemptRecord[];
-  /** The plan a change paid now moves from; null for a period's renewal (T3). */
+  /**
+   * The plan a change paid now moves from (or a canceled plan paid for again); null for the job's
+   * charge at the end of a trial or period (T3).
+   */
   from: InvoicePlanChoice | null;
   /** Paying it ends the trial and starts the first paid period. */
   endsTrial: boolean;
+  /** The bank transfer it waits for or was paid by (T3); null for a card. */
+  transfer: InvoiceTransferRecord | null;
   /** The member who chose the change; null for the subscription's own jobs (T3). */
   createdBy: Types.ObjectId | null;
   paidAt: Date | null;
@@ -85,6 +108,7 @@ const attemptSchema = new Schema<InvoiceAttemptRecord>(
     outcome: { type: String, enum: chargeOutcomes, required: true },
     code: { type: String, enum: [...paymentDeclineCodes, null], default: null },
     requestKey: { type: String, default: null },
+    transfer: { type: Boolean },
   },
   { _id: false },
 );
@@ -95,6 +119,19 @@ const invoiceBillingInfoSchema = new Schema(
     taxCode: { type: String, required: true },
     address: { type: String, required: true },
     email: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+const transferSchema = new Schema<InvoiceTransferRecord>(
+  {
+    bankName: { type: String, required: true },
+    accountNumber: { type: String, required: true },
+    accountName: { type: String, required: true },
+    content: { type: String, required: true },
+    qrPayload: { type: String, default: null },
+    pageUrl: { type: String, default: null },
+    startedAt: { type: Date, required: true },
   },
   { _id: false },
 );
@@ -125,6 +162,7 @@ export const invoiceSchema = new Schema<InvoiceRecord>(
     attempts: { type: [attemptSchema], default: [] },
     from: { type: choiceSchema, default: null },
     endsTrial: { type: Boolean, required: true },
+    transfer: { type: transferSchema, default: null },
     createdBy: { type: Schema.Types.ObjectId, default: null },
     paidAt: { type: Date, default: null },
     voidedAt: { type: Date, default: null },

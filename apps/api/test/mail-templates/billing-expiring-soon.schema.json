@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "billing-expiring-soon",
+  "description": "Báo Chủ sở hữu kỳ hiện tại sắp hết mà gói chưa tự gia hạn được (ADR-035, T3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "planName", "periodEndsOn", "daysLeft", "reason", "paymentsUrl"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "planName": { "type": "string", "minLength": 1 },
+    "periodEndsOn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ngày hết kỳ, \"dd/MM/yyyy\"."
+    },
+    "daysLeft": { "type": "integer", "minimum": 1 },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ví dụ \"Workspace chưa có thẻ thanh toán\" hoặc \"Thẻ Visa •••• 4242 hết hạn 11/2026, trước ngày gia hạn\"."
+    },
+    "paymentsUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Màn 29 \"Thanh toán & hóa đơn\" trong admin."
+    }
+  }
+}

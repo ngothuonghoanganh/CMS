@@ -7,6 +7,11 @@ import {
   approvalPublishedEmail,
   approvalRejectedEmail,
   approvalRequestEmail,
+  billingChargeFailedEmail,
+  billingExpiringSoonEmail,
+  billingReadOnlyEmail,
+  billingReceiptEmail,
+  billingTrialEndingEmail,
   domainActiveEmail,
   domainLostEmail,
   domainMovedEmail,
@@ -344,5 +349,121 @@ describe('account emails (ADR-026)', () => {
     );
     expect(email.text).toContain('Link có hiệu lực 60 phút');
     expect(email.html).toContain('href="http://localhost:3100/reset-password#token=abc"');
+  });
+});
+
+describe('the emails of the plan (ADR-035, T3)', () => {
+  const workspace = { workspaceId: ID, workspaceName: 'Mây <Xanh>' };
+  const billingUrl = `http://localhost:3100/workspaces/${ID}/billing`;
+  const paymentsUrl = `${billingUrl}/payments`;
+
+  it('remind of the end of the trial with what it charges, or how to go on without a card', () => {
+    const base = {
+      ...workspace,
+      trialEndsAt: LINK_EXPIRES_AT,
+      planName: 'Agency',
+      trialEndsOn: '04/12/2026',
+      daysLeft: 3,
+      billingUrl,
+    };
+    const charged = renderEmail(
+      billingTrialEndingEmail({
+        ...base,
+        charge: { amount: '599.000 ₫', cycle: 'tháng', card: 'Visa •••• 4242' },
+      }),
+    );
+    expect(charged.subject).toBe('Dùng thử Mây <Xanh> còn 3 ngày');
+    expect(charged.text).toContain('tự trừ 599.000 ₫ / tháng vào thẻ Visa •••• 4242');
+    expect(charged.html).toContain('Mây &lt;Xanh&gt;');
+    expect(charged.html).not.toContain('Mây <Xanh>');
+    const free = renderEmail(billingTrialEndingEmail({ ...base, charge: null }));
+    expect(free.text).toContain('Thêm thẻ thanh toán hoặc chọn "Thanh toán ngay"');
+    expect(free.text).toContain('chỉ đọc');
+    expect(free.text).toContain(billingUrl);
+  });
+
+  it('say why a charge failed, when it is tried again or that it is not, and the grace', () => {
+    const base = {
+      ...workspace,
+      invoiceId: ID,
+      attempt: 1,
+      planName: 'Doanh nghiệp',
+      invoiceNumber: 'HD-2026-000123',
+      amount: '1.490.000 ₫',
+      graceEndsOn: '08/12/2026',
+      paymentsUrl,
+    };
+    const retried = renderEmail(
+      billingChargeFailedEmail({
+        ...base,
+        reason: 'Thẻ không đủ hạn mức',
+        card: 'Visa •••• 9995',
+        nextRetryOn: '03/12/2026',
+      }),
+    );
+    expect(retried.subject).toBe('Chưa gia hạn được Mây <Xanh>');
+    expect(retried.text).toContain(
+      'Hệ thống chưa trừ được 1.490.000 ₫ cho Gói Doanh nghiệp, hóa đơn HD-2026-000123: Thẻ không đủ hạn mức (thẻ Visa •••• 9995).',
+    );
+    expect(retried.text).toContain('Hệ thống tự thử lại ngày 03/12/2026.');
+    expect(retried.text).toContain('Workspace vẫn dùng bình thường tới 08/12/2026');
+    const last = renderEmail(
+      billingChargeFailedEmail({
+        ...base,
+        reason: 'Chưa có thẻ thanh toán',
+        card: null,
+        nextRetryOn: null,
+      }),
+    );
+    expect(last.text).toContain('hóa đơn HD-2026-000123: Chưa có thẻ thanh toán.');
+    expect(last.text).toContain('Hệ thống không tự thử lại nữa.');
+  });
+
+  it('warn of a period that cannot renew, and of read-only, keeping live pages running', () => {
+    const expiring = renderEmail(
+      billingExpiringSoonEmail({
+        ...workspace,
+        periodEnd: LINK_EXPIRES_AT,
+        planName: 'Agency',
+        periodEndsOn: '01/12/2026',
+        daysLeft: 7,
+        reason: 'Workspace chưa có thẻ thanh toán',
+        paymentsUrl,
+      }),
+    );
+    expect(expiring.subject).toBe('Gói của Mây <Xanh> hết hạn ngày 01/12/2026');
+    expect(expiring.text).toContain('(còn 7 ngày) và chưa tự gia hạn được: Workspace chưa có thẻ');
+    const readOnly = renderEmail(
+      billingReadOnlyEmail({
+        ...workspace,
+        since: LINK_EXPIRES_AT,
+        reason: 'Thời gian dùng thử đã hết.',
+        billingUrl,
+      }),
+    );
+    expect(readOnly.subject).toBe('Mây <Xanh> đã chuyển sang chế độ chỉ đọc');
+    expect(readOnly.text).toContain('Thời gian dùng thử đã hết. Trang live và form vẫn chạy');
+    expect(readOnly.text).toContain('Không dữ liệu nào bị xóa.');
+  });
+
+  it('give the receipt of a paid invoice, which is not an electronic invoice', () => {
+    const paid = renderEmail(
+      billingReceiptEmail({
+        ...workspace,
+        invoiceId: ID,
+        invoiceNumber: 'HD-2026-000123',
+        planName: 'Doanh nghiệp',
+        period: '01/11/2026 – 01/12/2026',
+        amount: '1.490.000 ₫',
+        paidOn: '01/11/2026',
+        method: 'Chuyển khoản',
+        receiptUrl: `${billingUrl}/receipts/${ID}`,
+      }),
+    );
+    expect(paid.subject).toBe('Biên nhận HD-2026-000123 · Mây <Xanh>');
+    expect(paid.text).toContain('Nội dung: Gói Doanh nghiệp · 01/11/2026 – 01/12/2026');
+    expect(paid.text).toContain('Phương thức: Chuyển khoản');
+    expect(paid.text).toContain('không phải hóa đơn điện tử');
+    expect(paid.html).toContain(`href="${billingUrl}/receipts/${ID}"`);
   });
 });

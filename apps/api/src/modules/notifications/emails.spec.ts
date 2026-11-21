@@ -8,6 +8,11 @@ import {
   approvalRejectedEmail,
   automationNoticeEmail,
   approvalRequestEmail,
+  billingChargeFailedEmail,
+  billingExpiringSoonEmail,
+  billingReadOnlyEmail,
+  billingReceiptEmail,
+  billingTrialEndingEmail,
   domainActiveEmail,
   domainLostEmail,
   domainMovedEmail,
@@ -171,9 +176,89 @@ const automationNotice = automationNoticeEmail({
   profileUrl: `http://localhost:3100/sites/${ID}/contacts/${OTHER_ID}`,
 });
 
+/*
+ * The emails of the plan (ADR-035, T3), as the billing job and the payments send them.
+ */
+const BILLING = {
+  workspaceId: ID,
+  workspaceName: 'Mây Xanh Agency',
+  billingUrl: `http://localhost:3100/workspaces/${ID}/billing`,
+  paymentsUrl: `http://localhost:3100/workspaces/${ID}/billing/payments`,
+};
+
+function trialEnding(charge: boolean): KeyedEmail {
+  return billingTrialEndingEmail({
+    workspaceId: BILLING.workspaceId,
+    trialEndsAt: AT,
+    workspaceName: BILLING.workspaceName,
+    planName: 'Agency',
+    trialEndsOn: '08/11/2026',
+    daysLeft: 3,
+    charge: charge ? { amount: '599.000 ₫', cycle: 'tháng', card: 'Visa •••• 4242' } : null,
+    billingUrl: BILLING.billingUrl,
+  });
+}
+
+function chargeFailed(card: string | null, nextRetryOn: string | null): KeyedEmail {
+  return billingChargeFailedEmail({
+    invoiceId: OTHER_ID,
+    attempt: 2,
+    workspaceName: BILLING.workspaceName,
+    planName: 'Doanh nghiệp',
+    invoiceNumber: 'HD-2026-000123',
+    amount: '1.490.000 ₫',
+    reason: card === null ? 'Chưa có thẻ thanh toán' : 'Thẻ không đủ hạn mức',
+    card,
+    nextRetryOn,
+    graceEndsOn: '08/12/2026',
+    paymentsUrl: BILLING.paymentsUrl,
+  });
+}
+
+const expiringSoon = billingExpiringSoonEmail({
+  workspaceId: BILLING.workspaceId,
+  periodEnd: AT,
+  workspaceName: BILLING.workspaceName,
+  planName: 'Agency',
+  periodEndsOn: '01/12/2026',
+  daysLeft: 7,
+  reason: 'Thẻ Visa •••• 4242 hết hạn 11/2026, trước ngày gia hạn',
+  paymentsUrl: BILLING.paymentsUrl,
+});
+
+const readOnly = billingReadOnlyEmail({
+  workspaceId: BILLING.workspaceId,
+  since: AT,
+  workspaceName: BILLING.workspaceName,
+  reason: 'Gói chưa được thanh toán và đã hết thời gian ân hạn.',
+  billingUrl: BILLING.billingUrl,
+});
+
+function receipt(method: string): KeyedEmail {
+  return billingReceiptEmail({
+    invoiceId: OTHER_ID,
+    workspaceName: BILLING.workspaceName,
+    invoiceNumber: 'HD-2026-000123',
+    planName: 'Doanh nghiệp',
+    period: '01/11/2026 – 01/12/2026',
+    amount: '1.490.000 ₫',
+    paidOn: '01/11/2026',
+    method,
+    receiptUrl: `http://localhost:3100/workspaces/${ID}/billing/receipts/${OTHER_ID}`,
+  });
+}
+
 /** Every email the API can send, in each shape its data can take. */
 const EVERY_EMAIL: Array<[string, KeyedEmail]> = [
   ['automation-notice without a page or an owner', automationNotice],
+  ['billing-trial-ending with the card that pays', trialEnding(true)],
+  ['billing-trial-ending without a card', trialEnding(false)],
+  ['billing-charge-failed with a retry to come', chargeFailed('Visa •••• 9995', '03/12/2026')],
+  ['billing-charge-failed without a card or a retry', chargeFailed(null, null)],
+  ['billing-expiring-soon', expiringSoon],
+  ['billing-read-only', readOnly],
+  ['billing-receipt of a card', receipt('Thẻ Visa •••• 4242')],
+  ['billing-receipt of a transfer', receipt('Chuyển khoản')],
   ['lead-notification', leadEmail()],
   [
     'lead-notification without email, message or campaign',
@@ -362,5 +447,31 @@ describe('approval emails', () => {
   it('send a missing note as null', () => {
     expect(approvalRequest('').data).toMatchObject({ note: null, resent: false });
     expect(approvalRequest('Đã đổi giá').data).toMatchObject({ note: 'Đã đổi giá' });
+  });
+});
+
+describe('the emails of the plan (ADR-035, T3)', () => {
+  it('are each sent once: per trial, refused charge, period, turn to read-only and invoice', () => {
+    expect(trialEnding(true).idempotencyKey).toBe(`billing-trial-ending:${ID}:${AT.getTime()}`);
+    expect(trialEnding(false).idempotencyKey).toBe(trialEnding(true).idempotencyKey);
+    expect(chargeFailed(null, null).idempotencyKey).toBe(`billing-charge-failed:${OTHER_ID}:2`);
+    expect(expiringSoon.idempotencyKey).toBe(`billing-expiring-soon:${ID}:${AT.getTime()}`);
+    expect(readOnly.idempotencyKey).toBe(`billing-read-only:${ID}:${AT.getTime()}`);
+    expect(receipt('Chuyển khoản').idempotencyKey).toBe(`billing-receipt:${OTHER_ID}`);
+  });
+
+  it('never carry more of a card than its network and last four digits', () => {
+    expect(
+      templateDataProblems('billing-charge-failed', {
+        ...chargeFailed('Visa •••• 9995', null).data,
+        cardNumber: '4000000000009995',
+      }),
+    ).toEqual(['/ must NOT have additional properties']);
+    expect(
+      templateDataProblems('billing-receipt', {
+        ...receipt('Chuyển khoản').data,
+        invoiceNumber: 'HD-1',
+      }),
+    ).toEqual(['/invoiceNumber must match pattern "^HD-\\d{4}-\\d{6}$"']);
   });
 });

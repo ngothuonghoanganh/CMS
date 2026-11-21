@@ -14,6 +14,8 @@ const CATALOG: PlanCatalog = {
   trial: { planId: 'agency', days: 14 },
   graceDays: 7,
   expiringSoonDays: 7,
+  trialReminderDays: 3,
+  retryDays: [2, 5],
   plans: [
     {
       id: 'basic',
@@ -51,6 +53,7 @@ function paid(overrides: Partial<SubscriptionFacts> = {}): SubscriptionFacts {
     openInvoiceId: null,
     failedSince: null,
     paymentMethod: { token: 'tok_1', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030 },
+    cardAfterTrial: false,
     billingInfo: null,
     nextActionAt: at(30),
     lockedUntil: null,
@@ -118,6 +121,25 @@ describe('the plan catalog', () => {
       'plans.0.limits.automationRuns',
     ]);
   });
+
+  it('reminds of the end of a trial within it, and retries a failed charge on later days only', () => {
+    expect(issuesOf({ ...CATALOG, trialReminderDays: 14 })).toEqual(['trialReminderDays']);
+    expect(issuesOf({ ...CATALOG, retryDays: [] })).toEqual([]);
+    expect(issuesOf({ ...CATALOG, retryDays: [5, 2] })).toEqual(['retryDays.1']);
+    expect(issuesOf({ ...CATALOG, retryDays: [2, 2] })).toEqual(['retryDays.1']);
+    expect(issuesOf({ ...CATALOG, retryDays: [0] })).toEqual(['retryDays.0']);
+    expect(issuesOf({ ...CATALOG, retryDays: [1, 2, 3, 4, 5, 6] })).toEqual(['retryDays']);
+  });
+
+  it('retries a failed charge only within the grace, never on a read-only workspace', () => {
+    expect(issuesOf({ ...CATALOG, graceDays: 7, retryDays: [2, 6] })).toEqual([]);
+    expect(issuesOf({ ...CATALOG, graceDays: 7, retryDays: [2, 7] })).toEqual(['retryDays.1']);
+    expect(issuesOf({ ...CATALOG, graceDays: 5, retryDays: [2, 5, 9] })).toEqual([
+      'retryDays.1',
+      'retryDays.2',
+    ]);
+    expect(issuesOf({ ...CATALOG, graceDays: 0, retryDays: [] })).toEqual([]);
+  });
 });
 
 describe('the state of a subscription (ADR-035)', () => {
@@ -128,6 +150,7 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'full',
         trialDaysLeft: 14,
         graceEndsAt: null,
+        graceDaysLeft: null,
       });
       expect(statusAt(trial(), at(4, 1)).trialDaysLeft).toBe(10);
       expect(statusAt(trial(), at(14, -1))).toMatchObject({
@@ -142,7 +165,31 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'read_only',
         trialDaysLeft: null,
         graceEndsAt: null,
+        graceDaysLeft: null,
       });
+    });
+
+    it('stays expired, read-only, when a card is saved only after it ended without one', () => {
+      // A card that came late is not charged for the trial's end (T3): only paying ends it.
+      const late = trial({
+        paymentMethod: {
+          token: 'tok_1',
+          brand: 'visa',
+          last4: '4242',
+          expMonth: 12,
+          expYear: 2030,
+        },
+        cardAfterTrial: true,
+      });
+      expect(statusAt(late, at(15))).toEqual({
+        state: 'trial_expired',
+        access: 'read_only',
+        trialDaysLeft: null,
+        graceEndsAt: null,
+        graceDaysLeft: null,
+      });
+      // A transfer it then waits for is a payment under way, as without the card.
+      expect(statusAt({ ...late, openInvoiceId: INVOICE }, at(15)).state).toBe('pending_payment');
     });
 
     it('is overdue when charging at its end failed, with the grace from the failure', () => {
@@ -152,8 +199,9 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'full',
         trialDaysLeft: null,
         graceEndsAt: at(21),
+        graceDaysLeft: 7,
       });
-      expect(statusAt(failed, at(21, -1)).access).toBe('full');
+      expect(statusAt(failed, at(21, -1))).toMatchObject({ access: 'full', graceDaysLeft: 1 });
       expect(statusAt(failed, at(21)).access).toBe('read_only');
     });
 
@@ -184,6 +232,7 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'full',
         trialDaysLeft: null,
         graceEndsAt: at(21),
+        graceDaysLeft: 7,
       });
       expect(statusAt(card, at(21, -1)).access).toBe('full');
       expect(statusAt(card, at(21))).toMatchObject({ state: 'past_due', access: 'read_only' });
@@ -205,6 +254,7 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'full',
         trialDaysLeft: null,
         graceEndsAt: null,
+        graceDaysLeft: null,
       });
       expect(statusAt(paid(), at(29)).state).toBe('active');
     });
@@ -239,6 +289,7 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'read_only',
         trialDaysLeft: null,
         graceEndsAt: null,
+        graceDaysLeft: null,
       });
     });
 
@@ -249,9 +300,17 @@ describe('the state of a subscription (ADR-035)', () => {
         access: 'full',
         trialDaysLeft: null,
         graceEndsAt: at(37, 3_600_000),
+        // 6 days and an hour, rounded up: "còn 7 ngày" by the server's clock.
+        graceDaysLeft: 7,
       });
-      expect(statusAt(failed, at(37, 3_599_999)).access).toBe('full');
-      expect(statusAt(failed, at(37, 3_600_000)).access).toBe('read_only');
+      expect(statusAt(failed, at(37, 3_599_999))).toMatchObject({
+        access: 'full',
+        graceDaysLeft: 1,
+      });
+      expect(statusAt(failed, at(37, 3_600_000))).toMatchObject({
+        access: 'read_only',
+        graceDaysLeft: null,
+      });
     });
 
     it('is `past_due` from its end when no renewal ran, so a late job never keeps it open', () => {

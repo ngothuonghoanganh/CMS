@@ -329,3 +329,72 @@
     grid-area: action;
   }
 }
+
+/* "Chuyển khoản": the details of a transfer and its QR code. */
+.transferBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.qr {
+  flex: none;
+  width: 176px;
+  height: 176px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  /* The QR code is drawn dark on light whatever the theme: it must stay scannable. */
+  background: #fff;
+}
+
+.transferFacts {
+  display: grid;
+  flex: 1 1 280px;
+  grid-template-columns: minmax(96px, 120px) minmax(0, 1fr);
+  gap: 8px 14px;
+  align-items: center;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-body);
+  color: var(--color-ink);
+}
+
+.transferFacts dt {
+  color: var(--color-muted);
+}
+
+.transferFacts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.copyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+@media (max-width: 480px) {
+  .transferFacts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .transferFacts dd {
+    margin-bottom: 8px;
+  }
+
+  /* The gateway button's label is long: it wraps inside the card instead of crossing its edge. */
+  .actions > * {
+    max-width: 100%;
+    height: auto;
+    min-height: 40px;
+    padding-block: 8px;
+    white-space: normal;
+    text-align: center;
+  }
+}

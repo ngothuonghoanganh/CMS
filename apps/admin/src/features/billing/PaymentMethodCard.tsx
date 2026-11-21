@@ -81,7 +81,8 @@ export function PaymentMethodCard({
         </Callout>
       )}
       <p className={styles.fine}>
-        Hiện hỗ trợ thẻ quốc tế. Thông tin thẻ do cổng thanh toán lưu, Payload không lưu số thẻ.
+        Thẻ quốc tế tự thanh toán mỗi kỳ. Chuyển khoản dùng để trả từng hóa đơn, không tự gia hạn.
+        Thông tin thẻ do cổng thanh toán lưu, Payload không lưu số thẻ.
       </p>
     </section>
   );

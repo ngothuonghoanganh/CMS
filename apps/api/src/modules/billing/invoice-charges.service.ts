@@ -2,17 +2,22 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   type BillingCycle,
   cardValidAt,
+  type PaymentDeclineCode,
   type PaymentMethod,
   type Plan,
   type SubscriptionFacts,
 } from '@plp/contracts';
 import { notFound } from '../../shared/errors.js';
-import type { ObjectId } from '../../shared/persistence/object-id.js';
+import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
+import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { BillingClock } from './billing-clock.js';
+import { BillingNotifier } from './billing-notifier.service.js';
 import {
-  CHARGEABLE_INVOICE_STATUSES,
+  awaitsTransfer,
+  chargeableStatusesOf,
   chargeIdempotencyKey,
   invoicePayable,
   nextAttemptNumber,
@@ -21,13 +26,15 @@ import type { PlanChange } from './domain/plan-change.js';
 import { chargeWithTimeout } from './gateway/charge-with-timeout.js';
 import { PaymentGateway, type ChargeResult } from './gateway/payment-gateway.js';
 import type { InvoiceAttemptRecord, InvoiceRecord } from './invoice.schema.js';
-import { InvoiceSettlement } from './invoice-settlement.service.js';
+import { InvoiceSettlement, type RecordedCharge } from './invoice-settlement.service.js';
+import { InvoiceTransfers } from './invoice-transfers.service.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import {
   gatewayUnavailable,
   invoiceNotPayable,
   paymentFailed,
   paymentInProgress,
+  paymentAwaitingTransfer,
   paymentMethodRequired,
   paymentNotApplied,
   paymentsDisabled,
@@ -52,6 +59,30 @@ export const CHARGE_TIMEOUT_MS = 60_000;
 export interface ChargeAnswer {
   invoice: InvoiceRecord;
   pending: boolean;
+}
+
+/** One recorded charge: the invoice after it, and what the gateway said. */
+export interface ChargeAttempt {
+  invoice: InvoiceRecord;
+  number: number;
+  outcome: InvoiceAttemptRecord['outcome'];
+  code: PaymentDeclineCode | null;
+  /** Why the gateway could not be asked or did not answer; set for an unknown outcome. */
+  failure: unknown;
+}
+
+/**
+ * Whether the card charge numbered `number` is what paid the invoice: its success reported by the
+ * gateway's event, with its key, before the API recorded its answer.
+ */
+function paidBy(invoice: InvoiceRecord, number: number): boolean {
+  return (
+    invoice.status === 'paid' &&
+    invoice.attempts.some(
+      (attempt) =>
+        attempt.number === number && attempt.outcome === 'succeeded' && attempt.transfer !== true,
+    )
+  );
 }
 
 /** The card a charge uses: saved, and valid now. 422 otherwise. */
@@ -88,11 +119,12 @@ function answerOf(
 }
 
 /**
- * Charges invoices with the saved card (ADR-035): a plan change paid now, and "Thanh toán lại".
- * One charge per workspace at a time: it holds the subscription (`lockedUntil`) from before the
- * gateway is called until its outcome is recorded, and an invoice the gateway is still deciding
- * blocks the next. Each attempt's idempotency key is `{invoiceId}-{number}`, so asking again
- * never charges twice.
+ * Charges invoices with the saved card (ADR-035): a plan change paid now, "Thanh toán lại", and
+ * the subscription's job (T3). One charge per workspace at a time: it holds the subscription
+ * (`lockedUntil`) from before the gateway is called until its outcome is recorded, and an invoice
+ * the gateway is still deciding blocks the next. Each attempt's idempotency key is
+ * `{invoiceId}-{number}`, so asking again never charges twice. A paid invoice's receipt is
+ * emailed once it is recorded.
  */
 @Injectable()
 export class InvoiceCharges {
@@ -104,6 +136,8 @@ export class InvoiceCharges {
     private readonly invoices: InvoicesRepository,
     private readonly subscriptions: SubscriptionsRepository,
     private readonly settlement: InvoiceSettlement,
+    private readonly transfers: InvoiceTransfers,
+    private readonly notifier: BillingNotifier,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -122,9 +156,15 @@ export class InvoiceCharges {
   /**
    * Makes the invoice of a plan change and charges it, from the subscription's `version` that was
    * read for the quote (409 `conflict` when it moved). It voids the refused invoices of earlier
-   * changes, which this one replaces. An earlier charge whose outcome is unknown may have gone
-   * through, so it blocks the change (409 `payment_in_progress` with its invoice) until "Thanh
-   * toán lại" on that invoice decides it: voiding it and charging again could charge twice.
+   * changes, and the transfers still waiting for plans paid now, which this one replaces. An
+   * earlier charge whose outcome is unknown may have gone through, so it blocks the change (409
+   * `payment_in_progress` with its invoice) until "Thanh toán lại" on that invoice decides it:
+   * voiding it and charging again could charge twice. So does a transfer waiting for the charge
+   * at the end of the trial or period, which may arrive any time.
+   *
+   * Paid by transfer (`payWith: 'transfer'`, a plan paid now only, T3), nothing is charged: the
+   * invoice waits for the gateway's confirmation (`pending`), and the subscription for it. The
+   * gateway gives the transfer's details once the invoice has its number.
    */
   async checkout(
     scope: WorkspaceScope,
@@ -134,12 +174,14 @@ export class InvoiceCharges {
       target: Plan;
       cycle: BillingCycle;
       change: Extract<PlanChange, { mode: 'start_paid' | 'upgrade' }>;
+      payWith: 'card' | 'transfer';
       at: Date;
     },
   ): Promise<ChargeAnswer> {
     this.requireEnabled();
     const { facts, current, target, cycle, change, at } = input;
-    const method = chargeableMethod(facts, at);
+    const byTransfer = input.payWith === 'transfer' && change.mode === 'start_paid';
+    const method = byTransfer ? null : chargeableMethod(facts, at);
     const until = new Date(at.getTime() + CHARGE_HOLD_MS);
     const invoice = await this.transactions.run(async (tx) => {
       const hold = await this.subscriptions.holdForCharge(
@@ -157,8 +199,11 @@ export class InvoiceCharges {
       if (undecided !== null) {
         throw paymentUndecided(undecided);
       }
+      await this.blockOnWaitingTransfer(scope, facts, tx);
       await this.invoices.voidRefusedChanges(scope, at, tx);
-      return this.invoices.create(
+      const replaced = await this.invoices.voidReplacedTransfers(scope, at, tx);
+      await this.subscriptions.stopWaitingFor(scope, replaced, tx);
+      const created = await this.invoices.create(
         {
           workspaceId: scope.workspaceId,
           kind: change.mode === 'upgrade' ? 'upgrade' : 'subscription',
@@ -169,24 +214,33 @@ export class InvoiceCharges {
           periodEnd: change.periodEnd,
           amount: change.amount,
           billingInfo: facts.billingInfo,
-          method: 'card',
+          method: byTransfer ? 'transfer' : 'card',
           card: null,
           from: { planId: current.id, cycle: facts.cycle },
-          endsTrial: change.mode === 'start_paid',
+          endsTrial: change.mode === 'start_paid' && facts.trialEndsAt !== null,
           createdBy: scope.userId,
+          awaitingTransfer: byTransfer,
         },
         at,
         tx,
       );
+      if (byTransfer) {
+        await this.transfers.recordStarted(scope, created, at, tx);
+        await this.subscriptions.releaseCharge(scope, until, tx);
+      }
+      return created;
     });
-    return this.charge(scope, invoice, method, until, null);
+    if (method === null) {
+      return { invoice: (await this.transfers.fill(scope, invoice)) ?? invoice, pending: true };
+    }
+    return this.answer(await this.attempt(scope, invoice, method, until, null, false));
   }
 
   /**
-   * "Thanh toán lại": charges an unpaid invoice again with the saved card. A request whose
-   * `Idempotency-Key` made an attempt before gets that attempt's answer again, without a charge;
-   * the key is looked for again under the hold, where a request with the same key that was still
-   * running at the first look has recorded its attempt.
+   * "Thanh toán lại": charges an unpaid invoice again with the saved card, a transfer still
+   * waiting included (T3). A request whose `Idempotency-Key` made an attempt before gets that
+   * attempt's answer again, without a charge; the key is looked for again under the hold, where a
+   * request with the same key that was still running at the first look has recorded its attempt.
    */
   async payAgain(
     scope: WorkspaceScope,
@@ -233,24 +287,90 @@ export class InvoiceCharges {
     if ('replay' in next) {
       return answerOf(next.replay.invoice, next.replay.attempt);
     }
-    return this.charge(scope, next.charge.invoice, next.charge.method, until, requestKey);
+    return this.answer(
+      await this.attempt(scope, next.charge.invoice, next.charge.method, until, requestKey, false),
+    );
   }
 
   /**
-   * Calls the gateway, then records the outcome and lets the next charge start in one
-   * transaction. A gateway that throws, or does not answer within `CHARGE_TIMEOUT_MS`, leaves the
-   * outcome unknown: the invoice stays open and the next attempt reuses this one's idempotency key.
+   * A charge of the subscription's job (T3), which holds the subscription until `until` and keeps
+   * holding it after: the job lets go once its whole run is done.
    */
-  private async charge(
-    scope: WorkspaceScope,
+  chargeForJob(
+    ref: WorkspaceRef,
+    invoice: InvoiceRecord,
+    method: PaymentMethod,
+    until: Date,
+  ): Promise<ChargeAttempt> {
+    return this.attempt(ref, invoice, method, until, null, true);
+  }
+
+  /**
+   * A charge of the job that cannot reach the gateway (T3): no card saved, or it has expired. It is
+   * recorded as refused with that reason, so the invoice and its retries say why.
+   */
+  async recordUncharged(
+    invoice: InvoiceRecord,
+    code: Extract<PaymentDeclineCode, 'no_payment_method' | 'expired_card'>,
+  ): Promise<ChargeAttempt> {
+    const number = nextAttemptNumber(invoice.attempts);
+    const { invoice: after } = await this.transactions.run((tx) =>
+      this.settlement.record(
+        invoice,
+        { number, at: this.clock.now(), outcome: 'failed', code, requestKey: null },
+        chargeableStatusesOf(invoice),
+        tx,
+      ),
+    );
+    return { invoice: after, number, outcome: 'failed', code, failure: null };
+  }
+
+  /** Maps a recorded charge to the answer of a request, or its problem. */
+  private answer(attempt: ChargeAttempt): ChargeAnswer {
+    const { invoice } = attempt;
+    // An event of the gateway may have decided the invoice first: its status is the answer.
+    if (invoice.status === 'paid') {
+      return { invoice, pending: false };
+    }
+    if (attempt.outcome === 'succeeded') {
+      throw paymentNotApplied(invoice);
+    }
+    return answerOf(invoice, attempt, attempt.failure);
+  }
+
+  /** A transfer for the charge at the end of the trial or period may arrive any time. */
+  private async blockOnWaitingTransfer(
+    ref: WorkspaceRef,
+    facts: Pick<SubscriptionFacts, 'openInvoiceId'>,
+    tx: Tx,
+  ): Promise<void> {
+    if (facts.openInvoiceId === null) {
+      return;
+    }
+    const due = await this.invoices.findOfWorkspace(ref, toObjectId(facts.openInvoiceId), tx);
+    if (due !== null && due.from === null && awaitsTransfer(due)) {
+      throw paymentAwaitingTransfer(due);
+    }
+  }
+
+  /**
+   * Calls the gateway, then records the outcome in one transaction, which also lets the next charge
+   * start unless the job keeps holding the subscription. A gateway that throws, or does not answer
+   * within `CHARGE_TIMEOUT_MS`, leaves the outcome unknown: the invoice stays open and the next
+   * attempt reuses this one's idempotency key.
+   */
+  private async attempt(
+    ref: WorkspaceRef,
     invoice: InvoiceRecord,
     method: PaymentMethod,
     until: Date,
     requestKey: string | null,
-  ): Promise<ChargeAnswer> {
+    keepHold: boolean,
+  ): Promise<ChargeAttempt> {
     const number = nextAttemptNumber(invoice.attempts);
     const invoiceId = invoice._id.toHexString();
     const idempotencyKey = chargeIdempotencyKey(invoiceId, number);
+    const workspaceId = ref.workspaceId.toHexString();
     let result: ChargeResult | null = null;
     let failure: unknown = null;
     try {
@@ -262,7 +382,7 @@ export class InvoiceCharges {
           // Recorded as unknown already: the next attempt asks again with this key.
           this.logger.warn(
             {
-              workspaceId: scope.workspaceId.toHexString(),
+              workspaceId,
               invoiceId,
               attempt: number,
               ...('result' in late ? { status: late.result.status } : { err: late.error }),
@@ -282,32 +402,37 @@ export class InvoiceCharges {
       requestKey,
       card: { brand: method.brand, last4: method.last4 },
     } as const;
-    let after: InvoiceRecord;
+    let settled: RecordedCharge;
     try {
-      after = await this.transactions.run(async (tx) => {
+      settled = await this.transactions.run(async (tx) => {
         const recorded = await this.settlement.record(
           invoice,
           report,
-          CHARGEABLE_INVOICE_STATUSES,
+          chargeableStatusesOf(invoice),
           tx,
         );
-        await this.subscriptions.releaseCharge(scope, until, tx);
+        if (!keepHold) {
+          await this.subscriptions.releaseCharge(ref, until, tx);
+        }
         return recorded;
       });
     } catch (error) {
       // Nothing of the outcome is stored, so the next attempt reuses this one's key: the gateway
       // answers it again and the invoice is settled then. The hold need not wait to run out.
-      await this.subscriptions.releaseCharge(scope, until).catch((releaseError: unknown) => {
-        throw new AggregateError(
-          [error, releaseError],
-          'Recording a charge failed, and so did releasing its hold',
-        );
-      });
+      if (!keepHold) {
+        await this.subscriptions.releaseCharge(ref, until).catch((releaseError: unknown) => {
+          throw new AggregateError(
+            [error, releaseError],
+            'Recording a charge failed, and so did releasing its hold',
+          );
+        });
+      }
       throw error;
     }
+    const after = settled.invoice;
     this.logger.log(
       {
-        workspaceId: scope.workspaceId.toHexString(),
+        workspaceId,
         invoiceId,
         attempt: number,
         outcome: report.outcome,
@@ -316,24 +441,19 @@ export class InvoiceCharges {
       },
       'Charged an invoice',
     );
-    // An event of the gateway may have decided the invoice first: its status is the answer.
-    if (after.status === 'paid') {
-      return { invoice: after, pending: false };
-    }
-    if (report.outcome === 'succeeded') {
-      // The invoice was decided while the gateway answered (a hold that ran out): the money is
-      // taken and nothing it pays for is applied.
+    if (settled.recorded) {
+      if (after.status === 'paid') {
+        await this.notifier.receipt(after);
+      }
+    } else if (report.outcome === 'succeeded' && !paidBy(after, number)) {
+      // Something else decided the invoice while the gateway answered (a transfer that arrived,
+      // a hold that ran out): this charge took the money a second time, and pays for nothing.
+      // The same charge reported by the gateway's event first is not one.
       this.logger.error(
-        {
-          workspaceId: scope.workspaceId.toHexString(),
-          invoiceId,
-          number: after.number,
-          status: after.status,
-        },
+        { workspaceId, invoiceId, number: after.number, attempt: number, status: after.status },
         'A charge succeeded on an invoice decided before: refund it outside the system',
       );
-      throw paymentNotApplied(after);
     }
-    return answerOf(after, report, failure);
+    return { invoice: after, number, outcome: report.outcome, code: report.code, failure };
   }
 }

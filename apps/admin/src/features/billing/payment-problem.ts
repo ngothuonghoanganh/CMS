@@ -19,8 +19,11 @@ import { problemMessage } from '../shell/problem-message';
 export type PaymentProblem =
   | { kind: 'declined'; code: PaymentDeclineCode | null; invoiceNumber: string | null }
   | { kind: 'unknown_outcome'; invoiceNumber: string | null }
-  /** Another charge is under way; or, with its number, an earlier charge's outcome is unknown. */
-  | { kind: 'in_progress'; invoiceNumber: string | null }
+  /**
+   * Another charge is under way; or, with its number, an earlier charge's outcome is unknown, or
+   * (`transfer`) that invoice waits for a bank transfer (T3).
+   */
+  | { kind: 'in_progress'; invoiceNumber: string | null; transfer: boolean }
   | { kind: 'card_required' }
   | { kind: 'disabled' }
   | { kind: 'not_payable' }
@@ -53,6 +56,7 @@ export function paymentProblemOf(error: unknown): PaymentProblem | null {
       return {
         kind: 'in_progress',
         invoiceNumber: parsed.success ? parsed.data.invoiceNumber : null,
+        transfer: parsed.success && parsed.data.awaiting === 'transfer',
       };
     }
     case 'payment_method_required':
@@ -78,8 +82,6 @@ export function paymentProblemOf(error: unknown): PaymentProblem | null {
 export const unavailableReasonText: Record<PlanChangeUnavailableReason, string> = {
   payment_required: 'Thời gian dùng thử đã hết. Chọn "Thanh toán ngay" để dùng tiếp gói bạn chọn.',
   unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi đổi gói.',
-  scheduled_change:
-    'Gói thấp hơn hoặc đổi chu kỳ chỉ áp dụng khi hết kỳ hiện tại; việc này chưa làm được ở đây.',
 };
 
 /** The sentence a payment problem shows; null for a problem that is not about payments. */
@@ -97,8 +99,12 @@ export function paymentProblemText(problem: PaymentProblem): string {
     case 'unknown_outcome':
       return `Chưa biết kết quả thanh toán${problem.invoiceNumber === null ? '' : ` hóa đơn ${problem.invoiceNumber}`}: cổng thanh toán chưa trả lời. Xem lịch sử giao dịch trước khi thử lại.`;
     case 'in_progress':
-      return problem.invoiceNumber === null
-        ? 'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.'
+      if (problem.invoiceNumber === null) {
+        return 'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.';
+      }
+      // A transfer may be on its way: paying again now could pay the period twice.
+      return problem.transfer
+        ? `Hóa đơn ${problem.invoiceNumber} đang chờ chuyển khoản. Chờ xác nhận, hoặc thanh toán hóa đơn đó bằng thẻ ở "Thanh toán & hóa đơn".`
         : `Chưa biết kết quả thanh toán hóa đơn ${problem.invoiceNumber}. Bấm "Thanh toán lại" ở hóa đơn đó trong lịch sử giao dịch để biết kết quả, rồi chọn lại gói.`;
     case 'card_required':
       return 'Chưa có thẻ dùng được. Thêm thẻ rồi thử lại.';
@@ -113,6 +119,35 @@ export function paymentProblemText(problem: PaymentProblem): string {
         ? 'Chưa đổi được gói lúc này.'
         : unavailableReasonText[problem.reason];
   }
+}
+
+/** "Hủy gói", "Giữ lại gói" and "Hủy thay đổi" of board 28 (T3). */
+export type PlanAction = 'cancel' | 'keep' | 'drop_schedule';
+
+/** Why each of them is refused: the change dialog's words are about choosing a plan. */
+const ACTION_UNAVAILABLE_TEXT: Record<PlanAction, Record<PlanChangeUnavailableReason, string>> = {
+  cancel: {
+    unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi hủy gói.',
+    payment_required: 'Gói đã dừng nên không cần hủy. Chọn gói mới khi muốn dùng tiếp.',
+  },
+  keep: {
+    unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này để dùng tiếp gói.',
+    payment_required: 'Gói đã dừng. Chọn gói mới để dùng tiếp.',
+  },
+  drop_schedule: {
+    unpaid:
+      'Kỳ này chưa được thanh toán, và hóa đơn gia hạn đã tính theo gói đã lên lịch. Thanh toán hóa đơn đó trước.',
+    payment_required: 'Gói đã dừng. Chọn gói mới để dùng tiếp.',
+  },
+};
+
+/** What a refused "Hủy gói", "Giữ lại gói" or "Hủy thay đổi" says, in words for that action. */
+export function planActionMessage(error: unknown, action: PlanAction): string {
+  const problem = paymentProblemOf(error);
+  if (problem?.kind === 'unavailable' && problem.reason !== null) {
+    return ACTION_UNAVAILABLE_TEXT[action][problem.reason];
+  }
+  return paymentsMessage(error);
 }
 
 /** What a failed payments request says: a 403 is the role (Quản trị views the plan, not payments). */

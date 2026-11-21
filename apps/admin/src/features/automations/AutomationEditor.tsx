@@ -36,7 +36,7 @@ import { formatCount, formatRelativeTime } from '../../lib/format';
 import { useWorkspacePlan } from '../billing/plan-context';
 import { planProblemOf } from '../billing/plan-problem';
 import { PlanProblemAction } from '../billing/PlanProblemAction';
-import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanBanner } from '../billing/PlanBanner';
 import { useProblemToast } from '../billing/use-problem-toast';
 import { automationHref, automationRunsHref, automationsHref } from '../shell/navigation';
 import { cx } from '../shell/cx';
@@ -399,7 +399,7 @@ export function AutomationEditor({ site, initial, canManage, loadedAt }: Automat
           ) : null}
         </div>
       </header>
-      <ReadOnlyBanner variant="strip" />
+      <PlanBanner variant="strip" />
 
       <div className={styles.body}>
         <section aria-label="Các bước" className={styles.stepsColumn}>

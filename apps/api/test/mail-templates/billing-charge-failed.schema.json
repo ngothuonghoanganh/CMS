@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "billing-charge-failed",
+  "description": "Báo Chủ sở hữu lần trừ tiền tự động không thành công, lần thử lại tiếp và hạn ân hạn (ADR-035, T3). Không có số thẻ, chỉ bốn số cuối.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workspaceName",
+    "planName",
+    "invoiceNumber",
+    "amount",
+    "reason",
+    "card",
+    "nextRetryOn",
+    "graceEndsOn",
+    "paymentsUrl"
+  ],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "planName": { "type": "string", "minLength": 1 },
+    "invoiceNumber": { "type": "string", "pattern": "^HD-\\d{4}-\\d{6}$" },
+    "amount": { "type": "string", "minLength": 1, "description": "Ví dụ \"599.000 ₫\"." },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Lý do, ví dụ \"Thẻ không đủ hạn mức\", \"Chưa có thẻ thanh toán\"."
+    },
+    "card": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Thẻ đã bị trừ, ví dụ \"Visa •••• 0002\"; null khi không có thẻ."
+    },
+    "nextRetryOn": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Ngày hệ thống tự thử lại, \"dd/MM/yyyy\"; null khi không thử lại nữa."
+    },
+    "graceEndsOn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ngày workspace chuyển sang chỉ đọc nếu chưa thanh toán, \"dd/MM/yyyy\"."
+    },
+    "paymentsUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Màn 29 \"Thanh toán & hóa đơn\" trong admin."
+    }
+  }
+}

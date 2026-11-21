@@ -46,6 +46,10 @@ export interface TransferRequest {
   /** The invoice's id, echoed back in `transfer_received`. */
   reference: string;
   amount: number;
+  /** The invoice's number, which the transfer's content names for the owner and their bank. */
+  invoiceNumber: string;
+  /** Where a page of the gateway for the transfer leads the browser back to. */
+  returnUrl: string;
 }
 
 /** Request headers with lowercase names, as Node gives them. */

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "billing-read-only",
+  "description": "Báo Chủ sở hữu workspace đã chuyển sang chỉ đọc: hết dùng thử, đã hủy, hoặc quá ân hạn (ADR-035, T3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "reason", "billingUrl"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Một câu, ví dụ \"Thời gian dùng thử đã hết.\""
+    },
+    "billingUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Màn 28 \"Gói & mức dùng\" trong admin."
+    }
+  }
+}

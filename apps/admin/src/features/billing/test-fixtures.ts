@@ -53,6 +53,12 @@ export function summaryFixture(overrides: Partial<BillingSummary> = {}): Billing
     cancelAtPeriodEnd: false,
     scheduledChange: null,
     graceEndsAt: null,
+    graceDaysLeft: null,
+    cancelAt: null,
+    renewal: null,
+    dueInvoice: null,
+    failedSince: null,
+    nextRetryAt: null,
     usage: { sites: 4, members: 7, aiUses: 12, automationRuns: 1240, customDomains: 4 },
     usageMonth: '2026-11',
     usageResetsOn: '2026-12-01',
@@ -81,6 +87,9 @@ export function quoteFixture(overrides: Partial<PlanChangeQuote> = {}): PlanChan
     paymentMethod: null,
     paymentMethodRequired: false,
     unavailableReason: null,
+    effectiveAt: null,
+    nextAmount: null,
+    impacts: null,
     ...overrides,
   };
 }
@@ -114,6 +123,7 @@ export function invoiceFixture(overrides: Partial<Invoice> = {}): Invoice {
     billingInfo: null,
     from: { planId: 'agency', cycle: 'monthly' },
     endsTrial: true,
+    transfer: null,
     ...overrides,
   };
 }

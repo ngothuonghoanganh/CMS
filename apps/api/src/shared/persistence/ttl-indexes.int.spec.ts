@@ -10,7 +10,8 @@ import { signedUpClient } from '../../../test/client.js';
  * day salts, "seen today" hashes and daily totals of page views (ADR-019). Invitations and access
  * requests go at their `purgeAt` (ADR-021), since their `expiresAt` is when a link stops working,
  * and closed requests to publish at theirs (ADR-023). AI jobs go 30 days after they start
- * (ADR-031): the brief need not stay. The payment gateway's events go after 90 days (ADR-035).
+ * (ADR-031): the brief need not stay. The payment gateway's events go after 90 days, and the
+ * record that an email of the plan went after 400 days (ADR-035).
  * The app only computes the date, so without the index nothing is ever deleted. The master DB
  * holds accounts, access and shared counters; each workspace database its own data (ADR-025).
  */
@@ -26,6 +27,8 @@ const EXPIRING_IN_MASTER: Record<string, string> = {
   access_requests: 'purgeAt',
   // A payment gateway's event is kept 90 days, so that it applies once (ADR-035).
   billing_events: 'expiresAt',
+  // An email of the plan is remembered longer than any period, so it goes once (ADR-035, T3).
+  billing_notices: 'expiresAt',
 };
 
 const EXPIRING_IN_WORKSPACE: Record<string, string> = {

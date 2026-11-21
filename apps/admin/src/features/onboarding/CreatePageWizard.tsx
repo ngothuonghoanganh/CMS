@@ -65,7 +65,7 @@ import {
   wizardReducer,
   wizardSteps,
 } from './wizard-state';
-import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanBanner } from '../billing/PlanBanner';
 import styles from './CreatePageWizard.module.css';
 
 const goalIcons: Record<PageGoal, ReactNode> = {
@@ -378,7 +378,7 @@ export function CreatePageWizard({ site }: CreatePageWizardProps) {
           </button>
         </div>
       </header>
-      <ReadOnlyBanner variant="strip" />
+      <PlanBanner variant="strip" />
 
       <main id="main-content" className={styles.main}>
         <section aria-labelledby="wizard-heading" className={styles.content}>

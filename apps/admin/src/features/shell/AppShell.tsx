@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Dialog as RadixDialog } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
 import { can } from '@plp/contracts';
-import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanBanner } from '../billing/PlanBanner';
 import { WorkspacePlanProvider } from '../billing/plan-context';
 import { Brand } from './Brand';
 import { billingHref } from './navigation';
@@ -27,8 +27,11 @@ export interface AppShellProps extends Omit<SidebarProps, 'onNavigate'> {
 export function AppShell({ children, ...sidebar }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const siteId = sidebar.site?.id ?? null;
-  // Board 28 says the read-only state in its own banner; the shell's would say it twice.
-  const onBilling = usePathname() === billingHref(sidebar.membership.workspace.id);
+  // Boards 28 and 29 (and the receipts) say the state in their own banners: the shell's would say
+  // it twice.
+  const billing = billingHref(sidebar.membership.workspace.id);
+  const pathname = usePathname();
+  const onBilling = pathname === billing || pathname.startsWith(`${billing}/`);
 
   // The workspace screens show the site the user worked on last in the sidebar.
   useEffect(() => {
@@ -100,7 +103,7 @@ export function AppShell({ children, ...sidebar }: AppShellProps) {
             </div>
           </aside>
           <main id="main-content" tabIndex={-1} className={styles.main}>
-            {onBilling ? null : <ReadOnlyBanner />}
+            {onBilling ? null : <PlanBanner />}
             {children}
           </main>
         </div>

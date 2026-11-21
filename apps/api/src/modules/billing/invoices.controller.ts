@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Param, Post, Query, Res } from '@nestjs/common';
+import { Controller, Get, Headers, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import {
   type CursorQuery,
   cursorQuerySchema,
@@ -7,6 +7,7 @@ import {
   type InvoiceListResponse,
   type InvoiceReceipt,
   type PayInvoiceResponse,
+  type StartTransferResponse,
 } from '@plp/contracts';
 import type { Response } from 'express';
 import { parseIdempotencyKey } from '../../shared/idempotency-key.js';
@@ -60,5 +61,16 @@ export class InvoicesController {
     const outcome = await this.invoices.pay(user, workspaceId, invoiceId, key);
     response.status(outcome.pending ? 202 : 200);
     return { invoice: outcome.invoice };
+  }
+
+  /** "Chuyển khoản" (T3): the invoice waits for a transfer, with its details; asked again, the same. */
+  @Post(':invoiceId/transfer')
+  @HttpCode(200)
+  async startTransfer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('invoiceId') invoiceId: string,
+  ): Promise<StartTransferResponse> {
+    return { invoice: await this.invoices.startTransfer(user, workspaceId, invoiceId) };
   }
 }

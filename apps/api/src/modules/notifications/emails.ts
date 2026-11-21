@@ -130,6 +130,76 @@ export interface ApprovalRejectedData {
   pageUrl: string;
 }
 
+/*
+ * The emails of a workspace's plan to its Chủ sở hữu (ADR-035, T3). Amounts are "599.000 ₫", days
+ * "04/12/2026" in Vietnam; a card is its brand and last four digits, never more.
+ */
+
+/** "Dùng thử sắp hết", `trialReminderDays` before the trial ends. */
+export interface BillingTrialEndingData {
+  workspaceName: string;
+  /** The plan the trial ends on: "Agency" ("Gói Agency"). */
+  planName: string;
+  trialEndsOn: string;
+  daysLeft: number;
+  /** What the end of the trial charges, when the saved card can pay it; null otherwise. */
+  charge: { amount: string; cycle: string; card: string } | null;
+  /** Board 28. */
+  billingUrl: string;
+}
+
+/** A charge of the job (end of a trial or period, a retry) did not go through. */
+export interface BillingChargeFailedData {
+  workspaceName: string;
+  planName: string;
+  invoiceNumber: string;
+  amount: string;
+  /** Why, as board 29 says it: "Thẻ không đủ hạn mức", "Chưa có thẻ thanh toán". */
+  reason: string;
+  /** The card charged, "Visa •••• 0002"; null when there was none to charge. */
+  card: string | null;
+  /** When the job charges again; null when it will not ("no more retries"). */
+  nextRetryOn: string | null;
+  /** The last day of full access, after which the workspace is read-only until paid. */
+  graceEndsOn: string;
+  /** Board 29. */
+  paymentsUrl: string;
+}
+
+/** "Sắp hết hạn": a paid period ends within `expiringSoonDays` and cannot renew by itself. */
+export interface BillingExpiringSoonData {
+  workspaceName: string;
+  planName: string;
+  periodEndsOn: string;
+  daysLeft: number;
+  /** Why it cannot: "Workspace chưa có thẻ thanh toán", or the card that expires before. */
+  reason: string;
+  paymentsUrl: string;
+}
+
+/** The workspace turned read-only: trial over, canceled, or unpaid past the grace. */
+export interface BillingReadOnlyData {
+  workspaceName: string;
+  /** Why, as the 402 `workspace_read_only` says it. */
+  reason: string;
+  billingUrl: string;
+}
+
+/** The receipt of a paid invoice (not an electronic VAT invoice, §6). */
+export interface BillingReceiptData {
+  workspaceName: string;
+  invoiceNumber: string;
+  planName: string;
+  /** What it paid for: "01/11/2026 – 01/12/2026". */
+  period: string;
+  amount: string;
+  paidOn: string;
+  /** "Thẻ Visa •••• 4242" or "Chuyển khoản". */
+  method: string;
+  /** The printable receipt in the admin. */
+  receiptUrl: string;
+}
+
 export type Email =
   | { template: 'lead-notification'; data: LeadNotificationData }
   | { template: 'recipient-confirmation'; data: RecipientConfirmationData }
@@ -145,7 +215,12 @@ export type Email =
   | { template: 'approval-request'; data: ApprovalRequestData }
   | { template: 'approval-published'; data: ApprovalPublishedData }
   | { template: 'approval-rejected'; data: ApprovalRejectedData }
-  | { template: 'automation-notice'; data: AutomationNoticeData };
+  | { template: 'automation-notice'; data: AutomationNoticeData }
+  | { template: 'billing-trial-ending'; data: BillingTrialEndingData }
+  | { template: 'billing-charge-failed'; data: BillingChargeFailedData }
+  | { template: 'billing-expiring-soon'; data: BillingExpiringSoonData }
+  | { template: 'billing-read-only'; data: BillingReadOnlyData }
+  | { template: 'billing-receipt'; data: BillingReceiptData };
 
 export type EmailTemplate = Email['template'];
 
@@ -406,4 +481,58 @@ export function automationNoticeEmail(
     idempotencyKey: `automation-notice:${runId}:${step}`,
     data,
   };
+}
+
+/** Once per trial: a trial is once per workspace, and its end names it. */
+export function billingTrialEndingEmail(
+  input: BillingTrialEndingData & { workspaceId: string; trialEndsAt: Date },
+): KeyedEmail {
+  const { workspaceId, trialEndsAt, ...data } = input;
+  return {
+    template: 'billing-trial-ending',
+    idempotencyKey: `billing-trial-ending:${workspaceId}:${keyTime(trialEndsAt)}`,
+    data,
+  };
+}
+
+/** Once per refused charge: the invoice and the number of its attempt. */
+export function billingChargeFailedEmail(
+  input: BillingChargeFailedData & { invoiceId: string; attempt: number },
+): KeyedEmail {
+  const { invoiceId, attempt, ...data } = input;
+  return {
+    template: 'billing-charge-failed',
+    idempotencyKey: `billing-charge-failed:${invoiceId}:${attempt}`,
+    data,
+  };
+}
+
+/** Once per period: its end names it. */
+export function billingExpiringSoonEmail(
+  input: BillingExpiringSoonData & { workspaceId: string; periodEnd: Date },
+): KeyedEmail {
+  const { workspaceId, periodEnd, ...data } = input;
+  return {
+    template: 'billing-expiring-soon',
+    idempotencyKey: `billing-expiring-soon:${workspaceId}:${keyTime(periodEnd)}`,
+    data,
+  };
+}
+
+/** Once each time the workspace turns read-only: the moment it did names it. */
+export function billingReadOnlyEmail(
+  input: BillingReadOnlyData & { workspaceId: string; since: Date },
+): KeyedEmail {
+  const { workspaceId, since, ...data } = input;
+  return {
+    template: 'billing-read-only',
+    idempotencyKey: `billing-read-only:${workspaceId}:${keyTime(since)}`,
+    data,
+  };
+}
+
+/** Once per paid invoice. */
+export function billingReceiptEmail(input: BillingReceiptData & { invoiceId: string }): KeyedEmail {
+  const { invoiceId, ...data } = input;
+  return { template: 'billing-receipt', idempotencyKey: `billing-receipt:${invoiceId}`, data };
 }

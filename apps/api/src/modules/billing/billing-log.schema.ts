@@ -4,9 +4,11 @@ import { Schema, type Types } from 'mongoose';
 export const BILLING_LOG_MODEL = 'BillingLogEntry';
 
 /**
- * What the owner did to the subscription (ADR-035): a free change of the trial's plan, paying for
- * a plan now (which ends the trial), an upgrade paid for the days left, a new card, new billing
- * info. T3 adds its actions.
+ * What happened to the subscription (ADR-035): a free change of the trial's plan, paying for a
+ * plan now (which ends the trial), an upgrade paid for the days left, a new card, new billing
+ * info; and from T3 a change scheduled for the period's end and its withdrawal, "Hủy gói" and
+ * "Giữ lại gói", a period renewed (with the scheduled change it applied), a canceled plan paid
+ * for again, and a transfer started.
  */
 export const billingLogActions = [
   'plan_changed',
@@ -14,6 +16,14 @@ export const billingLogActions = [
   'plan_upgraded',
   'payment_method_changed',
   'billing_info_changed',
+  'change_scheduled',
+  'scheduled_change_canceled',
+  'scheduled_change_applied',
+  'cancel_scheduled',
+  'cancel_withdrawn',
+  'period_renewed',
+  'plan_restarted',
+  'transfer_started',
 ] as const;
 export type BillingLogAction = (typeof billingLogActions)[number];
 

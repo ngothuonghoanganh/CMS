@@ -20,6 +20,17 @@ export const FAKE_SIGNATURE_TOLERANCE_SECONDS = 300;
 /** How long the card page of one setup stays open. */
 export const FAKE_SETUP_SESSION_SECONDS = 30 * 60;
 
+/** How long the page that confirms a transfer stays open: a transfer may take days. */
+export const FAKE_TRANSFER_SESSION_SECONDS = 14 * 24 * 3600;
+
+/** The fake gateway's bank account for transfers, and the BIN its VietQR names. */
+export const FAKE_TRANSFER_ACCOUNT = {
+  bankName: 'Ngân hàng thử (cổng thanh toán giả)',
+  bankBin: '970000',
+  accountNumber: '0000000000',
+  accountName: 'PAYLOAD LANDING PAGE',
+} as const;
+
 /** What a test card does when it is charged: the card number decides (ADR-035). */
 export type FakeCardBehaviour = 'succeeds' | 'card_declined' | 'insufficient_funds';
 
@@ -144,10 +155,34 @@ function isSetupSession(value: unknown): value is FakeSetupSession {
   );
 }
 
-/** `{base64url JSON}.{hex HMAC}`: the `session` query parameter of the card page. */
-export function mintFakeSetupSession(secret: string, session: FakeSetupSession): string {
+/** `{base64url JSON}.{hex HMAC}`, signed for one `purpose`, so one page's session opens no other. */
+function mintSession(secret: string, purpose: string, session: object): string {
   const payload = Buffer.from(JSON.stringify(session)).toString('base64url');
-  return `${payload}.${hmacHex(secret, 'setup', payload)}`;
+  return `${payload}.${hmacHex(secret, purpose, payload)}`;
+}
+
+/** The JSON of a session token signed for `purpose`; null when it was changed. */
+function readSession(secret: string, purpose: string, token: string): unknown {
+  const [payload, signature, ...rest] = token.split('.');
+  if (payload === undefined || signature === undefined || rest.length > 0) {
+    return null;
+  }
+  if (!sameHex(hmacHex(secret, purpose, payload), signature)) {
+    return null;
+  }
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch (error) {
+    // Signed by this secret, so only a bug writes a payload that is not JSON.
+    throw new Error(`A fake ${purpose} session signed by this gateway is not JSON`, {
+      cause: error,
+    });
+  }
+}
+
+/** The `session` query parameter of the card page. */
+export function mintFakeSetupSession(secret: string, session: FakeSetupSession): string {
+  return mintSession(secret, 'setup', session);
 }
 
 /** The session a card page was opened with; null when it was changed or has expired. */
@@ -156,21 +191,55 @@ export function readFakeSetupSession(
   token: string,
   nowSeconds: number,
 ): FakeSetupSession | null {
-  const [payload, signature, ...rest] = token.split('.');
-  if (payload === undefined || signature === undefined || rest.length > 0) {
-    return null;
-  }
-  if (!sameHex(hmacHex(secret, 'setup', payload), signature)) {
-    return null;
-  }
-  let session: unknown;
-  try {
-    session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-  } catch (error) {
-    // Signed by this secret, so only a bug writes a payload that is not JSON.
-    throw new Error('A fake setup session signed by this gateway is not JSON', { cause: error });
-  }
+  const session = readSession(secret, 'setup', token);
   if (!isSetupSession(session) || session.expiresAt <= nowSeconds) {
+    return null;
+  }
+  return session;
+}
+
+/** What the page that confirms one transfer needs (T3); signed, so the browser cannot change it. */
+export interface FakeTransferSession {
+  /** Random: a transfer is confirmed once. */
+  id: string;
+  /** The invoice, echoed back in `transfer_received`. */
+  reference: string;
+  amount: number;
+  /** "Nội dung chuyển khoản". */
+  content: string;
+  returnUrl: string;
+  /** Unix seconds. */
+  expiresAt: number;
+}
+
+function isTransferSession(value: unknown): value is FakeTransferSession {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const fields = value as Record<string, unknown>;
+  return (
+    typeof fields['id'] === 'string' &&
+    typeof fields['reference'] === 'string' &&
+    typeof fields['amount'] === 'number' &&
+    typeof fields['content'] === 'string' &&
+    typeof fields['returnUrl'] === 'string' &&
+    typeof fields['expiresAt'] === 'number'
+  );
+}
+
+/** The `session` query parameter of the transfer page. */
+export function mintFakeTransferSession(secret: string, session: FakeTransferSession): string {
+  return mintSession(secret, 'transfer', session);
+}
+
+/** The transfer a page was opened for; null when its link was changed or has expired. */
+export function readFakeTransferSession(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): FakeTransferSession | null {
+  const session = readSession(secret, 'transfer', token);
+  if (!isTransferSession(session) || session.expiresAt <= nowSeconds) {
     return null;
   }
   return session;

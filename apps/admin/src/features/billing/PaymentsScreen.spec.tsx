@@ -7,7 +7,7 @@ import { ApiError } from '../../lib/api-core';
 import { navigateTo } from '../../lib/navigate';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { PaymentsDenied, PaymentsScreen, type PaymentsScreenProps } from './PaymentsScreen';
-import { invoiceSummaryFixture, visaCard } from './test-fixtures';
+import { invoiceSummaryFixture, summaryFixture, visaCard } from './test-fixtures';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -34,6 +34,7 @@ const failed = invoiceSummaryFixture({
 
 function initialOf(overrides: Partial<PaymentsScreenProps['initial']> = {}) {
   return {
+    summary: summaryFixture({ state: 'active' }),
     paymentMethod: { paymentMethod: visaCard, paymentsEnabled: true },
     billingInfo: { billingInfo: null },
     invoices: { items: [paid], nextCursor: null },
@@ -68,6 +69,9 @@ function routePay(items: unknown[], onPay: (options: Parameters<typeof api>[2]) 
     }
     if (endpoint === endpoints.getPaymentMethod) {
       return Promise.resolve({ paymentMethod: visaCard, paymentsEnabled: true });
+    }
+    if (endpoint === endpoints.getBillingSummary) {
+      return Promise.resolve(summaryFixture({ state: 'active' }));
     }
     return Promise.reject(new Error('unexpected call'));
   });
@@ -225,7 +229,9 @@ describe('PaymentsScreen (board 29)', () => {
         initial: initialOf({ invoices: { items: [failed, paid], nextCursor: null } }),
       });
       expect(screen.getByText('Lần thanh toán gần nhất bị từ chối')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent('Bạn có thể đổi thẻ rồi thanh toán lại.');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Bạn có thể đổi thẻ hoặc chuyển khoản ngay.',
+      );
     });
 
     it('says why the gateway page could not be opened from the failed payment', async () => {

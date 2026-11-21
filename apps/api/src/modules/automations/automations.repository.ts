@@ -117,6 +117,13 @@ export class AutomationsRepository {
       .exec();
   }
 
+  /** The automations of the workspace that are on: what a plan without automation pauses. */
+  countEnabled(ref: WorkspaceRef): Promise<number> {
+    return this.automations(ref)
+      .countDocuments({ workspaceId: ref.workspaceId, state: 'on' })
+      .exec();
+  }
+
   /**
    * A plan without automation pauses every enabled automation of the workspace, reason `plan`
    * (ADR-035); drafts and paused ones stay as they are. Returns their ids, for their runs.

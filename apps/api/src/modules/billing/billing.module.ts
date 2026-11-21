@@ -2,11 +2,19 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import type { Env } from '../../config/env.js';
 import { ENV } from '../../shared/env.js';
+import { AuthModule } from '../auth/auth.module.js';
+import { EmailModule } from '../notifications/email.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import { BillingAccountController } from './billing-account.controller.js';
 import { BillingAccountService } from './billing-account.service.js';
 import { BILLING_EVENT_MODEL, billingEventSchema } from './billing-event.schema.js';
 import { BillingEventsRepository } from './billing-events.repository.js';
+import { BillingJob } from './billing-job.service.js';
+import { BILLING_NOTICE_MODEL, billingNoticeSchema } from './billing-notice.schema.js';
+import { BillingNoticesRepository } from './billing-notices.repository.js';
+import { BillingNotifier } from './billing-notifier.service.js';
+import { BillingSchedule } from './billing-schedule.service.js';
+import { BillingScheduler } from './billing-scheduler.service.js';
 import { BillingController } from './billing.controller.js';
 import { BillingCoreModule } from './billing-core.module.js';
 import { BillingService } from './billing.service.js';
@@ -25,6 +33,7 @@ import {
   invoiceSchema,
 } from './invoice.schema.js';
 import { InvoiceSettlement } from './invoice-settlement.service.js';
+import { InvoiceTransfers } from './invoice-transfers.service.js';
 import { InvoicesController } from './invoices.controller.js';
 import { InvoicesRepository } from './invoices.repository.js';
 import { InvoicesService } from './invoices.service.js';
@@ -34,16 +43,19 @@ import { TestClockController } from './test-clock.controller.js';
 /**
  * The endpoints of plans and billing (ADR-035), the trials of workspaces made before them, and
  * payments: the gateway `PAYMENT_PROVIDER` names, cards, billing info, invoices and the gateway's
- * webhook.
+ * webhook; and the subscriptions' life (T3): the billing job, transfers and the plan's emails.
  */
 @Module({
   imports: [
+    AuthModule,
     BillingCoreModule,
+    EmailModule,
     WorkspacesModule,
     MongooseModule.forFeature([
       { name: INVOICE_MODEL, schema: invoiceSchema },
       { name: INVOICE_COUNTER_MODEL, schema: invoiceCounterSchema },
       { name: BILLING_EVENT_MODEL, schema: billingEventSchema },
+      { name: BILLING_NOTICE_MODEL, schema: billingNoticeSchema },
     ]),
   ],
   controllers: [
@@ -61,7 +73,13 @@ import { TestClockController } from './test-clock.controller.js';
     InvoicesRepository,
     InvoiceSettlement,
     InvoiceCharges,
+    InvoiceTransfers,
     InvoicesService,
+    BillingSchedule,
+    BillingNoticesRepository,
+    BillingNotifier,
+    BillingJob,
+    BillingScheduler,
     BillingEventsRepository,
     GatewayWebhookService,
     FakeWebhookSender,

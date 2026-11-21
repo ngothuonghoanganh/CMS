@@ -2,6 +2,8 @@
   "trial": { "planId": "agency", "days": 14 },
   "graceDays": 7,
   "expiringSoonDays": 7,
+  "trialReminderDays": 3,
+  "retryDays": [2, 5],
   "plans": [
     {
       "id": "basic",

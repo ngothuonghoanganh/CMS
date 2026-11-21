@@ -2,15 +2,19 @@ import {
   type BillingCycle,
   type BillingSummary,
   billingCycleLabels,
+  type DueInvoice,
   type Plan,
+  type PlanChangeImpacts,
   type PlanFeatureKey,
   type PlanLimitKey,
   planFeatureLabels,
   planLimitKeys,
   planLimitLabels,
   type PlanUsage,
+  paymentDeclineLabels,
   type SubscriptionState,
   subscriptionStateLabels,
+  type WorkspacePlan,
 } from '@plp/contracts';
 import type { BadgeTone, CalloutTone } from '@plp/ui';
 import { formatCount, formatDate, formatDayMonth, formatVnd } from '../../lib/format';
@@ -23,6 +27,20 @@ export function priceLabel(plan: Pick<Plan, 'prices'>, cycle: BillingCycle): str
 interface StateChip {
   label: string;
   tone: BadgeTone;
+}
+
+/**
+ * The state the screens show (T3): an unpaid period whose payment waits for its answer (a transfer
+ * to confirm, a gateway that has not replied) reads "Chờ thanh toán", even after a failed charge.
+ * The API keeps `past_due`: the grace still counts from the failure.
+ */
+export function shownState(state: SubscriptionState, paymentWaiting: boolean): SubscriptionState {
+  return state === 'past_due' && paymentWaiting ? 'pending_payment' : state;
+}
+
+/** Whether the invoice the subscription waits for has no answer yet: a transfer, or the gateway. */
+export function dueWaiting(due: Pick<DueInvoice, 'status'> | null): boolean {
+  return due !== null && (due.status === 'pending' || due.status === 'open');
 }
 
 /** The status chip beside the plan's name: a trial adds "· còn N ngày". */
@@ -48,106 +66,351 @@ export function stateChip(state: SubscriptionState, trialDaysLeft: number | null
   }
 }
 
+/**
+ * What the banner's button does: the payments screen (a card to add or change, an invoice to pay
+ * or to look at), or a dialog of this screen (keep the plan, choose a plan and pay).
+ */
+export type PlanBannerAction =
+  | 'add_method'
+  | 'update_card'
+  | 'pay_invoice'
+  | 'view_invoice'
+  | 'keep'
+  | 'choose_plan'
+  | 'pay_now';
+
 export interface PlanBannerContent {
   /** `alert` for a state that stops work, `status` for one that only warns. */
   role: 'status' | 'alert';
   tone: CalloutTone;
   title: string;
   body: string;
+  action: PlanBannerAction | null;
 }
 
+export const BANNER_ACTION_LABELS: Record<PlanBannerAction, string> = {
+  add_method: 'Thêm phương thức thanh toán',
+  update_card: 'Cập nhật thẻ',
+  pay_invoice: 'Thanh toán ngay',
+  view_invoice: 'Xem hóa đơn',
+  keep: 'Giữ lại gói',
+  choose_plan: 'Chọn gói mới',
+  pay_now: 'Chọn gói và thanh toán',
+};
+
 const KEPT_RUNNING = 'Trang live và form vẫn chạy.';
+const DATA_KEPT = 'Dữ liệu được giữ nguyên.';
+
+type BannerSummary = Pick<
+  BillingSummary,
+  | 'state'
+  | 'access'
+  | 'plan'
+  | 'trialEndsAt'
+  | 'periodStart'
+  | 'periodEnd'
+  | 'graceEndsAt'
+  | 'cancelAt'
+  | 'renewal'
+  | 'dueInvoice'
+  | 'nextRetryAt'
+>;
+
+/** "01/12", the day a stopped plan stops: board 28's "Gói sẽ dừng vào 01/12". */
+function stopDay(summary: Pick<BillingSummary, 'cancelAt' | 'periodEnd'>): string {
+  return formatDate(summary.cancelAt ?? summary.periodEnd);
+}
+
+/** The grace sentence of an unpaid period: until when everything works, then read-only. */
+function graceSentence(summary: Pick<BillingSummary, 'access' | 'graceEndsAt'>): string {
+  if (summary.graceEndsAt === null) {
+    return '';
+  }
+  return summary.access === 'full'
+    ? `${KEPT_RUNNING} Workspace chuyển sang chỉ đọc từ ${formatDate(summary.graceEndsAt)}.`
+    : `Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING}`;
+}
 
 /**
- * The banner of board 28 for a state, or null for an active plan. Payment actions (T2) and
- * renewal (T3) are not built, so no banner offers one.
+ * "Hệ thống tự thử lại ngày 03/12.", or that no automatic try is left: only for a refused charge,
+ * never one that waits for its answer.
  */
-export function planBanner(
-  summary: Pick<
-    BillingSummary,
-    'state' | 'access' | 'plan' | 'trialEndsAt' | 'periodEnd' | 'graceEndsAt'
-  >,
-): PlanBannerContent | null {
-  const graceLine =
-    summary.graceEndsAt === null
-      ? ''
-      : summary.access === 'full'
-        ? ` ${KEPT_RUNNING} Workspace chuyển sang chỉ đọc từ ${formatDate(summary.graceEndsAt)}.`
-        : ` Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING}`;
+function retrySentence(summary: Pick<BillingSummary, 'nextRetryAt' | 'dueInvoice'>): string {
+  if (summary.dueInvoice?.status !== 'failed') {
+    return '';
+  }
+  return summary.nextRetryAt === null
+    ? 'Hệ thống đã hết lượt tự thử lại.'
+    : `Hệ thống tự thử lại ngày ${formatDayMonth(summary.nextRetryAt)}.`;
+}
+
+/**
+ * A payment waits for its answer: a transfer to be confirmed, or a gateway that has not replied.
+ * During a trial the trial runs on meanwhile.
+ */
+function pendingBanner(summary: BannerSummary): PlanBannerContent {
+  const due = summary.dueInvoice;
+  const transfer = due?.method === 'transfer' && due.status === 'pending';
+  const trialRuns =
+    summary.state === 'trialing' && summary.trialEndsAt !== null
+      ? `Bạn dùng thử bình thường tới ${formatDate(summary.trialEndsAt)}.`
+      : null;
+  return {
+    role: 'status',
+    tone: 'warning',
+    title: transfer ? 'Đang chờ xác nhận chuyển khoản.' : 'Đang chờ xác nhận thanh toán.',
+    body: [
+      due === null
+        ? null
+        : transfer
+          ? `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Thường được xác nhận trong 1 ngày làm việc.`
+          : `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Cổng thanh toán chưa trả lời.`,
+      trialRuns,
+      graceSentence(summary),
+    ]
+      .filter((part) => part !== null && part !== '')
+      .join(' '),
+    action: due === null ? null : 'view_invoice',
+  };
+}
+
+/**
+ * The banner of board 28 for a state, or null for an active plan (ADR-035, T3). The action is the
+ * one the state leads to; whether this viewer may take it (Chủ sở hữu only) is the screen's call.
+ */
+export function planBanner(summary: BannerSummary): PlanBannerContent | null {
+  const due = summary.dueInvoice;
   switch (summary.state) {
     case 'active':
       return null;
-    case 'trialing':
+    case 'trialing': {
+      if (due !== null && due.method === 'transfer' && due.status === 'pending') {
+        // "Thanh toán ngay" by transfer: the trial runs until the money arrives.
+        return pendingBanner(summary);
+      }
+      if (summary.cancelAt !== null) {
+        return {
+          role: 'status',
+          tone: 'info',
+          title: `Gói sẽ dừng vào ${stopDay(summary)}.`,
+          body: `Bạn dùng thử bình thường tới ngày đó, rồi workspace chuyển sang chỉ đọc. ${DATA_KEPT} Bạn có thể giữ lại gói trước ngày đó.`,
+          action: 'keep',
+        };
+      }
+      const ends =
+        summary.trialEndsAt === null ? '' : `Hết hạn ${formatDate(summary.trialEndsAt)}. `;
+      const renewal = summary.renewal;
+      if (renewal?.blocker === 'no_payment_method') {
+        return {
+          role: 'status',
+          tone: 'info',
+          title: `Bạn đang dùng thử Gói ${summary.plan.name}.`,
+          body: `${ends}Thêm phương thức thanh toán để không gián đoạn. Nếu chưa có, workspace chuyển sang chỉ đọc khi hết dùng thử; ${DATA_KEPT.toLowerCase()}`,
+          action: 'add_method',
+        };
+      }
+      if (renewal?.blocker === 'card_expires') {
+        return {
+          role: 'status',
+          tone: 'warning',
+          title: `Bạn đang dùng thử Gói ${summary.plan.name}.`,
+          body: `${ends}Thẻ đã lưu hết hạn trước ngày đó nên không tự thanh toán được. Cập nhật thẻ để không gián đoạn.`,
+          action: 'update_card',
+        };
+      }
       return {
         role: 'status',
         tone: 'info',
         title: `Bạn đang dùng thử Gói ${summary.plan.name}.`,
         body:
-          summary.trialEndsAt === null
-            ? ''
-            : `Hết hạn ${formatDate(summary.trialEndsAt)}. Bạn đổi được gói trong thời gian dùng thử.`,
+          renewal === null
+            ? `${ends}Bạn đổi được gói trong thời gian dùng thử.`.trim()
+            : `${ends}Hết dùng thử, hệ thống tự thanh toán ${formatVnd(renewal.amount)} cho Gói ${renewal.planName} bằng thẻ đã lưu. Bạn đổi được gói trong thời gian dùng thử.`,
+        action: null,
       };
+    }
     case 'trial_expired':
       return {
         role: 'alert',
         tone: 'danger',
         title: 'Thời gian dùng thử đã hết.',
-        body: `Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING}`,
+        body: `Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING} ${DATA_KEPT}`,
+        action: 'pay_now',
       };
-    case 'expiring_soon':
+    case 'expiring_soon': {
+      const blocker = summary.renewal?.blocker ?? null;
       return {
         role: 'status',
         tone: 'warning',
         title: `Gói hết hạn ngày ${formatDate(summary.periodEnd)}.`,
-        body: 'Gói chưa thể tự gia hạn.',
+        body:
+          blocker === 'card_expires'
+            ? 'Thẻ đã lưu hết hạn trước ngày đó, nên không gia hạn tự động được.'
+            : 'Workspace chưa có thẻ thanh toán, nên không gia hạn tự động được.',
+        action: blocker === 'card_expires' ? 'update_card' : 'add_method',
       };
-    case 'past_due':
+    }
+    case 'past_due': {
+      if (due === null) {
+        // The trial or period just ended and the job has not made its invoice yet: it charges the
+        // saved card in a moment, or records why it cannot. Nothing for the owner to do yet.
+        return {
+          role: 'status',
+          tone: 'info',
+          title: 'Đang thanh toán kỳ mới.',
+          body: [
+            'Hệ thống đang tạo hóa đơn kỳ mới và thanh toán bằng thẻ đã lưu. Tải lại trang sau ít phút để xem kết quả.',
+            graceSentence(summary),
+          ]
+            .filter(Boolean)
+            .join(' '),
+          action: null,
+        };
+      }
+      if (dueWaiting(due)) {
+        // A transfer started after the failure, or a charge the gateway has not answered: the
+        // failure is old news until it is decided.
+        return pendingBanner(summary);
+      }
+      const reason =
+        due.lastAttempt?.code == null ? null : paymentDeclineLabels[due.lastAttempt.code];
       return {
         role: 'alert',
         tone: 'danger',
-        title: 'Thanh toán kỳ này chưa thành công.',
-        body: graceLine.trim(),
+        title: `Thanh toán kỳ ${formatDayMonth(due.periodStart)} chưa thành công.`,
+        body: [
+          `Hóa đơn ${due.number} · ${formatVnd(due.amount)}.`,
+          reason === null ? null : `${reason}.`,
+          retrySentence(summary),
+          graceSentence(summary),
+        ]
+          .filter((part) => part !== null && part !== '')
+          .join(' '),
+        action: 'pay_invoice',
       };
+    }
     case 'pending_payment':
-      return {
-        role: 'status',
-        tone: 'warning',
-        title: 'Đang chờ xác nhận thanh toán.',
-        body: graceLine.trim(),
-      };
+      return pendingBanner(summary);
     case 'cancel_scheduled':
       return {
         role: 'status',
         tone: 'info',
-        title: `Gói sẽ dừng vào ${formatDate(summary.periodEnd)}.`,
-        body: 'Mọi thứ vẫn dùng bình thường tới hết kỳ.',
+        title: `Gói sẽ dừng vào ${stopDay(summary)}.`,
+        body: 'Mọi thứ vẫn dùng bình thường tới hết kỳ. Bạn có thể giữ lại gói trước ngày đó.',
+        action: 'keep',
       };
     case 'canceled':
       return {
         role: 'alert',
         tone: 'danger',
-        title: `Gói đã hủy từ ${formatDate(summary.periodEnd)}.`,
-        body: `Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING}`,
+        title: `Gói đã hủy từ ${stopDay(summary)}.`,
+        body: `Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING} ${DATA_KEPT} Chọn gói mới để sửa và xuất bản lại.`,
+        action: 'choose_plan',
       };
   }
 }
 
-/** "Kỳ hiện tại 01/11 – 30/11", the trial's dates, or when a stopped plan ended. */
+/**
+ * "Kỳ hiện tại 01/11 – 30/11 · gia hạn tự động 01/12", the trial's dates, or when a stopped plan
+ * ended.
+ */
 export function periodLine(
   summary: Pick<
     BillingSummary,
-    'state' | 'trialEndsAt' | 'periodStart' | 'periodEnd' | 'cancelAtPeriodEnd'
+    'state' | 'periodStart' | 'periodEnd' | 'cancelAt' | 'renewal' | 'dueInvoice'
   >,
 ): string {
   const from = formatDate(summary.periodStart);
   const to = formatDate(summary.periodEnd);
+  const renewal = summary.renewal;
   if (summary.state === 'trialing' || summary.state === 'trial_expired') {
-    return `Dùng thử từ ${from} tới ${to}`;
+    const base = `Dùng thử từ ${from} tới ${to}`;
+    if (summary.cancelAt !== null) {
+      return `${base} · không gia hạn`;
+    }
+    return renewal?.autoRenews === true
+      ? `${base} · tự thanh toán ${formatVnd(renewal.amount)} ngày ${formatDate(renewal.at)}`
+      : base;
   }
   if (summary.state === 'canceled') {
-    return `Đã dừng từ ${to}`;
+    return `Đã dừng từ ${formatDate(summary.cancelAt ?? summary.periodEnd)}`;
   }
-  return `Kỳ hiện tại ${from} – ${to}${summary.cancelAtPeriodEnd ? ' · không gia hạn' : ''}`;
+  const base = `Kỳ hiện tại ${from} – ${to}`;
+  if (summary.cancelAt !== null) {
+    return `${base} · không gia hạn`;
+  }
+  if (renewal === null) {
+    return base;
+  }
+  return renewal.autoRenews
+    ? `${base} · gia hạn tự động ${formatDate(renewal.at)}`
+    : `${base} · chưa thể gia hạn tự động`;
+}
+
+/**
+ * Whether "Hủy thay đổi" is offered for a scheduled change: only while the period is paid. Once it
+ * is due, its renewal invoice already charges the scheduled plan (the API says 409 `unpaid`).
+ */
+export function canDropSchedule(summary: Pick<BillingSummary, 'state'>): boolean {
+  return (
+    summary.state === 'active' ||
+    summary.state === 'expiring_soon' ||
+    summary.state === 'cancel_scheduled'
+  );
+}
+
+/** Whether "Hủy gói" is offered: only a plan that runs and is paid for (the API says 409 else). */
+export function canCancelPlan(summary: Pick<BillingSummary, 'state' | 'cancelAt'>): boolean {
+  return (
+    summary.cancelAt === null &&
+    (summary.state === 'trialing' ||
+      summary.state === 'active' ||
+      summary.state === 'expiring_soon')
+  );
+}
+
+/**
+ * "Chuyển sang Gói Cơ bản · theo tháng từ 01/12": the change waiting for the period's end. While
+ * "Hủy gói" stands no renewal follows, so the change applies only if the plan is kept (T3).
+ */
+export function scheduledChangeLine(
+  summary: Pick<BillingSummary, 'scheduledChange' | 'periodEnd' | 'cancelAt'>,
+  planName: string,
+): string | null {
+  const change = summary.scheduledChange;
+  if (change === null) {
+    return null;
+  }
+  const line = `Gói ${planName} · theo ${billingCycleLabels[change.cycle]} từ ${formatDate(summary.periodEnd)}`;
+  return summary.cancelAt === null ? `Chuyển sang ${line}` : `Nếu giữ lại gói: chuyển sang ${line}`;
+}
+
+/**
+ * The strip across every workspace screen while an unpaid period is still inside its grace: the
+ * read-only banner covers the time after. The days left are the server's (`graceDaysLeft`), so a
+ * moved test clock or a wrong clock in the browser never changes them; a payment that waits for
+ * its answer reads as waiting, not as failed.
+ */
+export function graceNotice(
+  plan: Pick<WorkspacePlan, 'state' | 'graceDaysLeft' | 'paymentWaiting'>,
+): { title: string; detail: string } | null {
+  const state = shownState(plan.state, plan.paymentWaiting);
+  if (state !== 'past_due' && state !== 'pending_payment') {
+    return null;
+  }
+  const left =
+    plan.graceDaysLeft === null ? '' : ` — còn ${plan.graceDaysLeft} ngày trước khi chỉ đọc`;
+  return state === 'past_due'
+    ? {
+        title: `Thanh toán lỗi${left}`,
+        detail:
+          'Trang live và form vẫn chạy. Thanh toán lại để workspace không bị chuyển sang chỉ đọc.',
+      }
+    : {
+        title: `Đang chờ xác nhận thanh toán${left}`,
+        detail:
+          'Trang live và form vẫn chạy. Nếu thanh toán không được xác nhận kịp, workspace chuyển sang chỉ đọc.',
+      };
 }
 
 const MONTHLY: ReadonlySet<PlanLimitKey> = new Set(['aiUses', 'automationRuns']);
@@ -273,50 +536,116 @@ export interface PlanImpact {
  */
 export function planImpacts(current: Plan, target: Plan, usage: PlanUsage): PlanImpact[] {
   const impacts: PlanImpact[] = [];
-  const over = (key: PlanLimitKey) => usage[key] > target.limits[key];
-  if (over('sites')) {
-    impacts.push({
-      kind: 'warn',
-      title: `${usage.sites} site, vượt hạn mức Gói ${target.name} (${target.limits.sites}).`,
-      body: 'Không site nào bị gỡ; bạn không tạo thêm site mới được.',
-    });
-  }
-  if (over('members')) {
-    impacts.push({
-      kind: 'warn',
-      title: `${usage.members} thành viên, vượt hạn mức Gói ${target.name} (${target.limits.members}).`,
-      body: 'Mọi người giữ nguyên quyền; bạn không mời thêm được.',
-    });
-  }
-  if (over('customDomains')) {
-    impacts.push({
-      kind: 'warn',
-      title: `${usage.customDomains} tên miền riêng, vượt hạn mức Gói ${target.name} (${target.limits.customDomains}).`,
-      body: 'Tên miền đang kết nối vẫn chạy; bạn không thêm tên miền mới được.',
-    });
+  for (const key of ['sites', 'members', 'customDomains'] as const) {
+    if (usage[key] > target.limits[key]) {
+      impacts.push(overLimitImpact(key, usage[key], target.limits[key], target.name));
+    }
   }
   if (current.features.automation && !target.features.automation) {
-    impacts.push({
-      kind: 'warn',
-      title: 'Automation đang bật sẽ tạm dừng.',
-      body: 'Thiết lập và lịch sử chạy được giữ lại để bật lại khi nâng gói.',
-    });
+    impacts.push(automationImpact(null));
   }
-  if (current.features.customRoles && !target.features.customRoles) {
-    impacts.push({
-      kind: 'note',
-      title: 'Không tạo thêm vai trò tùy chỉnh được.',
-      body: 'Vai trò đã tạo vẫn giữ nguyên.',
-    });
-  }
+  impacts.push(...featureImpacts(current, target));
   if (target.limits.aiUses < current.limits.aiUses) {
-    impacts.push({
-      kind: 'note',
-      title: `AI còn ${formatCount(target.limits.aiUses)} lượt mỗi tháng.`,
-      body: 'Bản nháp đã tạo bằng AI không bị ảnh hưởng.',
-    });
+    impacts.push(aiImpact(target.limits.aiUses));
   }
   return impacts;
+}
+
+type OverLimitKey = 'sites' | 'members' | 'customDomains';
+
+function overLimitImpact(
+  key: OverLimitKey,
+  used: number,
+  max: number,
+  targetName: string,
+): PlanImpact {
+  switch (key) {
+    case 'sites':
+      return {
+        kind: 'warn',
+        title: `${used} site, vượt hạn mức Gói ${targetName} (${max}).`,
+        body: 'Không site nào bị gỡ; bạn không tạo thêm site mới được.',
+      };
+    case 'members':
+      return {
+        kind: 'warn',
+        title: `${used} thành viên, vượt hạn mức Gói ${targetName} (${max}).`,
+        body: 'Mọi người giữ nguyên quyền; bạn không mời thêm được.',
+      };
+    case 'customDomains':
+      return {
+        kind: 'warn',
+        title: `${used} tên miền riêng, vượt hạn mức Gói ${targetName} (${max}).`,
+        body: 'Tên miền đang kết nối vẫn chạy; bạn không thêm tên miền mới được.',
+      };
+  }
+}
+
+/** `count` is how many are enabled now; null when only the plan says so (no quote yet). */
+function automationImpact(count: number | null): PlanImpact {
+  return {
+    kind: 'warn',
+    title:
+      count === null
+        ? 'Automation đang bật sẽ tạm dừng.'
+        : `${count} automation đang bật sẽ tạm dừng.`,
+    body: 'Thiết lập và lịch sử chạy được giữ lại để bật lại khi nâng gói.',
+  };
+}
+
+function aiImpact(to: number): PlanImpact {
+  return {
+    kind: 'note',
+    title: `AI còn ${formatCount(to)} lượt mỗi tháng.`,
+    body: 'Bản nháp đã tạo bằng AI không bị ảnh hưởng.',
+  };
+}
+
+function featureImpacts(current: Plan, target: Plan): PlanImpact[] {
+  return current.features.customRoles && !target.features.customRoles
+    ? [
+        {
+          kind: 'note',
+          title: 'Không tạo thêm vai trò tùy chỉnh được.',
+          body: 'Vai trò đã tạo vẫn giữ nguyên.',
+        },
+      ]
+    : [];
+}
+
+/**
+ * What the API's quote says a change to `target` does (board 28's downgrade dialog), with the
+ * counts it read from the workspace: automations to pause, members who keep their access.
+ */
+export function quoteImpacts(
+  impacts: PlanChangeImpacts,
+  current: Plan,
+  target: Plan,
+): PlanImpact[] {
+  const list: PlanImpact[] = [];
+  for (const over of impacts.overLimits) {
+    if (over.limit === 'sites' || over.limit === 'members' || over.limit === 'customDomains') {
+      list.push(overLimitImpact(over.limit, over.used, over.max, target.name));
+    }
+  }
+  if (impacts.automationsToPause > 0) {
+    list.push(automationImpact(impacts.automationsToPause));
+  }
+  list.push(...featureImpacts(current, target));
+  if (impacts.aiUses.to < impacts.aiUses.from) {
+    list.push(aiImpact(impacts.aiUses.to));
+  }
+  if (impacts.members > 0) {
+    const overMembers = impacts.overLimits.some((over) => over.limit === 'members');
+    list.push({
+      kind: 'note',
+      title: `${impacts.members} thành viên giữ nguyên quyền.`,
+      body: overMembers
+        ? 'Bạn không mời thêm được tới khi dưới hạn mức.'
+        : 'Lời mời đang chờ cũng được tính.',
+    });
+  }
+  return list;
 }
 
 /** The sentence of the read-only banner on every workspace screen. */

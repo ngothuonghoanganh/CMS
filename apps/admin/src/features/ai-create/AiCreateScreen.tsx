@@ -55,7 +55,7 @@ import { useSlugAvailability } from '../onboarding/use-slug-availability';
 import { cx } from '../shell/cx';
 import { newPageHref, pageHref, siteHref, templatesHref } from '../shell/navigation';
 import { reachedLimitOf } from '../billing/plan-problem';
-import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanBanner } from '../billing/PlanBanner';
 import { PlanMark, PlanProblemAction } from '../billing/PlanProblemAction';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
@@ -610,7 +610,7 @@ export function AiCreateScreen({ site, usage: initialUsage }: AiCreateScreenProp
   return (
     <div className={styles.page}>
       <Header site={site} step={state.step} usage={usage} />
-      <ReadOnlyBanner variant="strip" />
+      <PlanBanner variant="strip" />
       <main id="main-content" className={styles.main}>
         <section aria-labelledby="ai-title" className={styles.panel}>
           {state.step === 'brief' ? (

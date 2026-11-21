@@ -17,6 +17,8 @@ export class AutomationPlanPause implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    // What board 28's dialog says a change to a plan without automation pauses (T3).
+    this.hooks.registerFeatureUse('automation', (ref) => this.automations.countEnabled(ref));
     this.hooks.register(async (ref, change, tx) => {
       if (change.to.features.automation) {
         return;

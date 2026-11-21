@@ -121,4 +121,16 @@ describe('RadioCardGroup', () => {
       'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
     );
   });
+
+  it('fills the row with the cards it has when asked, and keeps empty columns otherwise', () => {
+    const { rerender } = render(
+      <RadioCardGroup legend="Gói" options={goals} value="lead" onChange={vi.fn()} fillRow />,
+    );
+    const grid = () => screen.getByRole('group', { name: 'Gói' }).querySelector('div');
+    expect(grid()?.style.gridTemplateColumns).toBe(
+      'repeat(auto-fit, minmax(min(220px, 100%), 1fr))',
+    );
+    rerender(<RadioCardGroup legend="Gói" options={goals} value="lead" onChange={vi.fn()} />);
+    expect(grid()?.style.gridTemplateColumns).toContain('auto-fill');
+  });
 });

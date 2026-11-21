@@ -28,7 +28,13 @@ import { cardLabel } from './payment-presentation';
 import { paymentProblemOf, paymentProblemText, paymentsMessage } from './payment-problem';
 import { billingQueryKeys } from './queries';
 import { useMethodSetup } from './use-method-setup';
-import { type PlanImpact, planImpacts, priceLabel } from './plan-presentation';
+import {
+  type PlanImpact,
+  planImpacts,
+  priceLabel,
+  quoteImpacts,
+  scheduledChangeLine,
+} from './plan-presentation';
 import styles from './Billing.module.css';
 
 export interface ChangePlanDialogProps {
@@ -37,8 +43,11 @@ export interface ChangePlanDialogProps {
   plans: readonly Plan[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The plan changed; `charged` is what the card paid (null for a free change). */
-  onChanged: (summary: BillingSummary, charged: number | null) => void;
+  /**
+   * The plan changed; `charged` is what the card paid (null for a free change). `scheduled`: the
+   * change waits for the end of the period, the plan in force is still the old one.
+   */
+  onChanged: (summary: BillingSummary, charged: number | null, scheduled: boolean) => void;
   /** A charge is still being decided: the plan changes when the gateway confirms. */
   onPending: () => void;
 }
@@ -61,12 +70,47 @@ function ImpactList({ impacts }: { impacts: readonly PlanImpact[] }) {
   );
 }
 
+/** Which button made the offer: the loading spinner sits on that one. */
+function ScheduledSummary({
+  quote,
+  current,
+  target,
+}: {
+  quote: PlanChangeQuote;
+  current: BillingSummary;
+  target: Plan;
+}) {
+  const from = quote.effectiveAt === null ? '' : ` từ ${formatDate(quote.effectiveAt)}`;
+  const samePlan = quote.planId === current.plan.id;
+  return (
+    <>
+      <p className={styles.dialogHeading}>
+        {samePlan
+          ? `Đổi sang thanh toán theo ${billingCycleLabels[quote.cycle]}${from}?`
+          : `Chuyển xuống Gói ${target.name}${from}?`}
+      </p>
+      <p className={styles.quoteLine}>
+        Gói {current.plan.name} giữ nguyên tới hết kỳ này. Không dữ liệu nào bị xóa; những gì vượt
+        hạn mức chỉ bị chặn tạo mới. Hôm nay không tính phí.
+      </p>
+      <p className={styles.quoteLine}>
+        {quote.nextAmount === null
+          ? null
+          : `Phí kỳ sau: ${formatVnd(quote.nextAmount)} / ${billingCycleLabels[quote.cycle]}. `}
+        Phần còn lại của kỳ này không được hoàn tiền.
+      </p>
+    </>
+  );
+}
+
 interface Offer {
   payNow: boolean;
   quote: PlanChangeQuote;
+  as: 'free' | 'main' | 'transfer';
 }
 
-function ChargeSummary({ quote }: { quote: PlanChangeQuote }) {
+/** `restart`: a canceled plan paid for again, which has no trial to end (T3). */
+function ChargeSummary({ quote, restart }: { quote: PlanChangeQuote; restart: boolean }) {
   const period =
     quote.periodStart === null || quote.periodEnd === null
       ? null
@@ -75,7 +119,9 @@ function ChargeSummary({ quote }: { quote: PlanChangeQuote }) {
     <p className={styles.quoteLine}>
       {quote.mode === 'upgrade'
         ? `Nâng cấp có hiệu lực ngay. Phần chênh lệch giá tính cho ${String(quote.remainingDays)}/${String(quote.periodDays)} ngày còn lại của kỳ, làm tròn lên 1.000 ₫.`
-        : 'Thanh toán ngay kết thúc dùng thử và bắt đầu kỳ đầu tiên của gói này.'}
+        : restart
+          ? 'Thanh toán ngay mở lại gói, với một kỳ mới tính từ hôm nay.'
+          : 'Thanh toán ngay kết thúc dùng thử và bắt đầu kỳ đầu tiên của gói này.'}
       {period === null ? null : ` Kỳ ${period}.`}
     </p>
   );
@@ -99,16 +145,16 @@ export function ChangePlanDialog({
   const queryClient = useQueryClient();
   const [planId, setPlanId] = useState(summary.plan.id);
   const [cycle, setCycle] = useState<BillingCycle>(summary.cycle);
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<'charge' | 'transfer' | null>(null);
   const target = plans.find((plan) => plan.id === planId) ?? summary.plan;
-  const impacts = planImpacts(summary.plan, target, summary.usage);
   const setup = useMethodSetup(workspaceId, 'plan');
   // The trial offers a free change and paying now; after it only paying, as the API decides from
   // `trialEndsAt`, whatever the state says (past due with a card on file, or read-only after it);
   // a paid period one change.
   const unpaidTrial = summary.trialEndsAt !== null;
   const inTrial = unpaidTrial && summary.state === 'trialing';
-  const trialOver = unpaidTrial && !inTrial;
+  // A trial that ended, or a plan that was canceled: only paying now chooses a plan.
+  const trialOver = (unpaidTrial && !inTrial) || summary.state === 'canceled';
 
   function quoteQuery(payNow: boolean, enabled: boolean) {
     return {
@@ -137,19 +183,41 @@ export function ChangePlanDialog({
         : null;
   const freeOffer: Offer | null =
     freeQuote !== null && freeQuote.mode === 'trial_change'
-      ? { payNow: false, quote: freeQuote }
+      ? { payNow: false, quote: freeQuote, as: 'free' }
       : null;
+  // A lower price or another cycle in a paid period: nothing is charged, it applies at the period's
+  // end (the quote says when).
+  const scheduledQuote = freeQuote !== null && freeQuote.mode === 'scheduled' ? freeQuote : null;
+  const scheduledOffer: Offer | null =
+    scheduledQuote === null ? null : { payNow: false, quote: scheduledQuote, as: 'main' };
   const chargeOffer: Offer | null =
-    chargeQuote === null ? null : { payNow: chargeQuote === paidQuote, quote: chargeQuote };
+    chargeQuote === null
+      ? null
+      : { payNow: chargeQuote === paidQuote, quote: chargeQuote, as: 'main' };
+  const mainOffer = chargeOffer ?? scheduledOffer;
+  // A plan paid now can be paid by bank transfer too, with no card on file.
+  const transferOffer: Offer | null =
+    chargeOffer !== null && chargeOffer.payNow ? { ...chargeOffer, as: 'transfer' } : null;
+  const impacts: PlanImpact[] =
+    (freeQuote?.mode === 'scheduled' || freeQuote?.mode === 'trial_change') &&
+    freeQuote.impacts !== null
+      ? quoteImpacts(freeQuote.impacts, summary.plan, target)
+      : planImpacts(summary.plan, target, summary.usage);
   const waiting = (!trialOver && free.isPending) || ((inTrial || trialOver) && paid.isPending);
   const unavailable =
     freeQuote?.mode === 'unavailable' && freeQuote.unavailableReason !== 'payment_required'
       ? freeQuote
       : null;
   const needsCard = chargeQuote?.paymentMethodRequired === true;
+  // A change already scheduled for the period's end: choosing again replaces it.
+  const scheduled = summary.scheduledChange;
+  const scheduledPlan =
+    scheduled === null ? undefined : plans.find((plan) => plan.id === scheduled.planId);
+  const scheduledLine =
+    scheduledPlan === undefined ? null : scheduledChangeLine(summary, scheduledPlan.name);
 
   const change = useMutation({
-    mutationFn: async ({ payNow, quote }: Offer) => {
+    mutationFn: async ({ payNow, quote, as }: Offer) => {
       let status = 200;
       const next = await api(endpoints.changePlan, [workspaceId], {
         body: {
@@ -157,21 +225,28 @@ export function ChangePlanDialog({
           cycle,
           ...(payNow ? { payNow } : {}),
           ...(quote.amount > 0 ? { expectedAmount: quote.amount } : {}),
+          ...(as === 'transfer' ? { payWith: 'transfer' as const } : {}),
         },
         onStatus: (value) => {
           status = value;
         },
       });
-      return { summary: next, pending: status === 202, charged: quote.amount };
+      return {
+        summary: next,
+        pending: status === 202,
+        charged: quote.amount,
+        scheduled: quote.mode === 'scheduled',
+        transfer: as === 'transfer',
+      };
     },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: billingQueryKeys.invoices(workspaceId) });
       if (result.pending) {
-        setPending(true);
+        setPending(result.transfer ? 'transfer' : 'charge');
         onPending();
         return;
       }
-      onChanged(result.summary, result.charged > 0 ? result.charged : null);
+      onChanged(result.summary, result.charged > 0 ? result.charged : null, result.scheduled);
     },
     onError: (error, offer) => {
       reportUnexpected('Changing the plan failed', error);
@@ -196,12 +271,16 @@ export function ChangePlanDialog({
   });
 
   const busy = change.isPending;
-  const chargeLabel =
-    chargeOffer === null
+  const mainLabel =
+    mainOffer === null
       ? null
-      : chargeOffer.quote.mode === 'upgrade'
-        ? `Nâng cấp và thanh toán ${formatVnd(chargeOffer.quote.amount)}`
-        : `Thanh toán ngay ${formatVnd(chargeOffer.quote.amount)}`;
+      : mainOffer.quote.mode === 'scheduled'
+        ? mainOffer.quote.planId === summary.plan.id
+          ? 'Lên lịch đổi chu kỳ'
+          : 'Lên lịch hạ gói'
+        : mainOffer.quote.mode === 'upgrade'
+          ? `Nâng cấp và thanh toán ${formatVnd(mainOffer.quote.amount)}`
+          : `Thanh toán ngay ${formatVnd(mainOffer.quote.amount)}`;
   const problem = change.isError ? paymentProblemOf(change.error) : null;
   // A problem that points to an invoice in the history.
   const aboutInvoice =
@@ -239,11 +318,11 @@ export function ChangePlanDialog({
         inTrial
           ? 'Trong thời gian dùng thử, bạn đổi gói miễn phí, hoặc thanh toán ngay để dùng tiếp không gián đoạn.'
           : trialOver
-            ? `Thời gian dùng thử đã hết. Chọn gói và thanh toán ${summary.access === 'read_only' ? 'để mở lại việc chỉnh sửa' : 'để dùng tiếp không gián đoạn'}.`
+            ? `${summary.state === 'canceled' ? 'Gói đã hủy.' : 'Thời gian dùng thử đã hết.'} Chọn gói và thanh toán ${summary.access === 'read_only' ? 'để mở lại việc chỉnh sửa' : 'để dùng tiếp không gián đoạn'}.`
             : 'Chọn gói và chu kỳ thanh toán.'
       }
       footer={
-        pending ? (
+        pending !== null ? (
           <Button
             onClick={() => {
               onOpenChange(false);
@@ -265,7 +344,7 @@ export function ChangePlanDialog({
             {inTrial ? (
               <Button
                 variant="secondary"
-                loading={busy && !change.variables.payNow}
+                loading={busy && change.variables.as === 'free'}
                 disabled={busy || freeOffer === null}
                 onClick={() => {
                   if (freeOffer !== null) {
@@ -276,28 +355,52 @@ export function ChangePlanDialog({
                 Đổi miễn phí
               </Button>
             ) : null}
+            {transferOffer === null ? null : (
+              <Button
+                variant="secondary"
+                loading={busy && change.variables.as === 'transfer'}
+                disabled={busy}
+                onClick={() => {
+                  change.mutate(transferOffer);
+                }}
+              >
+                Chuyển khoản
+              </Button>
+            )}
             <Button
-              loading={busy && (inTrial || trialOver ? change.variables.payNow : true)}
-              disabled={busy || chargeOffer === null || needsCard}
+              loading={busy && change.variables.as === 'main'}
+              disabled={busy || mainOffer === null || needsCard}
               onClick={() => {
-                if (chargeOffer !== null) {
-                  change.mutate(chargeOffer);
+                if (mainOffer !== null) {
+                  change.mutate(mainOffer);
                 }
               }}
             >
-              {chargeLabel ?? (inTrial || trialOver ? 'Thanh toán ngay' : 'Đổi gói')}
+              {mainLabel ?? (inTrial || trialOver ? 'Thanh toán ngay' : 'Đổi gói')}
             </Button>
           </>
         )
       }
     >
-      {pending ? (
+      {pending === 'transfer' ? (
+        <Callout tone="info" role="status" title="Đang chờ chuyển khoản">
+          Hóa đơn đã được tạo. Chuyển khoản theo hướng dẫn ở{' '}
+          <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>; gói đổi khi nhận được
+          tiền.
+        </Callout>
+      ) : pending === 'charge' ? (
         <Callout tone="info" role="status" title="Đang xử lý thanh toán">
           Gói sẽ đổi khi cổng thanh toán xác nhận. Bạn xem kết quả ở{' '}
           <Link href={paymentsHref(workspaceId)}>Thanh toán & hóa đơn</Link>.
         </Callout>
       ) : (
         <div className={styles.dialogBody}>
+          {scheduledLine === null ? null : (
+            <Callout tone="info" title="Đã lên lịch đổi gói">
+              {scheduledLine}. Chọn gói hay chu kỳ khác sẽ thay lịch này. Muốn giữ Gói{' '}
+              {summary.plan.name} như hiện tại, đóng hộp thoại và bấm &quot;Hủy thay đổi&quot;.
+            </Callout>
+          )}
           <SegmentedControl<BillingCycle>
             aria-label="Chu kỳ thanh toán"
             options={billingCycles.map((value) => ({
@@ -311,12 +414,19 @@ export function ChangePlanDialog({
             legend="Gói dịch vụ"
             options={plans.map((plan) => ({
               value: plan.id,
-              label: `Gói ${plan.name}${plan.id === summary.plan.id ? ' (hiện tại)' : ''}`,
+              label: `Gói ${plan.name}${
+                plan.id === summary.plan.id
+                  ? ' (hiện tại)'
+                  : plan.id === scheduledPlan?.id
+                    ? ' (đã lên lịch)'
+                    : ''
+              }`,
               description: `${priceLabel(plan, cycle)} · ${plan.fit}`,
             }))}
             value={planId}
             onChange={choosePlan}
             minColumnWidth={200}
+            fillRow
           />
           {impacts.length === 0 ? null : <ImpactList impacts={impacts} />}
           <div className={styles.quote} aria-live="polite" aria-busy={waiting}>
@@ -327,7 +437,7 @@ export function ChangePlanDialog({
                 <p className={styles.quoteAmount}>
                   Số tiền thanh toán ngay: <strong>{formatVnd(chargeQuote.amount)}</strong>
                 </p>
-                <ChargeSummary quote={chargeQuote} />
+                <ChargeSummary quote={chargeQuote} restart={summary.state === 'canceled'} />
                 {chargeQuote.paymentMethod === null ? (
                   <p className={styles.quoteLine}>
                     Chưa có thẻ dùng được.{' '}
@@ -341,6 +451,8 @@ export function ChangePlanDialog({
                   </p>
                 )}
               </>
+            ) : scheduledQuote !== null ? (
+              <ScheduledSummary quote={scheduledQuote} current={summary} target={target} />
             ) : unavailable?.unavailableReason ? (
               <p className={styles.quoteLine}>
                 {paymentProblemText({ kind: 'unavailable', reason: unavailable.unavailableReason })}

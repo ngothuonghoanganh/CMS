@@ -3,7 +3,9 @@ import { changePlanRequestSchema } from './billing.js';
 import {
   gatewayEventSchema,
   invoiceNumberSchema,
+  invoiceTransferSchema,
   paymentMethodViewSchema,
+  planChangeImpactsSchema,
   planChangeQuoteQuerySchema,
 } from './billing-payments.js';
 
@@ -61,6 +63,50 @@ describe('plan change requests', () => {
     ).toBe(true);
     expect(
       planChangeQuoteQuerySchema.safeParse({ planId: 'business', cycle: 'yearly', payNow: '1' })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('T3 lifecycle shapes', () => {
+  it('take a payment now by transfer, and a scheduled change with its impacts', () => {
+    expect(
+      changePlanRequestSchema.parse({
+        planId: 'basic',
+        cycle: 'yearly',
+        payNow: true,
+        expectedAmount: 1_990_000,
+        payWith: 'transfer',
+      }).payWith,
+    ).toBe('transfer');
+    expect(
+      changePlanRequestSchema.safeParse({ planId: 'basic', cycle: 'yearly', payWith: 'wallet' })
+        .success,
+    ).toBe(false);
+    expect(
+      planChangeImpactsSchema.parse({
+        overLimits: [{ limit: 'sites', used: 4, max: 1 }],
+        automationsToPause: 3,
+        aiUses: { from: 100, to: 20 },
+        members: 7,
+      }).overLimits,
+    ).toEqual([{ limit: 'sites', used: 4, max: 1 }]);
+  });
+
+  it('draw a transfer’s QR code as an SVG data URL, never a link elsewhere', () => {
+    const transfer = {
+      bankName: 'Ngân hàng',
+      accountNumber: '0000000000',
+      accountName: 'PLP',
+      content: 'PLP HD-2026-000001',
+      amount: 599_000,
+      qrDataUrl: 'data:image/svg+xml;base64,PHN2Zy8+',
+      pageUrl: null,
+      startedAt: '2026-11-21T03:00:00.000Z',
+    };
+    expect(invoiceTransferSchema.safeParse(transfer).success).toBe(true);
+    expect(
+      invoiceTransferSchema.safeParse({ ...transfer, qrDataUrl: 'https://qr.example/x.png' })
         .success,
     ).toBe(false);
   });
