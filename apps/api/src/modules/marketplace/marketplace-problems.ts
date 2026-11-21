@@ -64,3 +64,13 @@ export function itemFree(name: string): AppError {
     detail: 'Mẫu miễn phí được nhận bằng "Nhận mẫu", không cần thanh toán.',
   });
 }
+
+/**
+ * 503 `suggestion_not_sent`: the email to Chủ sở hữu could not be sent. It was given back, so the
+ * member may ask again.
+ */
+export function suggestionNotSent(): AppError {
+  return new AppError(503, 'suggestion_not_sent', 'Chưa gửi được đề xuất', {
+    detail: 'Email tới Chủ sở hữu chưa gửi được. Thử lại sau ít phút.',
+  });
+}

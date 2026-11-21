@@ -30,6 +30,7 @@ export class MarketplacePurchaseSettlement implements OnModuleInit {
   onModuleInit(): void {
     this.hooks.register({
       grant: (invoice, at, tx) => this.grant(invoice, at, tx),
+      grantedBy: (invoice) => this.grantedBy(invoice),
       standings: (ref, itemIds, tx) => this.standings(ref, itemIds, tx),
       hasItem: (itemId) => {
         const item = findMarketplaceItem(this.catalog, itemId);
@@ -71,6 +72,14 @@ export class MarketplacePurchaseSettlement implements OnModuleInit {
       tx,
     );
     return granted;
+  }
+
+  private async grantedBy(invoice: MarketplaceInvoiceRecord): Promise<boolean> {
+    const held = await this.licences.find(
+      { workspaceId: invoice.workspaceId },
+      invoice.item.itemId,
+    );
+    return held?.invoiceId?.equals(invoice._id) === true;
   }
 
   /** On sale, the price, and held by the workspace: one read of its licences for every item. */

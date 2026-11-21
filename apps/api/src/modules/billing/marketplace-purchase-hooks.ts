@@ -16,6 +16,12 @@ export interface MarketplacePurchaseHandler {
    * must stay within the database, since the transaction may run more than once.
    */
   grant(invoice: MarketplaceInvoiceRecord, at: Date, tx: Tx): Promise<boolean>;
+  /**
+   * Whether the licence the workspace holds is the one this invoice granted. False for an invoice
+   * paid after the workspace came to hold the item another way: its money is refunded outside the
+   * system, and no receipt tells the owner the item was bought.
+   */
+  grantedBy(invoice: MarketplaceInvoiceRecord): Promise<boolean>;
   /** What each item is to the workspace now: on sale, its price, held; every id gets an answer. */
   standings(
     ref: WorkspaceRef,
@@ -44,6 +50,10 @@ export class MarketplacePurchaseHooks {
 
   grant(invoice: MarketplaceInvoiceRecord, at: Date, tx: Tx): Promise<boolean> {
     return this.registered().grant(invoice, at, tx);
+  }
+
+  grantedBy(invoice: MarketplaceInvoiceRecord): Promise<boolean> {
+    return this.registered().grantedBy(invoice);
   }
 
   /** The standing of the items of `invoices` that are marketplace invoices; none asked for none. */

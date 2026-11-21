@@ -118,8 +118,8 @@ export function marketplaceList(
   };
 }
 
-/** Board 31 without the owner's name, which the service reads only for an item it shows. */
-export type MarketplaceItemView = Omit<MarketplaceItemDetail, 'ownerName'>;
+/** Board 31 without what the service reads only for an item it shows: the owner and the suggestion. */
+export type MarketplaceItemView = Omit<MarketplaceItemDetail, 'ownerName' | 'suggested'>;
 
 /**
  * Board 31: the item at its current version, with its preview and the terms; null when the

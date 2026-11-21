@@ -11,6 +11,7 @@ import {
   marketplacePurchaseRequestSchema,
   type MarketplacePurchaseResponse,
   type MarketplaceQuote,
+  type MarketplaceSuggestionResponse,
   type UpdateMarketplaceLicenceVersionRequest,
   updateMarketplaceLicenceVersionRequestSchema,
 } from '@plp/contracts';
@@ -56,6 +57,17 @@ export class MarketplaceController {
     @Body(new ZodPipe(claimMarketplaceItemRequestSchema)) body: ClaimMarketplaceItemRequest,
   ): Promise<MarketplaceLicence> {
     return this.marketplace.claim(user, workspaceId, itemId, body);
+  }
+
+  /** `pages.view`, for a member who cannot buy; 200 for a repeat too (`alreadySuggested`). */
+  @Post('workspaces/:workspaceId/marketplace/items/:itemId/suggestions')
+  @HttpCode(200)
+  suggest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId') workspaceId: string,
+    @Param('itemId') itemId: string,
+  ): Promise<MarketplaceSuggestionResponse> {
+    return this.marketplace.suggest(user, workspaceId, itemId);
   }
 
   @Get('workspaces/:workspaceId/marketplace/licences')

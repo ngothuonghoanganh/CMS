@@ -94,3 +94,37 @@ export function purchaseOutcome<L>(
   }
   return { kind: 'buy', item, version: current.version, termsVersion: catalog.terms.version };
 }
+
+/** What "Đề xuất {tên} mua" does, `L` being the workspace's licence. */
+export type SuggestionOutcome<L> =
+  /** The workspace may not see the item: a draft, withdrawn and not held, or not in the catalog. */
+  | { kind: 'not_found' }
+  /** The workspace holds it already (409 `item_owned`). */
+  | { kind: 'owned'; item: MarketplaceItem; licence: L }
+  /** A free item is claimed, so nobody needs to ask for a purchase (409 `item_free`). */
+  | { kind: 'free'; item: MarketplaceItem }
+  /** An item on sale with a price: ask Chủ sở hữu to buy it. */
+  | { kind: 'suggest'; item: MarketplaceItem };
+
+/**
+ * The checks of a suggestion, in the order of a purchase: the item on sale for the workspace
+ * (404), not held (409 `item_owned`), with a price (409 `item_free`). Membership (404) and the
+ * member not being the one who buys (403) come before them.
+ */
+export function suggestionOutcome<L>(
+  catalog: MarketplaceCatalog,
+  itemId: string,
+  held: L | null,
+): SuggestionOutcome<L> {
+  const item = findMarketplaceItem(catalog, itemId);
+  if (item === undefined || !itemVisibleTo(item, held !== null)) {
+    return { kind: 'not_found' };
+  }
+  if (held !== null) {
+    return { kind: 'owned', item, licence: held };
+  }
+  if (item.price === 0) {
+    return { kind: 'free', item };
+  }
+  return { kind: 'suggest', item };
+}

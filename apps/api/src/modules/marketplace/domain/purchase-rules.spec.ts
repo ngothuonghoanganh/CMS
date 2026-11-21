@@ -12,7 +12,7 @@ import {
   TWO_VERSIONS_ITEM_ID,
   WITHDRAWN_ITEM_ID,
 } from '../../../../test/marketplace.js';
-import { purchaseOutcome, quoteOutcome } from './purchase-rules.js';
+import { purchaseOutcome, quoteOutcome, suggestionOutcome } from './purchase-rules.js';
 
 const catalog: MarketplaceCatalog = testMarketplaceCatalog();
 const HELD = { version: 1 };
@@ -107,5 +107,34 @@ describe('"Mua mẫu": the checks of a purchase, in order (ADR-036, MP3)', () =>
       kind: 'changed',
       current: { price: 450_000 },
     });
+  });
+});
+
+describe('"Đề xuất mua": the checks of a suggestion, in order (ADR-036, MP3)', () => {
+  it('asks for an item on sale with a price that the workspace does not hold', () => {
+    expect(suggestionOutcome(catalog, PAID_ITEM_ID, null)).toMatchObject({
+      kind: 'suggest',
+      item: { id: PAID_ITEM_ID, price: 399_000 },
+    });
+  });
+
+  it('finds nothing it may not see, whatever the licence it holds of a draft', () => {
+    for (const id of [DRAFT_ITEM_ID, WITHDRAWN_ITEM_ID, 'mp-khong-co', 'nha-khoa-uu-dai']) {
+      expect(suggestionOutcome(catalog, id, null), id).toEqual({ kind: 'not_found' });
+    }
+    expect(suggestionOutcome(catalog, DRAFT_ITEM_ID, HELD)).toEqual({ kind: 'not_found' });
+  });
+
+  it('answers owned before free, withdrawn items held included', () => {
+    for (const id of [PAID_ITEM_ID, FREE_ITEM_ID, WITHDRAWN_ITEM_ID]) {
+      expect(suggestionOutcome(catalog, id, HELD), id).toMatchObject({
+        kind: 'owned',
+        licence: HELD,
+      });
+    }
+  });
+
+  it('sends a free item to "Nhận mẫu": nobody needs to ask for it', () => {
+    expect(suggestionOutcome(catalog, FREE_ITEM_ID, null)).toMatchObject({ kind: 'free' });
   });
 });
