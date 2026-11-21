@@ -48,9 +48,17 @@ export type SubscriptionRenewal = z.infer<typeof subscriptionRenewalSchema>;
 /**
  * The invoice the subscription waits for (banners of boards 28 and 29): the renewal charged at the
  * end of a period or trial, failed and retried, or a bank transfer waiting for its confirmation.
- * Without the card, which only the owner sees on board 29.
+ * Without the card, which only the owner sees on board 29. Always an invoice of the plan, with its
+ * plan and period: a marketplace item's never is one (ADR-036).
  */
-export const dueInvoiceSchema = invoiceSummarySchema.omit({ card: true });
+export const dueInvoiceSchema = invoiceSummarySchema.omit({ card: true }).extend({
+  planId: planIdSchema,
+  planName: z.string(),
+  cycle: billingCycleSchema,
+  periodStart: isoDateTimeSchema,
+  periodEnd: isoDateTimeSchema,
+  item: z.null(),
+});
 export type DueInvoice = z.infer<typeof dueInvoiceSchema>;
 
 /** Board 28 "Gói & mức dùng" (`billing.view`): the plan with its limits and features, and usage. */

@@ -7,6 +7,8 @@ import {
   marketplaceItemDetailSchema,
   marketplaceLicenceListResponseSchema,
   marketplaceListResponseSchema,
+  marketplacePurchaseRequestSchema,
+  marketplaceQuoteSchema,
   MAX_MARKETPLACE_ITEM_VERSIONS,
   MAX_MARKETPLACE_ITEMS,
   updateMarketplaceLicenceVersionRequestSchema,
@@ -348,5 +350,49 @@ describe('the licences of a workspace (MP2)', () => {
     expect(
       marketplaceItemChangedProblemContextSchema.parse({ version: 2, price: 0, termsVersion: 3 }),
     ).toEqual({ version: 2, price: 0, termsVersion: 3 });
+  });
+});
+
+describe('buying an item (MP3)', () => {
+  it('confirms the version, the price and the terms of the quote', () => {
+    const body = {
+      itemId: 'mp-khai-truong-phong-tap',
+      version: 1,
+      expectedAmount: 399_000,
+      termsVersion: 1,
+    };
+    expect(marketplacePurchaseRequestSchema.parse(body)).toEqual(body);
+    for (const wrong of [
+      { ...body, itemId: 'nha-khoa-uu-dai' },
+      { ...body, expectedAmount: -1 },
+      { ...body, version: 0 },
+      { ...body, termsVersion: undefined },
+      { ...body, planId: 'agency' },
+    ]) {
+      expect(marketplacePurchaseRequestSchema.safeParse(wrong).success).toBe(false);
+    }
+  });
+
+  it('quotes the card without its token, and says when there is none to pay', () => {
+    const quote = marketplaceQuoteSchema.parse({
+      itemId: 'mp-khai-truong-phong-tap',
+      name: 'Khai trương phòng tập',
+      version: 1,
+      amount: 399_000,
+      termsVersion: 1,
+      owned: false,
+      paymentMethod: {
+        brand: 'visa',
+        last4: '4242',
+        expMonth: 12,
+        expYear: 2035,
+        expired: false,
+        token: 'tok_1',
+      },
+      paymentMethodRequired: false,
+      paymentsEnabled: true,
+      billingCompanyName: null,
+    });
+    expect(quote.paymentMethod).not.toHaveProperty('token');
   });
 });

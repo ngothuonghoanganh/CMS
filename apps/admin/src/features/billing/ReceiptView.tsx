@@ -90,8 +90,10 @@ export function ReceiptView({ workspaceId, receipt }: ReceiptViewProps) {
               <td>
                 {invoiceDescription(invoice)}
                 <span className={styles.line}>
-                  Chu kỳ {invoice.cycle === 'yearly' ? 'năm' : 'tháng'} · tạo ngày{' '}
-                  {formatDate(invoice.createdAt)}
+                  {invoice.item === null
+                    ? `Chu kỳ ${invoice.cycle === 'yearly' ? 'năm' : 'tháng'}`
+                    : `Phiên bản v${invoice.item.version} · Một lần`}{' '}
+                  · tạo ngày {formatDate(invoice.createdAt)}
                 </span>
               </td>
               <td className={styles.right}>{invoiceAmount(invoice)}</td>

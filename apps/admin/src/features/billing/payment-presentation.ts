@@ -67,14 +67,23 @@ export function invoiceStatusView(
   return { label: invoiceStatusLabels[status], tone: STATUS_TONES[status] };
 }
 
-/** "Gói Agency · kỳ 01/11 – 30/11", or the rest of a period paid for an upgrade. */
+/**
+ * "Gói Agency · kỳ 01/11 – 30/11", or the rest of a period paid for an upgrade, or a marketplace
+ * item bought: "Mẫu “Mở bán dự án căn hộ” · Marketplace" (board 29, ADR-036).
+ */
 export function invoiceDescription(
-  invoice: Pick<InvoiceSummary, 'kind' | 'planName' | 'periodStart' | 'periodEnd'>,
+  invoice: Pick<InvoiceSummary, 'kind' | 'planName' | 'periodStart' | 'periodEnd' | 'item'>,
 ): string {
-  const period = `kỳ ${formatDate(invoice.periodStart)} – ${formatDate(invoice.periodEnd)}`;
-  return invoice.kind === 'upgrade'
-    ? `Nâng cấp lên Gói ${invoice.planName} · ${period}`
-    : `Gói ${invoice.planName} · ${period}`;
+  if (invoice.item !== null) {
+    return `Mẫu “${invoice.item.name}” · Marketplace`;
+  }
+  const period =
+    invoice.periodStart === null || invoice.periodEnd === null
+      ? null
+      : `kỳ ${formatDate(invoice.periodStart)} – ${formatDate(invoice.periodEnd)}`;
+  const plan = `Gói ${invoice.planName ?? ''}`;
+  const what = invoice.kind === 'upgrade' ? `Nâng cấp lên ${plan}` : plan;
+  return period === null ? what : `${what} · ${period}`;
 }
 
 /** The invoice's number with how it was paid: "HD-2026-000012 · Thẻ Visa •••• 4242". */

@@ -173,6 +173,7 @@ describe('BillingScreen (board 28)', () => {
           cycle: 'monthly',
           periodStart: '2026-12-04T03:00:00.000Z',
           periodEnd: '2027-01-04T03:00:00.000Z',
+          item: null,
           amount: 599_000,
           method: 'transfer',
           status: 'pending',

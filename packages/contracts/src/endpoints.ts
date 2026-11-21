@@ -193,6 +193,9 @@ import {
   marketplaceLicenceListResponseSchema,
   marketplaceLicenceSchema,
   marketplaceListResponseSchema,
+  marketplacePurchaseRequestSchema,
+  marketplacePurchaseResponseSchema,
+  marketplaceQuoteSchema,
   updateMarketplaceLicenceVersionRequestSchema,
 } from './marketplace.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
@@ -522,7 +525,8 @@ export const endpoints = {
   }),
   /**
    * `billing.manage`: the gateway's page that saves a card ("Thêm phương thức", "Đổi thẻ"). The
-   * browser goes to `url`; the gateway leads back to the admin screen `returnTo` names, with
+   * browser goes to `url`; the gateway leads back to the admin screen `returnTo` names (board 31 of
+   * `itemId` for `marketplace`, an item of the catalog, 422 otherwise), with
    * `?paymentMethod=saved|canceled`. The card is stored when the gateway's event arrives.
    */
   startPaymentMethodSetup: endpoint({
@@ -592,9 +596,9 @@ export const endpoints = {
    * `billing.manage` (T3), "Chuyển khoản": pays an unpaid invoice of a period (a renewal, the end
    * of a trial, a plan paid now) by bank transfer. The invoice becomes `pending` with its
    * `transfer` details; the gateway's `transfer_received` pays it. Asking again answers the same
-   * details. 409 `invoice_not_payable` (paid, void, an upgrade, or what it pays for is gone), 409
-   * `payment_in_progress` (a card charge being decided, or one whose outcome is unknown: "Thanh
-   * toán lại" first), 503 `payments_disabled`.
+   * details. 409 `invoice_not_payable` (paid, void, an upgrade, a marketplace item, or what it
+   * pays for is gone), 409 `payment_in_progress` (a card charge being decided, or one whose outcome
+   * is unknown: "Thanh toán lại" first), 503 `payments_disabled`.
    */
   startInvoiceTransfer: endpoint({
     method: 'POST',
@@ -1662,6 +1666,38 @@ export const endpoints = {
     request: updateMarketplaceLicenceVersionRequestSchema,
     query: null,
     response: marketplaceLicenceSchema,
+  }),
+  /**
+   * `billing.manage` (MP3): what "Mua mẫu" charges now and with which card. Never charges, also in a
+   * read-only workspace. An item held answers `owned: true`; a free item not held 409 `item_free`;
+   * a draft, a withdrawn item not held or an unknown id 404 "Không tìm thấy mẫu".
+   */
+  getMarketplaceQuote: endpoint({
+    method: 'GET',
+    path: (workspaceId: string, itemId: string) =>
+      `/workspaces/${e(workspaceId)}/marketplace/items/${e(itemId)}/quote`,
+    request: null,
+    query: null,
+    response: marketplaceQuoteSchema,
+  }),
+  /**
+   * `billing.manage` (MP3), "Thanh toán {tổng}" of "Xác nhận mua mẫu", with the `Idempotency-Key`
+   * header. In this order: 404 not a member, 403, 402 `workspace_read_only`, 404 an item not on
+   * sale, 409 `item_owned`, 409 `item_free`, 503 `payments_disabled`, 409 `item_changed` (version,
+   * price or terms not those of the quote), 422 `payment_method_required`. Then 409
+   * `payment_in_progress` while another charge of the workspace runs or may have gone through. 200
+   * paid with the licence; 202 while the gateway decides (the licence comes with its event); 402
+   * `payment_failed` (nothing charged, not owned); 503 `gateway_unavailable` (may have been charged:
+   * "Thanh toán lại" on the invoice asks again); 409 `payment_not_applied` (paid while the workspace
+   * came to hold the item another way: refunded outside). The same key answers its invoice again;
+   * for another item 422 `idempotency_key_reused`.
+   */
+  purchaseMarketplaceItem: endpoint({
+    method: 'POST',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/marketplace/purchases`,
+    request: marketplacePurchaseRequestSchema,
+    query: null,
+    response: marketplacePurchaseResponseSchema,
   }),
 
   // Pages and drafts
