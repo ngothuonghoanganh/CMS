@@ -29,8 +29,9 @@ import {
   TWO_VERSIONS_ITEM_ID,
   WITHDRAWN_ITEM_ID,
 } from '../../../test/marketplace.js';
-import { addMember } from '../../../test/resources.js';
+import { addMember, scopeOf } from '../../../test/resources.js';
 import { versionHashOf } from './domain/version-hash.js';
+import { MarketplaceLicencesRepository } from './marketplace-licences.repository.js';
 
 /** Released three times: a licence may stand between its first and its current version. */
 const THREE_VERSIONS_ID = 'mp-mau-ba-phien-ban';
@@ -407,6 +408,40 @@ describe('marketplace licences', () => {
         responses.map((response) => marketplaceLicenceSchema.parse(response.body).version),
       ).toEqual(Array.from({ length: 5 }, () => 3));
       expect(await storedLicences(workspaceId)).toMatchObject([{ version: 3 }]);
+    });
+
+    it('moves a licence only from the version it is still at, never back', async () => {
+      // Two API instances during a deploy: one serves a catalog where v3 is current, the other
+      // still one where v2 is. Both read the licence at v1; the second write must not undo the first.
+      const { ownerId, workspaceId } = await workspace();
+      await grantLicence(t, workspaceId, THREE_VERSIONS_ID, { version: 1, grantedBy: ownerId });
+      const admin = await addMember(t, workspaceId, 'admin');
+      const editor = await addMember(t, workspaceId, 'editor');
+      const repository = t.app.get(MarketplaceLicencesRepository);
+      const v2Hash = versionHashOf(versionIn(catalog, THREE_VERSIONS_ID, 2).composition);
+      const v3Hash = versionHashOf(versionIn(catalog, THREE_VERSIONS_ID, 3).composition);
+
+      const first = await repository.moveVersion(
+        await scopeOf(t, admin.me, workspaceId),
+        THREE_VERSIONS_ID,
+        { from: 1, to: 3, versionHash: v3Hash, at: new Date('2026-11-21T08:00:00.000Z') },
+      );
+      expect(first).toMatchObject({ version: 3, versionHash: v3Hash });
+      const [moved] = await storedLicences(workspaceId);
+      expect(moved).toMatchObject({
+        version: 3,
+        versionHash: v3Hash,
+        updatedAt: new Date('2026-11-21T08:00:00.000Z'),
+        updatedBy: new Types.ObjectId(admin.me.user.id),
+      });
+
+      const stale = await repository.moveVersion(
+        await scopeOf(t, editor.me, workspaceId),
+        THREE_VERSIONS_ID,
+        { from: 1, to: 2, versionHash: v2Hash, at: new Date('2026-11-21T08:00:01.000Z') },
+      );
+      expect(stale).toBeNull();
+      expect(await storedLicences(workspaceId)).toEqual([moved]);
     });
 
     it('updates the licence of a withdrawn item too', async () => {
