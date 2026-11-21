@@ -186,8 +186,8 @@ export interface BillingReadOnlyData {
 }
 
 /**
- * The invoice of the next period, renewed by bank transfer (T4): `issued` when it is made, before
- * the period ends, and `due` on the day it is due (the period's end) if still unpaid.
+ * The invoice of the next period, renewed by bank transfer (T4): when it is made, before the
+ * period ends, and on the day it is due (the period's end) if still unpaid (`dueToday`).
  */
 export interface BillingTransferDueData {
   workspaceName: string;
@@ -198,7 +198,8 @@ export interface BillingTransferDueData {
   period: string;
   invoiceNumber: string;
   amount: string;
-  stage: 'issued' | 'due';
+  /** Sent on the due day, the transfer still not received; false when the invoice is made. */
+  dueToday: boolean;
   /** When the transfer is due: the end of the current period, "01/12/2026". */
   dueOn: string;
   /** The last day of full access if it is still unpaid then; read-only after. */
@@ -597,15 +598,18 @@ export function billingReceiptEmail(input: BillingReceiptData & { invoiceId: str
   return { template: 'billing-receipt', idempotencyKey: `billing-receipt:${invoiceId}`, data };
 }
 
+/** When a renewal's transfer invoice is told of: made (`issued`), or due today unpaid (`due`). */
+export type TransferDueStage = 'issued' | 'due';
+
 /** Once per invoice and stage: when it is made, and on the day it is due. */
 export function billingTransferDueEmail(
-  input: BillingTransferDueData & { invoiceId: string },
+  input: Omit<BillingTransferDueData, 'dueToday'> & { invoiceId: string; stage: TransferDueStage },
 ): KeyedEmail {
-  const { invoiceId, ...data } = input;
+  const { invoiceId, stage, ...rest } = input;
   return {
     template: 'billing-transfer-due',
-    idempotencyKey: `billing-transfer-due:${invoiceId}:${data.stage}`,
-    data,
+    idempotencyKey: `billing-transfer-due:${invoiceId}:${stage}`,
+    data: { ...rest, dueToday: stage === 'due' },
   };
 }
 

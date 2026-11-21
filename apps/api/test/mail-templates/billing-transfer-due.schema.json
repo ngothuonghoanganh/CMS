@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "billing-transfer-due",
-  "description": "Hóa đơn kỳ sau của gói gia hạn bằng chuyển khoản (ADR-035, T4): khi hóa đơn được tạo trước cuối kỳ (stage \"issued\"), và vào ngày đến hạn nếu chưa trả (stage \"due\"). Có thông tin chuyển khoản, không có mã QR (ở màn 29).",
+  "description": "Hóa đơn kỳ sau của gói gia hạn bằng chuyển khoản (ADR-035, T4): khi hóa đơn được tạo trước cuối kỳ, và vào ngày đến hạn nếu chưa trả (dueToday). Có thông tin chuyển khoản, không có mã QR (ở màn 29).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,7 @@
     "period",
     "invoiceNumber",
     "amount",
-    "stage",
+    "dueToday",
     "dueOn",
     "graceEndsOn",
     "bankName",
@@ -32,10 +32,9 @@
     },
     "invoiceNumber": { "type": "string", "pattern": "^HD-\\d{4}-\\d{6}$" },
     "amount": { "type": "string", "minLength": 1, "description": "Ví dụ \"599.000 ₫\"." },
-    "stage": {
-      "type": "string",
-      "enum": ["issued", "due"],
-      "description": "\"issued\": hóa đơn vừa được tạo, trước hạn; \"due\": hôm nay là hạn mà chưa nhận được tiền."
+    "dueToday": {
+      "type": "boolean",
+      "description": "true: hôm nay là hạn chuyển khoản mà chưa nhận được tiền; false: hóa đơn vừa được tạo, trước hạn."
     },
     "dueOn": {
       "type": "string",

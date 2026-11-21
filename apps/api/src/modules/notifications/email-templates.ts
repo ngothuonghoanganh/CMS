@@ -427,7 +427,7 @@ function billingReceipt(data: BillingReceiptData): RenderedEmail {
  * clients block images.
  */
 function billingTransferDue(data: BillingTransferDueData): RenderedEmail {
-  const issued = data.stage === 'issued';
+  const issued = !data.dueToday;
   const title = issued
     ? `Hóa đơn kỳ mới của ${data.workspaceName}: chuyển khoản trước ${data.dueOn}`
     : `Hôm nay là hạn chuyển khoản gói của ${data.workspaceName}`;

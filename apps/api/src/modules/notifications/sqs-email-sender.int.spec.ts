@@ -571,8 +571,8 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     expect(
       queued('billing-transfer-due')
         .filter((request) => request.to.join() === transferOwner)
-        .map((request) => (request.data as { stage: string }).stage),
-    ).toEqual(['issued', 'due']);
+        .map((request) => (request.data as { dueToday: boolean }).dueToday),
+    ).toEqual([false, true]);
     for (const template of ['marketplace-receipt', 'marketplace-suggestion'] as const) {
       expect(queued(template)).toEqual([expect.objectContaining({ to: [marketplaceOwner] })]);
     }

@@ -81,7 +81,7 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
       (sent) =>
         sent.template === 'billing-transfer-due' &&
         sent.to.includes(email) &&
-        (sent.data as { stage: string }).stage === stage,
+        sent.idempotencyKey.endsWith(`:${stage}`),
     );
   const emailsTo = (email: string, template: string) =>
     t.emails.sent.filter((sent) => sent.template === template && sent.to.includes(email));
@@ -459,7 +459,7 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
     expect(transferEmails(email, 'due')).toEqual([
       expect.objectContaining({
         idempotencyKey: `billing-transfer-due:${invoice.id}:due`,
-        data: expect.objectContaining({ stage: 'due', invoiceNumber: invoice.number }) as unknown,
+        data: expect.objectContaining({ dueToday: true, invoiceNumber: invoice.number }) as unknown,
       }),
     ]);
     // T3 still blocks a plan change while the period waits.

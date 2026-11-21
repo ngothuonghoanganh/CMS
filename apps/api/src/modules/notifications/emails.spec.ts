@@ -523,8 +523,10 @@ describe('the emails of the plan (ADR-035, T3)', () => {
     expect(transferDue('issued').idempotencyKey).toBe(`billing-transfer-due:${OTHER_ID}:issued`);
     expect(transferDue('due').idempotencyKey).toBe(`billing-transfer-due:${OTHER_ID}:due`);
     expect(
-      templateDataProblems('billing-transfer-due', { ...transferDue('due').data, stage: 'late' }),
-    ).toEqual(['/stage must be equal to one of the allowed values']);
+      templateDataProblems('billing-transfer-due', { ...transferDue('due').data, dueToday: 'yes' }),
+    ).toEqual(['/dueToday must be boolean']);
+    expect(transferDue('issued').data).toMatchObject({ dueToday: false });
+    expect(transferDue('due').data).toMatchObject({ dueToday: true });
     expect(
       templateDataProblems('billing-transfer-due', {
         ...transferDue('issued').data,
