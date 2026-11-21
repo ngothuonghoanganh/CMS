@@ -16,6 +16,9 @@ import { cardLabel, sameCard } from './payment-presentation';
 import { paymentsMessage } from './payment-problem';
 import { PaymentMethodCard } from './PaymentMethodCard';
 import { readOnlyReason } from './plan-presentation';
+import { renewalTransferNotice } from './renewal-presentation';
+import { RenewalMethodChoice } from './RenewalMethodChoice';
+import { RenewalTransferCallout } from './RenewalTransferCallout';
 import { type PaymentsInitial, useInvoiceDetail, usePaymentsData } from './queries';
 import { TransferInstructions } from './TransferInstructions';
 import { useMethodSetup } from './use-method-setup';
@@ -70,9 +73,15 @@ export function PaymentsScreen({
     items.find(
       (invoice) => invoice.status === 'failed' && invoice.payable && invoice.kind !== 'marketplace',
     ) ?? null;
+  // A plan renewed by bank transfer (T4): the early invoice, or "Chờ chuyển khoản" after the end.
+  const renewalNotice = renewalTransferNotice(summary);
+  const renewalInvoice =
+    renewalNotice === null || renewalNotice.kind === 'paid' ? null : renewalNotice.invoice;
   // The invoice that waits for a bank transfer: its details sit above the history.
   const waiting =
-    items.find((invoice) => invoice.status === 'pending' && invoice.method === 'transfer') ?? null;
+    renewalInvoice ??
+    items.find((invoice) => invoice.status === 'pending' && invoice.method === 'transfer') ??
+    null;
   const waitingDetail = useInvoiceDetail(workspaceId, waiting?.id ?? null);
   const failedCode = failed?.lastAttempt?.code ?? null;
   const saved = method.paymentMethod;
@@ -109,7 +118,7 @@ export function PaymentsScreen({
         ? ''
         : ` Workspace chuyển sang chỉ đọc từ ${formatDate(summary.graceEndsAt)} nếu chưa thanh toán.`;
   const readOnlyLine =
-    summary.access !== 'read_only' || retrying
+    summary.access !== 'read_only' || retrying || renewalNotice?.kind === 'awaiting'
       ? null
       : `${readOnlyReason(summary.state)} Trang live và form vẫn chạy. ${
           waiting === null
@@ -242,9 +251,27 @@ export function PaymentsScreen({
         </Callout>
       )}
 
+      {renewalNotice === null ? null : (
+        <RenewalTransferCallout
+          notice={renewalNotice}
+          onPayWithCard={
+            saved === null || renewalInvoice === null
+              ? null
+              : () => {
+                  payInvoice(renewalInvoice.id);
+                }
+          }
+          payingWithCard={pay.isPending && pay.variables === renewalInvoice?.id}
+          busy={pay.isPending || transfer.isPending}
+        />
+      )}
+
       {waiting === null ? null : (
         <TransferInstructions
           invoiceNumber={waiting.number}
+          {...(renewalInvoice === null
+            ? {}
+            : { title: `Chuyển khoản hóa đơn gia hạn ${waiting.number}` })}
           detail={waitingDetail.data}
           error={waitingDetail.error}
           loading={waitingDetail.isFetching}
@@ -252,7 +279,7 @@ export function PaymentsScreen({
             void waitingDetail.refetch();
           }}
           onPayWithCard={
-            saved === null
+            saved === null || renewalInvoice !== null
               ? null
               : () => {
                   payInvoice(waiting.id);
@@ -263,7 +290,9 @@ export function PaymentsScreen({
       )}
 
       <div className={styles.cards}>
-        <PaymentMethodCard workspaceId={workspaceId} method={method} declined={savedWasRefused} />
+        <PaymentMethodCard workspaceId={workspaceId} method={method} declined={savedWasRefused}>
+          <RenewalMethodChoice workspaceId={workspaceId} summary={summary} method={method} />
+        </PaymentMethodCard>
         <BillingInfoCard workspaceId={workspaceId} info={billingInfo.data.billingInfo} />
       </div>
 
