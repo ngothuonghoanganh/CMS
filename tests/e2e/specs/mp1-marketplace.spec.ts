@@ -116,7 +116,8 @@ test.describe('MP1 · Marketplace', () => {
     const priceBox = page.getByRole('complementary', { name: 'Giá' });
     await expect(priceBox).toContainText('399.000đ');
     await expect(priceBox).toContainText('Một lần · Đã gồm VAT');
-    await expect(priceBox.getByRole('button')).toHaveCount(0);
+    // The owner of the new workspace can buy (MP3); the rest of the box has no link.
+    await expect(priceBox.getByRole('button')).toHaveText(['Mua mẫu']);
     await expect(priceBox.getByRole('link')).toHaveCount(0);
 
     // The terms open in a dialog; closing it gives focus back to its button.
