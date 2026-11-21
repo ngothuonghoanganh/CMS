@@ -9,8 +9,9 @@ import { setUpSite } from '../support/setup.js';
  */
 
 const GYM = 'Khai trương phòng tập';
+const APARTMENTS = 'Mở bán dự án căn hộ';
 const FREE = 'Khóa học tiếng Anh trẻ em';
-const NAMES = [GYM, 'Mở bán dự án căn hộ', 'Spa ưu đãi ngày lễ', FREE];
+const NAMES = [GYM, APARTMENTS, 'Spa ưu đãi ngày lễ', FREE];
 
 test.describe('MP1 · Marketplace', () => {
   test('browses the catalog, filters it and reads one item', async ({ page }) => {
@@ -27,7 +28,9 @@ test.describe('MP1 · Marketplace', () => {
       'page',
     );
     await expect(sidebar.getByRole('link', { name: 'Marketplace' })).not.toContainText('Nâng cấp');
+    // It opens board 32 once there is one (MP2): until then it is text, not a control's outline.
     await expect(page.getByText('Đã sở hữu · 0')).toBeVisible();
+    await expect(page.getByText('Đã sở hữu · 0')).toHaveCSS('border-top-style', 'none');
 
     const cards = page.getByRole('article');
     await expect(cards.getByRole('heading', { level: 2 })).toHaveText(NAMES);
@@ -75,8 +78,17 @@ test.describe('MP1 · Marketplace', () => {
     await sort.selectOption('recent');
     await expect(cards.getByRole('heading', { level: 2 })).toHaveText(NAMES);
 
-    // One item.
-    await page.getByRole('article', { name: GYM }).getByRole('link', { name: GYM }).click();
+    // One item. A mouse press focuses the card's link without the card's ring; Tab shows it.
+    const gym = page.getByRole('article', { name: GYM });
+    await gym.getByRole('link', { name: GYM }).hover();
+    await page.mouse.down();
+    await expect(gym.getByRole('link', { name: GYM })).toBeFocused();
+    await expect(gym).toHaveCSS('outline-style', 'none');
+    await page.keyboard.press('Tab');
+    const next = page.getByRole('article', { name: APARTMENTS });
+    await expect(next.getByRole('link', { name: APARTMENTS })).toBeFocused();
+    await expect(next).toHaveCSS('outline-style', 'solid');
+    await page.mouse.up();
     await expect(page).toHaveURL(new RegExp(`${workspace}/marketplace/mp-khai-truong-phong-tap$`));
     await expect(page.getByRole('heading', { level: 1, name: GYM })).toBeVisible();
     await expect(page.getByText('Sự kiện / webinar · Thể hình · 7 section · v1')).toBeVisible();
