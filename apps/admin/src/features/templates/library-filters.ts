@@ -18,7 +18,9 @@ import { goalDefinitions } from '@plp/sections/schema';
 
 /**
  * "Tất cả" and one tab per source. "Của workspace" is board 19, the list of the workspace's own
- * templates, at the same address (`?source=workspace`).
+ * templates, at the same address (`?source=workspace`). "Đã sở hữu từ Marketplace"
+ * (`?source=marketplace`) has the marketplace items the workspace holds only; "Tất cả" also has
+ * those it does not, which open on the marketplace (ADR-036).
  */
 export type LibraryTab = 'all' | TemplateSource;
 
@@ -27,12 +29,20 @@ export interface LibraryTabDefinition {
   label: string;
   /** The sources its cards come from. */
   sources: readonly TemplateSource[];
+  /** Only the marketplace items the workspace holds a licence of. */
+  ownedOnly: boolean;
 }
 
 export const libraryTabs: readonly LibraryTabDefinition[] = [
-  { tab: 'all', label: 'Tất cả', sources: templateSources },
-  { tab: 'system', label: 'Hệ thống', sources: ['system'] },
-  { tab: 'workspace', label: 'Của workspace', sources: ['workspace'] },
+  { tab: 'all', label: 'Tất cả', sources: templateSources, ownedOnly: false },
+  { tab: 'system', label: 'Hệ thống', sources: ['system'], ownedOnly: false },
+  { tab: 'workspace', label: 'Của workspace', sources: ['workspace'], ownedOnly: false },
+  {
+    tab: 'marketplace',
+    label: 'Đã sở hữu từ Marketplace',
+    sources: ['marketplace'],
+    ownedOnly: true,
+  },
 ];
 
 /** The tab of `?source=`; anything else is "Tất cả". */
@@ -40,8 +50,16 @@ export function tabOf(source: string | undefined): LibraryTab {
   return libraryTabs.find((item) => item.tab === source)?.tab ?? 'all';
 }
 
-export function inTab(template: Pick<TemplateSummary, 'source'>, tab: LibraryTab): boolean {
-  return libraryTabs.some((item) => item.tab === tab && item.sources.includes(template.source));
+export function inTab(
+  template: Pick<TemplateSummary, 'source' | 'marketplace'>,
+  tab: LibraryTab,
+): boolean {
+  return libraryTabs.some(
+    (item) =>
+      item.tab === tab &&
+      item.sources.includes(template.source) &&
+      (!item.ownedOnly || template.marketplace?.owned === true),
+  );
 }
 
 export function goalLabel(goal: PageGoal): string {

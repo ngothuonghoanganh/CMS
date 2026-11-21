@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  endpoints,
-  type TemplateRef,
-  type TemplateSummary,
-  templateUsableIn,
-} from '@plp/contracts';
+import { endpoints, type TemplateSummary, templateRefOf, templateUsableIn } from '@plp/contracts';
 import { Button, Callout, Dialog, Field, Select } from '@plp/ui';
 import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query';
 import { type SubmitEvent, useState } from 'react';
@@ -26,12 +21,6 @@ function libraryQuery(workspaceId: string) {
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       api(endpoints.listTemplates, [workspaceId], { signal }),
   };
-}
-
-function refOf(template: TemplateSummary): TemplateRef {
-  return template.source === 'system'
-    ? { source: 'system', templateId: template.id, version: template.version }
-    : { source: 'workspace', templateId: template.id, version: template.version };
 }
 
 /** "Thay toàn bộ section" in words, with the draft's and the template's real counts. */
@@ -65,7 +54,7 @@ function ApplyForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) 
   const prepare = useMutation({
     mutationKey: preparingKey,
     mutationFn: (template: TemplateSummary) =>
-      api(endpoints.templateComposition, [site.id, pageId], { body: refOf(template) }),
+      api(endpoints.templateComposition, [site.id, pageId], { body: templateRefOf(template) }),
     onSuccess: (result) => {
       // The images first, so the canvas never shows them missing.
       store.getState().addAssets(result.assets);

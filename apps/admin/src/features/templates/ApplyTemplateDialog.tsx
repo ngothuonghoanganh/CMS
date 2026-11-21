@@ -6,6 +6,7 @@ import {
   pageStatusLabels,
   type Site,
   type TemplateRef,
+  templateRefOf,
   type TemplateSummary,
 } from '@plp/contracts';
 import { Button, Callout, Dialog, Field, RadioCardGroup, Select } from '@plp/ui';
@@ -69,10 +70,7 @@ function ApplyTemplateForm({
     enabled: chosen !== null,
   });
 
-  const ref: TemplateRef =
-    template.source === 'system'
-      ? { source: 'system', templateId: template.id, version: template.version }
-      : { source: 'workspace', templateId: template.id, version: template.version };
+  const ref: TemplateRef = templateRefOf(template);
 
   const apply = useMutation({
     mutationKey: applyingKey(template.id),

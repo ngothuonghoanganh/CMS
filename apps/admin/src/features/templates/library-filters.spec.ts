@@ -14,7 +14,12 @@ import {
   withGoal,
   withIndustry,
 } from './library-filters';
-import { summaryFixture, templateSummaries, workspaceSummaryFixture } from './test-fixtures';
+import {
+  marketplaceSummaryFixture,
+  summaryFixture,
+  templateSummaries,
+  workspaceSummaryFixture,
+} from './test-fixtures';
 
 const ALL: LibraryQuery = { tab: 'all', query: '', filters: NO_FILTERS };
 
@@ -27,11 +32,16 @@ describe('tabs', () => {
     expect(tabOf('system')).toBe('system');
     expect(tabOf(undefined)).toBe('all');
     expect(tabOf('all')).toBe('all');
-    expect(tabOf('marketplace')).toBe('all');
+    expect(tabOf('store')).toBe('all');
   });
 
   it('counts the templates of each tab', () => {
-    expect(tabCounts(templateSummaries)).toEqual({ all: 12, system: 12, workspace: 0 });
+    expect(tabCounts(templateSummaries)).toEqual({
+      all: 12,
+      system: 12,
+      workspace: 0,
+      marketplace: 0,
+    });
     expect(names({ tab: 'system' })).toHaveLength(12);
   });
 
@@ -39,9 +49,24 @@ describe('tabs', () => {
     const own = workspaceSummaryFixture();
     const library = [...templateSummaries, own];
     expect(tabOf('workspace')).toBe('workspace');
-    expect(tabCounts(library)).toEqual({ all: 13, system: 12, workspace: 1 });
+    expect(tabCounts(library)).toEqual({ all: 13, system: 12, workspace: 1, marketplace: 0 });
     expect(visibleTemplates(library, { ...ALL, tab: 'workspace' })).toEqual([own]);
     expect(visibleTemplates(library, ALL)).toContain(own);
+  });
+
+  it('lists the marketplace items held in “Đã sở hữu từ Marketplace”, all of them in “Tất cả” (ADR-036)', () => {
+    const owned = marketplaceSummaryFixture({ owned: true });
+    const unowned = marketplaceSummaryFixture({
+      id: 'mp-spa-uu-dai-ngay-le',
+      name: 'Spa ưu đãi ngày lễ',
+      owned: false,
+    });
+    const library = [...templateSummaries, owned, unowned];
+    expect(tabOf('marketplace')).toBe('marketplace');
+    expect(tabCounts(library)).toEqual({ all: 14, system: 12, workspace: 0, marketplace: 1 });
+    expect(visibleTemplates(library, { ...ALL, tab: 'marketplace' })).toEqual([owned]);
+    expect(visibleTemplates(library, ALL)).toEqual(expect.arrayContaining([owned, unowned]));
+    expect(visibleTemplates(library, { ...ALL, tab: 'system' })).not.toContain(owned);
   });
 });
 
