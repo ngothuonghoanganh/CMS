@@ -322,6 +322,56 @@ test.describe('MP2 · Licences of marketplace items', () => {
     expect({ ...generated, items: [] }).toEqual({ ...bundled, items: [] });
   });
 
+  test('board 32 keeps every cell of a row apart from a phone to a desktop, beside the sidebar or not', async ({
+    page,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    const workspace = `/workspaces/${site.workspaceId}`;
+    const me = await call(page.request, 'GET', endpoints.me.path(), meResponseSchema);
+    await seedLicence(E2E_DATABASE, site.workspaceId, me.user.id);
+    await page.goto(`${workspace}/marketplace/owned`);
+    const row = page
+      .getByRole('region', { name: 'Template đã sở hữu' })
+      .getByRole('listitem')
+      .filter({ hasText: VERSIONED_ITEM_NAME });
+    const parts = {
+      // The frame the drawing is clipped to: the drawing itself is taller than what shows.
+      thumbnail: row.getByRole('img', { name: `Thu nhỏ: ${VERSIONED_ITEM_NAME}` }).locator('..'),
+      name: row.getByRole('link', { name: VERSIONED_ITEM_NAME, exact: true }),
+      version: row.getByText('v1', { exact: true }),
+      scope: row.getByText('Mọi site trong workspace', { exact: true }),
+      update: row.getByRole('button', { name: `Cập nhật ${VERSIONED_ITEM_NAME}` }),
+      create: row.getByRole('button', { name: `Tạo trang từ ${VERSIONED_ITEM_NAME}` }),
+    };
+    // 390 and 760 have no sidebar; 900 to 1180 share the window with its 248px.
+    for (const width of [390, 760, 900, 1024, 1180, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(parts.name).toBeVisible();
+      const boxes = await Promise.all(
+        Object.entries(parts).map(async ([part, locator]) => {
+          const box = await locator.boundingBox();
+          expect(box, `${part} at ${width}px`).not.toBeNull();
+          return { part, box: box ?? { x: 0, y: 0, width: 0, height: 0 } };
+        }),
+      );
+      const name = boxes.find((entry) => entry.part === 'name')?.box;
+      // The name reads as words, on at most two lines, not a letter per line.
+      expect(name?.width, `name width at ${width}px`).toBeGreaterThanOrEqual(120);
+      expect(name?.height, `name height at ${width}px`).toBeLessThan(60);
+      for (const [index, a] of boxes.entries()) {
+        for (const b of boxes.slice(index + 1)) {
+          const apart =
+            a.box.x + a.box.width <= b.box.x ||
+            b.box.x + b.box.width <= a.box.x ||
+            a.box.y + a.box.height <= b.box.y ||
+            b.box.y + b.box.height <= a.box.y;
+          expect(apart, `${a.part} and ${b.part} overlap at ${width}px`).toBe(true);
+        }
+      }
+      await expectNoSidewaysScroll(page, `Board 32 at ${width}px`);
+    }
+  });
+
   for (const viewport of SCAN_VIEWPORTS) {
     test(`board 32 and an owned item are accessible at ${viewport.width} px`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });

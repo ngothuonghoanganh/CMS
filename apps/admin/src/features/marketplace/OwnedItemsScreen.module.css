@@ -62,13 +62,17 @@
 }
 
 .list {
+  container: owned-list / inline-size;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
   overflow: hidden;
 }
 
-/* The board's five columns; one card per row below 760px, where each cell names itself. */
+/*
+ * The board's five columns, from the 900px the board gives its list. The list's own width decides,
+ * not the window's: the sidebar takes 248px from 900px up. Narrower lists stack each row below.
+ */
 .head,
 .row {
   display: grid;
@@ -179,22 +183,34 @@
   gap: 6px;
 }
 
-@media (max-width: 759px) {
+/*
+ * A tablet, or a window narrowed beside the sidebar: the template and its actions on a first line,
+ * then version, scope and date side by side, each named by its label (no column headings).
+ */
+@container owned-list (max-width: 899px) {
   .head {
     display: none;
   }
 
   .row {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 16px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px 16px;
+    padding: 16px 20px;
   }
 
+  .template {
+    grid-row: 1;
+    grid-column: 1 / span 2;
+  }
+
+  .actions {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  /* The second line's labels on one baseline, whatever the version cell's chip adds below. */
   .cell {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
+    align-self: start;
   }
 
   .cellLabel {
@@ -206,6 +222,28 @@
     clip: auto;
     font-size: var(--text-sm);
     color: var(--color-muted);
+  }
+}
+
+/* A phone: one cell per line, each label before its value. */
+@container owned-list (max-width: 559px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .template,
+  .actions {
+    grid-row: auto;
+    grid-column: auto;
+  }
+
+  .cell {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
   }
 
   .cellLabel::after {
