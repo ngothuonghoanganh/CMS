@@ -34,6 +34,8 @@ import {
   usageMeters,
 } from './plan-presentation';
 import { adoptSummary, billingQueryKeys, useBillingSummary, usePaymentMethod } from './queries';
+import { replacedInvoiceNote } from './renewal-presentation';
+import { TRANSFER_DETAILS_ID } from './TransferInstructions';
 import { usePlanLifecycle } from './use-plan-lifecycle';
 import styles from './Billing.module.css';
 
@@ -109,10 +111,12 @@ export function BillingScreen({
       case 'update_card':
       case 'pay_invoice':
       case 'view_invoice':
+      case 'view_transfer':
         return (
           <ButtonLink
             as={Link}
-            href={paymentsHref(workspaceId)}
+            // "Xem thông tin chuyển khoản" leads to the card of the bank details (board 29).
+            href={`${paymentsHref(workspaceId)}${action === 'view_transfer' ? `#${TRANSFER_DETAILS_ID}` : ''}`}
             variant={action === 'pay_invoice' ? 'primary' : 'secondary'}
             size="sm"
           >
@@ -146,17 +150,24 @@ export function BillingScreen({
   function changed(next: BillingSummary, charged: number | null, scheduled: boolean) {
     adoptSummary(queryClient, workspaceId, next);
     setChanging(false);
+    // The early transfer invoice the change voided, and the one that replaced it (T4).
+    const note = replacedInvoiceNote(summary, next);
     toast(
       scheduled
         ? {
             tone: 'success',
             title: 'Đã lên lịch đổi gói',
-            description: `Gói ${summary.plan.name} giữ nguyên tới ${formatDate(next.periodEnd)}.`,
+            description: `Gói ${summary.plan.name} giữ nguyên tới ${formatDate(next.periodEnd)}.${note}`,
           }
         : {
             tone: 'success',
             title: `Đã đổi sang Gói ${next.plan.name}`,
-            ...(charged === null ? {} : { description: `Đã thanh toán ${formatVnd(charged)}.` }),
+            ...(charged === null && note === ''
+              ? {}
+              : {
+                  description:
+                    `${charged === null ? '' : `Đã thanh toán ${formatVnd(charged)}.`}${note}`.trim(),
+                }),
           },
     );
   }
@@ -204,6 +215,12 @@ export function BillingScreen({
               {priceLabel(summary.plan, summary.cycle)} · tính cho cả workspace {workspaceName}
             </span>
             <span className={styles.period}>{periodLine(summary)}</span>
+            {summary.renewal?.paid === true ? (
+              <span className={styles.period}>
+                Kỳ sau đã thanh toán nên đổi gói và hủy gói được từ {formatDate(summary.renewal.at)}
+                .
+              </span>
+            ) : null}
           </div>
           {canManage ? (
             <div className={styles.currentActions}>

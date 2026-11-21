@@ -343,3 +343,8 @@
     padding-inline: 16px;
   }
 }
+
+/* One sentence per choice in the "hóa đơn chuyển khoản sẽ bị thay" notice (T4). */
+.voidedLine {
+  display: block;
+}

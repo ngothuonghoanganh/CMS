@@ -18,6 +18,11 @@ import {
 } from '@plp/contracts';
 import type { BadgeTone, CalloutTone } from '@plp/ui';
 import { formatCount, formatDate, formatDayMonth, formatVnd } from '../../lib/format';
+import {
+  type AwaitingTransferNotice,
+  renewalInvoiceTitle,
+  renewalTransferNotice,
+} from './renewal-presentation';
 
 /** "199.000 ₫ / tháng" (board 28 "[GIÁ] / [CHU KỲ]"), VAT included. */
 export function priceLabel(plan: Pick<Plan, 'prices'>, cycle: BillingCycle): string {
@@ -75,6 +80,7 @@ export type PlanBannerAction =
   | 'update_card'
   | 'pay_invoice'
   | 'view_invoice'
+  | 'view_transfer'
   | 'keep'
   | 'choose_plan'
   | 'pay_now';
@@ -93,6 +99,7 @@ export const BANNER_ACTION_LABELS: Record<PlanBannerAction, string> = {
   update_card: 'Cập nhật thẻ',
   pay_invoice: 'Thanh toán ngay',
   view_invoice: 'Xem hóa đơn',
+  view_transfer: 'Xem thông tin chuyển khoản',
   keep: 'Giữ lại gói',
   choose_plan: 'Chọn gói mới',
   pay_now: 'Chọn gói và thanh toán',
@@ -114,6 +121,7 @@ type BannerSummary = Pick<
   | 'renewal'
   | 'dueInvoice'
   | 'nextRetryAt'
+  | 'awaitingTransfer'
 >;
 
 /** "01/12", the day a stopped plan stops: board 28's "Gói sẽ dừng vào 01/12". */
@@ -175,18 +183,101 @@ function pendingBanner(summary: BannerSummary): PlanBannerContent {
 }
 
 /**
+ * The ended period waits for the bank transfer of its renewal invoice (T4): "Chờ chuyển khoản", not
+ * a failed payment. Everything keeps running until the grace ends; then the workspace is read-only
+ * until the money arrives.
+ */
+function awaitingTransferBanner(
+  summary: BannerSummary,
+  notice: AwaitingTransferNotice,
+): PlanBannerContent {
+  const { invoice, deadline } = notice;
+  const lead = `Hóa đơn ${invoice.number} · ${formatVnd(invoice.amount)}.`;
+  const body =
+    summary.access === 'read_only'
+      ? `${lead} Workspace đang ở chế độ chỉ đọc. ${KEPT_RUNNING} Workspace mở lại khi nhận được chuyển khoản.`
+      : deadline === null
+        ? lead
+        : `${lead} Chuyển khoản trước ${formatDate(deadline)}. ${KEPT_RUNNING} Workspace chuyển sang chỉ đọc từ ngày đó nếu chưa nhận được tiền.`;
+  return {
+    role: summary.access === 'read_only' ? 'alert' : 'status',
+    tone: summary.access === 'read_only' ? 'danger' : 'warning',
+    title: 'Chờ chuyển khoản.',
+    body,
+    action: 'view_transfer',
+  };
+}
+
+/**
+ * A plan that renews by bank transfer, before its period (or trial) ends (T4): the invoice waits
+ * for the transfer, or is made soon, or is paid. Null when there is nothing to say yet.
+ */
+function transferRenewalBanner(summary: BannerSummary): PlanBannerContent | null {
+  const renewal = summary.renewal;
+  const notice = renewalTransferNotice(summary);
+  const trial = summary.state === 'trialing';
+  const ends =
+    trial && summary.trialEndsAt !== null
+      ? `Dùng thử hết ${formatDate(summary.trialEndsAt)}. `
+      : '';
+  if (notice?.kind === 'issued') {
+    return {
+      role: 'status',
+      tone: 'info',
+      title: renewalInvoiceTitle(notice.invoice, notice.dueAt),
+      body: `${ends}Chuyển khoản trước ngày đó để Gói ${renewal?.planName ?? summary.plan.name} kỳ mới bắt đầu đúng ngày, không mất ngày nào.${
+        notice.cardFallback
+          ? ' Nếu chưa nhận được tiền, hệ thống trừ thẻ đã lưu cho hóa đơn này.'
+          : ''
+      }`,
+      action: 'view_transfer',
+    };
+  }
+  if (trial && renewal !== null) {
+    const prefix = `Bạn đang dùng thử Gói ${summary.plan.name}.`;
+    if (notice?.kind === 'paid') {
+      return {
+        role: 'status',
+        tone: 'success',
+        title: prefix,
+        body: `${ends}Kỳ trả phí đầu tiên đã thanh toán bằng chuyển khoản và bắt đầu ${formatDate(notice.startsAt)}, không mất ngày nào.`,
+        action: null,
+      };
+    }
+    if (renewal.method === 'transfer' && renewal.invoiceAt !== null) {
+      return {
+        role: 'status',
+        tone: 'info',
+        title: prefix,
+        body: `${ends}Hóa đơn ${formatVnd(renewal.amount)} cho Gói ${renewal.planName} được gửi ${formatDate(renewal.invoiceAt)}; chuyển khoản trước ngày hết dùng thử để không gián đoạn. Bạn đổi được gói trong thời gian dùng thử.`,
+        action: null,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * The banner of board 28 for a state, or null for an active plan (ADR-035, T3). The action is the
  * one the state leads to; whether this viewer may take it (Chủ sở hữu only) is the screen's call.
  */
 export function planBanner(summary: BannerSummary): PlanBannerContent | null {
   const due = summary.dueInvoice;
+  const transfer = renewalTransferNotice(summary);
+  if (transfer?.kind === 'awaiting') {
+    return awaitingTransferBanner(summary, transfer);
+  }
   switch (summary.state) {
     case 'active':
-      return null;
+      return transferRenewalBanner(summary);
     case 'trialing': {
       if (due !== null && due.method === 'transfer' && due.status === 'pending') {
         // "Thanh toán ngay" by transfer: the trial runs until the money arrives.
         return pendingBanner(summary);
+      }
+      const renewing = transferRenewalBanner(summary);
+      if (renewing !== null) {
+        return renewing;
       }
       if (summary.cancelAt !== null) {
         return {
@@ -225,7 +316,9 @@ export function planBanner(summary: BannerSummary): PlanBannerContent | null {
         body:
           renewal === null
             ? `${ends}Bạn đổi được gói trong thời gian dùng thử.`.trim()
-            : `${ends}Hết dùng thử, hệ thống tự thanh toán ${formatVnd(renewal.amount)} cho Gói ${renewal.planName} bằng thẻ đã lưu. Bạn đổi được gói trong thời gian dùng thử.`,
+            : renewal.method === 'transfer'
+              ? `${ends}Hết dùng thử, kỳ trả phí đầu tiên (${formatVnd(renewal.amount)} cho Gói ${renewal.planName}) trả bằng chuyển khoản. Bạn đổi được gói trong thời gian dùng thử.`
+              : `${ends}Hết dùng thử, hệ thống tự thanh toán ${formatVnd(renewal.amount)} cho Gói ${renewal.planName} bằng thẻ đã lưu. Bạn đổi được gói trong thời gian dùng thử.`,
         action: null,
       };
     }
@@ -311,6 +404,29 @@ export function planBanner(summary: BannerSummary): PlanBannerContent | null {
 }
 
 /**
+ * The renewal by bank transfer (T4) as the plan card says it: "gia hạn 01/12 · chuyển khoản 599.000 ₫,
+ * hóa đơn gửi 24/11", or that the invoice is sent or the period paid. Null for a card renewal.
+ */
+function transferLine(renewal: BillingSummary['renewal']): string | null {
+  if (renewal === null) {
+    return null;
+  }
+  if (renewal.paid) {
+    return `kỳ sau đã thanh toán, bắt đầu ${formatDate(renewal.at)}`;
+  }
+  if (renewal.method !== 'transfer') {
+    return null;
+  }
+  const head = `gia hạn ${formatDate(renewal.at)} · chuyển khoản ${formatVnd(renewal.amount)}`;
+  if (renewal.invoice !== null) {
+    return `${head}, hóa đơn ${renewal.invoice.number} đã gửi`;
+  }
+  return renewal.invoiceAt === null
+    ? head
+    : `${head}, hóa đơn gửi ${formatDate(renewal.invoiceAt)}`;
+}
+
+/**
  * "Kỳ hiện tại 01/11 – 30/11 · gia hạn tự động 01/12", the trial's dates, or when a stopped plan
  * ended.
  */
@@ -328,6 +444,10 @@ export function periodLine(
     if (summary.cancelAt !== null) {
       return `${base} · không gia hạn`;
     }
+    const transfer = transferLine(renewal);
+    if (transfer !== null) {
+      return `${base} · ${transfer}`;
+    }
     return renewal?.autoRenews === true
       ? `${base} · tự thanh toán ${formatVnd(renewal.amount)} ngày ${formatDate(renewal.at)}`
       : base;
@@ -342,6 +462,10 @@ export function periodLine(
   if (renewal === null) {
     return base;
   }
+  const transfer = transferLine(renewal);
+  if (transfer !== null) {
+    return `${base} · ${transfer}`;
+  }
   return renewal.autoRenews
     ? `${base} · gia hạn tự động ${formatDate(renewal.at)}`
     : `${base} · chưa thể gia hạn tự động`;
@@ -351,7 +475,13 @@ export function periodLine(
  * Whether "Hủy thay đổi" is offered for a scheduled change: only while the period is paid. Once it
  * is due, its renewal invoice already charges the scheduled plan (the API says 409 `unpaid`).
  */
-export function canDropSchedule(summary: Pick<BillingSummary, 'state'>): boolean {
+export function canDropSchedule(
+  summary: Pick<BillingSummary, 'state'> & { renewal?: BillingSummary['renewal'] },
+): boolean {
+  // The next period paid by transfer already carries the scheduled plan (T4: 409 next_period_paid).
+  if (summary.renewal?.paid === true) {
+    return false;
+  }
   return (
     summary.state === 'active' ||
     summary.state === 'expiring_soon' ||
@@ -360,8 +490,11 @@ export function canDropSchedule(summary: Pick<BillingSummary, 'state'>): boolean
 }
 
 /** Whether "Hủy gói" is offered: only a plan that runs and is paid for (the API says 409 else). */
-export function canCancelPlan(summary: Pick<BillingSummary, 'state' | 'cancelAt'>): boolean {
+export function canCancelPlan(
+  summary: Pick<BillingSummary, 'state' | 'cancelAt'> & { renewal?: BillingSummary['renewal'] },
+): boolean {
   return (
+    summary.renewal?.paid !== true &&
     summary.cancelAt === null &&
     (summary.state === 'trialing' ||
       summary.state === 'active' ||
@@ -392,7 +525,7 @@ export function scheduledChangeLine(
  * its answer reads as waiting, not as failed.
  */
 export function graceNotice(
-  plan: Pick<WorkspacePlan, 'state' | 'graceDaysLeft' | 'paymentWaiting'>,
+  plan: Pick<WorkspacePlan, 'state' | 'graceDaysLeft' | 'paymentWaiting' | 'awaitingTransfer'>,
 ): { title: string; detail: string } | null {
   const state = shownState(plan.state, plan.paymentWaiting);
   if (state !== 'past_due' && state !== 'pending_payment') {
@@ -400,6 +533,13 @@ export function graceNotice(
   }
   const left =
     plan.graceDaysLeft === null ? '' : ` — còn ${plan.graceDaysLeft} ngày trước khi chỉ đọc`;
+  if (plan.awaitingTransfer) {
+    return {
+      title: `Chờ chuyển khoản${left}`,
+      detail:
+        'Trang live và form vẫn chạy. Chuyển khoản theo hóa đơn gia hạn trước hạn để workspace không bị chuyển sang chỉ đọc.',
+    };
+  }
   return state === 'past_due'
     ? {
         title: `Thanh toán lỗi${left}`,
