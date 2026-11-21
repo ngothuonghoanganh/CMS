@@ -34,6 +34,7 @@ import {
   invoiceNotPayable,
   paymentFailed,
   paymentInProgress,
+  paymentAwaitingTransfer,
   paymentMethodRequired,
   paymentNotApplied,
   paymentsDisabled,
@@ -348,7 +349,7 @@ export class InvoiceCharges {
     }
     const due = await this.invoices.findOfWorkspace(ref, toObjectId(facts.openInvoiceId), tx);
     if (due !== null && due.from === null && awaitsTransfer(due)) {
-      throw paymentUndecided(due);
+      throw paymentAwaitingTransfer(due);
     }
   }
 

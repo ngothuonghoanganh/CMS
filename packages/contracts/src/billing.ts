@@ -446,6 +446,13 @@ export const workspacePlanSchema = z.object({
   state: subscriptionStateSchema,
   access: accessLevelSchema,
   trialDaysLeft: z.number().int().nonnegative().nullable(),
+  /** Days left before an unpaid workspace turns read-only, by the server's clock (T3). */
+  graceDaysLeft: z.number().int().nonnegative().nullable(),
+  /**
+   * A payment of the unpaid period waits for its answer (T3): a bank transfer to confirm, or a
+   * gateway that has not replied. The banners say it is waiting, not that it failed.
+   */
+  paymentWaiting: z.boolean(),
 });
 export type WorkspacePlan = z.infer<typeof workspacePlanSchema>;
 

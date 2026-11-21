@@ -69,11 +69,18 @@ export class BillingService {
     return { plans: this.catalog.plans, trial: this.catalog.trial };
   }
 
-  /** What every member sees of the plan: its name, limits and features, and the access level. */
+  /**
+   * What every member sees of the plan: its name, limits and features, the access level, and of
+   * an unpaid period whether its payment waits for an answer (T3).
+   */
   async workspacePlan(user: AuthenticatedUser, workspaceId: string): Promise<WorkspacePlan> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'pages.view');
-    return toWorkspacePlan(await this.entitlements.of(scope));
+    const entitlements = await this.entitlements.of(scope);
+    const dueId = entitlements.facts.openInvoiceId;
+    const due =
+      dueId === null ? null : await this.invoices.findOfWorkspace(scope, toObjectId(dueId));
+    return toWorkspacePlan(entitlements, due);
   }
 
   async summary(user: AuthenticatedUser, workspaceId: string): Promise<BillingSummary> {
@@ -157,7 +164,11 @@ export class BillingService {
     }
   }
 
-  /** Drops the change scheduled for the end of the period (T3); nothing to drop is fine. */
+  /**
+   * Drops the change scheduled for the end of the period (T3); nothing to drop is fine. Not once
+   * the period ended or its payment is under way (409 `unpaid`): the renewal invoice charges the
+   * scheduled plan, and paying it applies that plan.
+   */
   async cancelScheduledChange(
     user: AuthenticatedUser,
     workspaceId: string,
@@ -167,6 +178,9 @@ export class BillingService {
     const { facts, plan, at } = await this.entitlements.of(scope);
     const scheduled = facts.scheduledChange;
     if (scheduled !== null) {
+      if (at.getTime() >= facts.periodEnd.getTime() || paymentUnderWay(facts)) {
+        throw planChangeUnavailable('unpaid');
+      }
       await this.transactions.run(async (tx) => {
         await this.writeOrConflict(
           this.subscriptions.setScheduledChange(

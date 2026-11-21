@@ -443,12 +443,14 @@ export type GatewayUnavailableProblemContext = z.infer<
 
 /**
  * `context` of a 409 `payment_in_progress` when an invoice whose charge has an unknown outcome
- * blocks the change ("Thanh toán lại" on it tells), and of a 409 `payment_not_applied` (the
- * gateway took a payment for an invoice decided meanwhile): the invoice concerned.
+ * blocks the change ("Thanh toán lại" on it tells), or one that waits for a bank transfer
+ * (`awaiting: 'transfer'`, T3: the money may be on its way), and of a 409 `payment_not_applied`
+ * (the gateway took a payment for an invoice decided meanwhile): the invoice concerned.
  */
 export const invoiceProblemContextSchema = z.object({
   invoiceId: idSchema,
   invoiceNumber: invoiceNumberSchema,
+  awaiting: z.literal('transfer').optional(),
 });
 export type InvoiceProblemContext = z.infer<typeof invoiceProblemContextSchema>;
 

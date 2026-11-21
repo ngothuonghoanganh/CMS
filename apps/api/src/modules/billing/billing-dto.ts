@@ -104,12 +104,21 @@ function toDueInvoice(invoice: InvoiceRecord, payable: boolean): DueInvoice {
   return summary;
 }
 
-export function toWorkspacePlan({ plan, status }: Entitlements): WorkspacePlan {
+/**
+ * The plan every member sees, with `due`, the invoice the subscription waits for: a transfer to
+ * confirm or a charge the gateway has not answered make the banners say it waits (T3).
+ */
+export function toWorkspacePlan(
+  { plan, status }: Entitlements,
+  due: Pick<InvoiceRecord, 'status'> | null,
+): WorkspacePlan {
   return {
     plan: { id: plan.id, name: plan.name, limits: plan.limits, features: plan.features },
     state: status.state,
     access: status.access,
     trialDaysLeft: status.trialDaysLeft,
+    graceDaysLeft: status.graceDaysLeft,
+    paymentWaiting: due !== null && (due.status === 'pending' || due.status === 'open'),
   };
 }
 
