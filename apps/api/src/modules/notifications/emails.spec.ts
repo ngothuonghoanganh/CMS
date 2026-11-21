@@ -12,6 +12,7 @@ import {
   billingExpiringSoonEmail,
   billingReadOnlyEmail,
   billingReceiptEmail,
+  billingTransferDueEmail,
   billingTrialEndingEmail,
   domainActiveEmail,
   domainLostEmail,
@@ -250,6 +251,30 @@ function receipt(method: string): KeyedEmail {
   });
 }
 
+function transferDue(
+  stage: 'issued' | 'due',
+  replacesInvoiceNumber: string | null = null,
+): KeyedEmail {
+  return billingTransferDueEmail({
+    invoiceId: OTHER_ID,
+    workspaceName: BILLING.workspaceName,
+    planName: 'Agency',
+    cycle: 'tháng',
+    period: '01/12/2026 – 01/01/2027',
+    invoiceNumber: 'HD-2026-000124',
+    amount: '599.000 ₫',
+    stage,
+    dueOn: '01/12/2026',
+    graceEndsOn: '08/12/2026',
+    bankName: 'Ngân hàng thử (cổng thanh toán giả)',
+    accountNumber: '0000000000',
+    accountName: 'PAYLOAD LANDING PAGE',
+    content: 'PLP HD-2026-000124',
+    replacesInvoiceNumber,
+    paymentsUrl: BILLING.paymentsUrl,
+  });
+}
+
 function marketplaceReceipt(method: string): KeyedEmail {
   return marketplaceReceiptEmail({
     invoiceId: OTHER_ID,
@@ -287,6 +312,9 @@ const EVERY_EMAIL: Array<[string, KeyedEmail]> = [
   ['billing-read-only', readOnly],
   ['billing-receipt of a card', receipt('Thẻ Visa •••• 4242')],
   ['billing-receipt of a transfer', receipt('Chuyển khoản')],
+  ['billing-transfer-due when the invoice is made', transferDue('issued')],
+  ['billing-transfer-due replacing an invoice', transferDue('issued', 'HD-2026-000123')],
+  ['billing-transfer-due on its due day', transferDue('due')],
   ['marketplace-receipt of a card', marketplaceReceipt('Thẻ Visa •••• 4242')],
   ['marketplace-receipt of a transfer', marketplaceReceipt('Chuyển khoản')],
   ['marketplace-suggestion', marketplaceSuggestion],
@@ -489,6 +517,20 @@ describe('the emails of the plan (ADR-035, T3)', () => {
     expect(expiringSoon.idempotencyKey).toBe(`billing-expiring-soon:${ID}:${AT.getTime()}`);
     expect(readOnly.idempotencyKey).toBe(`billing-read-only:${ID}:${AT.getTime()}`);
     expect(receipt('Chuyển khoản').idempotencyKey).toBe(`billing-receipt:${OTHER_ID}`);
+  });
+
+  it('send the transfer invoice once when it is made and once on its due day (T4)', () => {
+    expect(transferDue('issued').idempotencyKey).toBe(`billing-transfer-due:${OTHER_ID}:issued`);
+    expect(transferDue('due').idempotencyKey).toBe(`billing-transfer-due:${OTHER_ID}:due`);
+    expect(
+      templateDataProblems('billing-transfer-due', { ...transferDue('due').data, stage: 'late' }),
+    ).toEqual(['/stage must be equal to one of the allowed values']);
+    expect(
+      templateDataProblems('billing-transfer-due', {
+        ...transferDue('issued').data,
+        replacesInvoiceNumber: 'HD-1',
+      }),
+    ).toEqual(['/replacesInvoiceNumber must match pattern "^HD-\\d{4}-\\d{6}$"']);
   });
 
   it('never carry more of a card than its network and last four digits', () => {

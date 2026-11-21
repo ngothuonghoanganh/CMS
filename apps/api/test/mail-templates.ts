@@ -32,6 +32,8 @@ export const MAIL_TEMPLATES: readonly EmailTemplate[] = [
   'billing-expiring-soon',
   'billing-read-only',
   'billing-receipt',
+  // Written here first too (ADR-035, T4): the renewal invoice to pay by bank transfer.
+  'billing-transfer-due',
   // Written here first too (ADR-036, MP3): the emails of the marketplace.
   'marketplace-receipt',
   'marketplace-suggestion',

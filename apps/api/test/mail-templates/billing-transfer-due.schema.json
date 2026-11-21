@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "billing-transfer-due",
+  "description": "Hóa đơn kỳ sau của gói gia hạn bằng chuyển khoản (ADR-035, T4): khi hóa đơn được tạo trước cuối kỳ (stage \"issued\"), và vào ngày đến hạn nếu chưa trả (stage \"due\"). Có thông tin chuyển khoản, không có mã QR (ở màn 29).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workspaceName",
+    "planName",
+    "cycle",
+    "period",
+    "invoiceNumber",
+    "amount",
+    "stage",
+    "dueOn",
+    "graceEndsOn",
+    "bankName",
+    "accountNumber",
+    "accountName",
+    "content",
+    "replacesInvoiceNumber",
+    "paymentsUrl"
+  ],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "planName": { "type": "string", "minLength": 1 },
+    "cycle": { "type": "string", "enum": ["tháng", "năm"] },
+    "period": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Kỳ hóa đơn trả cho, ví dụ \"01/12/2026 – 01/01/2027\"."
+    },
+    "invoiceNumber": { "type": "string", "pattern": "^HD-\\d{4}-\\d{6}$" },
+    "amount": { "type": "string", "minLength": 1, "description": "Ví dụ \"599.000 ₫\"." },
+    "stage": {
+      "type": "string",
+      "enum": ["issued", "due"],
+      "description": "\"issued\": hóa đơn vừa được tạo, trước hạn; \"due\": hôm nay là hạn mà chưa nhận được tiền."
+    },
+    "dueOn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hạn chuyển khoản, là ngày hết kỳ hiện tại, \"dd/MM/yyyy\"."
+    },
+    "graceEndsOn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ngày workspace chuyển sang chỉ đọc nếu vẫn chưa thanh toán, \"dd/MM/yyyy\"."
+    },
+    "bankName": { "type": "string", "minLength": 1 },
+    "accountNumber": { "type": "string", "minLength": 1 },
+    "accountName": { "type": "string", "minLength": 1 },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Nội dung chuyển khoản, ví dụ \"PLP HD-2026-000123\"."
+    },
+    "replacesInvoiceNumber": {
+      "type": ["string", "null"],
+      "pattern": "^HD-\\d{4}-\\d{6}$",
+      "description": "Hóa đơn cũ mà hóa đơn này thay sau khi gói thay đổi (không chuyển khoản cho nó nữa); null khi không thay hóa đơn nào."
+    },
+    "paymentsUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Màn 29 \"Thanh toán & hóa đơn\": mã QR, thông tin chuyển khoản và thanh toán bằng thẻ."
+    }
+  }
+}
