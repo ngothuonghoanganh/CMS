@@ -497,6 +497,46 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
     expect(charge).not.toHaveBeenCalled();
   });
 
+  it('keeps the grace from the end when a card tried in place of the awaited transfer is refused', async () => {
+    // Refused inside the grace: the grace and the retries still count from the end.
+    const inGrace = await invoiced();
+    await runAt(inGrace.periodEnd);
+    await addCard(t, inGrace.owner, inGrace.workspaceId, CARD_DECLINED);
+    clock.set(after(inGrace.periodEnd, 3));
+    await payInvoice(inGrace.owner, inGrace.workspaceId, inGrace.invoice.id).expect(402);
+    expect(await summaryOf(inGrace.owner, inGrace.workspaceId)).toMatchObject({
+      state: 'past_due',
+      access: 'full',
+      awaitingTransfer: false,
+      failedSince: inGrace.periodEnd.toISOString(),
+      graceEndsAt: after(inGrace.periodEnd, 7).toISOString(),
+      nextRetryAt: after(inGrace.periodEnd, 5).toISOString(),
+    });
+    await runAt(after(inGrace.periodEnd, 7));
+    expect((await summaryOf(inGrace.owner, inGrace.workspaceId)).access).toBe('read_only');
+
+    // Refused once read-only: the workspace stays read-only, with the same deadline, and no retry.
+    const late = await invoiced();
+    await runAt(late.periodEnd);
+    await runAt(after(late.periodEnd, 7));
+    expect(emailsTo(late.email, 'billing-read-only')).toHaveLength(1);
+    await addCard(t, late.owner, late.workspaceId, CARD_DECLINED);
+    clock.set(after(late.periodEnd, 10));
+    await payInvoice(late.owner, late.workspaceId, late.invoice.id).expect(402);
+    expect(await summaryOf(late.owner, late.workspaceId)).toMatchObject({
+      state: 'past_due',
+      access: 'read_only',
+      failedSince: late.periodEnd.toISOString(),
+      graceEndsAt: after(late.periodEnd, 7).toISOString(),
+      nextRetryAt: null,
+    });
+    const charge = vi.spyOn(fakeGateway(t), 'charge');
+    await runAt(after(late.periodEnd, 17));
+    expect(charge).not.toHaveBeenCalled();
+    expect((await summaryOf(late.owner, late.workspaceId)).access).toBe('read_only');
+    expect(emailsTo(late.email, 'billing-read-only')).toHaveLength(1);
+  });
+
   it('voids the unpaid early invoice on a plan change and makes its replacement at once, with its email', async () => {
     const { owner, workspaceId, email, periodEnd, invoice: first } = await invoiced();
     clock.set(after(periodEnd, -5));

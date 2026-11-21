@@ -207,6 +207,27 @@ export function periodPaidAt(
 }
 
 /**
+ * When a refused charge of the invoice the subscription waits for starts its grace and retries
+ * (`failedSince`, T3): the refusal. The invoice of a renewal by bank transfer (T4) was waited for
+ * in the grace from the end it renews, with nothing failed: a card tried in its place days later
+ * counts from that end, so the refusal neither moves the grace nor gives a read-only workspace its
+ * full access back, and only the retries still ahead of it are made.
+ */
+export function failedSinceOf(
+  invoice: Pick<PlanInvoicePurpose, 'kind' | 'from' | 'endsTrial' | 'periodStart'> & {
+    transferRenewal?: boolean;
+  },
+  at: Date,
+): Date {
+  const purpose = purposeOf(invoice);
+  const renewsByTransfer =
+    invoice.transferRenewal === true && (purpose === 'renewal' || purpose === 'trial_end');
+  return renewsByTransfer && invoice.periodStart.getTime() < at.getTime()
+    ? invoice.periodStart
+    : at;
+}
+
+/**
  * Whether "Thanh toán lại" may charge the invoice now: it is unpaid and not being decided (a
  * transfer waiting may be paid by card instead), and what it pays for still applies. Paying for
  * the end of a trial needs the trial still unpaid; an upgrade needs the subscription still on the

@@ -4,7 +4,12 @@ import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js
 import type { Tx } from '../../shared/persistence/transaction.js';
 import { BillingLogRepository } from './billing-log.repository.js';
 import { BillingSchedule } from './billing-schedule.service.js';
-import { periodPaidAt, purposeOf, statusAfterCharge } from './domain/invoice-state.js';
+import {
+  failedSinceOf,
+  periodPaidAt,
+  purposeOf,
+  statusAfterCharge,
+} from './domain/invoice-state.js';
 import type {
   InvoiceRecord,
   MarketplaceInvoiceRecord,
@@ -132,7 +137,11 @@ export class InvoiceSettlement {
       // A renewal follows the period that ended where the invoice's own period was to start.
       applied = await this.applyPaid(after, { at: report.at, follows: invoice.periodStart }, tx);
     } else if (after.status === 'failed') {
-      await this.subscriptions.recordFailure(ref, { invoiceId: after._id, at: report.at }, tx);
+      await this.subscriptions.recordFailure(
+        ref,
+        { invoiceId: after._id, since: failedSinceOf(after, report.at), at: report.at },
+        tx,
+      );
     }
     await this.schedule.reschedule(ref, report.at, tx);
     return { invoice: after, recorded: true, applied };

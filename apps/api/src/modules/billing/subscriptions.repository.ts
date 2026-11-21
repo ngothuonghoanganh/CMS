@@ -593,18 +593,18 @@ export class SubscriptionsRepository {
   }
 
   /**
-   * The first refused charge of the invoice the subscription waits for: the grace and the retries
-   * count from it (ADR-035, T3). A later refusal leaves it.
+   * The first refused charge of the invoice the subscription waits for, made at `at`: the grace and
+   * the retries count from `since` (ADR-035, T3; `failedSinceOf`). A later refusal leaves it.
    */
   async recordFailure(
     ref: WorkspaceRef,
-    failure: { invoiceId: ObjectId; at: Date },
+    failure: { invoiceId: ObjectId; since: Date; at: Date },
     tx: Tx,
   ): Promise<void> {
     await this.subscriptions
       .updateOne(
         { _id: ref.workspaceId, openInvoiceId: failure.invoiceId, failedSince: null },
-        { $set: { failedSince: failure.at, updatedAt: failure.at }, $inc: { version: 1 } },
+        { $set: { failedSince: failure.since, updatedAt: failure.at }, $inc: { version: 1 } },
         { session: tx },
       )
       .exec();
