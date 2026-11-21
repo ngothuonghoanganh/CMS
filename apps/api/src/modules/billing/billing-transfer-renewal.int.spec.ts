@@ -648,10 +648,25 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
       state: 'trialing',
       renewal: { invoice: { status: 'pending', amount: 599_000, planId: 'agency' } },
     });
-    const invoice = trialing.renewal?.invoice;
-    if (invoice == null) {
+    const first = trialing.renewal?.invoice;
+    if (first == null) {
       throw new Error('The trial got no invoice for its transfer');
     }
+    // A free change of the trial's plan replaces it at the new plan's price.
+    clock.set(after(trialEnd, -6));
+    const changed = billingSummarySchema.parse(
+      (
+        await owner
+          .post(endpoints.changePlan.path(workspaceId), { planId: 'basic', cycle: 'monthly' })
+          .expect(200)
+      ).body,
+    );
+    const invoice = changed.renewal?.invoice;
+    if (invoice == null) {
+      throw new Error('The trial’s new plan got no invoice for its transfer');
+    }
+    expect(invoice).toMatchObject({ status: 'pending', amount: 199_000, planId: 'basic' });
+    expect((await invoiceOf(owner, workspaceId, first.id)).status).toBe('void');
     expect(await invoiceOf(owner, workspaceId, invoice.id)).toMatchObject({
       endsTrial: true,
       periodStart: trialEnd.toISOString(),
@@ -668,6 +683,7 @@ describe('renewing by bank transfer (ADR-035, T4)', () => {
     await runAt(trialEnd);
     expect(await summaryOf(owner, workspaceId)).toMatchObject({
       state: 'active',
+      plan: { id: 'basic' },
       trialEndsAt: null,
       periodStart: trialEnd.toISOString(),
       periodEnd: periodEndOf(trialEnd, 'monthly').toISOString(),
