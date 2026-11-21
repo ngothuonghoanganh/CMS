@@ -44,6 +44,10 @@ import {
   grantLicence,
   licenceVersionPath,
   marketplaceCatalogFile,
+  PAID_ITEM_ID,
+  purchaseBody,
+  purchaseItem,
+  quoteItem,
   testMarketplaceCatalog,
   TWO_VERSIONS_ITEM_ID,
 } from '../../../test/marketplace.js';
@@ -727,6 +731,24 @@ const ROWS: Row[] = [
     status: 200,
     call: (client, { workspaceId }) =>
       client.post(licenceVersionPath(workspaceId, TWO_VERSIONS_ITEM_ID), { baseVersion: 1 }),
+  },
+  // Buying is paying (MP3): the owner's, never while read-only, though the plan is still paid
+  {
+    action: 'Báo giá mua mẫu',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => quoteItem(client, workspaceId, PAID_ITEM_ID),
+  },
+  {
+    action: 'Mua mẫu',
+    permission: 'billing.manage',
+    scope: 'workspace',
+    // The fixture saves no card: every check before the card's passes, and nothing is charged.
+    status: 422,
+    refusedWhileReadOnly: true,
+    call: (client, { workspaceId }) =>
+      purchaseItem(client, workspaceId, purchaseBody(), 'role-matrix-purchase'),
   },
   {
     action: 'Xem trang và bản nháp',
