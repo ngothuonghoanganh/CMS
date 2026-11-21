@@ -85,6 +85,13 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 | 33  | Khu vực nhà cung cấp          | `Vendor.dc.html`          | Hoãn: chủ sản phẩm quyết ngày 2026-11-20 chỉ Payload bán (ADR-036)                 |
 | —   | Sidebar v2, bật `planLimited` | `SidebarV2.dc.html`       | T1; khóa của mục Marketplace không làm (ADR-036)                                   |
 
+**Màn 28 và 29, T4 (gia hạn bằng chuyển khoản):** board không vẽ những phần sau, nên admin dựng theo kiểu của board và `@plp/ui`; `docs/ARCHITECTURE.md` ADR-035 (mục T4) là nguồn quyết định.
+
+- "Gia hạn bằng" (màn 29): `RadioCardGroup` hai thẻ "Thẻ thanh toán tự động" và "Chuyển khoản ngân hàng" nằm trong thẻ "Phương thức thanh toán", dưới thẻ đã lưu. Câu "Phương thức được hỗ trợ" nay là thẻ và chuyển khoản. Chọn thẻ mà chưa có thẻ dùng được thì hiện "Thêm thẻ" thay vì gọi API. Số ngày gửi hóa đơn trước (`transferLeadDays`) chưa có trong contract công khai nên mô tả không nêu con số: ngày gửi cụ thể hiện ở dòng trạng thái bên dưới.
+- Hóa đơn gia hạn sớm và "Chờ chuyển khoản" (màn 29): một `Callout` kiểu banner "Thanh toán không thành công" (nút bên phải: "Xem thông tin chuyển khoản", "Thanh toán bằng thẻ thay thế"), trên thẻ "Chuyển khoản hóa đơn gia hạn …" dùng lại khung chuyển khoản của T3. Màu `warning` trong ân hạn, `danger` khi đã chỉ đọc, `info` trước cuối kỳ, `success` khi kỳ sau đã trả.
+- Màn 28: banner thêm hành động "Xem thông tin chuyển khoản" dẫn tới màn 29 (nút thẻ thay thế chỉ có ở màn 29, nơi có thẻ đã lưu); dòng kỳ ghi phương thức ("gia hạn 04/12 · chuyển khoản 599.000 ₫, hóa đơn gửi 27/11"); khi kỳ sau đã trả, "Hủy gói" và "Hủy thay đổi" ẩn kèm một câu giải thích.
+- Hộp "Đổi gói" và "Hủy gói" thêm câu cảnh báo khi hóa đơn chuyển khoản đang chờ sẽ bị thay.
+
 **Chuyển động** (ARCHITECTURE §5, ADR-032):
 
 | #   | Board                                   | File                    | Lát                                                   |
