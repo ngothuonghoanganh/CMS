@@ -12,11 +12,15 @@ import {
   VERSIONED_ITEM_NAME,
 } from '../support/marketplace-catalog.js';
 import { accountLink, waitForEmail } from '../support/mailpit.js';
+import { TERMS_LABEL, tickAndPay } from '../support/marketplace-purchase.js';
+import { joinAs } from '../support/members.js';
 import {
   addCardViaGateway,
+  CARD_DECLINED,
   CARD_INSUFFICIENT_FUNDS,
   CARD_OK,
   paymentsPath,
+  saveCardAtGateway,
 } from '../support/payments.js';
 import { call, setUpSite, uniqueId } from '../support/setup.js';
 import { WebhookReceiver } from '../support/webhook-receiver.js';
@@ -702,6 +706,104 @@ test.describe('Design capture', () => {
     ).toBeVisible();
     await capture(receipt, 'Receipt');
   });
+  // A workspace of its own: buying changes the plan's invoices and the licences it holds.
+  test('31 MarketplaceItem when bought, and the marketplace row of 29 and its receipt', async ({
+    page,
+    browser,
+    request,
+    context,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    const { site } = await setUpSite(page.request);
+    const workspaceId = site.workspaceId;
+    const workspace = `/workspaces/${workspaceId}`;
+    const item = `${workspace}/marketplace/mp-khai-truong-phong-tap`;
+    await addCardViaGateway(page, workspaceId, CARD_OK);
+
+    // Confirm.
+    await page.goto(item);
+    await page
+      .getByRole('complementary', { name: 'Giá' })
+      .getByRole('button', { name: 'Mua mẫu' })
+      .click();
+    let dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('checkbox', { name: TERMS_LABEL })).toBeVisible();
+    await capture(page, 'MarketplaceItem-buy');
+    await dialog.getByRole('button', { name: 'Hủy' }).click();
+
+    // Declined: the card is changed at the gateway first.
+    await addCardViaGateway(page, workspaceId, CARD_DECLINED);
+    await page.goto(item);
+    await page
+      .getByRole('complementary', { name: 'Giá' })
+      .getByRole('button', { name: 'Mua mẫu' })
+      .click();
+    dialog = page.getByRole('dialog');
+    await tickAndPay(dialog);
+    await expect(
+      dialog.getByRole('alert').filter({ hasText: 'Ngân hàng từ chối thẻ' }),
+    ).toBeVisible();
+    await capture(page, 'MarketplaceItem-declined');
+    await dialog.getByRole('button', { name: 'Đổi phương thức' }).click();
+    await saveCardAtGateway(page, CARD_OK);
+    dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Đã lưu thẻ', { exact: true })).toBeVisible();
+
+    // Waiting: the gateway's answer is held until the picture is taken.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/marketplace/purchases', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await tickAndPay(dialog);
+    await expect(dialog.getByText('Đang chờ cổng thanh toán xác nhận…')).toBeVisible();
+    await capture(page, 'MarketplaceItem-waiting');
+    release();
+    await expect(dialog.getByText('Đã mua “Khai trương phòng tập”').first()).toBeVisible();
+    await capture(page, 'MarketplaceItem-success');
+    await dialog.getByRole('button', { name: 'Đóng' }).first().click();
+    await expect(page.getByText('Workspace đã sở hữu · v1')).toBeVisible();
+    await capture(page, 'MarketplaceItem-bought');
+
+    // A member who cannot pay asks the owner.
+    const editor = await joinAs(page.request, browser, request, workspaceId, 'editor', [site.id]);
+    try {
+      await editor.setViewportSize({ width: 1440, height: 1080 });
+      await editor.goto(`${workspace}/marketplace/mp-mo-ban-du-an-can-ho`);
+      await expect(
+        editor
+          .getByRole('complementary', { name: 'Giá' })
+          .getByRole('button', { name: /^Đề xuất/ }),
+      ).toBeVisible();
+      await capture(editor, 'MarketplaceItem-notOwner');
+    } finally {
+      await editor.context().close();
+    }
+
+    // Board 29 with the row, and its receipt.
+    await page.goto(paymentsPath(workspaceId));
+    const history = page.getByRole('table', { name: 'Lịch sử giao dịch' });
+    // The refused attempt stays as a voided row beside the paid one.
+    const paid = history
+      .getByRole('row')
+      .filter({ hasText: 'Mẫu “Khai trương phòng tập” · Marketplace' })
+      .filter({ hasText: 'Đã thanh toán' });
+    await expect(paid).toHaveCount(1);
+    await capture(page, 'Billing-marketplace');
+    const [receipt] = await Promise.all([
+      context.waitForEvent('page'),
+      paid.getByRole('link', { name: /^Tải hóa đơn HD-/ }).click(),
+    ]);
+    await receipt.setViewportSize({ width: 1000, height: 900 });
+    await expect(
+      receipt.getByRole('heading', { level: 1, name: 'Biên nhận thanh toán' }),
+    ).toBeVisible();
+    await capture(receipt, 'Receipt-marketplace');
+  });
+
   // Last: a workspace of its own whose clock is moved, so the states of T3 (ADR-035) show on
   // boards 28 and 29 without touching the board's data.
   test('28 and 29 in the life of a plan: past due, transfer, scheduled downgrade, cancel', async ({
