@@ -77,6 +77,20 @@ export class MarketplaceLicencesRepository {
       .exec();
   }
 
+  /** The workspace's licences of `itemIds`, at most one each, in the caller's transaction if any. */
+  findOfItems(
+    ref: WorkspaceRef,
+    itemIds: readonly string[],
+    tx?: Tx,
+  ): Promise<MarketplaceLicenceRecord[]> {
+    return this.licences
+      .find({ workspaceId: ref.workspaceId, itemId: { $in: [...itemIds] } })
+      .limit(MAX_MARKETPLACE_ITEMS)
+      .session(tx ?? null)
+      .lean<MarketplaceLicenceRecord[]>()
+      .exec();
+  }
+
   /**
    * Every licence of the workspace, withdrawn items included, the newest first. A workspace
    * holds at most one per item of the catalog.
