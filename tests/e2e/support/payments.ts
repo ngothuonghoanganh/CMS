@@ -28,3 +28,16 @@ export async function addCardViaGateway(
 }
 
 export const CARD_INSUFFICIENT_FUNDS = '4000 0000 0000 9995';
+
+/**
+ * The fake gateway's card page, opened by a button of the admin (board 31's "Thêm thẻ" or
+ * "Đổi", board 29's "Đổi phương thức"): fills the card and saves it. The gateway posts its
+ * signed event before it sends the browser back to the address it was given.
+ */
+export async function saveCardAtGateway(page: Page, number: string): Promise<void> {
+  await expect(page).toHaveURL(/\/api\/public\/billing\/fake-gateway\/setup\?session=/);
+  await page.getByLabel('Số thẻ').fill(number);
+  await page.getByLabel('Hết hạn (MM/YY)').fill('12/35');
+  await page.getByLabel('CVC').fill('123');
+  await page.getByRole('button', { name: 'Lưu thẻ' }).click();
+}
