@@ -32,6 +32,18 @@ export interface AgendaItem {
   at: Date;
 }
 
+/**
+ * Work that stays on the timeline until the job has done it: a charge to make, a retry, a
+ * question to the gateway. One whose time has passed is overdue, not over: a renewal paid so late
+ * that the period it starts has ended too must still be followed by the next one.
+ */
+const STANDING_KINDS: ReadonlySet<AgendaKind> = new Set([
+  'trial_end',
+  'renewal',
+  'retry',
+  'settle',
+]);
+
 /** An unpaid invoice, as far as the timeline needs it. */
 export interface AgendaInvoice {
   status: InvoiceStatus;
@@ -182,6 +194,19 @@ export function billingAgendaOf(input: AgendaInput): AgendaItem[] {
     at('settle', settleAtOf(invoice));
   }
   return items;
+}
+
+/** Whether work that stays until done (a charge, a retry, a question) is due at `now`. */
+export function overdueAt(items: readonly AgendaItem[], now: Date): boolean {
+  return items.some((item) => STANDING_KINDS.has(item.kind) && item.at.getTime() <= now.getTime());
+}
+
+/**
+ * When the job next has work after a write at `now`: at once when work that stays until done is
+ * overdue, else the earliest time after `now`; null when it has nothing.
+ */
+export function nextActionOf(items: readonly AgendaItem[], now: Date): Date | null {
+  return overdueAt(items, now) ? now : nextActionAfter(items, now);
 }
 
 /** The earliest time after `now` the job has something to do; null when it has nothing. */

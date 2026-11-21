@@ -7,7 +7,7 @@ import {
   type AgendaInvoice,
   type AgendaItem,
   billingAgendaOf,
-  nextActionAfter,
+  nextActionOf,
 } from './domain/billing-agenda.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
@@ -68,9 +68,10 @@ export class BillingSchedule {
   }
 
   /**
-   * Sets `nextActionAt` after a write in `tx`, at `now`: the next thing on the timeline. A time
-   * already due stays, since the job runs then and sets it when it ends; an earlier time than
-   * before wakes the job on every instance.
+   * Sets `nextActionAt` after a write in `tx`, at `now`: the next thing on the timeline, or `now`
+   * when the write left work overdue (a renewal paid after the period it starts had ended too).
+   * A time already due stays, since the job runs then and sets it when it ends; an earlier time
+   * than before wakes the job on every instance.
    */
   async reschedule(ref: WorkspaceRef, now: Date, tx: Tx): Promise<void> {
     const { facts, items } = await this.timelineOf(ref, tx);
@@ -78,7 +79,7 @@ export class BillingSchedule {
     if (before !== null && before.getTime() <= now.getTime()) {
       return;
     }
-    const next = nextActionAfter(items, now);
+    const next = nextActionOf(items, now);
     if (next?.getTime() !== before?.getTime()) {
       await this.subscriptions.setNextAction(ref, { at: next, before }, tx);
     }

@@ -6,7 +6,9 @@ import {
   dueRetryOf,
   graceEndOf,
   nextActionAfter,
+  nextActionOf,
   nextRetryOf,
+  overdueAt,
   retryTimesOf,
   settleAtOf,
 } from './billing-agenda.js';
@@ -184,6 +186,35 @@ describe('the grace', () => {
     expect(graceEndOf(facts, POLICY)).toEqual(at(37));
     expect(graceEndOf({ ...facts, failedSince: at(31) }, POLICY)).toEqual(at(38));
     expect(graceEndOf({ ...facts, trialEndsAt: at(14) }, POLICY)).toEqual(at(21));
+  });
+});
+
+describe('the next action after a write', () => {
+  it('is at once when a charge, a retry or a question is overdue, never for an email', () => {
+    // A renewal paid on day 75 for the period from day 30: the period it starts ended on day 60.
+    const late = billingAgendaOf({
+      facts: { ...paid, periodEnd: at(60) },
+      policy: POLICY,
+      due: null,
+      undecided: [],
+    });
+    expect(overdueAt(late, at(75))).toBe(true);
+    expect(nextActionOf(late, at(75))).toEqual(at(75));
+    expect(nextActionOf(late, at(50))).toEqual(at(60));
+
+    const failed = { ...paid, openInvoiceId: 'inv', failedSince: at(30) };
+    const retryMissed = billingAgendaOf({
+      facts: failed,
+      policy: POLICY,
+      due: invoice({ attempts: [{ at: at(30), outcome: 'failed' }] }),
+      undecided: [],
+    });
+    expect(nextActionOf(retryMissed, at(33))).toEqual(at(33));
+
+    // A notice whose time passed was sent then, or is no longer due: nothing to do at once.
+    const expired = billingAgendaOf({ facts: trial, policy: POLICY, due: null, undecided: [] });
+    expect(overdueAt(expired, at(20))).toBe(false);
+    expect(nextActionOf(expired, at(20))).toBeNull();
   });
 });
 
