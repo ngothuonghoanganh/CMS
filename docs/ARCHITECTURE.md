@@ -265,6 +265,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-01 (ADR-029):**
   - `@aws-sdk/client-sqs` 3.1161.0 (API) gửi email vào hàng đợi của plp-mailer khi `MAIL_TRANSPORT=sqs`. Cùng họ SDK v3 với `@aws-sdk/client-s3`.
   - `ajv` 8.20.0 (dev dependency của API) kiểm `data` của email theo `schema.json` của các template trong plp-mailer. Đó là JSON Schema 2020-12 có `if`/`then`, và plp-mailer kiểm bằng chính Ajv; Zod không đọc JSON Schema.
+- **Amended 2026-11-21 (ADR-035, T3):** `qrcode` 1.5.4 (kèm `@types/qrcode` 1.5.6), cùng bản admin đang dùng, thêm vào API để vẽ mã QR chuyển khoản thành SVG ngay trong API, không qua dịch vụ ngoài.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -2899,6 +2900,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Hạn mức lượt chạy mỗi tháng lấy từ gói của workspace, thay `AUTOMATION_RUNS_PER_MONTH`. Màn 25 ghi "hạn mức theo gói", dẫn tới màn 28.
   - Gói không có automation: màn 25 có trạng thái "Cần gói có automation"; tạo và bật trả 402 `plan_feature_required`. Đổi sang gói như vậy tạm dừng automation đang bật với `pausedReason: plan`; bật lại cần gói có automation.
   - Workspace chỉ đọc không chạy automation: sự kiện mới bị bỏ qua và đếm như khi hết lượt.
+- **Amended 2026-11-21 (ADR-035, T3):** bộ hẹn giờ và change stream thành một lớp dùng chung (`WakeupTimer`) cho hàng đợi automation và việc nền thanh toán. `job_wakeups` có thêm một tài liệu `queue: 'billing'` (`_id` và `workspaceId` là id dành riêng `000000000000000000000001`, không workspace nào có); hàng đợi automation bỏ qua nó ở mọi truy vấn và ở change stream.
 
 ### ADR-035 — Gói dịch vụ, hạn mức và thanh toán
 
@@ -3082,6 +3084,50 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Cổng giả:** chữ ký `x-plp-fake-signature: t={giây},v1={HMAC-SHA256 hex của "{t}.{body}"}`, lệch tối đa 5 phút, so sánh trong thời gian không đổi. Token `tok_fake_{kết quả}_{ngẫu nhiên}`, không chứa số thẻ. Trang thẻ ở `/public/billing/fake-gateway/setup?session=…`, phiên có chữ ký và hạn 30 phút. Mỗi phiên lưu một thẻ: mở lại trang (nút Back của trình duyệt) thì trang báo thẻ đã lưu và dẫn về admin, không còn form.
   - **Env:** `PAYMENT_PROVIDER` (`none` hay `fake`; mặc định `fake` ngoài production và `none` ở production; `fake` ở production bị từ chối). `PAYMENT_WEBHOOK_SECRET` (ít nhất 32 ký tự, sinh cho từng môi trường); thiếu thì cổng giả dùng bí mật ngẫu nhiên của process.
   - **Quyền:** mọi endpoint mới cần `billing.manage`, kể cả ở workspace chỉ đọc; Quản trị nhận 403, workspace khác 404.
+- **Amended 2026-11-21 (T3, cách làm):**
+  - **Việc nền thanh toán** (cơ chế của ADR-034):
+    - `subscriptions` là hàng đợi: index `nextActionAt`, và index một phần trên `lockedUntil`. Tài liệu `queue: 'billing'` của `job_wakeups` giữ `nextActionAt` sớm nhất của mọi subscription: lệnh ghi đưa một `nextActionAt` sớm hơn trước thì `$min` và tăng `seq` trong cùng transaction; instance chạy xong việc tới hạn đặt lại mốc nếu `seq` chưa đổi. Mỗi instance đặt một bộ hẹn giờ tới mốc đó và theo dõi tài liệu bằng change stream; không polling. Khởi động đọc mốc sớm nhất, nên việc tới hạn lúc API tắt chạy ngay.
+    - `nextActionAt` là mốc kế tiếp trên dòng thời gian suy ra từ sự kiện của gói và hóa đơn đang chờ (`billingAgendaOf`): nhắc hết dùng thử, cuối dùng thử, "Sắp hết hạn", gia hạn, lần thử lại, hỏi lại cổng, báo chỉ đọc. Mọi lệnh ghi đổi các sự kiện đó đặt lại nó trong cùng transaction; một mốc đã tới hạn thì giữ nguyên, vì việc nền sắp chạy hoặc đang chạy và tự đặt mốc khi xong.
+    - Instance giành một subscription tới hạn bằng update có điều kiện trên `lockedUntil` (2 phút), cùng khóa với một lần trừ tiền của T2: chỉ một instance làm, và trong lúc đó Chủ sở hữu nhận 409 `payment_in_progress`. Subscription được giữ mà instance dừng thì tới hạn lại khi khóa hết.
+    - Một lần chạy làm lần lượt: hỏi lại cổng về lần trừ tiền chưa rõ kết quả, cuối dùng thử hay cuối kỳ, lần thử lại tới hạn, các email theo mốc; rồi đặt `nextActionAt`. Mỗi bước đọc lại sự kiện và chỉ làm điều còn tới hạn, nên chạy lại hay chạy trễ đều an toàn. Bước chưa xong được (email lỗi, một lần trừ tiền khác còn chưa rõ) chạy lại sau 15 phút.
+    - Không tạo hóa đơn mới khi workspace còn lần trừ tiền đang chờ cổng hay chưa rõ kết quả: biết kết quả trước, nên không trừ hai lần.
+  - **Cuối dùng thử** (bổ sung "Hết hạn mà có phương thức thanh toán thì trừ tiền gói đang chọn"):
+    - Có thẻ còn hạn: hóa đơn của kỳ trả phí đầu (`from: null`, `endsTrial`) cho gói và chu kỳ đang chọn, kỳ từ cuối dùng thử, rồi trừ thẻ như T2 (key `{invoiceId}-{n}`, chờ tối đa 60 giây, chưa rõ thì hóa đơn `open`). Trả lúc nào thì kỳ vẫn tính từ cuối dùng thử.
+    - Thẻ đã hết hạn: hóa đơn như trên, lần thử ghi `failed` mã `expired_card` mà không gọi cổng, nên workspace quá hạn có ân hạn như hàm trạng thái nói.
+    - Không có thẻ: không hóa đơn, `trial_expired`. Thẻ thêm sau đó không tự trừ tiền: Chủ sở hữu chọn gói bằng "Thanh toán ngay".
+    - Đã hủy trong lúc dùng thử: không trừ, `canceled`.
+  - **Cuối kỳ:** có `cancelAtPeriodEnd` thì không trừ (`canceled`). Không có thì hóa đơn kỳ mới (`from: null`) cho gói và chu kỳ của `scheduledChange` nếu có, kỳ từ cuối kỳ cũ; subscription chờ hóa đơn đó (`openInvoiceId`).
+    - Trả xong, lúc nào cũng vậy: kỳ mới từ cuối kỳ cũ, `failedSince` và `openInvoiceId` về `null`, `scheduledChange` được áp dụng, `billing_log` `period_renewed` (thêm `scheduled_change_applied` khi gói hay chu kỳ đổi, `actorId` null) và `PlanChangeHooks` khi gói đổi.
+    - Không có thẻ dùng được: lần thử ghi `failed` mã `no_payment_method` hay `expired_card`, không gọi cổng (`no_payment_method` thêm vào `paymentDeclineCodes`, nhãn "Chưa có thẻ thanh toán"). Hóa đơn và lần thử lại nói lý do.
+  - **Trừ tiền lỗi và thử lại:**
+    - Lần lỗi đầu của hóa đơn subscription đang chờ đặt `failedSince`; ân hạn 7 ngày tính từ đó.
+    - Thử lại sau 2 và 5 ngày: `retryDays: [2, 5]` trong `plans.json` (con số tạm; schema: tăng dần, mỗi số 1–60, tối đa 5 lần). Một lần thử lại coi như đã làm khi hóa đơn có lần trừ tiền nào từ mốc của nó, kể cả "Thanh toán lại" của Chủ sở hữu; việc nền chạy trễ chỉ trừ một lần cho mọi mốc đã qua. Sau lần cuối, không tự trừ nữa.
+    - Không thử lại khi hóa đơn đang chờ chuyển khoản hay cổng đang quyết.
+    - "Thanh toán lại" (thẻ mới) hay chuyển khoản trả hóa đơn đó: gói hoạt động lại, kỳ tính từ cuối kỳ cũ.
+  - **Lần trừ tiền chưa rõ kết quả** (phần còn lại của T2):
+    - Việc nền hỏi lại cổng bằng đúng key của lần đó: 15 phút sau, gấp đôi sau mỗi lần vẫn chưa rõ, tối đa 6 giờ. Một kết quả chưa rõ trong yêu cầu của Chủ sở hữu (T2) cũng đặt mốc này.
+    - Hóa đơn gia hạn hay cuối dùng thử chờ tới khi biết: subscription cần nó.
+    - Hóa đơn khác (nâng gói, thanh toán ngay) mà mục đích đã hết (không còn `payable`, hoặc hết kỳ của nó): hỏi lại một lần; vẫn chưa rõ thì `void`, không bao giờ trừ lại, log lỗi để kiểm tra ở cổng và hoàn tiền ngoài hệ thống. Nhờ vậy nó không còn chặn đổi gói (`findUndecided`). Tiền cổng báo sau cho hóa đơn `void` đi theo luật hoàn tiền của T2.
+    - Hóa đơn chưa ghi được lần trừ nào (API dừng khi chờ cổng) mà mục đích đã hết thì `void` ngay, không hỏi: hỏi bằng key của nó có thể trừ tiền lần đầu cho điều không còn áp dụng.
+  - **Chuyển khoản** (`POST /workspaces/:id/billing/invoices/:invoiceId/transfer`, `billing.manage`, kể cả workspace chỉ đọc):
+    - Trả một hóa đơn của kỳ: gia hạn, cuối dùng thử, thanh toán ngay (`payWith: 'transfer'`, 202). Không cho nâng gói, vì số tiền chỉ đúng trong ngày báo giá; không cho hóa đơn `open`, vì lần trừ trước có thể đã qua ("Thanh toán lại" trước, 409 `payment_in_progress`).
+    - Cổng đưa ngân hàng, tài khoản, tên tài khoản, số tiền, nội dung `PLP {số hóa đơn}`, payload VietQR và trang của cổng nếu có. API lưu chúng vào hóa đơn (`transfer`), vẽ mã QR thành SVG data URL bằng thư viện `qrcode` (không dịch vụ ngoài), hóa đơn `pending` với `method: transfer`, subscription chờ nó, `billing_log` `transfer_started`. Hỏi lại thì trả đúng thông tin đó.
+    - Thanh toán ngay bằng chuyển khoản tạo hóa đơn `pending` trước để có số hóa đơn, rồi hỏi cổng. Trong lúc dùng thử, dùng thử vẫn chạy tới khi tiền tới; kỳ tính từ lúc nhận.
+    - `transfer_received` trả hóa đơn trong cùng transaction với `billing_events`; sự kiện đến lại không áp dụng hai lần. Một chuyển khoản tới cho hóa đơn đã trả: log để hoàn tiền ngoài hệ thống.
+    - Trong lúc chờ, Chủ sở hữu vẫn trả bằng thẻ được ("Thanh toán lại"); chuyển khoản tới sau đó thì hoàn tiền ngoài hệ thống. Một lần thanh toán ngay mới hủy (`void`) chuyển khoản đang chờ của lần thanh toán ngay trước; chuyển khoản đang chờ của gia hạn hay cuối dùng thử thì chặn đổi gói.
+    - **Không có "chuyển khoản" làm phương thức gia hạn:** board 29 còn ghi "Phương thức được hỗ trợ: CHƯA CHỐT — thẻ, chuyển khoản, ví điện tử", và trả trước cho kỳ chưa tới cần một cách tính kỳ khác. Workspace trả bằng chuyển khoản nhận email "Sắp hết hạn" (chưa có thẻ), rồi ở cuối kỳ có hóa đơn kỳ mới để chuyển khoản trong thời gian ân hạn. Chủ sản phẩm chốt phương thức thì bổ sung ADR này.
+    - Cổng giả: trang `/public/billing/fake-gateway/transfer?session=…` (phiên có chữ ký, hạn 14 ngày) với nút "Xác nhận đã nhận tiền", gửi `transfer_received` ký như T2 rồi dẫn về màn 29 với `?transfer=received`. Mỗi phiên xác nhận một lần; mở lại thì trang báo "Đã xác nhận chuyển khoản".
+  - **Hạ gói và đổi chu kỳ:** `POST .../billing/plan` với giá thấp hơn hay bằng, hoặc chu kỳ khác, trong kỳ trả phí: 200, đặt `scheduledChange`, không hóa đơn, `billing_log` `change_scheduled`; chọn lại thì thay lịch. Báo giá có `mode: scheduled`, `effectiveAt` (cuối kỳ), `nextAmount` và `impacts` (phần vượt hạn mức của site, thành viên, tên miền riêng; số automation đang bật sẽ tạm dừng, đếm qua `PlanChangeHooks.registerFeatureUse`; lượt AI trước và sau; số thành viên giữ quyền). `impacts` cũng có cho đổi gói trong lúc dùng thử. `DELETE .../billing/plan/scheduled-change` bỏ lịch (`scheduled_change_canceled`). Nâng gói thì bỏ lịch hạ gói đang có. 409 `plan_change_unavailable` không còn lý do `scheduled_change`.
+  - **Hủy, giữ lại, mua lại:**
+    - `POST .../billing/cancel` đặt `cancelAtPeriodEnd` (`cancel_scheduled`), trong lúc dùng thử hay kỳ trả phí chưa hết; không cho khi kỳ đang nợ (409 `unpaid`) hay khi gói đã dừng (409 `payment_required`). `POST .../billing/keep` bỏ nó trước cuối kỳ (`cancel_withdrawn`); sau cuối kỳ 409 `payment_required`. Gọi lại khi đã ở đúng trạng thái là 200 không đổi gì.
+    - Gói đã hủy chỉ chọn lại bằng "Thanh toán ngay": trọn giá của chu kỳ, kỳ từ lúc trả, không có dùng thử lần hai; `billing_log` `plan_restarted`. Không hoàn tiền (§6).
+  - **Email** tới Chủ sở hữu lúc gửi, ở đường SMTP (`email-templates.ts`) và cùng tên ở plp-mailer (schema ở `apps/api/test/mail-templates/`):
+    - `billing-trial-ending` 3 ngày trước khi hết dùng thử (`trialReminderDays: 3` trong `plans.json`, con số tạm, nhỏ hơn số ngày dùng thử), kể cả số tiền và thẻ sẽ bị trừ nếu thẻ trả được; `billing-charge-failed` sau mỗi lần trừ tiền tự động lỗi, với ngày thử lại hay "không thử lại nữa" và hạn ân hạn; `billing-expiring-soon` `expiringSoonDays` trước cuối kỳ khi thẻ không gia hạn được; `billing-read-only` khi workspace chuyển sang chỉ đọc; `billing-receipt` cho mọi hóa đơn đã trả.
+    - Mỗi email một lần: `billing_notices` (master, `_id` là idempotency key của email, TTL 400 ngày) được giữ trước khi gửi. Gửi lỗi thì trả chỗ giữ và log: email theo mốc được lần chạy sau gửi lại khi còn hiệu lực; email theo sự kiện (biên nhận, trừ tiền lỗi) không gửi lại, như các email khác.
+    - Không có số thẻ hay token, chỉ hãng và bốn số cuối; không có thông tin xuất hóa đơn.
+  - **Banner** (`GET .../billing`, `billing.view`): thêm `cancelAt`, `renewal { at, planId, planName, cycle, amount, autoRenews, blocker }`, `dueInvoice` (hóa đơn subscription đang chờ, không có thẻ), `failedSince` và `nextRetryAt`. Hóa đơn (`GET .../invoices/:id`) thêm `transfer`.
+  - **Đồng hồ thử:** với `BILLING_TEST_CLOCK=on`, việc nền không có bộ hẹn giờ: `PUT /testing/clock` chạy việc tới hạn ở mốc mới rồi mới trả lời (`handled`), và `POST /testing/billing/run-due` chạy việc tới hạn mà không dời đồng hồ. Test quyết định lúc việc nền chạy. Tắt thì cả ba 404.
+  - **Thư viện:** `qrcode` 1.5.4 (đã có ở admin, ADR-002) thêm vào API để vẽ mã QR chuyển khoản.
 
 ---
 
@@ -3260,7 +3306,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
-- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 15 template (14 template của PR plp-mailer#1 và `automation-notice` của ADR-034 ở PR plp-mailer#2, cả hai đã merge; template email thanh toán thì chưa có) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018). Hoặc `MAIL_TRANSPORT=sqs` (ADR-029): plp-mailer có đủ 20 template (14 template của PR plp-mailer#1 và `automation-notice` của ADR-034 ở PR plp-mailer#2, cả hai đã merge; 5 template thanh toán `billing-trial-ending`, `billing-charge-failed`, `billing-expiring-soon`, `billing-read-only`, `billing-receipt` của ADR-035 T3 thì chưa có) và đã deploy với domain gửi đã xác minh (DKIM) và quyền gửi production của SES, `MAIL_QUEUE_URL` và `MAIL_QUEUE_REGION` lấy từ stack của nó, và `MailProducerPolicy` được gắn cho role của API.
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):
@@ -3284,7 +3330,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - Thanh toán (ADR-035):
   - Một cổng thanh toán thật có hợp đồng merchant, adapter của nó và một lần bổ sung ADR-035. `PAYMENT_PROVIDER`, khóa của cổng và bí mật webhook sinh cho production; API không khởi động với `fake` ở production.
   - Edge chuyển nguyên body của `POST /public/billing/webhooks/:provider` (chữ ký tính trên body thô).
-  - plp-mailer có các template email thanh toán nếu dùng `MAIL_TRANSPORT=sqs`.
+  - plp-mailer có 5 template email thanh toán (`billing-*`, ADR-035 T3) nếu dùng `MAIL_TRANSPORT=sqs`.
 
 **Chủ sản phẩm cần quyết**
 
