@@ -20,17 +20,21 @@
   color: var(--color-ink-2);
 }
 
+/* Titles echo what was searched; a long word without spaces wraps instead of widening the page. */
 .title {
+  max-width: 100%;
   margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.35;
   color: var(--color-ink);
+  overflow-wrap: anywhere;
 }
 
 .description {
-  max-width: 420px;
+  max-width: min(420px, 100%);
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: var(--text-body);
   line-height: 1.6;
   color: var(--color-muted);

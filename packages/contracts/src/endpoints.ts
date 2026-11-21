@@ -187,6 +187,7 @@ import {
   leadRecipientListResponseSchema,
   leadRecipientSchema,
 } from './lead-recipients.js';
+import { marketplaceItemDetailSchema, marketplaceListResponseSchema } from './marketplace.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
 import {
   consentVersionListQuerySchema,
@@ -1596,6 +1597,29 @@ export const endpoints = {
     request: reuseTemplateVersionRequestSchema,
     query: null,
     response: workspaceTemplateSchema,
+  }),
+
+  // Marketplace (ADR-036): every member browses it, like the template library (`pages.view`)
+  /** Board 30: every listed item at its current version, and how many the workspace holds. */
+  listMarketplace: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/marketplace`,
+    request: null,
+    query: null,
+    response: marketplaceListResponseSchema,
+  }),
+  /**
+   * Board 31: one item with its preview, the terms and the workspace's licence. 404 "Không tìm
+   * thấy mẫu" for a draft, for a withdrawn item the workspace holds no licence of, and outside the
+   * catalog.
+   */
+  getMarketplaceItem: endpoint({
+    method: 'GET',
+    path: (workspaceId: string, itemId: string) =>
+      `/workspaces/${e(workspaceId)}/marketplace/items/${e(itemId)}`,
+    request: null,
+    query: null,
+    response: marketplaceItemDetailSchema,
   }),
 
   // Pages and drafts

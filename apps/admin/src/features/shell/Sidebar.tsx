@@ -35,6 +35,7 @@ import {
   PlusIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  StoreIcon,
   UsersIcon,
   VisuallyHidden,
 } from '@plp/ui';
@@ -78,6 +79,7 @@ const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   settings: SettingsIcon,
   sites: BrowserIcon,
   templates: GridIcon,
+  marketplace: StoreIcon,
   members: UsersIcon,
   roles: LockIcon,
   billing: CreditCardIcon,

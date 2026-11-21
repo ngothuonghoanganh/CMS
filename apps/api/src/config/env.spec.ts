@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import {
+  BUNDLED_MARKETPLACE_CATALOG_FILE,
   BUNDLED_PLAN_CATALOG_FILE,
   baseDomainOf,
   customDomainOrigin,
@@ -221,6 +222,16 @@ describe('parseEnv', () => {
       expect(
         parseEnv({ ...valid, PLAN_CATALOG_FILE: '/etc/plp/plans.json' }).PLAN_CATALOG_FILE,
       ).toBe('/etc/plp/plans.json');
+    });
+
+    it('reads the marketplace catalog that comes with the API unless told otherwise', () => {
+      expect(parseEnv(valid).MARKETPLACE_CATALOG_FILE).toBe(BUNDLED_MARKETPLACE_CATALOG_FILE);
+      expect(BUNDLED_MARKETPLACE_CATALOG_FILE).toMatch(/apps\/api\/marketplace\.json$/);
+      expect(existsSync(BUNDLED_MARKETPLACE_CATALOG_FILE)).toBe(true);
+      expect(
+        parseEnv({ ...valid, MARKETPLACE_CATALOG_FILE: '/etc/plp/marketplace.json' })
+          .MARKETPLACE_CATALOG_FILE,
+      ).toBe('/etc/plp/marketplace.json');
     });
 
     it('moves the billing clock only outside production', () => {

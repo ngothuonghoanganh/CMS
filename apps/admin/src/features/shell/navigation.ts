@@ -5,7 +5,8 @@ export type SiteNavKey =
   'pages' | 'leads' | 'contacts' | 'analytics' | 'automations' | 'domain' | 'settings' | 'privacy';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
-export type WorkspaceNavKey = 'sites' | 'templates' | 'members' | 'roles' | 'billing';
+export type WorkspaceNavKey =
+  'sites' | 'templates' | 'marketplace' | 'members' | 'roles' | 'billing';
 
 export interface NavItem<Key extends string> {
   key: Key;
@@ -121,6 +122,16 @@ export function workspaceTemplatesHref(workspaceId: string, archived = false): s
   );
 }
 
+/** "Marketplace" (board 30, ADR-036): the catalog of templates Payload sells or gives. */
+export function marketplaceHref(workspaceId: string): string {
+  return `${workspaceHref(workspaceId)}/marketplace`;
+}
+
+/** One marketplace item (board 31). */
+export function marketplaceItemHref(workspaceId: string, itemId: string): string {
+  return `${marketplaceHref(workspaceId)}/${encodeURIComponent(itemId)}`;
+}
+
 /** "Tạo site khách hàng" in the workspace. */
 export function newSiteHref(workspaceId: string): string {
   return `/sites/new?workspace=${encodeURIComponent(workspaceId)}`;
@@ -152,7 +163,7 @@ export function membersHref(workspaceId: string, search = ''): string {
 }
 
 /**
- * Sections of the workspace. "Sites" and "Templates" are for every role, since every role views
+ * Sections of the workspace. "Sites", "Templates" and "Marketplace" are for every role, since every role views
  * pages; "Sites" lists the sites each member may open (ADR-028), "Templates" the library every
  * member browses (ADR-030).
  */
@@ -163,6 +174,13 @@ export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
       key: 'templates',
       label: 'Templates',
       href: templatesHref(workspaceId),
+      permissions: ['pages.view'],
+    },
+    // Right after "Templates", for every role, and never locked by the plan (ADR-036).
+    {
+      key: 'marketplace',
+      label: 'Marketplace',
+      href: marketplaceHref(workspaceId),
       permissions: ['pages.view'],
     },
     {

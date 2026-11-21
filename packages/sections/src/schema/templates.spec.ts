@@ -1,5 +1,7 @@
 import {
   compositionSchema,
+  isMarketplaceItemId,
+  MARKETPLACE_ITEM_ID_PREFIX,
   pageGoalIds,
   type SectionInstance,
   systemTemplateIdSchema,
@@ -68,6 +70,13 @@ describe('the system catalog', () => {
       for (const text of [template.name, template.description, template.details]) {
         expect(text.trim()).not.toBe('');
       }
+    }
+  });
+
+  it('never takes an id of the marketplace, so one path segment names either (ADR-036)', () => {
+    for (const id of ids) {
+      expect(id.startsWith(MARKETPLACE_ITEM_ID_PREFIX), id).toBe(false);
+      expect(isMarketplaceItemId(id), id).toBe(false);
     }
   });
 

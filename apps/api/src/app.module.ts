@@ -18,6 +18,7 @@ import { BillingModule } from './modules/billing/billing.module.js';
 import { ContactsModule } from './modules/contacts/contacts.module.js';
 import { DataRequestsModule } from './modules/data-requests/data-requests.module.js';
 import { LeadsModule } from './modules/leads/leads.module.js';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PagesModule } from './modules/pages/pages.module.js';
 import { PreviewModule } from './modules/preview/preview.module.js';
@@ -82,6 +83,7 @@ export class AppModule {
         AssetsModule,
         PagesModule,
         TemplatesModule,
+        MarketplaceModule,
         PublishingModule,
         LeadsModule,
         ContactsModule,

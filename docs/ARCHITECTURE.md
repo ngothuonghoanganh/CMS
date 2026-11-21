@@ -3326,6 +3326,21 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - `capture.spec.ts` thêm màn 30, 31 (mặc định, xác nhận, đang chờ, thành công, bị từ chối, đã sở hữu, không phải Chủ sở hữu), 32 (danh sách, hộp cập nhật, trống) và tab marketplace của màn 17.
   - Mọi phiên bản đã phát hành nằm mãi trong file, nên file lớn dần, trong giới hạn 100 mẫu × 20 phiên bản.
 - **Lát:** MP1 danh mục, màn 30 và 31 chỉ xem; MP2 giấy phép, nhận mẫu miễn phí, màn 32, mẫu đã sở hữu trong thư viện, tạo trang và cập nhật phiên bản; MP3 mua mẫu qua cổng thanh toán, hóa đơn, biên nhận và email (§5).
+- **Chi tiết khi làm (lát MP1):**
+  - **Danh mục**, kiểm lúc khởi động (`loadMarketplaceCatalog`, `checkCatalogComposition`):
+    - Composition của mỗi phiên bản phải đúng như registry tạo ra từ nó, so với chữ của file chứ không với bản `marketplaceCatalogSchema` đã đọc (schema bỏ khóa lạ và điền `reviewPaths`): không có khóa lạ ở composition, section hay content, `reviewPaths` ghi rõ, `samplePaths` chỉ gồm đường dẫn của chữ, không ghi `motion` mặc định. Trang nhận đúng những gì file ghi, và `versionHash` của MP2 tính trên đúng nội dung đó.
+    - Ít nhất một section. Mọi chữ và nhãn nút là chữ mẫu (`samplePaths` đủ như `samplePathsOf`, kể cả field variant đang ẩn), `reviewPaths` rỗng.
+    - Nút không dẫn tới trang, không dẫn tới section không có trên trang, và không giữ số điện thoại, số Zalo hay địa chỉ web: chúng thuộc một doanh nghiệp, như khi "Lưu thành template" đánh dấu mọi chữ là chữ mẫu (ADR-030). Nút chỉ gọi hay chỉ nhắn Zalo giữ loại của nó với số trống.
+    - Mọi phiên bản có `note` 1–200 ký tự, kể cả v1 ("Phiên bản đầu tiên."). `releasedOn` (ngày `YYYY-MM-DD`) của một phiên bản không trước phiên bản liền trước.
+    - Độ dài: tên 120, mô tả 300; `terms.summary` và `terms.support` 300, `terms.refund` 200, `terms.licence` 1–20 đoạn, mỗi đoạn tối đa 1000 ký tự.
+    - Lỗi nêu mọi vấn đề một lần, mỗi dòng `✖ {itemId} v{N}: {đường dẫn}: …`.
+  - **"Được dùng nhiều":** `popularRank` xếp kiểu thi đấu (1, 2, 2, 4): mẫu có cùng số giấy phép cùng hạng. Chưa có giấy phép (MP1) thì mọi mẫu hạng 1, `owned` là `false` và `ownedCount` là 0. Admin sắp xếp ổn định, nên ngày hay hạng bằng nhau giữ thứ tự của danh mục.
+  - **Màn 30:** "Đã sở hữu · N" là chữ thường, không viền và không phải link, tới khi màn 32 có (MP2). Tìm, lọc và sắp xếp nằm trong trạng thái của màn, như thư viện template, không ghi vào URL.
+  - **Màn 31:**
+    - Nhãn mục tiêu của dòng meta lấy từ màn 17 (`goalDefinitions`), nên `event` là "Sự kiện / webinar".
+    - Khung giá chưa có nút: một câu trung tính thay cho "Nhận mẫu" và "Mua mẫu", không có nút bấm không làm gì. MP2 và MP3 thay câu đó bằng các trạng thái ở trên.
+    - Mẫu miễn phí: khung giá chỉ ghi "Miễn phí", không có dòng "Một lần · Đã gồm VAT · {terms.refund}", vì không có khoản nào để trả, tính thuế hay hoàn.
+    - Mẫu `draft`, `withdrawn` hay mã lạ: trang "Không tìm thấy trang" (API trả 404).
 
 ---
 
@@ -3485,7 +3500,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                                                                                                                                                                   | Màn                | Trạng thái |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
 | MP0 | ADR-036 cho board 30–32, bổ sung ADR-025, 030, 035, §1, §2 quy tắc 12, §6 và README thiết kế                                                                                                                                                               | —                  | Xong       |
-| MP1 | Danh mục `marketplace.json` (schema, registry, kiểm lúc khởi động) với 4 mẫu tạm, danh sách và chi tiết mẫu chỉ xem: tìm, lọc giá và ngành, sắp xếp, preview, "Gồm những gì", giấy phép và điều khoản, mục "Marketplace" của Sidebar v2                    | 30, 31, Sidebar v2 | Chưa làm   |
+| MP1 | Danh mục `marketplace.json` (schema, registry, kiểm lúc khởi động) với 4 mẫu tạm, danh sách và chi tiết mẫu chỉ xem: tìm, lọc giá và ngành, sắp xếp, preview, "Gồm những gì", giấy phép và điều khoản, mục "Marketplace" của Sidebar v2                    | 30, 31, Sidebar v2 | Xong       |
 | MP2 | Giấy phép của workspace (`marketplace_licences`, `versionHash`, kiểm lúc khởi động), "Nhận mẫu" miễn phí, màn Sản phẩm đã mua, mẫu marketplace trong thư viện (tab, thẻ chưa sở hữu, "Ẩn mẫu trả phí"), màn 18, tạo trang và áp mẫu, cập nhật phiên bản    | 32, 31, 17, 18, 03 | Chưa làm   |
 | MP3 | Mua mẫu qua cổng thanh toán (adapter giả): báo giá, hộp xác nhận, hóa đơn `marketplace`, cấp giấy phép khi trả xong, webhook, "Thanh toán lại", biên nhận và dòng của màn 29, email `marketplace-receipt` và `marketplace-suggestion`, chỉ đọc và cổng tắt | 31, 29             | Chưa làm   |
 
