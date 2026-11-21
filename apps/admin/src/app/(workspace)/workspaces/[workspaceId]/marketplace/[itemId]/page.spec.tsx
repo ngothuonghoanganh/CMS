@@ -11,6 +11,7 @@ vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('not found');
   },
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 const membership: Membership = {

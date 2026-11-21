@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type Access,
   DEFAULT_THEME_PRESET,
   type MarketplaceItemDetail,
   type Membership,
@@ -26,21 +27,23 @@ import {
   previewDeviceLabels,
   TemplatePreview,
 } from '../templates/TemplatePreview';
-import { includedParts, priceText } from './marketplace-filters';
+import { ItemPriceBox } from './ItemPriceBox';
+import { includedParts } from './marketplace-filters';
 import styles from './MarketplaceItemScreen.module.css';
 
 export interface MarketplaceItemScreenProps {
   workspace: Membership['workspace'];
+  role: Access;
   item: MarketplaceItemDetail;
 }
 
 /**
  * One marketplace item (board 31, ADR-036): its page in the default theme on a computer or a
  * phone, what it includes, the licence and the terms behind it, what an update and support cover,
- * and the price. Viewing only: "Nhận mẫu" and "Mua mẫu" come with the licences (MP2, MP3), so the
- * price box says so instead of showing a button that does nothing.
+ * and the price box, which claims a free item or shows the licence the workspace holds ("Mua mẫu"
+ * comes with the payment, MP3).
  */
-export function MarketplaceItemScreen({ workspace, item }: MarketplaceItemScreenProps) {
+export function MarketplaceItemScreen({ workspace, role, item }: MarketplaceItemScreenProps) {
   const [device, setDevice] = useState<PreviewDevice>('desktop');
   const [termsOpen, setTermsOpen] = useState(false);
 
@@ -132,16 +135,7 @@ export function MarketplaceItemScreen({ workspace, item }: MarketplaceItemScreen
         </div>
 
         <aside aria-label="Giá" className={styles.aside}>
-          <Card className={styles.priceBox}>
-            <p className={styles.price}>{priceText(item.price)}</p>
-            {/* A free item is not paid for: there is no VAT to include and nothing to refund. */}
-            {item.price > 0 ? (
-              <p className={styles.priceNote}>Một lần · Đã gồm VAT · {item.terms.refund}</p>
-            ) : null}
-            <p className={styles.notice}>
-              Bạn xem được toàn bộ mẫu và điều khoản ở đây. Nhận hoặc mua mẫu chưa mở trong bản này.
-            </p>
-          </Card>
+          <ItemPriceBox workspace={workspace} role={role} item={item} />
         </aside>
       </div>
 

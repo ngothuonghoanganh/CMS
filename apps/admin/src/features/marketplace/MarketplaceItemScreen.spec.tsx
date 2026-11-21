@@ -1,11 +1,30 @@
-import type { Membership } from '@plp/contracts';
+import { type Access, endpoints, type Membership } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../lib/api';
 import { WORKSPACE_ID } from '../dashboard/test-fixtures';
-import { renderWithProviders } from '../shell/test-utils';
+import { apiError, renderWithProviders } from '../shell/test-utils';
 import { MarketplaceItemScreen } from './MarketplaceItemScreen';
-import { marketplaceDetailFixture, termsFixture } from './test-fixtures';
+import { licenceFixture, marketplaceDetailFixture, termsFixture } from './test-fixtures';
+
+const { router } = vi.hoisted(() => ({
+  router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
+}));
+
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
+
+vi.mock(import('../../lib/api'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  api: vi.fn(),
+}));
+
+const apiMock = vi.mocked(api);
+
+beforeEach(() => {
+  apiMock.mockReset();
+  router.refresh.mockReset();
+});
 
 const workspace: Membership['workspace'] = {
   id: WORKSPACE_ID,
@@ -13,9 +32,16 @@ const workspace: Membership['workspace'] = {
   slug: 'may-xanh-agency',
 };
 
-function renderItem(overrides: Parameters<typeof marketplaceDetailFixture>[0] = {}) {
+function renderItem(
+  overrides: Parameters<typeof marketplaceDetailFixture>[0] = {},
+  role: Access = 'owner',
+) {
   return renderWithProviders(
-    <MarketplaceItemScreen workspace={workspace} item={marketplaceDetailFixture(overrides)} />,
+    <MarketplaceItemScreen
+      workspace={workspace}
+      role={role}
+      item={marketplaceDetailFixture(overrides)}
+    />,
   );
 }
 
@@ -87,19 +113,16 @@ describe('MarketplaceItemScreen (board 31)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('shows the price and the refund line, with no action to get or buy yet', () => {
-    const { unmount } = renderItem();
+  it('shows the price and the refund line, with a neutral note for a paid item not owned (MP3 buys)', () => {
+    renderItem();
     const box = screen.getByRole('complementary', { name: 'Giá' });
     expect(box).toHaveTextContent('399.000đ');
     expect(box).toHaveTextContent('Một lần · Đã gồm VAT · Hoàn tiền theo chính sách của Payload');
+    expect(box).toHaveTextContent('Mua mẫu chưa mở trong bản này.');
     expect(within(box).queryByRole('button')).toBeNull();
     expect(within(box).queryByRole('link')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Mua mẫu|Nhận mẫu/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Mua mẫu|Nhận mẫu|Đề xuất/ })).toBeNull();
     expect(screen.queryByText(/nhà cung cấp/i)).toBeNull();
-    unmount();
-
-    renderItem({ price: 0 });
-    expect(screen.getByRole('complementary', { name: 'Giá' })).toHaveTextContent('Miễn phí');
   });
 
   it('leaves the VAT and refund line out for a free item, as nothing is paid', () => {
@@ -108,5 +131,127 @@ describe('MarketplaceItemScreen (board 31)', () => {
     expect(box).toHaveTextContent('Miễn phí');
     expect(box).not.toHaveTextContent('Đã gồm VAT');
     expect(box).not.toHaveTextContent(termsFixture.refund);
+  });
+
+  describe('a free item (ADR-036)', () => {
+    it('names who may claim it when the role cannot', () => {
+      renderItem({ price: 0 }, 'viewer');
+      const box = screen.getByRole('complementary', { name: 'Giá' });
+      expect(box).toHaveTextContent('Chỉ Chủ sở hữu, Quản trị và Biên tập nhận được mẫu miễn phí');
+      expect(within(box).queryByRole('button')).toBeNull();
+    });
+
+    it('asks for the terms before claiming, and sends the version and terms it showed', async () => {
+      const user = userEvent.setup();
+      apiMock.mockResolvedValueOnce(licenceFixture());
+      renderItem({ price: 0, version: 1 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      const dialog = screen.getByRole('dialog', { name: 'Nhận mẫu' });
+      expect(dialog).toHaveTextContent('Khai trương phòng tập · v1');
+      const agree = within(dialog).getByRole('checkbox', {
+        name: 'Tôi đồng ý với điều khoản giấy phép',
+      });
+      expect(agree).not.toBeChecked();
+      const confirm = within(dialog).getByRole('button', { name: 'Nhận mẫu' });
+      expect(confirm).toBeDisabled();
+      await user.click(agree);
+      expect(confirm).toBeEnabled();
+      await user.click(confirm);
+      expect(apiMock).toHaveBeenCalledWith(
+        endpoints.claimMarketplaceItem,
+        [WORKSPACE_ID, 'mp-khai-truong-phong-tap'],
+        { body: { version: 1, termsVersion: termsFixture.version } },
+      );
+      await vi.waitFor(() => {
+        expect(router.refresh).toHaveBeenCalled();
+      });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByRole('status')).toHaveTextContent('Đã nhận “Khai trương phòng tập”');
+    });
+
+    it('does not send anything on "Hủy"', async () => {
+      const user = userEvent.setup();
+      renderItem({ price: 0 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      await user.click(screen.getByRole('button', { name: 'Hủy' }));
+      expect(apiMock).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('reads the screen again and asks again when the item changed meanwhile', async () => {
+      const user = userEvent.setup();
+      apiMock.mockRejectedValueOnce(
+        apiError(409, 'item_changed', 'Mẫu “Khai trương phòng tập” vừa thay đổi'),
+      );
+      renderItem({ price: 0 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      await user.click(screen.getByRole('checkbox'));
+      await user.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Nhận mẫu' }),
+      );
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Mẫu “Khai trương phòng tập” vừa thay đổi. Đã tải lại; xem lại mẫu và điều khoản rồi nhận lại.',
+      );
+      expect(router.refresh).toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      // Asking again starts from an unticked box.
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('says why a read-only workspace cannot claim, and keeps the dialog', async () => {
+      const user = userEvent.setup();
+      apiMock.mockRejectedValueOnce(
+        apiError(402, 'workspace_read_only', 'Workspace đang ở chế độ chỉ đọc'),
+      );
+      renderItem({ price: 0 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      await user.click(screen.getByRole('checkbox'));
+      await user.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Nhận mẫu' }),
+      );
+      expect(await screen.findByRole('alert')).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
+      expect(router.refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('an item the workspace owns (ADR-036)', () => {
+    it('shows the licence version and leads to screen 18 of the item', () => {
+      renderItem({ price: 0, licence: licenceFixture({ version: 1 }) });
+      const box = screen.getByRole('complementary', { name: 'Giá' });
+      expect(box).toHaveTextContent('Workspace đã sở hữu · v1');
+      expect(within(box).getByRole('link', { name: 'Tạo trang từ mẫu' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/templates/mp-khai-truong-phong-tap`,
+      );
+      expect(within(box).queryByRole('button', { name: 'Nhận mẫu' })).toBeNull();
+      expect(box).not.toHaveTextContent('Cập nhật');
+      expect(box).not.toHaveTextContent('ngừng bán');
+    });
+
+    it('offers the update on screen 32 when a newer version exists', () => {
+      renderItem({ version: 2, licence: licenceFixture({ source: 'purchase', version: 1 }) });
+      const box = screen.getByRole('complementary', { name: 'Giá' });
+      expect(box).toHaveTextContent('Workspace đã sở hữu · v1');
+      expect(box).toHaveTextContent('Có phiên bản mới v2.');
+      expect(within(box).getByRole('link', { name: 'Cập nhật' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/marketplace/owned`,
+      );
+    });
+
+    it('says a withdrawn item is still used and updated', () => {
+      renderItem({ withdrawn: true, licence: licenceFixture({ source: 'purchase' }) });
+      expect(screen.getByRole('complementary', { name: 'Giá' })).toHaveTextContent(
+        'Mẫu đã ngừng bán. Workspace vẫn dùng và cập nhật được.',
+      );
+    });
+
+    it('owns a paid item without any button to buy it', () => {
+      renderItem({ licence: licenceFixture({ source: 'purchase' }) });
+      const box = screen.getByRole('complementary', { name: 'Giá' });
+      expect(box).not.toHaveTextContent('Một lần · Đã gồm VAT');
+      expect(within(box).queryByRole('button')).toBeNull();
+    });
   });
 });

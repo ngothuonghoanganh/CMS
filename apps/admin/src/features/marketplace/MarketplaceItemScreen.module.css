@@ -145,6 +145,32 @@
   color: var(--color-ink-2);
 }
 
+.statuses:empty {
+  display: none;
+}
+
+.statuses {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Board 31's green line for what the workspace already has. */
+.owned {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-success-ink);
+}
+
+.inlineLink {
+  font-weight: 600;
+  color: var(--color-primary-ink);
+}
+
 .terms {
   display: flex;
   flex-direction: column;

@@ -30,7 +30,12 @@ import {
 } from '@plp/ui';
 import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
-import { marketplaceItemHref, newAiPageHref, templatesHref } from '../shell/navigation';
+import {
+  marketplaceItemHref,
+  marketplaceOwnedHref,
+  newAiPageHref,
+  templatesHref,
+} from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { goalLabel } from '../templates/library-filters';
 import { TemplateThumb } from '../templates/TemplateThumb';
@@ -91,8 +96,8 @@ function ItemCard({ item, workspaceId }: { item: MarketplaceItemCard; workspaceI
 
 /**
  * "Marketplace" (board 30, ADR-036): the templates Payload sells or gives, with a search that
- * ignores accents, a price filter, one chip per industry and a sort. Browsing only: getting or
- * buying a template comes with the licences (MP2, MP3). Every filter runs here, over the whole
+ * ignores accents, a price filter, one chip per industry and a sort. Getting or buying a template
+ * is on its screen (board 31). Every filter runs here, over the whole
  * catalog (at most 100 items).
  */
 export function MarketplaceScreen({ workspace, role, catalog, aiSiteId }: MarketplaceScreenProps) {
@@ -116,8 +121,10 @@ export function MarketplaceScreen({ workspace, role, catalog, aiSiteId }: Market
           </span>
         }
         actions={
-          // The list of what the workspace owns is board 32, built with the licences (MP2).
-          <span className={styles.owned}>Đã sở hữu · {catalog.ownedCount}</span>
+          // The list of what the workspace owns is board 32.
+          <ButtonLink as={Link} href={marketplaceOwnedHref(workspace.id)} variant="secondary">
+            Đã sở hữu · {catalog.ownedCount}
+          </ButtonLink>
         }
       />
 

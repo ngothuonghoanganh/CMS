@@ -44,7 +44,6 @@ describe('MarketplaceScreen (board 30)', () => {
         'Mẫu do Payload soạn. Mẫu bạn nhận hoặc mua sẽ có trong Templates của workspace.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('Đã sở hữu · 0')).toBeInTheDocument();
     expect(cardNames()).toEqual(itemFixtures.map((item) => item.name));
     expect(screen.getByRole('status')).toHaveTextContent('4 mẫu');
 
@@ -66,7 +65,32 @@ describe('MarketplaceScreen (board 30)', () => {
     // Not in this catalog (ADR-036): other sellers, badges, selling one's own templates.
     expect(screen.queryByText(/Bán template của bạn/)).toBeNull();
     expect(screen.queryByText(/đã xác minh/i)).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Đã sở hữu · 0' })).toBeNull();
+  });
+
+  it('links "Đã sở hữu · N" to board 32 with the count of licences', () => {
+    renderScreen({ catalog: listFixture({ ownedCount: 3 }) });
+    expect(screen.getByRole('link', { name: 'Đã sở hữu · 3' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/marketplace/owned`,
+    );
+  });
+
+  it('keeps the link when nothing is owned yet, so the empty board 32 stays reachable', () => {
+    renderScreen();
+    expect(screen.getByRole('link', { name: 'Đã sở hữu · 0' })).toBeInTheDocument();
+  });
+
+  it('marks an owned card "Đã sở hữu" in place of its price', () => {
+    const [first, ...rest] = itemFixtures;
+    if (first === undefined) {
+      throw new Error('No marketplace item fixture');
+    }
+    renderScreen({
+      catalog: listFixture({ items: [{ ...first, owned: true }, ...rest], ownedCount: 1 }),
+    });
+    const card = screen.getByRole('article', { name: first.name });
+    expect(within(card).getByText('Đã sở hữu')).toBeInTheDocument();
+    expect(card).not.toHaveTextContent('399.000đ');
   });
 
   it('labels the search, the price filter and the sort, and offers the board’s choices', () => {
