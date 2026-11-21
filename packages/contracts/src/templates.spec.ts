@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { idSchema } from './common.js';
-import { createPageRequestSchema } from './page.js';
+import { createPageRequestSchema, pageDetailResponseSchema } from './page.js';
 import {
+  applyTemplateRequestSchema,
   createWorkspaceTemplateRequestSchema,
   isWorkspaceTemplateId,
   systemTemplateIdSchema,
   templateDetailQuerySchema,
   templateIndustries,
   templateIndustryLabels,
+  templateRefOf,
+  templateRefSchema,
   templateScopeSchema,
+  templateSourceLabels,
+  templateSources,
+  templateSummarySchema,
   templateUsableIn,
   templateVersionItemSchema,
 } from './templates.js';
@@ -59,7 +65,17 @@ describe('creating a page from a template', () => {
     expect(createPageRequestSchema.parse({ ...body, start }).start).toEqual(start);
   });
 
-  it('refuses a version that is not a positive whole number, or an id of the other source', () => {
+  it('names a marketplace item by its "mp-" id, at the version of the licence (ADR-036)', () => {
+    const start = {
+      kind: 'template',
+      source: 'marketplace',
+      templateId: 'mp-khoa-hoc-tieng-anh-tre-em',
+      version: 2,
+    };
+    expect(createPageRequestSchema.parse({ ...body, start }).start).toEqual(start);
+  });
+
+  it('refuses a version that is not a positive whole number, or an id of another source', () => {
     for (const start of [
       { kind: 'template', source: 'system', templateId: 'nha-khoa-uu-dai', version: 0 },
       { kind: 'template', source: 'system', templateId: 'nha-khoa-uu-dai', version: 1.5 },
@@ -67,10 +83,70 @@ describe('creating a page from a template', () => {
       { kind: 'template', source: 'workspace', templateId: 'nha-khoa-uu-dai', version: 1 },
       { kind: 'template', source: 'system', templateId: '64b000000000000000000001', version: 1 },
       { kind: 'template', source: 'marketplace', templateId: 'nha-khoa-uu-dai', version: 1 },
+      {
+        kind: 'template',
+        source: 'marketplace',
+        templateId: '64b000000000000000000001',
+        version: 1,
+      },
+      { kind: 'template', source: 'marketplace', templateId: 'mp-spa-uu-dai', version: 0 },
+      { kind: 'template', source: 'workspace', templateId: 'mp-spa-uu-dai', version: 1 },
+      { kind: 'template', source: 'store', templateId: 'mp-spa-uu-dai', version: 1 },
       { kind: 'template', source: 'system', templateId: 'NHA KHOA', version: 1 },
     ]) {
       expect(createPageRequestSchema.safeParse({ ...body, start }).success).toBe(false);
     }
+  });
+});
+
+describe('marketplace templates (ADR-036)', () => {
+  const ref = { source: 'marketplace', templateId: 'mp-khai-truong-phong-tap', version: 1 };
+
+  it('are a third source, labelled “Marketplace”', () => {
+    expect(templateSources).toEqual(['system', 'workspace', 'marketplace']);
+    expect(templateSourceLabels.marketplace).toBe('Marketplace');
+  });
+
+  it('are applied and recorded as a page’s source like the other templates', () => {
+    expect(templateRefSchema.parse(ref)).toEqual(ref);
+    expect(pageDetailResponseSchema.shape.createdFrom.parse(ref)).toEqual(ref);
+    expect(applyTemplateRequestSchema.parse({ baseRevision: 3, template: ref }).template).toEqual(
+      ref,
+    );
+    expect(templateRefSchema.safeParse({ ...ref, templateId: 'khai-truong' }).success).toBe(false);
+  });
+
+  it('are referred to from a card as any template, by its source, id and version shown', () => {
+    expect(templateRefOf({ source: 'marketplace', id: ref.templateId, version: 1 })).toEqual(ref);
+    expect(templateRefOf({ source: 'system', id: 'nha-khoa-uu-dai', version: 2 })).toEqual({
+      source: 'system',
+      templateId: 'nha-khoa-uu-dai',
+      version: 2,
+    });
+  });
+
+  it('carry their licence and price on a library card; other sources carry none', () => {
+    const card = {
+      id: 'mp-khai-truong-phong-tap',
+      source: 'marketplace',
+      version: 1,
+      updatedAt: '2026-11-21T00:00:00.000Z',
+      name: 'Khai trương phòng tập',
+      description: 'Ra mắt phòng tập với ưu đãi tuần đầu.',
+      goal: 'event',
+      industry: 'fitness',
+      hasForm: true,
+      sections: [],
+      siteIds: null,
+      marketplace: { owned: false, price: 399_000 },
+    };
+    expect(templateSummarySchema.parse(card)).toEqual(card);
+    expect(templateSummarySchema.parse({ ...card, marketplace: null }).marketplace).toBeNull();
+    const { marketplace: _omitted, ...withoutInfo } = card;
+    expect(templateSummarySchema.safeParse(withoutInfo).success).toBe(false);
+    expect(
+      templateSummarySchema.safeParse({ ...card, marketplace: { owned: true, price: -1 } }).success,
+    ).toBe(false);
   });
 });
 

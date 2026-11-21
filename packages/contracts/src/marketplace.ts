@@ -4,6 +4,7 @@ import { isoDateTimeSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { pageGoalSchema } from './goals.js';
 import {
+  marketplaceItemIdSchema,
   templateIndustrySchema,
   templateSectionSchema,
   templateVersionSchema,
@@ -15,22 +16,8 @@ import {
  * (ADR-030) plus a price, a status and every version ever released, since a licence names one.
  */
 
-/** Every marketplace item id starts with it; no system template id does (ADR-030). */
-export const MARKETPLACE_ITEM_ID_PREFIX = 'mp-';
-
-/**
- * "mp-" and kebab-case ("mp-khai-truong-phong-tap"), stable across versions. One path segment
- * still names a template of any source: a workspace template's id is 24 hex digits, and a system
- * template's never starts with "mp-".
- */
-export const marketplaceItemIdSchema = z
-  .string()
-  .max(60)
-  .regex(/^mp(?:-[a-z0-9]+)+$/, 'Mã mẫu marketplace không hợp lệ');
-
-export function isMarketplaceItemId(id: string): boolean {
-  return marketplaceItemIdSchema.safeParse(id).success;
-}
+// An item's id (`marketplaceItemIdSchema`, `isMarketplaceItemId`) is in templates.ts with the
+// other sources' ids: the template library and a page's `createdFrom` name items too.
 
 /** At most this many items in the catalog: the marketplace screen has no pagination. */
 export const MAX_MARKETPLACE_ITEMS = 100;
@@ -283,6 +270,11 @@ export const marketplaceOwnedItemSchema = z.object({
   hasForm: z.boolean(),
   /** Of the licence's version, for the thumbnail (TemplateThumb). */
   sections: z.array(templateSectionSchema),
+  /**
+   * Pages made from the item, any version, in the sites the member may open, counted as "Đã
+   * dùng" on board 18: "N trang đã tạo từ mẫu này không đổi" in the update dialog.
+   */
+  usedCount: z.number().int().nonnegative(),
 });
 export type MarketplaceOwnedItem = z.infer<typeof marketplaceOwnedItemSchema>;
 

@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   claimMarketplaceItemRequestSchema,
-  isMarketplaceItemId,
-  MARKETPLACE_ITEM_ID_PREFIX,
   type MarketplaceCatalog,
   marketplaceCatalogSchema,
   marketplaceItemChangedProblemContextSchema,
   marketplaceItemDetailSchema,
-  marketplaceItemIdSchema,
   marketplaceLicenceListResponseSchema,
   marketplaceListResponseSchema,
   MAX_MARKETPLACE_ITEM_VERSIONS,
   MAX_MARKETPLACE_ITEMS,
   updateMarketplaceLicenceVersionRequestSchema,
 } from './marketplace.js';
-import { systemTemplateIdSchema } from './templates.js';
+import {
+  isMarketplaceItemId,
+  MARKETPLACE_ITEM_ID_PREFIX,
+  marketplaceItemIdSchema,
+  systemTemplateIdSchema,
+} from './templates.js';
 
 const TERMS = {
   version: 1,
@@ -298,6 +300,7 @@ describe('the licences of a workspace (MP2)', () => {
     withdrawn: false,
     hasForm: true,
     sections: [],
+    usedCount: 2,
   };
 
   it('claims a version under the terms the member agreed to', () => {
@@ -333,6 +336,12 @@ describe('the licences of a workspace (MP2)', () => {
       marketplaceLicenceListResponseSchema.safeParse({ items: [{ ...row, itemId: 'nha-khoa' }] })
         .success,
     ).toBe(false);
+    // "N trang đã tạo từ mẫu này không đổi" of the update dialog.
+    for (const usedCount of [-1, 1.5, undefined]) {
+      expect(
+        marketplaceLicenceListResponseSchema.safeParse({ items: [{ ...row, usedCount }] }).success,
+      ).toBe(false);
+    }
   });
 
   it('says what the item is now when the member saw it otherwise', () => {
