@@ -160,6 +160,25 @@ describe('planBanner', () => {
     expect(open?.title).toBe('Đang chờ xác nhận thanh toán.');
   });
 
+  it('shows a transfer started after a failed charge as waiting, not as failed', () => {
+    const { card: _card, ...transfer } = invoiceSummaryFixture({
+      status: 'pending',
+      method: 'transfer',
+      paidAt: null,
+      payable: true,
+    });
+    const banner = planBanner(
+      summaryFixture({
+        state: 'past_due',
+        dueInvoice: transfer,
+        graceEndsAt: '2026-12-08T03:00:00.000Z',
+      }),
+    );
+    expect(banner?.title).toBe('Đang chờ xác nhận chuyển khoản.');
+    expect(banner?.body).toContain('chuyển sang chỉ đọc từ 08/12/2026');
+    expect(banner?.action).toBe('view_invoice');
+  });
+
   it('offers a stopped plan a new one', () => {
     const banner = planBanner(
       summaryFixture({

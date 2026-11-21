@@ -125,6 +125,28 @@ function retrySentence(summary: Pick<BillingSummary, 'nextRetryAt' | 'dueInvoice
     : `Hệ thống tự thử lại ngày ${formatDayMonth(summary.nextRetryAt)}.`;
 }
 
+/** A payment waits for its answer: a transfer to be confirmed, or a gateway that has not replied. */
+function pendingBanner(summary: BannerSummary): PlanBannerContent {
+  const due = summary.dueInvoice;
+  const transfer = due?.method === 'transfer' && due.status === 'pending';
+  return {
+    role: 'status',
+    tone: 'warning',
+    title: transfer ? 'Đang chờ xác nhận chuyển khoản.' : 'Đang chờ xác nhận thanh toán.',
+    body: [
+      due === null
+        ? null
+        : transfer
+          ? `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Thường được xác nhận trong 1 ngày làm việc.`
+          : `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Cổng thanh toán chưa trả lời.`,
+      graceSentence(summary),
+    ]
+      .filter((part) => part !== null && part !== '')
+      .join(' '),
+    action: due === null ? null : 'view_invoice',
+  };
+}
+
 /**
  * The banner of board 28 for a state, or null for an active plan (ADR-035, T3). The action is the
  * one the state leads to; whether this viewer may take it (Chủ sở hữu only) is the screen's call.
@@ -210,6 +232,10 @@ export function planBanner(summary: BannerSummary): PlanBannerContent | null {
           action: 'pay_now',
         };
       }
+      if (due.status === 'pending') {
+        // A transfer started after the failure: the failure is old news until it is confirmed.
+        return pendingBanner(summary);
+      }
       const reason =
         due.lastAttempt?.code == null ? null : paymentDeclineLabels[due.lastAttempt.code];
       return {
@@ -227,25 +253,8 @@ export function planBanner(summary: BannerSummary): PlanBannerContent | null {
         action: 'pay_invoice',
       };
     }
-    case 'pending_payment': {
-      const transfer = due?.method === 'transfer' && due.status === 'pending';
-      return {
-        role: 'status',
-        tone: 'warning',
-        title: transfer ? 'Đang chờ xác nhận chuyển khoản.' : 'Đang chờ xác nhận thanh toán.',
-        body: [
-          due === null
-            ? null
-            : transfer
-              ? `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Thường được xác nhận trong 1 ngày làm việc.`
-              : `Hóa đơn ${due.number} · ${formatVnd(due.amount)}. Cổng thanh toán chưa trả lời.`,
-          graceSentence(summary),
-        ]
-          .filter((part) => part !== null && part !== '')
-          .join(' '),
-        action: due === null ? null : 'view_invoice',
-      };
-    }
+    case 'pending_payment':
+      return pendingBanner(summary);
     case 'cancel_scheduled':
       return {
         role: 'status',
