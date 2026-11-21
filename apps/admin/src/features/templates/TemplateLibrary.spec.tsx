@@ -399,7 +399,7 @@ describe('TemplateLibrary', () => {
     });
 
     it('points an empty tab to the marketplace', () => {
-      renderLibrary({ templates: templateSummaries, tab: 'marketplace' });
+      renderLibrary({ templates: [...templateSummaries], tab: 'marketplace' });
       expect(screen.getByText('Workspace chưa sở hữu mẫu nào từ Marketplace')).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Tìm trên Marketplace' })).toHaveAttribute(
         'href',
