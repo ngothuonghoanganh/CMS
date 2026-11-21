@@ -206,10 +206,39 @@ test('Phase 4: trial, plan limits, payment, failed renewal, read-only, recovery,
       .getByRole('button', { name: 'Hủy gói' })
       .click();
     await expect(page.getByText(`Gói sẽ dừng vào ${fullDate(periodEnd)}.`)).toBeVisible();
+    // No renewal follows "Hủy gói": the downgrade stays, for the plan kept only.
+    await expect(
+      page.getByText(/^Nếu giữ lại gói: chuyển sang Gói Cơ bản · theo tháng từ /),
+    ).toContainText(fullDate(periodEnd));
+    expect(await billingSummaryOf(page.request, workspaceId)).toMatchObject({
+      state: 'cancel_scheduled',
+      cancelAt: current.periodEnd,
+      scheduledChange: { planId: 'basic', cycle: 'monthly' },
+      renewal: null,
+    });
 
     await page.getByRole('button', { name: 'Giữ lại gói' }).click();
     await expect(page.getByText('Đã giữ lại Gói Doanh nghiệp', { exact: true })).toBeVisible();
     await expect(page.getByText(/Gói sẽ dừng vào/)).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 2, name: 'Gói Doanh nghiệp' })).toBeVisible();
+    // Kept: the plan renews at the end of the period, on the downgrade scheduled before.
+    await expect(page.getByText(/^Chuyển sang Gói Cơ bản · theo tháng từ /)).toContainText(
+      fullDate(periodEnd),
+    );
+    await expect(page.getByRole('button', { name: 'Hủy thay đổi' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hủy gói' })).toBeVisible();
+    expect(await billingSummaryOf(page.request, workspaceId)).toMatchObject({
+      state: 'active',
+      cancelAt: null,
+      plan: { id: 'business' },
+      scheduledChange: { planId: 'basic', cycle: 'monthly' },
+      renewal: {
+        at: current.periodEnd,
+        planId: 'basic',
+        cycle: 'monthly',
+        amount: 199_000,
+        autoRenews: true,
+      },
+    });
   });
 });
