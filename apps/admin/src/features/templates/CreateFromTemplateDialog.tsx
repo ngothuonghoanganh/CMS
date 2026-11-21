@@ -17,6 +17,8 @@ import { useRouter } from 'next/navigation';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { hostOf } from '../../lib/site-url';
+import { planProblemOf } from '../billing/plan-problem';
+import { PlanProblemAction } from '../billing/PlanProblemAction';
 import { siteQueryKeys } from '../dashboard/queries';
 import { PageSlugField } from '../onboarding/PageSlugField';
 import { useSlugAvailability } from '../onboarding/use-slug-availability';
@@ -293,8 +295,10 @@ function CreateFromTemplateForm({
           {failure.problem.title}. {archivedHint(role)}
         </Callout>
       ) : unshown === null ? null : (
-        <Callout tone="danger" role="alert">
+        // A 402 of the plan (a read-only workspace) leads to board 28, not read as a permission.
+        <Callout tone={planProblemOf(failure) === null ? 'danger' : 'warning'} role="alert">
           {unshown}
+          <PlanProblemAction error={failure} workspaceId={workspaceId} />
         </Callout>
       )}
       <div className={styles.actions}>

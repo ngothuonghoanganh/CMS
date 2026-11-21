@@ -204,7 +204,29 @@ describe('CreateFromTemplateDialog', () => {
     renderDialog();
     await screen.findByText('Đường dẫn này dùng được.');
     await user.click(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mã mẫu không hợp lệ');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Mã mẫu không hợp lệ');
+    expect(alert).toHaveAttribute('data-tone', 'danger');
+    expect(within(alert).queryByRole('link')).toBeNull();
+  });
+
+  it('leads a read-only workspace to its plan rather than calling it a permission', async () => {
+    const user = userEvent.setup();
+    serve({ [SITE_ID]: readinessFixture() }, () =>
+      Promise.reject(apiError(402, 'workspace_read_only', 'Workspace đang ở chế độ chỉ đọc')),
+    );
+    renderDialog();
+    await screen.findByText('Đường dẫn này dùng được.');
+    await user.click(screen.getByRole('button', { name: 'Tạo bản nháp và mở editor' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
+    expect(alert).toHaveAttribute('data-tone', 'warning');
+    expect(alert).toHaveTextContent('Theo gói');
+    expect(within(alert).getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing`,
+    );
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it('says the template was archived meanwhile, stops, and has the screen read it again', async () => {

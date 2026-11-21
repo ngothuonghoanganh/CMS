@@ -5,11 +5,12 @@ import {
   endpoints,
   type MarketplaceItemDetail,
 } from '@plp/contracts';
-import { Button, Callout, Checkbox, Dialog } from '@plp/ui';
+import { Button, Checkbox, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { reportUnexpected } from '../shell/problem-message';
+import { DialogFailure } from './DialogFailure';
 import styles from './ClaimDialog.module.css';
 
 export interface ClaimDialogProps {
@@ -40,7 +41,7 @@ export function ClaimDialog({
   onChanged,
 }: ClaimDialogProps) {
   const [agreed, setAgreed] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
   const claim = useMutation({
     mutationFn: () =>
       api(endpoints.claimMarketplaceItem, [workspaceId, item.id], {
@@ -67,7 +68,7 @@ export function ClaimDialog({
         return;
       }
       reportUnexpected('Claiming a marketplace item failed', error);
-      setFailure(problemMessage(error));
+      setFailure(error);
     },
   });
 
@@ -122,11 +123,7 @@ export function ClaimDialog({
           }}
           label="Tôi đồng ý với điều khoản giấy phép"
         />
-        {failure === null ? null : (
-          <Callout tone="danger" role="alert">
-            {failure}
-          </Callout>
-        )}
+        <DialogFailure error={failure} workspaceId={workspaceId} />
       </div>
     </Dialog>
   );

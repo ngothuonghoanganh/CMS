@@ -177,8 +177,16 @@ describe('OwnedItemsScreen (board 32)', () => {
     renderScreen();
     await user.click(screen.getByRole('button', { name: 'Cập nhật Khai trương phòng tập' }));
     await user.click(screen.getByRole('button', { name: 'Cập nhật mẫu' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
     expect(router.refresh).not.toHaveBeenCalled();
+    // The plan stops it, not a permission (ADR-035): "Theo gói" and the way to board 28.
+    expect(alert).toHaveAttribute('data-tone', 'warning');
+    expect(alert).toHaveTextContent('Theo gói');
+    expect(within(alert).getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/billing`,
+    );
   });
 
   it('creates a page from the version of the licence, in the dialog of board 18', async () => {

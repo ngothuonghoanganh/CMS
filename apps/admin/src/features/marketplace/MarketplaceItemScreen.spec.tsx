@@ -210,8 +210,31 @@ describe('MarketplaceItemScreen (board 31)', () => {
       await user.click(
         within(screen.getByRole('dialog')).getByRole('button', { name: 'Nhận mẫu' }),
       );
-      expect(await screen.findByRole('alert')).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Workspace đang ở chế độ chỉ đọc');
       expect(router.refresh).not.toHaveBeenCalled();
+      // The plan stops it, not a permission (ADR-035): "Theo gói" and the way to board 28.
+      expect(alert).toHaveAttribute('data-tone', 'warning');
+      expect(alert).toHaveTextContent('Theo gói');
+      expect(within(alert).getByRole('link', { name: 'Xem gói & thanh toán' })).toHaveAttribute(
+        'href',
+        `/workspaces/${WORKSPACE_ID}/billing`,
+      );
+    });
+
+    it('shows any other failure as an error, without the way to the plan', async () => {
+      const user = userEvent.setup();
+      apiMock.mockRejectedValueOnce(apiError(500, 'internal', 'Lỗi máy chủ'));
+      renderItem({ price: 0 });
+      await user.click(screen.getByRole('button', { name: 'Nhận mẫu' }));
+      await user.click(screen.getByRole('checkbox'));
+      await user.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Nhận mẫu' }),
+      );
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Lỗi máy chủ');
+      expect(alert).toHaveAttribute('data-tone', 'danger');
+      expect(within(alert).queryByRole('link')).toBeNull();
     });
   });
 

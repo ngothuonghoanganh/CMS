@@ -5,12 +5,13 @@ import {
   type MarketplaceOwnedItem,
   updateMarketplaceLicenceVersionRequestSchema,
 } from '@plp/contracts';
-import { Button, Callout, Dialog } from '@plp/ui';
+import { Button, Dialog } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { formatDate } from '../../lib/format';
-import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { reportUnexpected } from '../shell/problem-message';
+import { DialogFailure } from './DialogFailure';
 import { updateSentence } from './owned-items';
 import styles from './UpdateLicenceDialog.module.css';
 
@@ -37,7 +38,7 @@ export function UpdateLicenceDialog({
   onUpdated,
   onChangedMeanwhile,
 }: UpdateLicenceDialogProps) {
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
   const update = useMutation({
     mutationFn: () =>
       api(endpoints.updateMarketplaceLicenceVersion, [workspaceId, item.itemId], {
@@ -54,7 +55,7 @@ export function UpdateLicenceDialog({
         return;
       }
       reportUnexpected('Updating a marketplace licence failed', error);
-      setFailure(problemMessage(error));
+      setFailure(error);
     },
   });
 
@@ -105,11 +106,7 @@ export function UpdateLicenceDialog({
           ))}
         </ul>
         <p className={styles.unchanged}>{updateSentence(item.usedCount, item.latestVersion)}</p>
-        {failure === null ? null : (
-          <Callout tone="danger" role="alert">
-            {failure}
-          </Callout>
-        )}
+        <DialogFailure error={failure} workspaceId={workspaceId} />
       </div>
     </Dialog>
   );
