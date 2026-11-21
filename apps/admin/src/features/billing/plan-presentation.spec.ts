@@ -377,19 +377,35 @@ describe('canCancelPlan', () => {
 });
 
 describe('scheduledChangeLine', () => {
+  const PERIOD_END = '2026-12-01T03:00:00.000Z';
+
   it('says the plan, the cycle and the day', () => {
     expect(
       scheduledChangeLine(
         {
           scheduledChange: { planId: 'basic', cycle: 'yearly' },
-          periodEnd: '2026-12-01T03:00:00.000Z',
+          periodEnd: PERIOD_END,
+          cancelAt: null,
         },
         'Cơ bản',
       ),
     ).toBe('Chuyển sang Gói Cơ bản · theo năm từ 01/12/2026');
     expect(
-      scheduledChangeLine({ scheduledChange: null, periodEnd: '2026-12-01T03:00:00.000Z' }, 'X'),
+      scheduledChangeLine({ scheduledChange: null, periodEnd: PERIOD_END, cancelAt: null }, 'X'),
     ).toBeNull();
+  });
+
+  it('says it applies only if the plan is kept while "Hủy gói" stands', () => {
+    expect(
+      scheduledChangeLine(
+        {
+          scheduledChange: { planId: 'basic', cycle: 'monthly' },
+          periodEnd: PERIOD_END,
+          cancelAt: PERIOD_END,
+        },
+        'Cơ bản',
+      ),
+    ).toBe('Nếu giữ lại gói: chuyển sang Gói Cơ bản · theo tháng từ 01/12/2026');
   });
 });
 

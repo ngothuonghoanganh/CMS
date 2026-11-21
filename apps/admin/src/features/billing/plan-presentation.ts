@@ -369,16 +369,20 @@ export function canCancelPlan(summary: Pick<BillingSummary, 'state' | 'cancelAt'
   );
 }
 
-/** "Chuyển sang Gói Cơ bản · theo tháng từ 01/12": the change waiting for the period's end. */
+/**
+ * "Chuyển sang Gói Cơ bản · theo tháng từ 01/12": the change waiting for the period's end. While
+ * "Hủy gói" stands no renewal follows, so the change applies only if the plan is kept (T3).
+ */
 export function scheduledChangeLine(
-  summary: Pick<BillingSummary, 'scheduledChange' | 'periodEnd'>,
+  summary: Pick<BillingSummary, 'scheduledChange' | 'periodEnd' | 'cancelAt'>,
   planName: string,
 ): string | null {
   const change = summary.scheduledChange;
   if (change === null) {
     return null;
   }
-  return `Chuyển sang Gói ${planName} · theo ${billingCycleLabels[change.cycle]} từ ${formatDate(summary.periodEnd)}`;
+  const line = `Gói ${planName} · theo ${billingCycleLabels[change.cycle]} từ ${formatDate(summary.periodEnd)}`;
+  return summary.cancelAt === null ? `Chuyển sang ${line}` : `Nếu giữ lại gói: chuyển sang ${line}`;
 }
 
 /**

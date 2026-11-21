@@ -210,6 +210,27 @@ describe('a scheduled change', () => {
     expect(screen.getByText(/Chuyển sang Gói Cơ bản/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Hủy thay đổi' })).toBeNull();
   });
+
+  it('applies only if the plan is kept while "Hủy gói" stands, and "Giữ lại gói" brings it back', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.keepPlan
+        ? Promise.resolve(scheduled)
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderBilling({ initial: { ...canceled, scheduledChange: scheduled.scheduledChange } });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Gói sẽ dừng vào 01/12/2026.');
+    expect(
+      screen.getByText('Nếu giữ lại gói: chuyển sang Gói Cơ bản · theo tháng từ 01/12/2026'),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Hủy thay đổi' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Giữ lại gói' }));
+
+    expect(await screen.findByText('Đã giữ lại Gói Agency')).toBeInTheDocument();
+    expect(screen.getByText('Chuyển sang Gói Cơ bản · theo tháng từ 01/12/2026')).toBeVisible();
+    expect(screen.queryByText(/Nếu giữ lại gói/)).toBeNull();
+  });
 });
 
 describe('"Đổi gói" to a lower plan in a paid period', () => {
