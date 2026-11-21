@@ -366,11 +366,21 @@ describe('MarketplaceItemScreen (board 31)', () => {
       );
     });
 
-    it('owns a paid item without any button to buy it', () => {
+    it('owns a bought item without any button to buy it, under what was paid for it', () => {
       renderItem({ licence: licenceFixture({ source: 'purchase' }) });
       const box = screen.getByRole('complementary', { name: 'Giá' });
-      expect(box).not.toHaveTextContent('Một lần · Đã gồm VAT');
+      // As board 31 draws its owned state: the one payment, VAT included, and the refund terms.
+      expect(box).toHaveTextContent(
+        `Đã sở hữuMột lần · Đã gồm VAT · ${termsFixture.refund}Workspace đã sở hữu · v1`,
+      );
       expect(within(box).queryByRole('button')).toBeNull();
+    });
+
+    it('leaves the VAT and refund line out of an item received free, even one now paid', () => {
+      renderItem({ price: 399_000, licence: licenceFixture({ source: 'free' }) });
+      const box = screen.getByRole('complementary', { name: 'Giá' });
+      expect(box).toHaveTextContent('Đã sở hữu');
+      expect(box).not.toHaveTextContent('Một lần · Đã gồm VAT');
     });
   });
 });

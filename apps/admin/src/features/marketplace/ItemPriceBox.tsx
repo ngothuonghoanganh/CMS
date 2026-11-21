@@ -44,8 +44,11 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
   return (
     <Card className={styles.priceBox}>
       <p className={styles.price}>{licence === null ? priceText(item.price) : 'Đã sở hữu'}</p>
-      {/* A free item is not paid for: there is no VAT to include and nothing to refund. */}
-      {licence === null && item.price > 0 ? (
+      {/*
+       * What is paid, or was paid for the licence held, as the board draws it under "Đã sở hữu" too.
+       * A free item, or one received free, has no VAT to include and nothing to refund.
+       */}
+      {(licence === null ? item.price > 0 : licence.source === 'purchase') ? (
         <p className={styles.priceNote}>Một lần · Đã gồm VAT · {item.terms.refund}</p>
       ) : null}
 
