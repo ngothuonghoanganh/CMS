@@ -42,6 +42,24 @@ async function capture(page: Page, board: string): Promise<void> {
   await page.screenshot({ path: `${CAPTURES}${board}.png`, fullPage: true });
 }
 
+/**
+ * Closes the toasts once the one titled `title` shows: they would cover the screen in its
+ * picture. All at once from the page, so that no click waits on a toast that is already leaving.
+ */
+async function closeToasts(page: Page, title: string): Promise<void> {
+  const toasts = page.getByRole('region', { name: 'Thông báo' });
+  await expect(toasts.getByText(title, { exact: true })).toBeVisible();
+  const close = toasts.getByRole('button', { name: 'Đóng' });
+  await close.evaluateAll((buttons) => {
+    for (const button of buttons) {
+      if (button instanceof HTMLElement) {
+        button.click();
+      }
+    }
+  });
+  await expect(close).toHaveCount(0);
+}
+
 function sitePath(path = ''): string {
   return `/sites/${board.site.id}${path}`;
 }
@@ -663,6 +681,7 @@ test.describe('Design capture', () => {
       await capture(page, 'Plan-downgrade');
       await dialog.getByRole('button', { name: 'Lên lịch hạ gói' }).click();
       await expect(page.getByText(/^Chuyển sang Gói Cơ bản/)).toBeVisible();
+      await closeToasts(page, 'Đã lên lịch đổi gói');
       await capture(page, 'Plan-scheduled');
 
       await page.getByRole('button', { name: 'Hủy gói' }).click();
@@ -670,6 +689,7 @@ test.describe('Design capture', () => {
       await capture(page, 'Plan-cancel');
       await page.getByRole('alertdialog').getByRole('button', { name: 'Hủy gói' }).click();
       await expect(page.getByText(/^Gói sẽ dừng vào/)).toBeVisible();
+      await closeToasts(page, 'Đã hủy gói');
       await capture(page, 'Plan-cancel-scheduled');
     } finally {
       await setBillingClock(request, null);
