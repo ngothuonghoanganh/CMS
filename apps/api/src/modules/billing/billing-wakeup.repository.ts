@@ -1,7 +1,7 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, mongo } from 'mongoose';
-import type { WakeupStream } from '../../shared/jobs/wakeup-timer.js';
+import type { WakeupStream } from '../../shared/persistence/wakeup-timer.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import {

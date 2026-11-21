@@ -4,7 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { WakeupTimer } from '../../shared/jobs/wakeup-timer.js';
+import { WakeupTimer } from '../../shared/persistence/wakeup-timer.js';
 import type { JobWakeupRecord } from '../automations/job-wakeup.schema.js';
 import { BillingClock } from './billing-clock.js';
 import { BillingJob } from './billing-job.service.js';
