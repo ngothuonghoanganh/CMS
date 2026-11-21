@@ -68,6 +68,8 @@ export const billingSummarySchema = z.object({
   scheduledChange: scheduledChangeSchema.nullable(),
   /** When an unpaid workspace turns read-only. */
   graceEndsAt: isoDateTimeSchema.nullable(),
+  /** Whole days left until then, by the server's clock; null outside the grace. */
+  graceDaysLeft: z.number().int().nonnegative().nullable(),
   /**
    * When the plan stops after "Hủy gói": the end of the period, or of the trial ("Gói sẽ dừng vào
    * 01/12"; once `canceled`, "Gói đã hủy từ 01/12"). Null without a cancellation.

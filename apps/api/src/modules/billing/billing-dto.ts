@@ -87,6 +87,7 @@ export function toBillingSummary(
     cancelAtPeriodEnd: facts.cancelAtPeriodEnd,
     scheduledChange: facts.scheduledChange,
     graceEndsAt: status.graceEndsAt?.toISOString() ?? null,
+    graceDaysLeft: status.graceDaysLeft,
     cancelAt: facts.cancelAtPeriodEnd ? currentEndOf(facts).toISOString() : null,
     renewal: renewalOf({ facts, at }, context.planOf),
     dueInvoice: due === null ? null : toDueInvoice(due.invoice, due.payable),
