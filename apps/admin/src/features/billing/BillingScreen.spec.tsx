@@ -77,10 +77,21 @@ describe('BillingScreen (board 28)', () => {
     ).toEqual(['— (không có)', '— (không có)', 'Có']);
   });
 
-  it('offers no lifecycle action before it exists, and leads the trial to the card', () => {
-    renderBilling();
+  it('leads a trial without a card to adding one', () => {
+    renderBilling({
+      initial: summaryFixture({
+        renewal: {
+          at: '2026-12-04T03:00:00.000Z',
+          planId: 'agency',
+          planName: 'Agency',
+          cycle: 'monthly',
+          amount: 599_000,
+          autoRenews: false,
+          blocker: 'no_payment_method',
+        },
+      }),
+    });
 
-    expect(screen.queryByRole('button', { name: /Hủy gói/ })).toBeNull();
     expect(screen.getByRole('link', { name: 'Thêm phương thức thanh toán' })).toHaveAttribute(
       'href',
       `/workspaces/${WORKSPACE_ID}/billing/payments`,
@@ -139,7 +150,7 @@ describe('BillingScreen (board 28)', () => {
       }),
     });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Thanh toán kỳ này chưa thành công.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Kỳ này chưa được thanh toán.');
     expect(screen.getByRole('button', { name: 'Chọn gói và thanh toán' })).toBeEnabled();
   });
 

@@ -5,6 +5,8 @@ import {
   holdersOf,
   methodSetupResultSchema,
   METHOD_SETUP_RESULT_PARAM,
+  TRANSFER_RECEIVED,
+  TRANSFER_RESULT_PARAM,
 } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { PaymentsDenied, PaymentsScreen } from '../../../../../../features/billing/PaymentsScreen';
@@ -24,14 +26,15 @@ export async function generateMetadata({ params }: PaymentsPageProps): Promise<M
   return { title: `Thanh toán & hóa đơn — ${membership.workspace.name}` };
 }
 
-/** The three cards of board 29 and when they were read. */
+/** The cards of board 29 with the summary that tells when a failed payment is retried and when they were read. */
 async function loadPayments(workspaceId: string) {
-  const [paymentMethod, billingInfo, invoices] = await Promise.all([
+  const [summary, paymentMethod, billingInfo, invoices] = await Promise.all([
+    serverApi(endpoints.getBillingSummary, [workspaceId]),
     serverApi(endpoints.getPaymentMethod, [workspaceId]),
     serverApi(endpoints.getBillingInfo, [workspaceId]),
     serverApi(endpoints.listInvoices, [workspaceId], { query: { limit: INVOICE_PAGE_SIZE } }),
   ]);
-  return { paymentMethod, billingInfo, invoices, loadedAt: Date.now() };
+  return { summary, paymentMethod, billingInfo, invoices, loadedAt: Date.now() };
 }
 
 /**
@@ -66,15 +69,15 @@ export default async function PaymentsPage({ params, searchParams }: PaymentsPag
     );
   }
   const initial = await loadPayments(workspaceId);
-  const returned = methodSetupResultSchema.safeParse(
-    (await searchParams)[METHOD_SETUP_RESULT_PARAM],
-  );
+  const query = await searchParams;
+  const returned = methodSetupResultSchema.safeParse(query[METHOD_SETUP_RESULT_PARAM]);
   return (
     <PaymentsScreen
       workspaceId={workspaceId}
       workspaceName={membership.workspace.name}
       initial={initial}
       returned={returned.success ? returned.data : null}
+      transferReceived={query[TRANSFER_RESULT_PARAM] === TRANSFER_RECEIVED}
     />
   );
 }

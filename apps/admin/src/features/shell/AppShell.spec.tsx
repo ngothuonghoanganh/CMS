@@ -141,7 +141,7 @@ describe('AppShell', () => {
     });
 
     it('shows nothing while the workspace has full access', () => {
-      renderShell(workspacePlanFixture({ state: 'past_due' }));
+      renderShell(workspacePlanFixture());
 
       expect(within(screen.getByRole('main')).queryByRole('status')).toBeNull();
     });

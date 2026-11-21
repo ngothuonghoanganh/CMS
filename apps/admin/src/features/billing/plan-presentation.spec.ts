@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canCancelPlan,
   comparisonRows,
+  graceNotice,
   periodLine,
   planBanner,
   planImpacts,
   priceLabel,
+  quoteImpacts,
   readOnlyReason,
+  scheduledChangeLine,
   stateChip,
   usageMeters,
 } from './plan-presentation';
-import { agency, basic, business, catalog, summaryFixture } from './test-fixtures';
+import {
+  agency,
+  basic,
+  business,
+  catalog,
+  invoiceSummaryFixture,
+  summaryFixture,
+} from './test-fixtures';
 
 describe('priceLabel', () => {
   it('writes the price with its cycle', () => {
@@ -39,10 +50,126 @@ describe('planBanner', () => {
     expect(planBanner(summaryFixture({ state: 'active' }))).toBeNull();
   });
 
-  it('tells a trial when it ends, without offering a payment that does not exist yet', () => {
+  it('tells a trial when it ends, and what happens then', () => {
     const banner = planBanner(summaryFixture());
     expect(banner?.title).toBe('Bạn đang dùng thử Gói Agency.');
     expect(banner?.body).toContain('Hết hạn 04/12/2026');
+    expect(banner?.action).toBeNull();
+    const charged = planBanner(
+      summaryFixture({
+        renewal: {
+          at: '2026-12-04T03:00:00.000Z',
+          planId: 'agency',
+          planName: 'Agency',
+          cycle: 'monthly',
+          amount: 599_000,
+          autoRenews: true,
+          blocker: null,
+        },
+      }),
+    );
+    expect(charged?.body).toContain('tự thanh toán 599.000 ₫ cho Gói Agency');
+  });
+
+  it('asks a trial without a card for one, and one whose card expires for another', () => {
+    const renewal = {
+      at: '2026-12-04T03:00:00.000Z',
+      planId: 'agency' as const,
+      planName: 'Agency',
+      cycle: 'monthly' as const,
+      amount: 599_000,
+      autoRenews: false,
+    };
+    expect(
+      planBanner(summaryFixture({ renewal: { ...renewal, blocker: 'no_payment_method' } }))?.action,
+    ).toBe('add_method');
+    expect(
+      planBanner(summaryFixture({ renewal: { ...renewal, blocker: 'card_expires' } }))?.action,
+    ).toBe('update_card');
+  });
+
+  it('offers to keep a plan whose stop is scheduled, in a trial as in a paid period', () => {
+    const trial = planBanner(summaryFixture({ cancelAt: '2026-12-04T03:00:00.000Z' }));
+    expect(trial?.title).toBe('Gói sẽ dừng vào 04/12/2026.');
+    expect(trial?.action).toBe('keep');
+    const paid = planBanner(
+      summaryFixture({ state: 'cancel_scheduled', cancelAt: '2026-12-04T03:00:00.000Z' }),
+    );
+    expect(paid?.action).toBe('keep');
+    expect(paid?.body).toContain('giữ lại gói');
+  });
+
+  it('names the invoice, the reason and the retry date of a failed renewal', () => {
+    const due = {
+      ...invoiceSummaryFixture({
+        status: 'failed',
+        paidAt: null,
+        payable: true,
+        periodStart: '2026-11-30T17:00:00.000Z',
+        lastAttempt: {
+          number: 1,
+          at: '2026-12-01T03:00:00.000Z',
+          outcome: 'failed',
+          code: 'insufficient_funds',
+        },
+      }),
+    };
+    const { card: _card, ...dueInvoice } = due;
+    const base = {
+      state: 'past_due' as const,
+      graceEndsAt: '2026-12-08T03:00:00.000Z',
+      dueInvoice,
+    };
+    const retry = planBanner(summaryFixture({ ...base, nextRetryAt: '2026-12-03T03:00:00.000Z' }));
+    expect(retry?.title).toBe('Thanh toán kỳ 01/12 chưa thành công.');
+    expect(retry?.body).toContain('Hóa đơn HD-2026-000001 · 1.490.000 ₫.');
+    expect(retry?.body).toContain('Thẻ không đủ hạn mức.');
+    expect(retry?.body).toContain('Hệ thống tự thử lại ngày 03/12.');
+    expect(retry?.body).toContain('chuyển sang chỉ đọc từ 08/12/2026');
+    expect(retry?.action).toBe('pay_invoice');
+    const spent = planBanner(summaryFixture({ ...base, nextRetryAt: null }));
+    expect(spent?.body).toContain('Hệ thống đã hết lượt tự thử lại.');
+  });
+
+  it('sends a trial that ended with a card added late to paying now', () => {
+    const banner = planBanner(
+      summaryFixture({ state: 'past_due', graceEndsAt: '2026-12-11T03:00:00.000Z' }),
+    );
+    expect(banner?.action).toBe('pay_now');
+  });
+
+  it('waits for a transfer, or for the gateway, and leads to the invoice', () => {
+    const { card: _card, ...transfer } = invoiceSummaryFixture({
+      status: 'pending',
+      method: 'transfer',
+      paidAt: null,
+      payable: true,
+    });
+    const banner = planBanner(
+      summaryFixture({ state: 'pending_payment', dueInvoice: transfer, graceEndsAt: null }),
+    );
+    expect(banner?.title).toBe('Đang chờ xác nhận chuyển khoản.');
+    expect(banner?.body).toContain('Hóa đơn HD-2026-000001 · 1.490.000 ₫.');
+    expect(banner?.action).toBe('view_invoice');
+    const open = planBanner(
+      summaryFixture({
+        state: 'pending_payment',
+        dueInvoice: { ...transfer, status: 'open', method: 'card' },
+      }),
+    );
+    expect(open?.title).toBe('Đang chờ xác nhận thanh toán.');
+  });
+
+  it('offers a stopped plan a new one', () => {
+    const banner = planBanner(
+      summaryFixture({
+        state: 'canceled',
+        access: 'read_only',
+        cancelAt: '2026-12-04T03:00:00.000Z',
+      }),
+    );
+    expect(banner?.title).toBe('Gói đã hủy từ 04/12/2026.');
+    expect(banner?.action).toBe('choose_plan');
   });
 
   it('alerts when a state stops work, and says live pages keep running', () => {
@@ -90,9 +217,121 @@ describe('periodLine', () => {
   });
 
   it('says a scheduled cancel does not renew', () => {
-    expect(periodLine(summaryFixture({ state: 'cancel_scheduled', cancelAtPeriodEnd: true }))).toBe(
-      'Kỳ hiện tại 20/11/2026 – 04/12/2026 · không gia hạn',
+    expect(
+      periodLine(
+        summaryFixture({
+          state: 'cancel_scheduled',
+          cancelAt: '2026-12-04T03:00:00.000Z',
+        }),
+      ),
+    ).toBe('Kỳ hiện tại 20/11/2026 – 04/12/2026 · không gia hạn');
+  });
+
+  it('says when a period renews by itself, and when it cannot', () => {
+    const renewal = {
+      at: '2026-12-04T03:00:00.000Z',
+      planId: 'agency' as const,
+      planName: 'Agency',
+      cycle: 'monthly' as const,
+      amount: 599_000,
+    };
+    const active = { state: 'active' as const };
+    expect(
+      periodLine(
+        summaryFixture({ ...active, renewal: { ...renewal, autoRenews: true, blocker: null } }),
+      ),
+    ).toBe('Kỳ hiện tại 20/11/2026 – 04/12/2026 · gia hạn tự động 04/12/2026');
+    expect(
+      periodLine(
+        summaryFixture({
+          ...active,
+          renewal: { ...renewal, autoRenews: false, blocker: 'no_payment_method' },
+        }),
+      ),
+    ).toBe('Kỳ hiện tại 20/11/2026 – 04/12/2026 · chưa thể gia hạn tự động');
+    expect(
+      periodLine(summaryFixture({ renewal: { ...renewal, autoRenews: true, blocker: null } })),
+    ).toBe('Dùng thử từ 20/11/2026 tới 04/12/2026 · tự thanh toán 599.000 ₫ ngày 04/12/2026');
+  });
+});
+
+describe('canCancelPlan', () => {
+  it('is for a plan that runs, until its stop is set', () => {
+    for (const state of ['trialing', 'active', 'expiring_soon'] as const) {
+      expect(canCancelPlan({ state, cancelAt: null })).toBe(true);
+    }
+    expect(canCancelPlan({ state: 'trialing', cancelAt: '2026-12-04T03:00:00.000Z' })).toBe(false);
+    for (const state of [
+      'past_due',
+      'pending_payment',
+      'trial_expired',
+      'canceled',
+      'cancel_scheduled',
+    ] as const) {
+      expect(canCancelPlan({ state, cancelAt: null })).toBe(false);
+    }
+  });
+});
+
+describe('scheduledChangeLine', () => {
+  it('says the plan, the cycle and the day', () => {
+    expect(
+      scheduledChangeLine(
+        {
+          scheduledChange: { planId: 'basic', cycle: 'yearly' },
+          periodEnd: '2026-12-01T03:00:00.000Z',
+        },
+        'Cơ bản',
+      ),
+    ).toBe('Chuyển sang Gói Cơ bản · theo năm từ 01/12/2026');
+    expect(
+      scheduledChangeLine({ scheduledChange: null, periodEnd: '2026-12-01T03:00:00.000Z' }, 'X'),
+    ).toBeNull();
+  });
+});
+
+describe('graceNotice', () => {
+  const now = new Date('2026-12-05T03:00:00.000Z').getTime();
+
+  it('counts the days to the read-only date of an unpaid period', () => {
+    expect(graceNotice('past_due', '2026-12-08T03:00:00.000Z', now)?.title).toBe(
+      'Thanh toán lỗi — còn 3 ngày trước khi chỉ đọc',
     );
+    expect(graceNotice('pending_payment', '2026-12-08T03:00:00.000Z', now)?.title).toBe(
+      'Đang chờ xác nhận thanh toán — còn 3 ngày trước khi chỉ đọc',
+    );
+  });
+
+  it('leaves the days out when they are not known, and says nothing for other states', () => {
+    expect(graceNotice('past_due', null, now)?.title).toBe('Thanh toán lỗi');
+    expect(graceNotice('past_due', '2026-12-08T03:00:00.000Z', null)?.title).toBe('Thanh toán lỗi');
+    expect(graceNotice('active', null, now)).toBeNull();
+    expect(graceNotice('trial_expired', null, now)).toBeNull();
+  });
+});
+
+describe('quoteImpacts', () => {
+  it('lists what the quote counted: the limits passed, automations paused, members kept', () => {
+    const impacts = quoteImpacts(
+      {
+        overLimits: [
+          { limit: 'sites', used: 4, max: 1 },
+          { limit: 'members', used: 7, max: 3 },
+        ],
+        automationsToPause: 3,
+        aiUses: { from: 300, to: 30 },
+        members: 7,
+      },
+      agency,
+      basic,
+    );
+    expect(impacts.map((impact) => impact.title)).toEqual([
+      '4 site, vượt hạn mức Gói Cơ bản (1).',
+      '7 thành viên, vượt hạn mức Gói Cơ bản (3).',
+      '3 automation đang bật sẽ tạm dừng.',
+      'AI còn 30 lượt mỗi tháng.',
+      '7 thành viên giữ nguyên quyền.',
+    ]);
   });
 });
 

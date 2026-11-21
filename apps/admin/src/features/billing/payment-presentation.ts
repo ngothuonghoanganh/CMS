@@ -1,6 +1,7 @@
 import {
   type BillingInfo,
   invoiceStatusLabels,
+  type InvoicePaymentMethod,
   type InvoiceStatus,
   type InvoiceSummary,
   type PaymentMethodView,
@@ -55,7 +56,14 @@ const STATUS_TONES: Record<InvoiceStatus, BadgeTone> = {
   void: 'neutral',
 };
 
-export function invoiceStatusView(status: InvoiceStatus): { label: string; tone: BadgeTone } {
+/** A transfer that waits for the bank says so ("Chờ xác nhận"); any other `pending` is the gateway. */
+export function invoiceStatusView(
+  status: InvoiceStatus,
+  method: InvoicePaymentMethod = 'card',
+): { label: string; tone: BadgeTone } {
+  if (status === 'pending' && method === 'transfer') {
+    return { label: 'Đang chờ xác nhận', tone: 'warning' };
+  }
   return { label: invoiceStatusLabels[status], tone: STATUS_TONES[status] };
 }
 

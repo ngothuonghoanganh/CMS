@@ -26,7 +26,7 @@ import { formatCount, formatTime } from '../../lib/format';
 import { cx } from '../shell/cx';
 import { fetchNextPageAfterRead } from '../shell/fetch-next-page';
 import { automationsHref } from '../shell/navigation';
-import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanBanner } from '../billing/PlanBanner';
 import { useProblemToast } from '../billing/use-problem-toast';
 import { serverFirstPage } from '../shell/server-render';
 import { useNow } from '../shell/use-now';
@@ -192,7 +192,7 @@ export function AutomationRuns({
           30 ngày: {formatCount(counts.last30Days.runs)} lượt · {formatCount(counts.failed)} lỗi
         </span>
       </header>
-      <ReadOnlyBanner variant="strip" />
+      <PlanBanner variant="strip" />
 
       <main className={styles.main}>
         <div className={styles.content}>

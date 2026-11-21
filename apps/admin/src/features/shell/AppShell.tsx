@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Dialog as RadixDialog } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
 import { can } from '@plp/contracts';
-import { ReadOnlyBanner } from '../billing/ReadOnlyBanner';
+import { PlanBanner } from '../billing/PlanBanner';
 import { WorkspacePlanProvider } from '../billing/plan-context';
 import { Brand } from './Brand';
 import { billingHref } from './navigation';
@@ -100,7 +100,7 @@ export function AppShell({ children, ...sidebar }: AppShellProps) {
             </div>
           </aside>
           <main id="main-content" tabIndex={-1} className={styles.main}>
-            {onBilling ? null : <ReadOnlyBanner />}
+            {onBilling ? null : <PlanBanner />}
             {children}
           </main>
         </div>

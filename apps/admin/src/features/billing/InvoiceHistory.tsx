@@ -32,6 +32,9 @@ function failureNote(invoice: InvoiceSummary): string | null {
   if (invoice.status === 'failed' && attempt?.code != null) {
     return paymentDeclineLabels[attempt.code];
   }
+  if (invoice.status === 'pending' && invoice.method === 'transfer') {
+    return 'Chờ nhận chuyển khoản';
+  }
   if (invoice.status === 'open' && attempt?.outcome === 'unknown') {
     return 'Chưa biết kết quả thanh toán';
   }
@@ -92,7 +95,7 @@ export function InvoiceHistory({
             </thead>
             <tbody className={styles.body} role="rowgroup">
               {items.map((invoice) => {
-                const status = invoiceStatusView(invoice.status);
+                const status = invoiceStatusView(invoice.status, invoice.method);
                 const note = failureNote(invoice);
                 return (
                   <tr key={invoice.id} className={styles.row} role="row">

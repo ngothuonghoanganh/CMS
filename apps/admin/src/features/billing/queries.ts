@@ -31,10 +31,39 @@ export const billingQueryKeys = {
     ['workspaces', workspaceId, 'billing', 'payment-method'] as const,
   info: (workspaceId: string) => ['workspaces', workspaceId, 'billing', 'info'] as const,
   invoices: (workspaceId: string) => ['workspaces', workspaceId, 'billing', 'invoices'] as const,
+  /** One invoice with its transfer details (board 29's "Chuyển khoản"). */
+  invoice: (workspaceId: string, invoiceId: string) =>
+    ['workspaces', workspaceId, 'billing', 'invoice', invoiceId] as const,
   /** What choosing a plan does now; `payNow` tells the trial's two offers apart. */
   quote: (workspaceId: string, planId: string, cycle: string, payNow: boolean) =>
     ['workspaces', workspaceId, 'billing', 'quote', planId, cycle, payNow] as const,
 };
+
+/** What the member-level plan keeps of a summary. */
+export function workspacePlanOf(summary: BillingSummary): WorkspacePlan {
+  const { id, name, limits, features } = summary.plan;
+  return {
+    plan: { id, name, limits, features },
+    state: summary.state,
+    access: summary.access,
+    trialDaysLeft: summary.trialDaysLeft,
+  };
+}
+
+/**
+ * A lifecycle action answered with the new summary (cancel, keep, a scheduled change): it replaces
+ * the cached one, and the plan of the sidebar, the banners and the "Nâng cấp" chips follows at
+ * once, without waiting for the next read.
+ */
+export function adoptSummary(
+  queryClient: QueryClient,
+  workspaceId: string,
+  summary: BillingSummary,
+): void {
+  queryClient.setQueryData(billingQueryKeys.summary(workspaceId), summary);
+  queryClient.setQueryData(billingQueryKeys.plan(workspaceId), workspacePlanOf(summary));
+  invalidateAfterPlanChange(queryClient, workspaceId);
+}
 
 /**
  * What else reads again once the plan changed, from the dialog or an invoice paid on board 29:
@@ -111,8 +140,30 @@ export function useBillingSummary(
   }).data;
 }
 
+/**
+ * The summary for a banner on any screen: only read for a viewer who holds `billing.view` and
+ * only while `enabled` (a grace period is running), from the cache board 28 fills.
+ */
+export function useGraceSummary(workspaceId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: billingQueryKeys.summary(workspaceId),
+    queryFn: ({ signal }) => api(endpoints.getBillingSummary, [workspaceId], { signal }),
+    enabled,
+  });
+}
+
+/** One invoice with its transfer details, read while a transfer waits. */
+export function useInvoiceDetail(workspaceId: string, invoiceId: string | null) {
+  return useQuery({
+    queryKey: billingQueryKeys.invoice(workspaceId, invoiceId ?? ''),
+    queryFn: ({ signal }) => api(endpoints.getInvoice, [workspaceId, invoiceId ?? ''], { signal }),
+    enabled: invoiceId !== null,
+  });
+}
+
 /** What board 29's page loaded on the server, and when (epoch ms). */
 export interface PaymentsInitial {
+  summary: BillingSummary;
   paymentMethod: PaymentMethodResponse;
   billingInfo: BillingInfoResponse;
   invoices: InvoiceListResponse;
@@ -156,6 +207,7 @@ export function usePaymentsData(workspaceId: string, initial: PaymentsInitial) {
     );
   }, [queryClient, workspaceId, initial, loadedAt]);
 
+  const summary = useBillingSummary(workspaceId, initial.summary, loadedAt);
   const paymentMethod = useQuery({
     queryKey: billingQueryKeys.paymentMethod(workspaceId),
     queryFn: ({ signal }) => api(endpoints.getPaymentMethod, [workspaceId], { signal }),
@@ -182,5 +234,5 @@ export function usePaymentsData(workspaceId: string, initial: PaymentsInitial) {
     initialDataUpdatedAt: loadedAt,
     refetchOnWindowFocus: true,
   });
-  return { paymentMethod, billingInfo, invoices };
+  return { summary, paymentMethod, billingInfo, invoices };
 }
