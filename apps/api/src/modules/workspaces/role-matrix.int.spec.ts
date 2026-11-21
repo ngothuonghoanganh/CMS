@@ -627,6 +627,22 @@ const ROWS: Row[] = [
         baseVersion: 1,
       }),
   },
+  // Marketplace (ADR-036): browsing, like the template library
+  {
+    action: 'Marketplace',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) => client.get(`/workspaces/${workspaceId}/marketplace`),
+  },
+  {
+    action: 'Chi tiết mẫu marketplace',
+    permission: 'pages.view',
+    scope: 'workspace',
+    status: 200,
+    call: (client, { workspaceId }) =>
+      client.get(`/workspaces/${workspaceId}/marketplace/items/mp-khai-truong-phong-tap`),
+  },
   {
     action: 'Xem trang và bản nháp',
     permission: 'pages.view',
