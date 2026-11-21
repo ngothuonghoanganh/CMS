@@ -7,8 +7,18 @@ import { notFound } from '../../../../shared/errors.js';
 import { ZodPipe } from '../../../../shared/zod.pipe.js';
 import { Public } from '../../../auth/public.decorator.js';
 import { PaymentGateway } from '../payment-gateway.js';
-import { fakeCardTokenFor, FAKE_GATEWAY_PATH } from './fake-gateway-protocol.js';
-import { renderGatewayError, renderSetupDone, renderSetupPage } from './fake-gateway-page.js';
+import {
+  fakeCardTokenFor,
+  FAKE_GATEWAY_PATH,
+  FAKE_TRANSFER_ACCOUNT,
+} from './fake-gateway-protocol.js';
+import {
+  renderGatewayError,
+  renderSetupDone,
+  renderSetupPage,
+  renderTransferDone,
+  renderTransferPage,
+} from './fake-gateway-page.js';
 import { FakePaymentGateway } from './fake-payment-gateway.js';
 import { FakeWebhookDeliveryFailed, FakeWebhookSender } from './fake-webhook-sender.js';
 
@@ -21,7 +31,10 @@ const setupFormSchema = z.object({
 
 const sessionQuerySchema = z.object({ session: z.string().max(4000).default('') });
 
+const transferFormSchema = z.object({ session: z.string().max(4000) });
+
 const EXPIRED_MESSAGE = 'Phiên thêm thẻ đã hết hạn hoặc không hợp lệ.';
+const TRANSFER_EXPIRED_MESSAGE = 'Liên kết chuyển khoản đã hết hạn hoặc không hợp lệ.';
 
 /** The card's last day: its month's end, as a real gateway reads "MM/YY". */
 function parseExpiry(value: string): { expMonth: number; expYear: number } | null {
@@ -41,11 +54,12 @@ function expired(expiry: { expMonth: number; expYear: number }, now: Date): bool
 }
 
 /**
- * The fake gateway's card page (ADR-035), under `FAKE_GATEWAY_PATH` and only with
- * `PAYMENT_PROVIDER=fake`; any other provider makes these routes 404. The browser reaches it
- * through the admin's `/api` proxy. A test card becomes a token and the number is dropped; the
- * `method_saved` event reaches the webhook before the browser is sent back, so the admin finds
- * the card there. A session saves one card: opened again, its page says so and leads back.
+ * The fake gateway's card page and transfer page (ADR-035), under `FAKE_GATEWAY_PATH` and only
+ * with `PAYMENT_PROVIDER=fake`; any other provider makes these routes 404. The browser reaches
+ * them through the admin's `/api` proxy. A test card becomes a token and the number is dropped;
+ * the `method_saved` event reaches the webhook before the browser is sent back, so the admin
+ * finds the card there. A session saves one card: opened again, its page says so and leads back.
+ * "Xác nhận đã nhận tiền" stands for the bank (T3): it posts `transfer_received` once per transfer.
  */
 @Controller(FAKE_GATEWAY_PATH.replace(/^\//, ''))
 export class FakeGatewayController {
@@ -142,6 +156,80 @@ export class FakeGatewayController {
         throw error;
       }
       // The event id says which delivery failed; nothing of the card is in it.
+      this.logger.error(`The fake gateway could not deliver ${event.eventId}`, error.cause);
+      this.page(
+        response,
+        502,
+        renderGatewayError('Cổng thử không gửi được thông báo tới hệ thống. Hãy thử lại.'),
+      );
+      return;
+    }
+    response.setHeader('Cache-Control', 'no-store');
+    response.redirect(303, session.returnUrl);
+  }
+
+  @Get('transfer')
+  @Public()
+  showTransfer(
+    @Query(new ZodPipe(sessionQuerySchema)) query: z.infer<typeof sessionQuerySchema>,
+    @Res() response: Response,
+  ): void {
+    const fake = this.fakeGateway();
+    const session = fake.transferSession(query.session);
+    if (session === null) {
+      this.page(response, 400, renderGatewayError(TRANSFER_EXPIRED_MESSAGE));
+      return;
+    }
+    if (fake.transferConfirmed(session)) {
+      this.page(response, 200, renderTransferDone(session.returnUrl));
+      return;
+    }
+    this.page(
+      response,
+      200,
+      renderTransferPage({
+        session: query.session,
+        bankName: FAKE_TRANSFER_ACCOUNT.bankName,
+        accountNumber: FAKE_TRANSFER_ACCOUNT.accountNumber,
+        accountName: FAKE_TRANSFER_ACCOUNT.accountName,
+        amount: session.amount,
+        content: session.content,
+        returnUrl: session.returnUrl,
+      }),
+    );
+  }
+
+  @Post('transfer')
+  @Public()
+  async confirmTransfer(
+    @Body(new ZodPipe(transferFormSchema)) form: z.infer<typeof transferFormSchema>,
+    @Res() response: Response,
+  ): Promise<void> {
+    const fake = this.fakeGateway();
+    const session = fake.transferSession(form.session);
+    if (session === null) {
+      this.page(response, 400, renderGatewayError(TRANSFER_EXPIRED_MESSAGE));
+      return;
+    }
+    // Taken before the event goes, so two clicks at once send one transfer.
+    if (!fake.claimTransfer(session)) {
+      this.page(response, 409, renderTransferDone(session.returnUrl));
+      return;
+    }
+    const event: GatewayEvent = {
+      kind: 'transfer_received',
+      eventId: `evt_fake_${randomUUID()}`,
+      occurredAt: new Date().toISOString(),
+      reference: session.reference,
+      amount: session.amount,
+    };
+    try {
+      await this.sender.send(event);
+    } catch (error) {
+      fake.releaseTransfer(session);
+      if (!(error instanceof FakeWebhookDeliveryFailed)) {
+        throw error;
+      }
       this.logger.error(`The fake gateway could not deliver ${event.eventId}`, error.cause);
       this.page(
         response,

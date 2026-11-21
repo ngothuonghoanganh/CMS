@@ -149,6 +149,70 @@ describe('the fake gateway’s card page', () => {
   });
 });
 
+describe('the fake gateway’s transfers (T3)', () => {
+  const request = {
+    reference: '674000000000000000000abc',
+    amount: 599_000,
+    invoiceNumber: 'HD-2026-000042',
+    returnUrl: 'http://localhost:3100/workspaces/w/billing/payments?transfer=received',
+  };
+
+  it('give the fake account, a content naming the invoice, a VietQR and the confirming page', async () => {
+    const fake = gateway();
+    const instructions = await fake.startTransfer(request);
+    expect(instructions).toMatchObject({
+      bankName: 'Ngân hàng thử (cổng thanh toán giả)',
+      accountNumber: '0000000000',
+      accountName: 'PAYLOAD LANDING PAGE',
+      content: 'PLP HD-2026-000042',
+      amount: 599_000,
+    });
+    expect(instructions.qrPayload).toMatch(
+      /^000201010212.*5406599000.*PLP HD-2026-000042.*6304[0-9A-F]{4}$/,
+    );
+    const page = new URL(instructions.pageUrl ?? '');
+    expect(`${page.origin}${page.pathname}`).toBe(`${PAGES}/transfer`);
+    const session = fake.transferSession(page.searchParams.get('session') ?? '');
+    expect(session).toMatchObject({
+      reference: request.reference,
+      amount: 599_000,
+      content: 'PLP HD-2026-000042',
+      returnUrl: request.returnUrl,
+    });
+  });
+
+  it('confirm one transfer per page, unless its event could not be sent', async () => {
+    const fake = gateway();
+    const page = new URL((await fake.startTransfer(request)).pageUrl ?? '');
+    const session = fake.transferSession(page.searchParams.get('session') ?? '');
+    if (session === null) {
+      throw new Error('The transfer page has no session');
+    }
+    expect(fake.transferConfirmed(session)).toBe(false);
+    expect(fake.claimTransfer(session)).toBe(true);
+    expect(fake.claimTransfer(session)).toBe(false);
+    fake.releaseTransfer(session);
+    expect(fake.claimTransfer(session)).toBe(true);
+    expect(fake.transferConfirmed(session)).toBe(true);
+  });
+
+  it('open no page with a changed, expired or card session', async () => {
+    const fake = gateway();
+    const token = new URL((await fake.startTransfer(request)).pageUrl ?? '').searchParams.get(
+      'session',
+    );
+    expect(fake.transferSession(`${token ?? ''}0`)).toBeNull();
+    const later = gateway(() => NOW + 15 * 24 * 3600 * 1000);
+    expect(later.transferSession(token ?? '')).toBeNull();
+    const setup = await fake.startMethodSetup({
+      reference: 'ws_1_by_2',
+      returnUrl: 'http://localhost:3100/a',
+      cancelUrl: 'http://localhost:3100/b',
+    });
+    expect(fake.transferSession(new URL(setup.url).searchParams.get('session') ?? '')).toBeNull();
+  });
+});
+
 describe('the fake gateway’s webhooks', () => {
   it('are signed so that parseWebhook returns the event', async () => {
     const fake = gateway();

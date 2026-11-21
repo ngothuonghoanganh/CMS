@@ -10,14 +10,20 @@ import {
   type TransferRequest,
   type WebhookHeaders,
 } from '../payment-gateway.js';
+import { vietQrPayload } from '../../domain/transfer-qr.js';
 import {
   behaviourOfFakeToken,
   FAKE_SETUP_SESSION_SECONDS,
   FAKE_SIGNATURE_HEADER,
+  FAKE_TRANSFER_ACCOUNT,
+  FAKE_TRANSFER_SESSION_SECONDS,
   type FakeSetupSession,
+  type FakeTransferSession,
   fakeWebhookRequest,
   mintFakeSetupSession,
+  mintFakeTransferSession,
   readFakeSetupSession,
+  readFakeTransferSession,
   verifyFakeWebhook,
 } from './fake-gateway-protocol.js';
 
@@ -38,13 +44,16 @@ export interface FakePaymentGatewayOptions {
  * production. The test card's token decides each charge at once: 4242 4242 4242 4242 succeeds,
  * 4000 0000 0000 0002 is declined, 4000 0000 0000 9995 lacks funds. Its card page and transfer
  * page are served by the API under `FAKE_GATEWAY_PATH`, and post their events signed as a real
- * gateway would. Charges are remembered per process, which is enough for one API in tests.
+ * gateway would; the transfer page's "Xác nhận đã nhận tiền" stands for the bank. Charges and
+ * confirmed transfers are remembered per process, which is enough for one API in tests.
  */
 export class FakePaymentGateway extends PaymentGateway {
   readonly provider = 'fake' as const;
   private readonly charges = new Map<string, ChargeResult>();
   /** Ids of the setup sessions a card was saved with, until they expire (Unix seconds). */
   private readonly usedSetups = new Map<string, number>();
+  /** Ids of the transfer sessions confirmed, until they expire (Unix seconds). */
+  private readonly confirmedTransfers = new Map<string, number>();
   private readonly now: () => number;
 
   constructor(private readonly options: FakePaymentGatewayOptions) {
@@ -81,15 +90,69 @@ export class FakePaymentGateway extends PaymentGateway {
     return Promise.resolve(result);
   }
 
+  /**
+   * The fake bank account, a content naming the invoice, its VietQR and the page that confirms the
+   * transfer as the bank would. The same invoice always gets the same account and content.
+   */
   startTransfer(request: TransferRequest): Promise<TransferInstructions> {
-    return Promise.resolve({
-      bankName: 'Ngân hàng thử (cổng thanh toán giả)',
-      accountNumber: '0000000000',
-      accountName: 'PAYLOAD LANDING PAGE',
-      content: `PLP ${request.reference}`,
+    const content = `PLP ${request.invoiceNumber}`;
+    const session = mintFakeTransferSession(this.options.secret, {
+      id: randomUUID(),
+      reference: request.reference,
       amount: request.amount,
-      qrPayload: null,
+      content,
+      returnUrl: request.returnUrl,
+      expiresAt: Math.floor(this.now() / 1000) + FAKE_TRANSFER_SESSION_SECONDS,
     });
+    const page = new URL(`${this.options.pagesUrl}/transfer`);
+    page.searchParams.set('session', session);
+    return Promise.resolve({
+      bankName: FAKE_TRANSFER_ACCOUNT.bankName,
+      accountNumber: FAKE_TRANSFER_ACCOUNT.accountNumber,
+      accountName: FAKE_TRANSFER_ACCOUNT.accountName,
+      content,
+      amount: request.amount,
+      qrPayload: vietQrPayload({
+        bankBin: FAKE_TRANSFER_ACCOUNT.bankBin,
+        accountNumber: FAKE_TRANSFER_ACCOUNT.accountNumber,
+        amount: request.amount,
+        content,
+      }),
+      pageUrl: page.toString(),
+    });
+  }
+
+  /** The transfer a confirmation page was opened for; null when its link was changed or expired. */
+  transferSession(token: string): FakeTransferSession | null {
+    return readFakeTransferSession(this.options.secret, token, Math.floor(this.now() / 1000));
+  }
+
+  /**
+   * Takes the transfer `session` for one confirmation; false when it was confirmed already, so the
+   * page reached again (the browser's Back, a second click) never sends a second transfer.
+   * `releaseTransfer` gives it back when the event was not delivered.
+   */
+  claimTransfer(session: FakeTransferSession): boolean {
+    const now = Math.floor(this.now() / 1000);
+    for (const [confirmed, expiresAt] of this.confirmedTransfers) {
+      if (expiresAt <= now) {
+        this.confirmedTransfers.delete(confirmed);
+      }
+    }
+    if (this.confirmedTransfers.has(session.id)) {
+      return false;
+    }
+    this.confirmedTransfers.set(session.id, session.expiresAt);
+    return true;
+  }
+
+  releaseTransfer(session: FakeTransferSession): void {
+    this.confirmedTransfers.delete(session.id);
+  }
+
+  /** Whether the transfer of this session was confirmed. */
+  transferConfirmed(session: FakeTransferSession): boolean {
+    return this.confirmedTransfers.has(session.id);
   }
 
   parseWebhook(rawBody: Buffer, headers: WebhookHeaders): Promise<GatewayEvent> {
