@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   attemptOfIdempotencyKey,
+  buysAgain,
   chargeIdempotencyKey,
   chargeableStatusesOf,
   type InvoicePurpose,
@@ -234,35 +235,48 @@ describe('marketplace invoices (ADR-036)', () => {
   });
 
   it('pay again a refused one only while the item is on sale at its price and not held', () => {
-    expect(marketplaceInvoicePayable(bought, onSale)).toBe(true);
-    expect(marketplaceInvoicePayable(bought, { ...onSale, listed: false })).toBe(false);
-    expect(marketplaceInvoicePayable(bought, { ...onSale, price: 499_000 })).toBe(false);
-    expect(marketplaceInvoicePayable(bought, { ...onSale, licensed: true })).toBe(false);
+    expect(marketplaceInvoicePayable(bought, onSale, 'full')).toBe(true);
+    expect(marketplaceInvoicePayable(bought, { ...onSale, listed: false }, 'full')).toBe(false);
+    expect(marketplaceInvoicePayable(bought, { ...onSale, price: 499_000 }, 'full')).toBe(false);
+    expect(marketplaceInvoicePayable(bought, { ...onSale, licensed: true }, 'full')).toBe(false);
+  });
+
+  it('never pay again a refused one in a read-only workspace: it would buy the item anew', () => {
+    expect(marketplaceInvoicePayable(bought, onSale, 'read_only')).toBe(false);
+    expect(buysAgain(bought)).toBe(true);
   });
 
   it('pay again an undecided one even once the item left the sale or changed price', () => {
     const open = { ...bought, status: 'open' as const };
-    expect(marketplaceInvoicePayable(open, onSale)).toBe(true);
-    expect(marketplaceInvoicePayable(open, { listed: false, price: 0, licensed: false })).toBe(
-      true,
-    );
+    expect(marketplaceInvoicePayable(open, onSale, 'full')).toBe(true);
+    expect(
+      marketplaceInvoicePayable(open, { listed: false, price: 0, licensed: false }, 'full'),
+    ).toBe(true);
+    // Asking the gateway about a charge already made buys nothing anew, read-only or not.
+    expect(marketplaceInvoicePayable(open, onSale, 'read_only')).toBe(true);
+    expect(buysAgain(open)).toBe(false);
     // What it paid for is gone once the workspace holds the item another way.
-    expect(marketplaceInvoicePayable(open, { ...onSale, licensed: true })).toBe(false);
+    expect(marketplaceInvoicePayable(open, { ...onSale, licensed: true }, 'full')).toBe(false);
   });
 
   it('never pay again one that is paid, void or being decided', () => {
     for (const status of ['paid', 'void', 'pending'] as const) {
-      expect(marketplaceInvoicePayable({ ...bought, status }, onSale), status).toBe(false);
+      expect(marketplaceInvoicePayable({ ...bought, status }, onSale, 'full'), status).toBe(false);
     }
   });
 
   it('decide with the item’s standing, and invoices of the plan with the plan', () => {
-    expect(payableOf(bought, paidPeriod, NOW, onSale)).toBe(true);
-    expect(payableOf(bought, paidPeriod, NOW, { ...onSale, licensed: true })).toBe(false);
-    expect(() => payableOf(bought, paidPeriod, NOW, undefined)).toThrow(/standing/);
-    expect(payableOf(upgrade, paidPeriod, NOW, undefined)).toBe(
-      invoicePayable(upgrade, paidPeriod, NOW),
-    );
+    expect(payableOf(bought, paidPeriod, NOW, onSale, 'full')).toBe(true);
+    expect(payableOf(bought, paidPeriod, NOW, onSale, 'read_only')).toBe(false);
+    expect(payableOf(bought, paidPeriod, NOW, { ...onSale, licensed: true }, 'full')).toBe(false);
+    expect(() => payableOf(bought, paidPeriod, NOW, undefined, 'full')).toThrow(/standing/);
+    // A plan's invoice is how a read-only workspace leaves that state.
+    for (const access of ['full', 'read_only'] as const) {
+      expect(payableOf(upgrade, paidPeriod, NOW, undefined, access), access).toBe(
+        invoicePayable(upgrade, paidPeriod, NOW),
+      );
+      expect(buysAgain(upgrade)).toBe(false);
+    }
   });
 });
 

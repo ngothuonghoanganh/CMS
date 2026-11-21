@@ -56,6 +56,7 @@ import { versionHashOf } from './domain/version-hash.js';
 import { MarketplaceLicencesRepository } from './marketplace-licences.repository.js';
 
 const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
 /** The second paid item of the bundled catalog (499.000đ). */
 const OTHER_PAID_ID = 'mp-mo-ban-du-an-can-ho';
 
@@ -427,6 +428,56 @@ describe('buying a marketplace item (ADR-036, MP3)', () => {
       const again = await payInvoice(owner, workspaceId, firstId).expect(409);
       expect(problemSchema.parse(again.body).code).toBe('invoice_not_payable');
     });
+    it('is not bought again in a read-only workspace, where an undecided one is still asked about', async () => {
+      const { owner, workspaceId } = await owning(CARD_DECLINED);
+      const refused = await purchaseItem(owner, workspaceId).expect(402);
+      const refusedId = String(problemSchema.parse(refused.body).context?.['invoiceId']);
+      await addCard(t, owner, workspaceId, CARD_OK);
+      const charge = vi
+        .spyOn(fakeGateway(t), 'charge')
+        .mockRejectedValueOnce(new Error('socket hang up'));
+      const unknown = await purchaseItem(
+        owner,
+        workspaceId,
+        purchaseBody({ itemId: OTHER_PAID_ID, expectedAmount: 499_000 }),
+      ).expect(503);
+      const undecidedId = String(problemSchema.parse(unknown.body).context?.['invoiceId']);
+
+      // The trial ended with the card unpaid, and its grace too: read-only (ADR-035).
+      clock.set(new Date(Date.now() + 30 * DAY_MS));
+      expect(
+        workspacePlanSchema.parse(
+          (await owner.get(endpoints.getWorkspacePlan.path(workspaceId)).expect(200)).body,
+        ),
+      ).toMatchObject({ access: 'read_only' });
+      // Paying the refused one again would buy the item anew: boards 29 and 31 stop offering it.
+      expect(await invoiceOf(owner, workspaceId, refusedId)).toMatchObject({
+        status: 'failed',
+        payable: false,
+      });
+      expect((await invoicesOf(owner, workspaceId)).items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: refusedId, payable: false }),
+          expect.objectContaining({ id: undecidedId, payable: true }),
+        ]),
+      );
+      charge.mockClear();
+      const blocked = await payInvoice(owner, workspaceId, refusedId).expect(402);
+      expect(problemSchema.parse(blocked.body)).toMatchObject({ code: 'workspace_read_only' });
+      expect(charge).not.toHaveBeenCalled();
+      expect(await licencesOf(workspaceId)).toEqual([]);
+      expect(await invoiceOf(owner, workspaceId, refusedId)).toMatchObject({ status: 'failed' });
+
+      // The undecided one only asks the gateway about the charge already made, with its key.
+      const asked = await payInvoice(owner, workspaceId, undecidedId).expect(200);
+      expect(payInvoiceResponseSchema.parse(asked.body).invoice).toMatchObject({ status: 'paid' });
+      expect(charge.mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
+        `${undecidedId}-1`,
+      ]);
+      expect(await licencesOf(workspaceId)).toEqual([
+        expect.objectContaining({ itemId: OTHER_PAID_ID, invoiceId: oid(undecidedId) }),
+      ]);
+    });
   });
 
   describe('other payments of the workspace', () => {
@@ -449,6 +500,114 @@ describe('buying a marketplace item (ADR-036, MP3)', () => {
         (await owner.get(endpoints.getBillingSummary.path(workspaceId)).expect(200)).body,
       );
       expect(summary.dueInvoice).toMatchObject({ status: 'pending', method: 'transfer' });
+    });
+
+    it('keep "Thanh toán lại" of a refused purchase waiting while a charge is being decided', async () => {
+      const { owner, workspaceId } = await owning(CARD_DECLINED);
+      const refused = await purchaseItem(owner, workspaceId).expect(402);
+      const refusedId = String(problemSchema.parse(refused.body).context?.['invoiceId']);
+      await addCard(t, owner, workspaceId, CARD_OK);
+      const other = purchaseBody({ itemId: OTHER_PAID_ID, expectedAmount: 499_000 });
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+
+      // A card charge the gateway is deciding (`pending`) blocks it, with that invoice.
+      charge.mockResolvedValueOnce({ status: 'pending' });
+      const pending = bought(await purchaseItem(owner, workspaceId, other).expect(202));
+      const whilePending = await payInvoice(owner, workspaceId, refusedId).expect(409);
+      expect(problemSchema.parse(whilePending.body)).toMatchObject({
+        code: 'payment_in_progress',
+        context: { invoiceId: pending.invoice.id, invoiceNumber: pending.invoice.number },
+      });
+      await postGatewayEvent(t, chargeEvent('charge_failed', pending.invoice)).expect(200);
+
+      // So does an invoice of another item whose charge may have gone through (`open`).
+      charge.mockRejectedValueOnce(new Error('socket hang up'));
+      const unknown = await purchaseItem(owner, workspaceId, other).expect(503);
+      const undecidedId = String(problemSchema.parse(unknown.body).context?.['invoiceId']);
+      const whileUnknown = await payInvoice(owner, workspaceId, refusedId).expect(409);
+      expect(problemSchema.parse(whileUnknown.body)).toMatchObject({
+        code: 'payment_in_progress',
+        context: { invoiceId: undecidedId },
+      });
+      expect(charge).toHaveBeenCalledTimes(2);
+      // It only waits: the refused invoice is still the one to pay.
+      expect(await invoiceOf(owner, workspaceId, refusedId)).toMatchObject({
+        status: 'failed',
+        payable: true,
+      });
+
+      // Once that charge is known, the refused one is paid.
+      await payInvoice(owner, workspaceId, undecidedId).expect(200);
+      await payInvoice(owner, workspaceId, refusedId).expect(200);
+      expect(charge.mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
+        `${pending.invoice.id}-1`,
+        `${undecidedId}-1`,
+        `${undecidedId}-1`,
+        `${refusedId}-2`,
+      ]);
+      expect(await licencesOf(workspaceId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ itemId: PAID_ITEM_ID, invoiceId: oid(refusedId) }),
+          expect.objectContaining({ itemId: OTHER_PAID_ID, invoiceId: oid(undecidedId) }),
+        ]),
+      );
+    });
+
+    it('keep a purchase sent again, whose charge was never recorded, waiting the same way', async () => {
+      const { owner, workspaceId } = await owning(CARD_DECLINED);
+      const refused = await purchaseItem(
+        owner,
+        workspaceId,
+        purchaseBody({ itemId: OTHER_PAID_ID, expectedAmount: 499_000 }),
+      ).expect(402);
+      const otherId = String(problemSchema.parse(refused.body).context?.['invoiceId']);
+      await addCard(t, owner, workspaceId, CARD_OK);
+      // The charge went through but was never recorded: the invoice stays open, with no attempt.
+      vi.spyOn(MarketplaceLicencesRepository.prototype, 'grant').mockRejectedValueOnce(
+        new Error('Granting the licence failed'),
+      );
+      const key = 'never-recorded-key-1';
+      await purchaseItem(owner, workspaceId, purchaseBody(), key).expect(500);
+      const stuck = (await invoiceDocs(workspaceId)).find((doc) => String(doc['_id']) !== otherId);
+      expect(stuck).toMatchObject({ status: 'open', attempts: [] });
+      const stuckId = String(stuck?.['_id']);
+      // Meanwhile the other item's "Thanh toán lại" got no answer: a race of two requests, set up
+      // here directly, since through the API each of them now waits for the other.
+      await t.connection.collection('invoices').updateOne(
+        { _id: oid(otherId) },
+        {
+          $set: {
+            status: 'open',
+            // After its refused attempt 1.
+            'attempts.1': {
+              number: 2,
+              at: new Date(),
+              outcome: 'unknown',
+              code: null,
+              requestKey: null,
+            },
+          },
+        },
+      );
+
+      const charge = vi.spyOn(fakeGateway(t), 'charge');
+      const blocked = await purchaseItem(owner, workspaceId, purchaseBody(), key).expect(409);
+      expect(problemSchema.parse(blocked.body)).toMatchObject({
+        code: 'payment_in_progress',
+        context: { invoiceId: otherId },
+      });
+      expect(charge).not.toHaveBeenCalled();
+
+      // Once that charge is known, the purchase sent again asks with the key of its attempt 1.
+      await payInvoice(owner, workspaceId, otherId).expect(200);
+      const answer = bought(
+        await purchaseItem(owner, workspaceId, purchaseBody(), key).expect(200),
+      );
+      expect(answer.invoice.id).toBe(stuckId);
+      expect(charge.mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
+        `${otherId}-2`,
+        `${stuckId}-1`,
+      ]);
     });
   });
 

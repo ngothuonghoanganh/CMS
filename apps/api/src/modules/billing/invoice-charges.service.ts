@@ -12,11 +12,13 @@ import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
+import { requireWritable } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { BillingClock } from './billing-clock.js';
 import { BillingNotifier } from './billing-notifier.service.js';
 import {
   awaitsTransfer,
+  buysAgain,
   chargeableStatusesOf,
   chargeIdempotencyKey,
   type ItemStanding,
@@ -294,6 +296,8 @@ export class InvoiceCharges {
    * waiting included (T3). A request whose `Idempotency-Key` made an attempt before gets that
    * attempt's answer again, without a charge; the key is looked for again under the hold, where a
    * request with the same key that was still running at the first look has recorded its attempt.
+   * A refused marketplace invoice is bought again (`buysAgain`, ADR-036): 402 in a read-only
+   * workspace, and blocked like a purchase by any other charge still being decided.
    */
   async payAgain(
     scope: WorkspaceScope,
@@ -307,6 +311,9 @@ export class InvoiceCharges {
     const earlier = invoice.attempts.find((attempt) => attempt.requestKey === requestKey);
     if (earlier !== undefined) {
       return answerOf(invoice, earlier);
+    }
+    if (buysAgain(invoice)) {
+      requireWritable(scope);
     }
     this.requireEnabled();
     const at = this.clock.now();
@@ -329,11 +336,15 @@ export class InvoiceCharges {
         await this.subscriptions.releaseCharge(scope, until, tx);
         return { replay: { invoice: fresh, attempt: replayed } } as const;
       }
-      if (await this.invoices.hasPending(scope, tx)) {
+      if (buysAgain(fresh)) {
+        // Again under the hold: an undecided one the job found refused meanwhile is bought again.
+        requireWritable(scope);
+        await this.blockPurchase(scope, fresh, tx);
+      } else if (await this.invoices.hasPending(scope, tx)) {
         throw paymentInProgress();
       }
       const standings = await this.purchases.standingsOf(scope, [fresh], tx);
-      if (!payableOf(fresh, facts, at, standingOf(fresh, standings))) {
+      if (!payableOf(fresh, facts, at, standingOf(fresh, standings), scope.subscription.access)) {
         throw invoiceNotPayable(fresh);
       }
       return { charge: { invoice: fresh, method: chargeableMethod(facts, at) } } as const;
@@ -381,14 +392,7 @@ export class InvoiceCharges {
         await this.subscriptions.releaseCharge(scope, until, tx);
         return { keyed } as const;
       }
-      const pending = await this.invoices.findPending(scope, tx);
-      if (pending !== null) {
-        throw paymentPending(pending);
-      }
-      const undecided = await this.invoices.findUndecided(scope, tx);
-      if (undecided !== null) {
-        throw paymentUndecided(undecided, 'purchase');
-      }
+      await this.blockPurchase(scope, null, tx);
       await purchase.confirm(tx);
       const facts = await this.subscriptions.find(scope, tx);
       if (facts === null) {
@@ -435,7 +439,7 @@ export class InvoiceCharges {
    * second charge (`purchaseReplayOf`). The same key for another item is 422
    * `idempotency_key_reused`. An invoice whose charge the API never recorded (it stopped before)
    * is charged now, under the hold, with the key of attempt 1, so the gateway answers that charge
-   * if it got there.
+   * if it got there; blocked, as the purchase was, by any other charge still being decided.
    */
   async replayPurchase(
     scope: WorkspaceScope,
@@ -469,8 +473,9 @@ export class InvoiceCharges {
         await this.subscriptions.releaseCharge(scope, until, tx);
         return { answer: again } as const;
       }
+      await this.blockPurchase(scope, fresh, tx);
       const standings = await this.purchases.standingsOf(scope, [fresh], tx);
-      if (!payableOf(fresh, facts, at, standingOf(fresh, standings))) {
+      if (!payableOf(fresh, facts, at, standingOf(fresh, standings), scope.subscription.access)) {
         throw invoiceNotPayable(fresh);
       }
       return { charge: { invoice: fresh, method: chargeableMethod(facts, at) } } as const;
@@ -534,6 +539,27 @@ export class InvoiceCharges {
       throw paymentNotApplied(invoice);
     }
     return answerOf(invoice, attempt, attempt.failure);
+  }
+
+  /**
+   * What blocks a charge for a marketplace item (ADR-036), under the hold: 409
+   * `payment_in_progress`, with its invoice, while a card charge of the workspace is being decided
+   * (`pending`) or one of any invoice other than `charging` may have gone through (`open`). A
+   * plan's transfer waiting for the bank does not block it: they never pay for the same thing.
+   */
+  private async blockPurchase(
+    scope: WorkspaceScope,
+    charging: InvoiceRecord | null,
+    tx: Tx,
+  ): Promise<void> {
+    const pending = await this.invoices.findPending(scope, tx);
+    if (pending !== null) {
+      throw paymentPending(pending);
+    }
+    const undecided = await this.invoices.findUndecided(scope, tx, charging?._id);
+    if (undecided !== null) {
+      throw paymentUndecided(undecided, 'purchase');
+    }
   }
 
   /** A transfer for the charge at the end of the trial or period may arrive any time. */

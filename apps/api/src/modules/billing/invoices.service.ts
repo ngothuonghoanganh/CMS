@@ -1,11 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  CursorQuery,
-  Invoice,
-  InvoiceListResponse,
-  InvoiceReceipt,
-  SubscriptionFacts,
-} from '@plp/contracts';
+import type { CursorQuery, Invoice, InvoiceListResponse, InvoiceReceipt } from '@plp/contracts';
 import { notFound } from '../../shared/errors.js';
 import { toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -14,7 +8,7 @@ import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { toInvoice, toInvoiceSummary } from './billing-dto.js';
 import { type ItemStanding, payableOf } from './domain/invoice-state.js';
-import { EntitlementsService } from './entitlements.service.js';
+import { type Entitlements, EntitlementsService } from './entitlements.service.js';
 import { InvoiceCharges } from './invoice-charges.service.js';
 import { InvoiceTransfers } from './invoice-transfers.service.js';
 import type { InvoiceRecord } from './invoice.schema.js';
@@ -51,7 +45,7 @@ export class InvoicesService {
     query: CursorQuery,
   ): Promise<InvoiceListResponse> {
     const scope = await this.ownerScope(user, workspaceId);
-    const [page, { facts, at }] = await Promise.all([
+    const [page, { facts, status, at }] = await Promise.all([
       this.invoices.list(scope, { cursor: query.cursor, limit: query.limit }),
       this.entitlements.of(scope),
     ]);
@@ -59,7 +53,10 @@ export class InvoicesService {
     const standings = await this.purchases.standingsOf(scope, page.items);
     return {
       items: page.items.map((invoice) =>
-        toInvoiceSummary(invoice, payableOf(invoice, facts, at, standingOf(invoice, standings))),
+        toInvoiceSummary(
+          invoice,
+          payableOf(invoice, facts, at, standingOf(invoice, standings), status.access),
+        ),
       ),
       nextCursor: page.nextCursor,
     };
@@ -67,11 +64,11 @@ export class InvoicesService {
 
   async get(user: AuthenticatedUser, workspaceId: string, invoiceId: string): Promise<Invoice> {
     const scope = await this.ownerScope(user, workspaceId);
-    const [invoice, { facts, at }] = await Promise.all([
+    const [invoice, entitlements] = await Promise.all([
       this.find(scope, invoiceId),
       this.entitlements.of(scope),
     ]);
-    return this.invoiceOf(scope, invoice, facts, at);
+    return this.invoiceOf(scope, invoice, entitlements);
   }
 
   /** "Tải hóa đơn": only a paid invoice has a receipt. */
@@ -126,8 +123,7 @@ export class InvoicesService {
    * with, the marketplace's included (ADR-036).
    */
   async invoiceNow(scope: WorkspaceScope, invoice: InvoiceRecord): Promise<Invoice> {
-    const { facts, at } = await this.entitlements.of(scope);
-    return this.invoiceOf(scope, invoice, facts, at);
+    return this.invoiceOf(scope, invoice, await this.entitlements.of(scope));
   }
 
   private async find(scope: WorkspaceScope, invoiceId: string): Promise<InvoiceRecord> {
@@ -144,11 +140,13 @@ export class InvoicesService {
   private async invoiceOf(
     scope: WorkspaceScope,
     invoice: InvoiceRecord,
-    facts: SubscriptionFacts,
-    at: Date,
+    { facts, status, at }: Pick<Entitlements, 'facts' | 'status' | 'at'>,
   ): Promise<Invoice> {
     const standings = await this.purchases.standingsOf(scope, [invoice]);
-    return toInvoice(invoice, payableOf(invoice, facts, at, standingOf(invoice, standings)));
+    return toInvoice(
+      invoice,
+      payableOf(invoice, facts, at, standingOf(invoice, standings), status.access),
+    );
   }
 
   private async ownerScope(user: AuthenticatedUser, workspaceId: string): Promise<WorkspaceScope> {

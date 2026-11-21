@@ -1,4 +1,5 @@
 import type {
+  AccessLevel,
   BillingCycle,
   ChargeOutcome,
   InvoiceKind,
@@ -232,13 +233,16 @@ export function invoicePayable(
 /**
  * Whether "Thanh toán lại" may charge a marketplace invoice now (ADR-036). One whose outcome is
  * unknown (`open`) may: paying again asks the gateway about that charge with the same key, and
- * pays for the item whatever became of it on the marketplace. A refused one (`failed`) only while
- * the item is still on sale at the amount of the invoice. Neither once the workspace holds the
- * item: what it paid for is gone, and the billing job voids it when it is still undecided.
+ * pays for the item whatever became of it on the marketplace or the plan. A refused one (`failed`)
+ * only while the item is still on sale at the amount of the invoice and the workspace may buy:
+ * paying it again is a new charge for the item, which a read-only workspace may not make, since
+ * its plan comes first. Neither once the workspace holds the item: what it paid for is gone, and
+ * the billing job voids it when it is still undecided.
  */
 export function marketplaceInvoicePayable(
   invoice: Pick<MarketplaceInvoicePurpose, 'status' | 'method' | 'amount'>,
   standing: ItemStanding,
+  access: AccessLevel,
 ): boolean {
   if (standing.licensed) {
     return false;
@@ -247,21 +251,34 @@ export function marketplaceInvoicePayable(
     case 'open':
       return true;
     case 'failed':
-      return standing.listed && standing.price === invoice.amount;
+      return access === 'full' && standing.listed && standing.price === invoice.amount;
     default:
       return false;
   }
 }
 
 /**
+ * Whether "Thanh toán lại" of a marketplace invoice charges the card for the item anew (ADR-036):
+ * one the gateway refused. Its rules are a purchase's: refused in a read-only workspace, and
+ * blocked by any other charge of the workspace still being decided. Paying an undecided one only
+ * asks the gateway about the charge already made, with its key.
+ */
+export function buysAgain(invoice: Pick<InvoicePurpose, 'kind' | 'status'>): boolean {
+  return invoice.kind === 'marketplace' && invoice.status === 'failed';
+}
+
+/**
  * Whether "Thanh toán lại" may charge the invoice now, whatever it pays for: the plan's rules
- * (`invoicePayable`), or a marketplace item's (`marketplaceInvoicePayable`) with its `standing`.
+ * (`invoicePayable`), or a marketplace item's (`marketplaceInvoicePayable`) with its `standing`
+ * and the workspace's `access`. A plan's invoice stays payable in a read-only workspace: paying it
+ * is how the workspace leaves that state.
  */
 export function payableOf(
   invoice: InvoicePurpose,
   facts: Parameters<typeof invoicePayable>[1],
   now: Date,
   standing: ItemStanding | undefined,
+  access: AccessLevel,
 ): boolean {
   if (invoice.kind !== 'marketplace') {
     return invoicePayable(invoice, facts, now);
@@ -271,7 +288,7 @@ export function payableOf(
       `No standing of ${invoice.item.itemId} to decide whether its invoice is payable`,
     );
   }
-  return marketplaceInvoicePayable(invoice, standing);
+  return marketplaceInvoicePayable(invoice, standing, access);
 }
 
 /**

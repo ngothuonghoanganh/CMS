@@ -301,11 +301,16 @@ export class InvoicesRepository {
   /**
    * The newest invoice of the workspace whose charge may have gone through without the API knowing
    * (ADR-035): `open` after an unknown outcome, or after a charge the API never recorded. Only
-   * "Thanh toán lại" on it, with the same key at the gateway, decides it.
+   * "Thanh toán lại" on it, with the same key at the gateway, decides it. `except` leaves out the
+   * invoice about to be charged itself.
    */
-  findUndecided(ref: WorkspaceRef, tx: Tx): Promise<InvoiceRecord | null> {
+  findUndecided(ref: WorkspaceRef, tx: Tx, except?: ObjectId): Promise<InvoiceRecord | null> {
     return this.invoices
-      .findOne({ workspaceId: ref.workspaceId, status: 'open' })
+      .findOne({
+        workspaceId: ref.workspaceId,
+        status: 'open',
+        ...(except === undefined ? {} : { _id: { $ne: except } }),
+      })
       .sort(NEWEST_FIRST)
       .session(tx)
       .lean<InvoiceRecord>()

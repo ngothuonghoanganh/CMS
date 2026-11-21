@@ -162,7 +162,8 @@ export class BillingJob {
   ): Promise<boolean> {
     if (invoice.kind === 'marketplace') {
       const standings = await this.purchases.standingsOf(ref, [invoice]);
-      return !payableOf(invoice, facts, at, standings.get(invoice.item.itemId));
+      const { access } = subscriptionStatusOf(facts, this.catalog, at);
+      return !payableOf(invoice, facts, at, standings.get(invoice.item.itemId), access);
     }
     const purpose = purposeOf(invoice);
     if (purpose === 'renewal' || purpose === 'trial_end') {
