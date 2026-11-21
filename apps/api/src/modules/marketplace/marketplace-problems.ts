@@ -1,12 +1,15 @@
 import type {
   MarketplaceItemChangedProblemContext,
   MarketplaceItemNotFreeProblemContext,
+  MarketplaceItemOwnedProblemContext,
+  MarketplaceLicence,
   TemplateChangedProblemContext,
 } from '@plp/contracts';
 import { AppError } from '../../shared/errors.js';
 
 /*
- * The problems of claiming a marketplace item and updating its licence (ADR-036, MP2).
+ * The problems of claiming a marketplace item and updating its licence (ADR-036, MP2), and of
+ * buying one (MP3).
  */
 
 /** 409 `item_not_free`: an item with a price is bought by Chủ sở hữu, not claimed. */
@@ -42,4 +45,32 @@ export function licenceChanged(name: string, licenceVersion: number): AppError {
       context: { currentVersion: licenceVersion } satisfies TemplateChangedProblemContext,
     },
   );
+}
+
+/**
+ * 409 `item_owned`: the workspace holds the item's licence already, so there is nothing to buy (or
+ * to suggest buying). The licence is the context: the admin shows the item as owned.
+ */
+export function itemOwned(name: string, licence: MarketplaceLicence): AppError {
+  return new AppError(409, 'item_owned', `Workspace đã sở hữu mẫu “${name}”`, {
+    detail: 'Mọi site trong workspace dùng được mẫu này. Mở Templates để tạo trang từ mẫu.',
+    context: { licence } satisfies MarketplaceItemOwnedProblemContext,
+  });
+}
+
+/** 409 `item_free`: a free item is claimed with "Nhận mẫu", not bought. */
+export function itemFree(name: string): AppError {
+  return new AppError(409, 'item_free', `Mẫu “${name}” miễn phí`, {
+    detail: 'Mẫu miễn phí được nhận bằng "Nhận mẫu", không cần thanh toán.',
+  });
+}
+
+/**
+ * 503 `suggestion_not_sent`: the email to Chủ sở hữu could not be sent. It was given back, so the
+ * member may ask again.
+ */
+export function suggestionNotSent(): AppError {
+  return new AppError(503, 'suggestion_not_sent', 'Chưa gửi được đề xuất', {
+    detail: 'Email tới Chủ sở hữu chưa gửi được. Thử lại sau ít phút.',
+  });
 }

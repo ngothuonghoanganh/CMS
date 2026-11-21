@@ -79,11 +79,15 @@ export class GatewayWebhookService {
 
   /**
    * The receipt of an invoice the event paid; the job's emails of a charge the gateway refused
-   * later (T3): its retries and grace count from the first refusal.
+   * later (T3): its retries and grace count from the first refusal. A marketplace item's refusal
+   * never concerns the plan (ADR-036).
    */
   private async notify(invoice: InvoiceRecord): Promise<void> {
     if (invoice.status === 'paid') {
       await this.notifier.receipt(invoice);
+      return;
+    }
+    if (invoice.kind === 'marketplace') {
       return;
     }
     const last = invoice.attempts.at(-1);

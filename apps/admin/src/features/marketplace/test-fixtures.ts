@@ -4,6 +4,7 @@ import type {
   MarketplaceOwnedItem,
   MarketplaceItemDetail,
   MarketplaceListResponse,
+  MarketplaceQuote,
   MarketplaceTerms,
 } from '@plp/contracts';
 import { detailFixture, summaryFixture } from '../templates/test-fixtures';
@@ -110,6 +111,7 @@ export function marketplaceDetailFixture(
     withdrawn: false,
     licence: null,
     ownerName: 'Ngọc Anh',
+    suggested: false,
     ...overrides,
   };
 }
@@ -144,6 +146,24 @@ export function ownedItemFixture(
     hasForm: free.hasForm,
     sections: free.sections,
     usedCount: 0,
+    ...overrides,
+  };
+}
+
+/** What "Mua mẫu" reads for the first item: a saved Visa card, the gateway on, nothing owned. */
+export function quoteFixture(overrides: Partial<MarketplaceQuote> = {}): MarketplaceQuote {
+  const detail = marketplaceDetailFixture();
+  return {
+    itemId: detail.id,
+    name: detail.name,
+    version: detail.version,
+    amount: detail.price,
+    termsVersion: detail.terms.version,
+    owned: false,
+    paymentMethod: { brand: 'visa', last4: '4242', expMonth: 8, expYear: 2030, expired: false },
+    paymentMethodRequired: false,
+    paymentsEnabled: true,
+    billingCompanyName: null,
     ...overrides,
   };
 }

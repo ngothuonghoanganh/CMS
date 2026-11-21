@@ -63,8 +63,13 @@ export function PaymentsScreen({
 
   const items = invoices.data.pages.flatMap((page) => page.items);
   const method = paymentMethod.data;
-  // The newest failed invoice that can still be paid: board 29's "paymentFailed" banner.
-  const failed = items.find((invoice) => invoice.status === 'failed' && invoice.payable) ?? null;
+  // The newest failed invoice of the plan that can still be paid: board 29's "paymentFailed"
+  // banner, with the plan's retries and grace. A refused marketplace purchase changes nothing of
+  // the plan (ADR-036): its row says so, with its own "Thanh toán lại".
+  const failed =
+    items.find(
+      (invoice) => invoice.status === 'failed' && invoice.payable && invoice.kind !== 'marketplace',
+    ) ?? null;
   // The invoice that waits for a bank transfer: its details sit above the history.
   const waiting =
     items.find((invoice) => invoice.status === 'pending' && invoice.method === 'transfer') ?? null;

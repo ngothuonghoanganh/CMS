@@ -5,8 +5,13 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import { BillingLogRepository } from './billing-log.repository.js';
 import { BillingSchedule } from './billing-schedule.service.js';
 import { periodPaidAt, purposeOf, statusAfterCharge } from './domain/invoice-state.js';
-import type { InvoiceRecord } from './invoice.schema.js';
+import type {
+  InvoiceRecord,
+  MarketplaceInvoiceRecord,
+  PlanInvoiceRecord,
+} from './invoice.schema.js';
 import { type InvoiceChange, InvoicesRepository } from './invoices.repository.js';
+import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
 import { type PaidPeriod, SubscriptionsRepository } from './subscriptions.repository.js';
@@ -42,17 +47,23 @@ export interface RecordedCharge {
    * changed nothing, and `invoice` is as something else left it.
    */
   recorded: boolean;
+  /**
+   * Whether what this report paid for was applied: false when the payment is recorded but no
+   * longer applies (refunded outside the system); null when it paid nothing.
+   */
+  applied: boolean | null;
 }
 
 /**
  * Records what became of an invoice's charges (ADR-035), inside the caller's transaction, for the
  * charges the API makes and the gateway's events alike. A paid invoice applies what it pays for in
  * the same transaction: the first paid period that ends the trial, the upgrade, the next period of
- * a renewal, or a canceled plan started again, with its `billing_log` entry and `PlanChangeHooks`.
- * The period paid for starts when it is paid when it would have ended by then (`periodPaidAt`).
- * A refused charge of the invoice the subscription waits for starts its grace and retries (T3).
- * The billing job's next time follows. Nothing here leaves the database, so a transaction that
- * runs again does it again safely.
+ * a renewal, or a canceled plan started again, with its `billing_log` entry and `PlanChangeHooks`;
+ * or the licence of a marketplace item (ADR-036, `MarketplacePurchaseHooks`), which never changes
+ * the plan. The period paid for starts when it is paid when it would have ended by then
+ * (`periodPaidAt`). A refused charge of the invoice the subscription waits for starts its grace
+ * and retries (T3); a marketplace item's never does. The billing job's next time follows. Nothing
+ * here leaves the database, so a transaction that runs again does it again safely.
  */
 @Injectable()
 export class InvoiceSettlement {
@@ -64,6 +75,7 @@ export class InvoiceSettlement {
     private readonly subscriptions: SubscriptionsRepository,
     private readonly log: BillingLogRepository,
     private readonly hooks: PlanChangeHooks,
+    private readonly purchases: MarketplacePurchaseHooks,
     private readonly schedule: BillingSchedule,
   ) {}
 
@@ -80,7 +92,8 @@ export class InvoiceSettlement {
   ): Promise<RecordedCharge> {
     const status = statusAfterCharge(report.outcome);
     // Written with `paid`: until this write the invoice is unpaid, so its period may still move.
-    const period = status === 'paid' ? periodPaidAt(invoice, report.at) : null;
+    const period =
+      status === 'paid' && invoice.kind !== 'marketplace' ? periodPaidAt(invoice, report.at) : null;
     const change: InvoiceChange = {
       status,
       ...(report.card ? { card: report.card } : {}),
@@ -103,17 +116,22 @@ export class InvoiceSettlement {
     );
     if (after === null) {
       const current = await this.invoices.findByReference(invoice._id, tx);
-      return { invoice: current ?? invoice, recorded: false };
+      return { invoice: current ?? invoice, recorded: false, applied: null };
     }
     const ref = { workspaceId: after.workspaceId };
-    if (after.status === 'paid') {
+    let applied: boolean | null = null;
+    if (after.kind === 'marketplace') {
+      if (after.status === 'paid') {
+        applied = await this.applyPurchase(after, report.at, tx);
+      }
+    } else if (after.status === 'paid' && invoice.kind !== 'marketplace') {
       // A renewal follows the period that ended where the invoice's own period was to start.
-      await this.applyPaid(after, { at: report.at, follows: invoice.periodStart }, tx);
+      applied = await this.applyPaid(after, { at: report.at, follows: invoice.periodStart }, tx);
     } else if (after.status === 'failed') {
       await this.subscriptions.recordFailure(ref, { invoiceId: after._id, at: report.at }, tx);
     }
     await this.schedule.reschedule(ref, report.at, tx);
-    return { invoice: after, recorded: true };
+    return { invoice: after, recorded: true, applied };
   }
 
   /** The invoice of `invoiceId` in `tx`, for an event that names it. */
@@ -128,15 +146,15 @@ export class InvoiceSettlement {
    * newer choice. `follows`: where the period was to start when the invoice was made.
    */
   private async applyPaid(
-    invoice: InvoiceRecord,
+    invoice: PlanInvoiceRecord,
     { at, follows }: { at: Date; follows: Date },
     tx: Tx,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const ref = { workspaceId: invoice.workspaceId };
     const facts = await this.subscriptions.find(ref, tx);
     if (facts === null) {
       this.reportUnapplied(invoice, 'the workspace has no subscription');
-      return;
+      return false;
     }
     const from = planOf(this.catalog, facts.planId);
     const to = planOf(this.catalog, invoice.planId);
@@ -149,6 +167,9 @@ export class InvoiceSettlement {
       at,
     };
     const purpose = purposeOf(invoice);
+    if (purpose === 'marketplace') {
+      throw new Error(`Invoice ${invoice._id.toHexString()} of the plan has a marketplace purpose`);
+    }
     let applied: boolean;
     switch (purpose) {
       case 'start_paid':
@@ -179,7 +200,7 @@ export class InvoiceSettlement {
     }
     if (!applied) {
       this.reportUnapplied(invoice, 'the subscription moved on before it was paid');
-      return;
+      return false;
     }
     const before = { planId: facts.planId, cycle: facts.cycle };
     const after = { planId: invoice.planId, cycle: invoice.cycle };
@@ -207,6 +228,38 @@ export class InvoiceSettlement {
     if (from.id !== to.id) {
       await this.hooks.run(ref, { from, to, at, by: invoice.createdBy }, tx);
     }
+    return true;
+  }
+
+  /**
+   * A paid marketplace invoice grants the item's licence at its version, with its `billing_log`
+   * entry (ADR-036), whatever became of the item since: an item withdrawn meanwhile is still
+   * granted, since it was paid for. A workspace that came to hold the item another way meanwhile
+   * (claimed once it became free) keeps that licence: the payment stays recorded and is reported
+   * for a refund outside the system.
+   */
+  private async applyPurchase(
+    invoice: MarketplaceInvoiceRecord,
+    at: Date,
+    tx: Tx,
+  ): Promise<boolean> {
+    if (!(await this.purchases.grant(invoice, at, tx))) {
+      this.reportUnapplied(invoice, 'the workspace held the item’s licence already');
+      return false;
+    }
+    await this.log.record(
+      { workspaceId: invoice.workspaceId },
+      {
+        at,
+        actorId: invoice.createdBy,
+        action: 'marketplace_purchased',
+        invoiceId: invoice._id,
+        itemId: invoice.item.itemId,
+        amount: invoice.amount,
+      },
+      tx,
+    );
+    return true;
   }
 
   private reportUnapplied(invoice: InvoiceRecord, why: string): void {

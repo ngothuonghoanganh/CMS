@@ -125,7 +125,10 @@ describe('the life of a plan (ADR-035, T3)', () => {
     });
     return {
       paidAt: new Date(invoice.paidAt ?? ''),
-      period: { start: new Date(invoice.periodStart), end: new Date(invoice.periodEnd) },
+      period: {
+        start: new Date(invoice.periodStart ?? ''),
+        end: new Date(invoice.periodEnd ?? ''),
+      },
     };
   }
 

@@ -8,6 +8,7 @@ import {
   vndAmountSchema,
 } from './billing.js';
 import { idSchema, isoDateTimeSchema } from './common.js';
+import { marketplaceItemIdSchema, templateVersionSchema } from './templates.js';
 
 /*
  * Payments of a workspace's plan (ADR-035, T2, boards 28 and 29): the payment gateway's events,
@@ -146,15 +147,40 @@ export const paymentMethodResponseSchema = z.object({
 });
 export type PaymentMethodResponse = z.infer<typeof paymentMethodResponseSchema>;
 
-/** The admin screen the gateway's page leads back to: board 29, or board 28's plan dialog. */
-export const methodSetupReturnTargets = ['payments', 'plan'] as const;
+/**
+ * The admin screen the gateway's page leads back to: board 29, board 28's plan dialog, or board 31
+ * of the marketplace item being bought (ADR-036), which `itemId` names.
+ */
+export const methodSetupReturnTargets = ['payments', 'plan', 'marketplace'] as const;
 export const methodSetupReturnTargetSchema = z.enum(methodSetupReturnTargets);
 export type MethodSetupReturnTarget = z.infer<typeof methodSetupReturnTargetSchema>;
 
-/** "Thêm phương thức" / "Đổi thẻ": the API asks the gateway for the page that saves a card. */
-export const startMethodSetupRequestSchema = z.strictObject({
-  returnTo: methodSetupReturnTargetSchema.default('payments'),
-});
+/**
+ * "Thêm phương thức" / "Đổi thẻ": the API asks the gateway for the page that saves a card. With
+ * `returnTo: 'marketplace'`, `itemId` names the item of the catalog whose board 31 it leads back to
+ * ("Đổi" and "Thêm thẻ" of "Xác nhận mua mẫu"); no other target takes one.
+ */
+export const startMethodSetupRequestSchema = z
+  .strictObject({
+    returnTo: methodSetupReturnTargetSchema.default('payments'),
+    itemId: marketplaceItemIdSchema.optional(),
+  })
+  .superRefine((request, context) => {
+    if (request.returnTo === 'marketplace' && request.itemId === undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Chọn mẫu để quay lại sau khi lưu thẻ',
+        path: ['itemId'],
+      });
+    }
+    if (request.returnTo !== 'marketplace' && request.itemId !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Chỉ Marketplace quay lại một mẫu',
+        path: ['itemId'],
+      });
+    }
+  });
 export type StartMethodSetupRequest = z.infer<typeof startMethodSetupRequestSchema>;
 
 /** Where the browser goes: the gateway's page, which leads back to the admin. */
@@ -191,8 +217,11 @@ export type BillingInfoResponse = z.infer<typeof billingInfoResponseSchema>;
  * đơn" of board 29. A paid or void invoice never changes.
  */
 
-/** `subscription` pays a period of the plan; `upgrade` the rest of a period on a higher plan. */
-export const invoiceKinds = ['subscription', 'upgrade'] as const;
+/**
+ * `subscription` pays a period of the plan; `upgrade` the rest of a period on a higher plan;
+ * `marketplace` one item of the template marketplace, once (ADR-036), which never changes the plan.
+ */
+export const invoiceKinds = ['subscription', 'upgrade', 'marketplace'] as const;
 export const invoiceKindSchema = z.enum(invoiceKinds);
 export type InvoiceKind = z.infer<typeof invoiceKindSchema>;
 
@@ -238,18 +267,34 @@ export type InvoiceAttempt = z.infer<typeof invoiceAttemptSchema>;
 
 const planChoiceSchema = z.object({ planId: planIdSchema, cycle: billingCycleSchema });
 
-/** A row of "Lịch sử giao dịch". */
+/**
+ * What a `marketplace` invoice pays for (ADR-036): the item at the version that was quoted, with
+ * its name when it was bought: "Mẫu “Mở bán dự án căn hộ” · Marketplace".
+ */
+export const invoiceItemSchema = z.object({
+  itemId: marketplaceItemIdSchema,
+  name: z.string(),
+  version: templateVersionSchema,
+});
+export type InvoiceItem = z.infer<typeof invoiceItemSchema>;
+
+/**
+ * A row of "Lịch sử giao dịch". An invoice of the plan (`subscription`, `upgrade`) has its plan
+ * and period and no `item`; a `marketplace` invoice has its `item`, and its plan's fields are null.
+ */
 export const invoiceSummarySchema = z.object({
   id: idSchema,
   number: invoiceNumberSchema,
   kind: invoiceKindSchema,
-  planId: planIdSchema,
+  planId: planIdSchema.nullable(),
   /** The plan's name when the invoice was made: "Gói Agency · kỳ 01/11 – 30/11". */
-  planName: z.string(),
-  cycle: billingCycleSchema,
+  planName: z.string().nullable(),
+  cycle: billingCycleSchema.nullable(),
   /** What the invoice pays for: a whole period, or the rest of one for an upgrade. */
-  periodStart: isoDateTimeSchema,
-  periodEnd: isoDateTimeSchema,
+  periodStart: isoDateTimeSchema.nullable(),
+  periodEnd: isoDateTimeSchema.nullable(),
+  /** The marketplace item it pays for; null for an invoice of the plan. */
+  item: invoiceItemSchema.nullable(),
   /** In đồng, VAT included. */
   amount: vndAmountSchema,
   method: invoicePaymentMethodSchema,
@@ -290,10 +335,10 @@ export const invoiceSchema = invoiceSummarySchema.extend({
   billingInfo: billingInfoSchema.nullable(),
   /**
    * The plan it changes from: a plan change paid now, or a canceled plan started again; null for
-   * the charge at the end of a trial or a period (a renewal).
+   * the charge at the end of a trial or a period (a renewal), and for a marketplace item.
    */
   from: planChoiceSchema.nullable(),
-  /** Paying it ends the trial and starts the first paid period. */
+  /** Paying it ends the trial and starts the first paid period; false for a marketplace item. */
   endsTrial: z.boolean(),
   /** The bank transfer it waits for, or was paid by; null for a card. */
   transfer: invoiceTransferSchema.nullable(),

@@ -1,11 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  CursorQuery,
-  Invoice,
-  InvoiceListResponse,
-  InvoiceReceipt,
-  SubscriptionFacts,
-} from '@plp/contracts';
+import type { CursorQuery, Invoice, InvoiceListResponse, InvoiceReceipt } from '@plp/contracts';
 import { notFound } from '../../shared/errors.js';
 import { toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -13,12 +7,13 @@ import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { toInvoice, toInvoiceSummary } from './billing-dto.js';
-import { invoicePayable } from './domain/invoice-state.js';
-import { EntitlementsService } from './entitlements.service.js';
+import { type ItemStanding, payableOf } from './domain/invoice-state.js';
+import { type Entitlements, EntitlementsService } from './entitlements.service.js';
 import { InvoiceCharges } from './invoice-charges.service.js';
 import { InvoiceTransfers } from './invoice-transfers.service.js';
 import type { InvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
+import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 
 const INVOICE_NOT_FOUND = 'Không tìm thấy hóa đơn';
 
@@ -40,6 +35,7 @@ export class InvoicesService {
     private readonly invoices: InvoicesRepository,
     private readonly charges: InvoiceCharges,
     private readonly transfers: InvoiceTransfers,
+    private readonly purchases: MarketplacePurchaseHooks,
     private readonly workspaces: WorkspacesRepository,
   ) {}
 
@@ -49,13 +45,18 @@ export class InvoicesService {
     query: CursorQuery,
   ): Promise<InvoiceListResponse> {
     const scope = await this.ownerScope(user, workspaceId);
-    const [page, { facts, at }] = await Promise.all([
+    const [page, { facts, status, at }] = await Promise.all([
       this.invoices.list(scope, { cursor: query.cursor, limit: query.limit }),
       this.entitlements.of(scope),
     ]);
+    // One read for the items of every marketplace invoice of the page (ADR-036).
+    const standings = await this.purchases.standingsOf(scope, page.items);
     return {
       items: page.items.map((invoice) =>
-        toInvoiceSummary(invoice, invoicePayable(invoice, facts, at)),
+        toInvoiceSummary(
+          invoice,
+          payableOf(invoice, facts, at, standingOf(invoice, standings), status.access),
+        ),
       ),
       nextCursor: page.nextCursor,
     };
@@ -63,11 +64,11 @@ export class InvoicesService {
 
   async get(user: AuthenticatedUser, workspaceId: string, invoiceId: string): Promise<Invoice> {
     const scope = await this.ownerScope(user, workspaceId);
-    const [invoice, { facts, at }] = await Promise.all([
+    const [invoice, entitlements] = await Promise.all([
       this.find(scope, invoiceId),
       this.entitlements.of(scope),
     ]);
-    return this.invoiceOf(invoice, facts, at);
+    return this.invoiceOf(scope, invoice, entitlements);
   }
 
   /** "Tải hóa đơn": only a paid invoice has a receipt. */
@@ -103,8 +104,7 @@ export class InvoicesService {
       toObjectId(invoiceId, INVOICE_NOT_FOUND),
       requestKey,
     );
-    const { facts, at } = await this.entitlements.of(scope);
-    return { invoice: this.invoiceOf(answer.invoice, facts, at), pending: answer.pending };
+    return { invoice: await this.invoiceNow(scope, answer.invoice), pending: answer.pending };
   }
 
   /** "Chuyển khoản" (T3): the invoice waiting for a transfer, with its details. */
@@ -115,8 +115,15 @@ export class InvoicesService {
   ): Promise<Invoice> {
     const scope = await this.ownerScope(user, workspaceId);
     const invoice = await this.transfers.start(scope, toObjectId(invoiceId, INVOICE_NOT_FOUND));
-    const { facts, at } = await this.entitlements.of(scope);
-    return this.invoiceOf(invoice, facts, at);
+    return this.invoiceNow(scope, invoice);
+  }
+
+  /**
+   * The contract's form of an invoice, payable or not now: what a charge or a purchase answers
+   * with, the marketplace's included (ADR-036).
+   */
+  async invoiceNow(scope: WorkspaceScope, invoice: InvoiceRecord): Promise<Invoice> {
+    return this.invoiceOf(scope, invoice, await this.entitlements.of(scope));
   }
 
   private async find(scope: WorkspaceScope, invoiceId: string): Promise<InvoiceRecord> {
@@ -130,8 +137,16 @@ export class InvoicesService {
     return invoice;
   }
 
-  private invoiceOf(invoice: InvoiceRecord, facts: SubscriptionFacts, at: Date): Invoice {
-    return toInvoice(invoice, invoicePayable(invoice, facts, at));
+  private async invoiceOf(
+    scope: WorkspaceScope,
+    invoice: InvoiceRecord,
+    { facts, status, at }: Pick<Entitlements, 'facts' | 'status' | 'at'>,
+  ): Promise<Invoice> {
+    const standings = await this.purchases.standingsOf(scope, [invoice]);
+    return toInvoice(
+      invoice,
+      payableOf(invoice, facts, at, standingOf(invoice, standings), status.access),
+    );
   }
 
   private async ownerScope(user: AuthenticatedUser, workspaceId: string): Promise<WorkspaceScope> {
@@ -139,4 +154,12 @@ export class InvoicesService {
     this.access.require(scope, 'billing.manage');
     return scope;
   }
+}
+
+/** The standing of a marketplace invoice's item; none for an invoice of the plan. */
+function standingOf(
+  invoice: InvoiceRecord,
+  standings: ReadonlyMap<string, ItemStanding>,
+): ItemStanding | undefined {
+  return invoice.kind === 'marketplace' ? standings.get(invoice.item.itemId) : undefined;
 }

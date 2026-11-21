@@ -115,6 +115,7 @@ describe('marketplace', () => {
       owned: false,
       popularRank: 1,
       ownerName: OWNER_NAME,
+      suggested: false,
     });
     expect(detail.composition).toEqual(current?.composition);
     expect(detail.sections).toEqual(compositionOutline(detail.composition));

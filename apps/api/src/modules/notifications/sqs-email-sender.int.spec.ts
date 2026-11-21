@@ -3,6 +3,7 @@ import {
   approvalResponseSchema,
   automationListItemSchema,
   createInvitationsResponseSchema,
+  endpoints,
   type Domain,
   domainSchema,
   type LeadDetail,
@@ -33,6 +34,7 @@ import { publishableDraft } from '../../../test/compositions.js';
 import { pointHere } from '../../../test/domains.js';
 import { createLiveFormPage, leadBody, submitLead } from '../../../test/leads.js';
 import { MAIL_TEMPLATES, templateDataProblems } from '../../../test/mail-templates.js';
+import { purchaseItem } from '../../../test/marketplace.js';
 import { addCard, CARD_OK } from '../../../test/payments.js';
 import { AutomationScheduler } from '../automations/automation-scheduler.service.js';
 import { BillingClock } from '../billing/billing-clock.js';
@@ -404,7 +406,22 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     return billing.me.user.email;
   }
 
-  it('queues each of the 20 emails, once, with data its template renders', async () => {
+  /**
+   * The emails of the marketplace (ADR-036): an item bought, whose receipt goes to the owner, and
+   * a member asking the owner to buy another. Returns the owner's address.
+   */
+  async function marketplaceLife(): Promise<string> {
+    const buyer = await signedUpClient(t.app);
+    await addCard(t, buyer.client, buyer.workspaceId, CARD_OK);
+    await purchaseItem(buyer.client, buyer.workspaceId).expect(200);
+    const editor = await addMember(t, buyer.workspaceId, 'editor');
+    await editor.client
+      .post(endpoints.suggestMarketplaceItem.path(buyer.workspaceId, 'mp-mo-ban-du-an-can-ho'))
+      .expect(200);
+    return buyer.me.user.email;
+  }
+
+  it('queues each of the 22 emails, once, with data its template renders', async () => {
     const ownerEmail = owner.me.user.email;
 
     // Account emails (ADR-026); the owner's own sign-up queued the first confirmation.
@@ -506,6 +523,7 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
     expect((await checkDomain(other, claim.id)).status).toBe('active');
 
     const billingOwner = await planLife();
+    const marketplaceOwner = await marketplaceLife();
 
     const requests = requestsIn(stub);
     expect(new Set(requests.map((request) => request.template))).toEqual(new Set(MAIL_TEMPLATES));
@@ -517,6 +535,9 @@ describe('the API with MAIL_TRANSPORT=sqs', () => {
       'billing-read-only',
     ] as const) {
       expect(queued(template).some((request) => request.to.join() === billingOwner)).toBe(true);
+    }
+    for (const template of ['marketplace-receipt', 'marketplace-suggestion'] as const) {
+      expect(queued(template)).toEqual([expect.objectContaining({ to: [marketplaceOwner] })]);
     }
     for (const request of requests) {
       expect(templateDataProblems(request.template as EmailTemplate, request.data)).toEqual([]);

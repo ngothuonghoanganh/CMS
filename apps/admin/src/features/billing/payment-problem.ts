@@ -84,8 +84,18 @@ export const unavailableReasonText: Record<PlanChangeUnavailableReason, string> 
   unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi đổi gói.',
 };
 
+/**
+ * What was refused: a plan change (`plan`, the default), after which the owner chooses the plan
+ * again, or "Thanh toán lại" of an invoice (`invoice`, a plan's or a marketplace item's), which
+ * they try again.
+ */
+export type PaymentSubject = 'plan' | 'invoice';
+
 /** The sentence a payment problem shows; null for a problem that is not about payments. */
-export function paymentProblemText(problem: PaymentProblem): string {
+export function paymentProblemText(
+  problem: PaymentProblem,
+  subject: PaymentSubject = 'plan',
+): string {
   switch (problem.kind) {
     case 'declined': {
       const why =
@@ -103,8 +113,13 @@ export function paymentProblemText(problem: PaymentProblem): string {
         return 'Một khoản thanh toán của workspace đang được xử lý. Chờ kết quả rồi thử lại.';
       }
       // A transfer may be on its way: paying again now could pay the period twice.
-      return problem.transfer
-        ? `Hóa đơn ${problem.invoiceNumber} đang chờ chuyển khoản. Chờ xác nhận, hoặc thanh toán hóa đơn đó bằng thẻ ở "Thanh toán & hóa đơn".`
+      if (problem.transfer) {
+        return `Hóa đơn ${problem.invoiceNumber} đang chờ chuyển khoản. Chờ xác nhận, hoặc thanh toán hóa đơn đó bằng thẻ ở "Thanh toán & hóa đơn".`;
+      }
+      // Paying an invoice again waits for a charge being decided (`pending`) or undecided: its row
+      // in the history says which, with its own "Thanh toán lại" when asking again decides it.
+      return subject === 'invoice'
+        ? `Hóa đơn ${problem.invoiceNumber} chưa có kết quả. Xem nó trong lịch sử giao dịch rồi thử lại.`
         : `Chưa biết kết quả thanh toán hóa đơn ${problem.invoiceNumber}. Bấm "Thanh toán lại" ở hóa đơn đó trong lịch sử giao dịch để biết kết quả, rồi chọn lại gói.`;
     case 'card_required':
       return 'Chưa có thẻ dùng được. Thêm thẻ rồi thử lại.';
@@ -151,10 +166,10 @@ export function planActionMessage(error: unknown, action: PlanAction): string {
 }
 
 /** What a failed payments request says: a 403 is the role (Quản trị views the plan, not payments). */
-export function paymentsMessage(error: unknown): string {
+export function paymentsMessage(error: unknown, subject: PaymentSubject = 'plan'): string {
   if (error instanceof ApiError && error.status === 403) {
     return 'Chỉ Chủ sở hữu xem được thanh toán';
   }
   const problem = paymentProblemOf(error);
-  return problem === null ? problemMessage(error) : paymentProblemText(problem);
+  return problem === null ? problemMessage(error) : paymentProblemText(problem, subject);
 }

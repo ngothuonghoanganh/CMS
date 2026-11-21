@@ -8,6 +8,7 @@ import { api, ApiError } from '../../lib/api';
 import { formatVnd } from '../../lib/format';
 import { reportUnexpected } from '../shell/problem-message';
 import { paymentProblemOf, paymentsMessage } from './payment-problem';
+import { templateQueryKeys } from '../templates/queries';
 import { billingQueryKeys, invalidateAfterPlanChange } from './queries';
 
 export interface PayResult {
@@ -21,7 +22,7 @@ export interface PayResult {
  * connection failed, or the server or the proxy before it broke down. The same request is then
  * sent again with the same key, which the API answers as the first time if it got there.
  */
-function answerLost(error: unknown): boolean {
+export function answerLost(error: unknown): boolean {
   return !(error instanceof ApiError) || (error.status >= 500 && error.code === 'internal');
 }
 
@@ -67,6 +68,10 @@ export function usePayInvoice(workspaceId: string) {
       refresh();
       if (!pending) {
         invalidateAfterPlanChange(queryClient, workspaceId);
+        if (invoice.item !== null) {
+          // The licence it paid for lists the item in the library and the editor.
+          void queryClient.invalidateQueries({ queryKey: templateQueryKeys.all(workspaceId) });
+        }
       }
       toast(
         pending
@@ -92,13 +97,13 @@ export function usePayInvoice(workspaceId: string) {
               tone: 'warning',
               title: 'Chưa biết kết quả thanh toán',
               description: lost
-                ? `${paymentsMessage(error)} Kiểm tra lịch sử giao dịch, hoặc bấm "Thanh toán lại": tiền không bị trừ hai lần.`
-                : paymentsMessage(error),
+                ? `${paymentsMessage(error, 'invoice')} Kiểm tra lịch sử giao dịch, hoặc bấm "Thanh toán lại": tiền không bị trừ hai lần.`
+                : paymentsMessage(error, 'invoice'),
             }
           : {
               tone: 'danger',
               title: 'Thanh toán không thành công',
-              description: paymentsMessage(error),
+              description: paymentsMessage(error, 'invoice'),
             },
       );
     },

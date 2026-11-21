@@ -43,6 +43,11 @@ export class BillingNoticesRepository {
     }
   }
 
+  /** Whether the email of `key` was taken: sent, or being sent. */
+  async has(key: string): Promise<boolean> {
+    return (await this.notices.exists({ _id: key })) !== null;
+  }
+
   /** Gives back an email that was not sent, so a later try may send it. */
   async release(key: string): Promise<void> {
     await this.notices.deleteOne({ _id: key }).exec();

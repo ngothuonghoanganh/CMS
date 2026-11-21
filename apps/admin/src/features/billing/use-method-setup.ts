@@ -25,10 +25,15 @@ export interface MethodSetup {
 export function useMethodSetup(
   workspaceId: string,
   returnTo: MethodSetupReturnTarget,
+  /** The item board 31 leads back to; required by (and only with) `returnTo: 'marketplace'`. */
+  itemId?: string,
 ): MethodSetup {
   const [leaving, setLeaving] = useState(false);
   const mutation = useMutation({
-    mutationFn: () => api(endpoints.startPaymentMethodSetup, [workspaceId], { body: { returnTo } }),
+    mutationFn: () =>
+      api(endpoints.startPaymentMethodSetup, [workspaceId], {
+        body: itemId === undefined ? { returnTo } : { returnTo, itemId },
+      }),
     onSuccess: ({ url }) => {
       setLeaving(true);
       navigateTo(url);

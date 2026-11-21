@@ -424,6 +424,11 @@ export class BillingService {
       facts.openInvoiceId === null
         ? null
         : await this.invoices.findOfWorkspace(scope, toObjectId(facts.openInvoiceId));
+    if (due?.kind === 'marketplace') {
+      throw new Error(
+        `Workspace ${scope.workspaceId.toHexString()} waits for a marketplace invoice; only a plan's invoice is waited for (ADR-036)`,
+      );
+    }
     return toBillingSummary(entitlements, {
       usage,
       month,

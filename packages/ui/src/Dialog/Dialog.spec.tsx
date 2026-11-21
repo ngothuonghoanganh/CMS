@@ -296,4 +296,33 @@ describe('Dialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
   });
+
+  it('stays open while it may not be dismissed, and its close button says so', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <Dialog open dismissible={false} onOpenChange={onOpenChange} title="Đang thanh toán…">
+        <Button>Thanh toán</Button>
+      </Dialog>,
+    );
+    const close = screen.getByRole('button', { name: 'Đóng' });
+    expect(close).toHaveAttribute('aria-disabled', 'true');
+
+    await user.keyboard('{Escape}');
+    await user.click(close);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    rerender(
+      <Dialog open onOpenChange={onOpenChange} title="Đã mua">
+        <Button>Thanh toán</Button>
+      </Dialog>,
+    );
+    expect(screen.getByRole('button', { name: 'Đóng' })).not.toHaveAttribute('aria-disabled');
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    onOpenChange.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

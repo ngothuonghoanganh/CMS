@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "marketplace-suggestion",
+  "description": "Một thành viên đề nghị Chủ sở hữu mua một mẫu Marketplace (ADR-036, MP3, board 31).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "memberName", "itemName", "price", "itemUrl"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "memberName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Tên người đề xuất, như admin hiển thị."
+    },
+    "itemName": { "type": "string", "minLength": 1 },
+    "price": { "type": "string", "minLength": 1, "description": "Đã gồm VAT, ví dụ \"399.000 ₫\"." },
+    "itemUrl": {
+      "type": "string",
+      "format": "http-url",
+      "description": "Màn 31 của mẫu trong admin, nơi Chủ sở hữu mua."
+    }
+  }
+}

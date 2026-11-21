@@ -9,6 +9,7 @@ import {
   type PaymentMethodResponse,
   type StartMethodSetupRequest,
 } from '@plp/contracts';
+import { validationFailed } from '../../shared/errors.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { AccessService } from '../workspaces/access.service.js';
@@ -20,19 +21,36 @@ import { BillingLogRepository } from './billing-log.repository.js';
 import { methodSetupReference } from './domain/billing-references.js';
 import { EntitlementsService } from './entitlements.service.js';
 import { PaymentGateway } from './gateway/payment-gateway.js';
+import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 import { paymentsDisabled } from './payment-problems.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
-/** The admin screens the gateway's page leads back to (ADR-035): board 29, or board 28. */
-function returnPath(workspaceId: string, target: MethodSetupReturnTarget): string {
-  const billing = `/workspaces/${encodeURIComponent(workspaceId)}/billing`;
-  return target === 'payments' ? `${billing}/payments` : billing;
+/** Where the gateway's page leads back to: a screen, and the item of board 31. */
+interface ReturnTarget {
+  target: MethodSetupReturnTarget;
+  itemId: string | null;
+}
+
+/**
+ * The admin screens the gateway's page leads back to (ADR-035): board 29, board 28, or board 31
+ * of the marketplace item being bought (ADR-036).
+ */
+function returnPath(workspaceId: string, { target, itemId }: ReturnTarget): string {
+  const workspace = `/workspaces/${encodeURIComponent(workspaceId)}`;
+  switch (target) {
+    case 'payments':
+      return `${workspace}/billing/payments`;
+    case 'plan':
+      return `${workspace}/billing`;
+    case 'marketplace':
+      return `${workspace}/marketplace/${encodeURIComponent(itemId ?? '')}`;
+  }
 }
 
 function returnUrl(
   origin: string,
   workspaceId: string,
-  target: MethodSetupReturnTarget,
+  target: ReturnTarget,
   result: MethodSetupResult,
 ): string {
   const url = new URL(returnPath(workspaceId, target), origin);
@@ -53,6 +71,7 @@ export class BillingAccountService {
     private readonly log: BillingLogRepository,
     private readonly gateway: PaymentGateway,
     private readonly links: WorkspaceLinks,
+    private readonly purchases: MarketplacePurchaseHooks,
     private readonly clock: BillingClock,
     private readonly transactions: TransactionRunner,
   ) {}
@@ -72,7 +91,7 @@ export class BillingAccountService {
   /**
    * The gateway's page that saves a card. Its reference names the workspace and the owner, which
    * the `method_saved` event echoes back; the return addresses are the workspace's admin, never an
-   * address from the request.
+   * address from the request: a screen it names, or board 31 of an item of the catalog (ADR-036).
    */
   async startMethodSetup(
     user: AuthenticatedUser,
@@ -83,12 +102,19 @@ export class BillingAccountService {
     if (this.gateway.provider === 'none') {
       throw paymentsDisabled();
     }
+    const itemId = request.itemId ?? null;
+    if (itemId !== null && !this.purchases.hasItem(itemId)) {
+      throw validationFailed([
+        { path: ['itemId'], code: 'unknown_item', message: 'Marketplace không có mẫu này' },
+      ]);
+    }
+    const target = { target: request.returnTo, itemId };
     const origin = await this.links.originOf(scope.workspaceId);
     const id = scope.workspaceId.toHexString();
     return this.gateway.startMethodSetup({
       reference: methodSetupReference(scope.workspaceId, scope.userId),
-      returnUrl: returnUrl(origin, id, request.returnTo, 'saved'),
-      cancelUrl: returnUrl(origin, id, request.returnTo, 'canceled'),
+      returnUrl: returnUrl(origin, id, target, 'saved'),
+      cancelUrl: returnUrl(origin, id, target, 'canceled'),
     });
   }
 

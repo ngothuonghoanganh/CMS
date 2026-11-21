@@ -66,11 +66,13 @@ export const systemTemplateIdSchema = z
 /**
  * "mp-" and kebab-case ("mp-khai-truong-phong-tap"), stable across versions. One path segment
  * still names a template of any source: a workspace template's id is 24 hex digits, and a system
- * template's never starts with "mp-".
+ * template's never starts with "mp-". At most 50 characters, so the key of a member's suggestion
+ * of an item (`marketplace-suggestion:{workspaceId}:{userId}:{itemId}`) fits the 128 plp-mailer
+ * takes.
  */
 export const marketplaceItemIdSchema = z
   .string()
-  .max(60)
+  .max(50)
   .regex(/^mp(?:-[a-z0-9]+)+$/, 'Mã mẫu marketplace không hợp lệ');
 
 export function isMarketplaceItemId(id: string): boolean {

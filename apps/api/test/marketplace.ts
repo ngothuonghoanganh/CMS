@@ -1,16 +1,21 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   type ClaimMarketplaceItemRequest,
+  endpoints,
+  IDEMPOTENCY_KEY_HEADER,
   type MarketplaceCatalog,
   type MarketplaceItem,
   type MarketplaceLicence,
   type MarketplaceLicenceSource,
   marketplaceLicenceSchema,
+  type MarketplacePurchaseRequest,
 } from '@plp/contracts';
 import { setAtPath } from '@plp/sections/schema';
 import { Types } from 'mongoose';
+import type request from 'supertest';
 import { BUNDLED_MARKETPLACE_CATALOG_FILE } from '../src/config/env.js';
 import { versionHashOf } from '../src/modules/marketplace/domain/version-hash.js';
 import { MarketplaceLicences } from '../src/modules/marketplace/marketplace-licences.js';
@@ -153,4 +158,38 @@ export async function grantLicence(
   if (!granted) {
     throw new Error(`Workspace ${workspaceId} already holds a licence of ${itemId}`);
   }
+}
+
+/** The purchase of the paid item as its quote shows it: v1, 399.000đ, terms v1 (MP3). */
+export function purchaseBody(
+  overrides: Partial<MarketplacePurchaseRequest> = {},
+): MarketplacePurchaseRequest {
+  return {
+    itemId: PAID_ITEM_ID,
+    version: 1,
+    expectedAmount: 399_000,
+    termsVersion: 1,
+    ...overrides,
+  };
+}
+
+/** "Thanh toán {tổng}" of "Xác nhận mua mẫu" with an `Idempotency-Key`, a new one by default. */
+export function purchaseItem(
+  client: TestClient,
+  workspaceId: string,
+  body: MarketplacePurchaseRequest = purchaseBody(),
+  key: string = randomUUID(),
+): request.Test {
+  return client
+    .post(endpoints.purchaseMarketplaceItem.path(workspaceId), body)
+    .set(IDEMPOTENCY_KEY_HEADER, key);
+}
+
+/** The quote of "Mua mẫu" of an item. */
+export function quoteItem(
+  client: TestClient,
+  workspaceId: string,
+  itemId: string = PAID_ITEM_ID,
+): request.Test {
+  return client.get(endpoints.getMarketplaceQuote.path(workspaceId, itemId));
 }

@@ -17,6 +17,9 @@ import {
   billingReceiptEmail,
   billingTrialEndingEmail,
   type KeyedEmail,
+  marketplaceReceiptEmail,
+  marketplaceSuggestionEmail,
+  marketplaceSuggestionKey,
 } from '../notifications/emails.js';
 import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
@@ -24,9 +27,21 @@ import { BillingNoticesRepository } from './billing-notices.repository.js';
 import { DAY_MS } from './domain/billing-period.js';
 import { cardText, cycleText, periodText, vnDateText, vndText } from './domain/billing-text.js';
 import { renewalBlockerOf } from './domain/renewal.js';
-import type { InvoiceRecord } from './invoice.schema.js';
+import type {
+  InvoiceRecord,
+  MarketplaceInvoiceRecord,
+  PlanInvoiceRecord,
+} from './invoice.schema.js';
+import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
 import { readOnlyReasonOf } from './plan-problems.js';
+
+/** "Thẻ Visa •••• 4242" or "Chuyển khoản", as the receipt says how the invoice was paid. */
+function paymentMethodText(invoice: InvoiceRecord): string {
+  return invoice.method === 'transfer' || invoice.card === null
+    ? 'Chuyển khoản'
+    : `Thẻ ${cardText(invoice.card)}`;
+}
 
 /**
  * What became of an email of the plan: sent now, sent before (or being sent), not sent (logged),
@@ -48,7 +63,9 @@ interface NoticeContext {
 
 /**
  * The emails of a workspace's plan to its Chủ sở hữu (ADR-035, T3): the trial's reminder, a refused
- * charge of the job, "Sắp hết hạn", read-only, and the receipt of each paid invoice. Each goes once
+ * charge of the job, "Sắp hết hạn", read-only, and the receipt of each paid invoice; and the two of
+ * the marketplace (ADR-036): the receipt of an item bought, and a member's suggestion to buy one.
+ * Each goes once
  * (`billing_notices`, keyed by its idempotency key) to the owner of the moment. A send that fails
  * is logged and given back, so a later try of the same email may send it; nothing here throws.
  */
@@ -63,6 +80,7 @@ export class BillingNotifier {
     private readonly users: UsersRepository,
     private readonly links: WorkspaceLinks,
     private readonly sender: EmailSender,
+    private readonly marketplace: MarketplacePurchaseHooks,
   ) {}
 
   /** "Dùng thử sắp hết": what the end charges with the saved card, or how to keep going. */
@@ -99,7 +117,7 @@ export class BillingNotifier {
 
   /** A charge of the job did not go through: why, when it is tried again, until when it is free. */
   chargeFailed(
-    invoice: InvoiceRecord,
+    invoice: PlanInvoiceRecord,
     failure: {
       attempt: number;
       code: PaymentDeclineCode;
@@ -168,11 +186,18 @@ export class BillingNotifier {
     );
   }
 
-  /** The receipt of a paid invoice, whoever or whatever paid it. */
+  /**
+   * The receipt of a paid invoice, whoever or whatever paid it. `billing-receipt` is the plan's:
+   * its data needs a plan and a period, which a marketplace invoice has not (ADR-036), so that one
+   * has `marketplace-receipt`.
+   */
   receipt(invoice: InvoiceRecord): Promise<NoticeOutcome> {
     const paidAt = invoice.paidAt;
     if (invoice.status !== 'paid' || paidAt === null) {
       return Promise.resolve('nobody');
+    }
+    if (invoice.kind === 'marketplace') {
+      return this.marketplaceReceipt(invoice, paidAt);
     }
     const invoiceId = invoice._id.toHexString();
     return this.deliver({ workspaceId: invoice.workspaceId }, (context) =>
@@ -184,11 +209,84 @@ export class BillingNotifier {
         period: periodText(invoice.periodStart, invoice.periodEnd),
         amount: vndText(invoice.amount),
         paidOn: vnDateText(paidAt),
-        method:
-          invoice.method === 'transfer' || invoice.card === null
-            ? 'Chuyển khoản'
-            : `Thẻ ${cardText(invoice.card)}`,
+        method: paymentMethodText(invoice),
         receiptUrl: `${context.origin}/workspaces/${context.workspaceId}/billing/receipts/${invoiceId}`,
+      }),
+    );
+  }
+
+  /**
+   * A member asks Chủ sở hữu to buy an item (board 31). Once per member and item: 'sent_before'
+   * for a repeat. Unlike the rest, the caller answers a person, so 'failed' and 'nobody' mean it
+   * was not sent and the member may ask again.
+   */
+  marketplaceSuggestion(
+    ref: WorkspaceRef,
+    suggestion: {
+      userId: string;
+      memberName: string;
+      itemId: string;
+      itemName: string;
+      price: number;
+    },
+  ): Promise<NoticeOutcome> {
+    return this.deliver(ref, (context) =>
+      marketplaceSuggestionEmail({
+        workspaceId: context.workspaceId,
+        userId: suggestion.userId,
+        itemId: suggestion.itemId,
+        workspaceName: context.workspaceName,
+        memberName: suggestion.memberName,
+        itemName: suggestion.itemName,
+        price: vndText(suggestion.price),
+        itemUrl: `${context.origin}/workspaces/${context.workspaceId}/marketplace/${suggestion.itemId}`,
+      }),
+    );
+  }
+
+  /** Whether the member's suggestion of the item was sent (or is being sent) already. */
+  hasSuggested(
+    ref: WorkspaceRef,
+    suggestion: { userId: string; itemId: string },
+  ): Promise<boolean> {
+    return this.notices.has(
+      marketplaceSuggestionKey({ workspaceId: ref.workspaceId.toHexString(), ...suggestion }),
+    );
+  }
+
+  /**
+   * The receipt of a marketplace invoice, only when it granted the licence the workspace holds: a
+   * payment that did not apply (the item came another way meanwhile) is refunded outside the
+   * system, and a receipt would tell the owner they bought what they did not.
+   */
+  private async marketplaceReceipt(
+    invoice: MarketplaceInvoiceRecord,
+    paidAt: Date,
+  ): Promise<NoticeOutcome> {
+    const invoiceId = invoice._id.toHexString();
+    try {
+      if (!(await this.marketplace.grantedBy(invoice))) {
+        return 'nobody';
+      }
+    } catch (error) {
+      this.logger.warn(
+        { invoiceId, template: 'marketplace-receipt', err: error },
+        'Email of the marketplace not sent: reading the licence of the invoice failed',
+      );
+      return 'failed';
+    }
+    return this.deliver({ workspaceId: invoice.workspaceId }, (context) =>
+      marketplaceReceiptEmail({
+        invoiceId,
+        workspaceName: context.workspaceName,
+        invoiceNumber: invoice.number,
+        itemName: invoice.item.name,
+        version: invoice.item.version,
+        amount: vndText(invoice.amount),
+        paidOn: vnDateText(paidAt),
+        method: paymentMethodText(invoice),
+        receiptUrl: `${context.origin}/workspaces/${context.workspaceId}/billing/receipts/${invoiceId}`,
+        templateUrl: `${context.origin}/workspaces/${context.workspaceId}/templates/${invoice.item.itemId}`,
       }),
     );
   }

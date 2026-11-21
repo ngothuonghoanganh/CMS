@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { vndAmountSchema } from './billing.js';
-import { isoDateTimeSchema } from './common.js';
+import { invoiceNumberSchema, invoiceSchema, paymentMethodViewSchema } from './billing-payments.js';
+import { idSchema, isoDateTimeSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { pageGoalSchema } from './goals.js';
 import {
@@ -217,6 +218,11 @@ export const marketplaceItemDetailSchema = marketplaceItemCardSchema.extend({
   licence: marketplaceLicenceSchema.nullable(),
   /** The workspace's Chủ sở hữu, the only one who buys: "Đề xuất {ownerName} mua". */
   ownerName: z.string(),
+  /**
+   * The viewer already asked the owner to buy this item (MP3): "Đã đề xuất {ownerName} mua", with
+   * no button to ask again. False for everyone else, and again once the notice is forgotten.
+   */
+  suggested: z.boolean(),
 });
 export type MarketplaceItemDetail = z.infer<typeof marketplaceItemDetailSchema>;
 
@@ -304,6 +310,96 @@ export const marketplaceItemChangedProblemContextSchema = z.object({
 });
 export type MarketplaceItemChangedProblemContext = z.infer<
   typeof marketplaceItemChangedProblemContextSchema
+>;
+
+/*
+ * Buying a paid item (ADR-036, MP3, board 31's "Xác nhận mua mẫu"): the quote, then the purchase
+ * with the saved card through the payment gateway of ADR-035. Only Chủ sở hữu buys
+ * (`billing.manage`).
+ */
+
+/**
+ * `GET /workspaces/:id/marketplace/items/:itemId/quote`: what "Mua mẫu" would charge now and with
+ * which card, before the owner confirms. Never charges. Confirm with the purchase's `version`,
+ * `expectedAmount` (this `amount`) and `termsVersion`.
+ */
+export const marketplaceQuoteSchema = z.object({
+  itemId: marketplaceItemIdSchema,
+  /** "{name} · v{version}". */
+  name: z.string(),
+  /** The item's current version: the one bought, and the licence's. */
+  version: templateVersionSchema,
+  /** Whole đồng, VAT included ("Thuế: Đã gồm VAT", "Tổng"). */
+  amount: vndAmountSchema,
+  /** The terms the owner agrees to ("Tôi đồng ý với điều khoản giấy phép"). */
+  termsVersion: z.number().int().positive(),
+  /** The workspace holds the item already: nothing to buy, board 31 shows it owned. */
+  owned: z.boolean(),
+  /** The card that would be charged ("Thanh toán bằng Thẻ Visa •••• 4242 · Đổi"); null for none. */
+  paymentMethod: paymentMethodViewSchema.nullable(),
+  /** No card that can pay is saved: "Thêm thẻ" instead of "Thanh toán {tổng}". */
+  paymentMethodRequired: z.boolean(),
+  /** False when `PAYMENT_PROVIDER=none`: "Thanh toán chưa được bật", no button. */
+  paymentsEnabled: z.boolean(),
+  /**
+   * The company of "Thông tin xuất hóa đơn" the receipt names, when it is filled in; null otherwise.
+   * The receipt itself goes to Chủ sở hữu (ADR-035).
+   */
+  billingCompanyName: z.string().nullable(),
+});
+export type MarketplaceQuote = z.infer<typeof marketplaceQuoteSchema>;
+
+/**
+ * `POST /workspaces/:id/marketplace/purchases` with an `Idempotency-Key` header: the item at the
+ * version, the price and under the terms the quote showed. Any of them changed meanwhile: 409
+ * `item_changed`, and the admin reads the item and the quote again.
+ */
+export const marketplacePurchaseRequestSchema = z.strictObject({
+  itemId: marketplaceItemIdSchema,
+  version: templateVersionSchema,
+  expectedAmount: vndAmountSchema,
+  termsVersion: z.number().int().positive(),
+});
+export type MarketplacePurchaseRequest = z.infer<typeof marketplacePurchaseRequestSchema>;
+
+/**
+ * The purchase's invoice (`kind: 'marketplace'`): 200 once paid, with the licence it granted; 202
+ * while the gateway decides, with no licence yet (it is granted when the gateway's event pays the
+ * invoice). The same `Idempotency-Key` answers the same invoice again.
+ */
+export const marketplacePurchaseResponseSchema = z.object({
+  invoice: invoiceSchema,
+  licence: marketplaceLicenceSchema.nullable(),
+});
+export type MarketplacePurchaseResponse = z.infer<typeof marketplacePurchaseResponseSchema>;
+
+/**
+ * "Đề xuất {ownerName} mua" (MP3): 200 whether the email went now or this member sent it before
+ * (`alreadySuggested`, then nothing is sent again). `message` is the line to show.
+ */
+export const marketplaceSuggestionResponseSchema = z.object({
+  alreadySuggested: z.boolean(),
+  message: z.string().min(1),
+});
+export type MarketplaceSuggestionResponse = z.infer<typeof marketplaceSuggestionResponseSchema>;
+
+/** `context` of 409 `item_owned`: the workspace holds the item's licence already. */
+export const marketplaceItemOwnedProblemContextSchema = z.object({
+  licence: marketplaceLicenceSchema,
+});
+export type MarketplaceItemOwnedProblemContext = z.infer<
+  typeof marketplaceItemOwnedProblemContextSchema
+>;
+
+/**
+ * `context` of 422 `idempotency_key_reused`: the purchase the key made before, of another item.
+ */
+export const idempotencyKeyReusedProblemContextSchema = z.object({
+  invoiceId: idSchema,
+  invoiceNumber: invoiceNumberSchema,
+});
+export type IdempotencyKeyReusedProblemContext = z.infer<
+  typeof idempotencyKeyReusedProblemContextSchema
 >;
 
 /** The price filter of board 30. */

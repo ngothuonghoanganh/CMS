@@ -7,7 +7,12 @@ import { ApiError } from '../../lib/api-core';
 import { navigateTo } from '../../lib/navigate';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { PaymentsDenied, PaymentsScreen, type PaymentsScreenProps } from './PaymentsScreen';
-import { invoiceSummaryFixture, summaryFixture, visaCard } from './test-fixtures';
+import {
+  invoiceSummaryFixture,
+  marketplaceInvoiceSummaryFixture,
+  summaryFixture,
+  visaCard,
+} from './test-fixtures';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -378,6 +383,78 @@ describe('PaymentsScreen (board 29)', () => {
       await user.click(screen.getByRole('button', { name: 'Lưu' }));
 
       expect(await screen.findByText('Mã số thuế này không hợp lệ')).toBeVisible();
+    });
+  });
+
+  describe('a marketplace invoice (ADR-036)', () => {
+    const bought = marketplaceInvoiceSummaryFixture();
+    const refused = marketplaceInvoiceSummaryFixture({
+      id: '64b0000000000000000000b8',
+      number: 'HD-2026-000008',
+      status: 'failed',
+      paidAt: null,
+      payable: true,
+      lastAttempt: {
+        number: 1,
+        at: '2026-11-21T04:00:00.000Z',
+        outcome: 'failed',
+        code: 'card_declined',
+      },
+    });
+
+    it('names the item in its row, with the receipt of a paid one and "Thanh toán lại" of a failed one', () => {
+      renderPayments({
+        initial: initialOf({ invoices: { items: [refused, bought], nextCursor: null } }),
+      });
+      const table = screen.getByRole('table', { name: 'Lịch sử giao dịch' });
+      const [, failedRow, paidRow] = within(table).getAllByRole('row') as [
+        HTMLElement,
+        HTMLElement,
+        HTMLElement,
+      ];
+      expect(failedRow).toHaveTextContent('Mẫu “Mở bán dự án căn hộ” · Marketplace');
+      expect(failedRow).toHaveTextContent('Ngân hàng từ chối thẻ');
+      expect(
+        within(failedRow).getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000008' }),
+      ).toBeVisible();
+      expect(paidRow).toHaveTextContent('Mẫu “Mở bán dự án căn hộ” · Marketplace');
+      expect(paidRow).toHaveTextContent('499.000');
+      expect(
+        within(paidRow).getByRole('link', { name: 'Tải hóa đơn HD-2026-000009' }),
+      ).toBeVisible();
+    });
+
+    it('says to try "Thanh toán lại" again once another charge is known, not to choose a plan', async () => {
+      const user = userEvent.setup();
+      routePay([refused], () => {
+        throw problem(409, 'payment_in_progress', {
+          invoiceId: '64b0000000000000000000b7',
+          invoiceNumber: 'HD-2026-000007',
+        });
+      });
+      renderPayments({
+        initial: initialOf({ invoices: { items: [refused], nextCursor: null } }),
+      });
+
+      await user.click(
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000008' }),
+      );
+
+      expect(
+        await screen.findByText(
+          'Hóa đơn HD-2026-000007 chưa có kết quả. Xem nó trong lịch sử giao dịch rồi thử lại.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('never offers a bank transfer for it, the card pays it', () => {
+      renderPayments({
+        initial: initialOf({ invoices: { items: [refused], nextCursor: null } }),
+      });
+      expect(screen.queryByRole('button', { name: /Chuyển khoản/ })).toBeNull();
+      expect(
+        screen.getByRole('button', { name: 'Thanh toán lại hóa đơn HD-2026-000008' }),
+      ).toBeEnabled();
     });
   });
 

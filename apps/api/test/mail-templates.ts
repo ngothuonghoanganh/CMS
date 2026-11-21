@@ -32,6 +32,9 @@ export const MAIL_TEMPLATES: readonly EmailTemplate[] = [
   'billing-expiring-soon',
   'billing-read-only',
   'billing-receipt',
+  // Written here first too (ADR-036, MP3): the emails of the marketplace.
+  'marketplace-receipt',
+  'marketplace-suggestion',
 ];
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

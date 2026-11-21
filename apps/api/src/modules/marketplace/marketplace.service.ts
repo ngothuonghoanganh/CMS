@@ -1,16 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  ClaimMarketplaceItemRequest,
+import {
+  can,
+  type ClaimMarketplaceItemRequest,
   MarketplaceItemDetail,
   MarketplaceLicence,
   MarketplaceLicenceListResponse,
   MarketplaceListResponse,
+  MarketplaceSuggestionResponse,
   Permission,
   UpdateMarketplaceLicenceVersionRequest,
 } from '@plp/contracts';
-import { notFound } from '../../shared/errors.js';
+import { forbidden, notFound } from '../../shared/errors.js';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { BillingNotifier } from '../billing/billing-notifier.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { TEMPLATE_NOT_FOUND } from '../templates/template-catalog.js';
 import { AccessService } from '../workspaces/access.service.js';
@@ -18,10 +22,18 @@ import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { claimOutcome, versionUpdateOutcome } from './domain/licence-rules.js';
 import { marketplaceDetail, marketplaceList, ownedItemOf } from './domain/marketplace-items.js';
+import { suggestionOutcome } from './domain/purchase-rules.js';
 import { versionHashOf } from './domain/version-hash.js';
 import { MarketplaceLicences, toMarketplaceLicence } from './marketplace-licences.js';
 import { MarketplaceLicencesRepository } from './marketplace-licences.repository.js';
-import { itemChanged, itemNotFree, licenceChanged } from './marketplace-problems.js';
+import {
+  itemChanged,
+  itemFree,
+  itemNotFree,
+  itemOwned,
+  licenceChanged,
+  suggestionNotSent,
+} from './marketplace-problems.js';
 
 /**
  * The marketplace of a workspace (ADR-036, boards 30–32). Every member browses it and lists the
@@ -40,6 +52,7 @@ export class MarketplaceService {
     private readonly workspaces: WorkspacesRepository,
     private readonly users: UsersRepository,
     private readonly pages: PagesRepository,
+    private readonly notifier: BillingNotifier,
   ) {}
 
   async list(user: AuthenticatedUser, workspaceId: string): Promise<MarketplaceListResponse> {
@@ -65,7 +78,59 @@ export class MarketplaceService {
     if (view === null) {
       throw notFound(TEMPLATE_NOT_FOUND);
     }
-    return { ...view, ownerName: await this.ownerName(scope) };
+    return {
+      ...view,
+      ownerName: (await this.owner(scope)).name,
+      suggested: await this.suggestedBy(scope, itemId),
+    };
+  }
+
+  /**
+   * "Đề xuất {tên} mua" (`pages.view`): emails Chủ sở hữu, once per member and item. Only a member
+   * who cannot buy asks (403 for `billing.manage`), a read-only workspace included: it changes
+   * nothing. A repeat is 200 and sends nothing; an email that could not be sent is 503, given back.
+   */
+  async suggest(
+    user: AuthenticatedUser,
+    workspaceId: string,
+    itemId: string,
+  ): Promise<MarketplaceSuggestionResponse> {
+    const scope = await this.scope(user, workspaceId, 'pages.view');
+    if (can(scope.access, 'billing.manage')) {
+      throw forbidden('Chủ sở hữu mua mẫu trực tiếp ở Marketplace, không cần đề xuất');
+    }
+    const held = await this.repository.find(scope, itemId);
+    const outcome = suggestionOutcome(this.licences.catalog, itemId, held);
+    switch (outcome.kind) {
+      case 'not_found':
+        throw notFound(TEMPLATE_NOT_FOUND);
+      case 'owned':
+        throw itemOwned(outcome.item.name, toMarketplaceLicence(outcome.licence));
+      case 'free':
+        throw itemFree(outcome.item.name);
+      case 'suggest': {
+        const [owner, asker] = await Promise.all([this.owner(scope), this.nameOf(scope.userId)]);
+        const sent = await this.notifier.marketplaceSuggestion(scope, {
+          userId: scope.userId.toHexString(),
+          memberName: asker,
+          itemId,
+          itemName: outcome.item.name,
+          price: outcome.item.price,
+        });
+        switch (sent) {
+          case 'sent':
+            return { alreadySuggested: false, message: `Đã gửi đề xuất tới ${owner.name}.` };
+          case 'sent_before':
+            return {
+              alreadySuggested: true,
+              message: `Bạn đã đề xuất ${owner.name} mua mẫu này trước đó.`,
+            };
+          case 'failed':
+          case 'nobody':
+            throw suggestionNotSent();
+        }
+      }
+    }
   }
 
   /**
@@ -199,15 +264,26 @@ export class MarketplaceService {
     return scope;
   }
 
+  /** Whether the viewer asked for this item already; Chủ sở hữu buys, so never asks. */
+  private suggestedBy(scope: WorkspaceScope, itemId: string): Promise<boolean> {
+    return can(scope.access, 'billing.manage')
+      ? Promise.resolve(false)
+      : this.notifier.hasSuggested(scope, { userId: scope.userId.toHexString(), itemId });
+  }
+
   /** "Đề xuất {tên} mua": only Chủ sở hữu buys (`billing.manage`). */
-  private async ownerName(scope: WorkspaceScope): Promise<string> {
+  private async owner(scope: WorkspaceScope): Promise<{ name: string }> {
     const owner = await this.workspaces.findOwner(scope);
-    const ref =
-      owner === null
-        ? undefined
-        : (await this.users.findRefs([owner.userId])).get(owner.userId.toHexString());
-    if (ref === undefined) {
+    if (owner === null) {
       throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no owner to name`);
+    }
+    return { name: await this.nameOf(owner.userId) };
+  }
+
+  private async nameOf(userId: ObjectId): Promise<string> {
+    const ref = (await this.users.findRefs([userId])).get(userId.toHexString());
+    if (ref === undefined) {
+      throw new Error(`User ${userId.toHexString()} has no name to show`);
     }
     return ref.name;
   }

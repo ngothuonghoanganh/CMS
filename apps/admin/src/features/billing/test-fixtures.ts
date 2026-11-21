@@ -1,5 +1,6 @@
 import type {
   BillingSummary,
+  DueInvoice,
   Invoice,
   InvoiceSummary,
   PaymentMethodView,
@@ -94,7 +95,13 @@ export function quoteFixture(overrides: Partial<PlanChangeQuote> = {}): PlanChan
   };
 }
 
-export function invoiceSummaryFixture(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
+/** A row of the plan (`subscription`, `upgrade`): its plan and period, no marketplace item. */
+export type PlanInvoiceSummary = InvoiceSummary &
+  Pick<DueInvoice, 'planId' | 'planName' | 'cycle' | 'periodStart' | 'periodEnd' | 'item'>;
+
+export function invoiceSummaryFixture(
+  overrides: Partial<PlanInvoiceSummary> = {},
+): PlanInvoiceSummary {
   return {
     id: '64b0000000000000000000b1',
     number: 'HD-2026-000001',
@@ -104,6 +111,7 @@ export function invoiceSummaryFixture(overrides: Partial<InvoiceSummary> = {}): 
     cycle: 'monthly',
     periodStart: '2026-11-21T03:00:00.000Z',
     periodEnd: '2026-12-21T03:00:00.000Z',
+    item: null,
     amount: 1_490_000,
     method: 'card',
     card: { brand: 'visa', last4: '4242' },
@@ -124,6 +132,26 @@ export function invoiceFixture(overrides: Partial<Invoice> = {}): Invoice {
     from: { planId: 'agency', cycle: 'monthly' },
     endsTrial: true,
     transfer: null,
+    ...overrides,
+  };
+}
+
+/** A marketplace row (ADR-036): the item it bought, no plan or period. */
+export function marketplaceInvoiceSummaryFixture(
+  overrides: Partial<InvoiceSummary> = {},
+): InvoiceSummary {
+  return {
+    ...invoiceSummaryFixture(),
+    id: '64b0000000000000000000b9',
+    number: 'HD-2026-000009',
+    kind: 'marketplace',
+    planId: null,
+    planName: null,
+    cycle: null,
+    periodStart: null,
+    periodEnd: null,
+    item: { itemId: 'mp-mo-ban-du-an-can-ho', name: 'Mở bán dự án căn hộ', version: 1 },
+    amount: 499_000,
     ...overrides,
   };
 }

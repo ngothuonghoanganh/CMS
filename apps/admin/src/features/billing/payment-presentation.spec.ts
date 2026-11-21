@@ -10,7 +10,7 @@ import {
   invoiceStatusView,
   taxCodeMessage,
 } from './payment-presentation';
-import { invoiceSummaryFixture, visaCard } from './test-fixtures';
+import { invoiceSummaryFixture, marketplaceInvoiceSummaryFixture, visaCard } from './test-fixtures';
 
 describe('cards', () => {
   it('names the card as the board does, without its number', () => {
@@ -35,6 +35,10 @@ describe('invoices', () => {
     expect(invoiceDescription(invoice)).toBe('Gói Doanh nghiệp · kỳ 21/11/2026 – 21/12/2026');
     expect(invoiceDescription({ ...invoice, kind: 'upgrade' })).toBe(
       'Nâng cấp lên Gói Doanh nghiệp · kỳ 21/11/2026 – 21/12/2026',
+    );
+    // A marketplace item bought (ADR-036): no plan, no period.
+    expect(invoiceDescription(marketplaceInvoiceSummaryFixture())).toBe(
+      'Mẫu “Mở bán dự án căn hộ” · Marketplace',
     );
   });
 

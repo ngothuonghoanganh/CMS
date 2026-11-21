@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   attemptOfIdempotencyKey,
+  buysAgain,
   chargeIdempotencyKey,
   chargeableStatusesOf,
   type InvoicePurpose,
   invoicePayable,
   invoiceTransferable,
   isFinalInvoiceStatus,
+  type ItemStanding,
+  type MarketplaceInvoicePurpose,
+  marketplaceInvoicePayable,
+  payableOf,
+  purchaseReplayOf,
   nextAttemptNumber,
   purposeOf,
   periodPaidAt,
@@ -209,6 +215,97 @@ describe('invoice purposes (T3)', () => {
       false,
     );
     expect(invoiceTransferable(upgrade, paidPeriod, NOW)).toBe(false);
+  });
+});
+
+describe('marketplace invoices (ADR-036)', () => {
+  const bought: MarketplaceInvoicePurpose = {
+    kind: 'marketplace',
+    method: 'card',
+    status: 'failed',
+    amount: 399_000,
+    item: { itemId: 'mp-khai-truong-phong-tap' },
+  };
+  const onSale: ItemStanding = { listed: true, price: 399_000, licensed: false };
+
+  it('are for an item, never a plan, and never take a transfer', () => {
+    expect(purposeOf({ kind: 'marketplace', from: null, endsTrial: false })).toBe('marketplace');
+    expect(invoiceTransferable(bought, paidPeriod, NOW)).toBe(false);
+    expect(invoiceTransferable({ ...bought, status: 'pending' }, paidPeriod, NOW)).toBe(false);
+  });
+
+  it('pay again a refused one only while the item is on sale at its price and not held', () => {
+    expect(marketplaceInvoicePayable(bought, onSale, 'full')).toBe(true);
+    expect(marketplaceInvoicePayable(bought, { ...onSale, listed: false }, 'full')).toBe(false);
+    expect(marketplaceInvoicePayable(bought, { ...onSale, price: 499_000 }, 'full')).toBe(false);
+    expect(marketplaceInvoicePayable(bought, { ...onSale, licensed: true }, 'full')).toBe(false);
+  });
+
+  it('never pay again a refused one in a read-only workspace: it would buy the item anew', () => {
+    expect(marketplaceInvoicePayable(bought, onSale, 'read_only')).toBe(false);
+    expect(buysAgain(bought)).toBe(true);
+  });
+
+  it('pay again an undecided one even once the item left the sale or changed price', () => {
+    const open = { ...bought, status: 'open' as const };
+    expect(marketplaceInvoicePayable(open, onSale, 'full')).toBe(true);
+    expect(
+      marketplaceInvoicePayable(open, { listed: false, price: 0, licensed: false }, 'full'),
+    ).toBe(true);
+    // Asking the gateway about a charge already made buys nothing anew, read-only or not.
+    expect(marketplaceInvoicePayable(open, onSale, 'read_only')).toBe(true);
+    expect(buysAgain(open)).toBe(false);
+    // What it paid for is gone once the workspace holds the item another way.
+    expect(marketplaceInvoicePayable(open, { ...onSale, licensed: true }, 'full')).toBe(false);
+  });
+
+  it('never pay again one that is paid, void or being decided', () => {
+    for (const status of ['paid', 'void', 'pending'] as const) {
+      expect(marketplaceInvoicePayable({ ...bought, status }, onSale, 'full'), status).toBe(false);
+    }
+  });
+
+  it('decide with the item’s standing, and invoices of the plan with the plan', () => {
+    expect(payableOf(bought, paidPeriod, NOW, onSale, 'full')).toBe(true);
+    expect(payableOf(bought, paidPeriod, NOW, onSale, 'read_only')).toBe(false);
+    expect(payableOf(bought, paidPeriod, NOW, { ...onSale, licensed: true }, 'full')).toBe(false);
+    expect(() => payableOf(bought, paidPeriod, NOW, undefined, 'full')).toThrow(/standing/);
+    // A plan's invoice is how a read-only workspace leaves that state.
+    for (const access of ['full', 'read_only'] as const) {
+      expect(payableOf(upgrade, paidPeriod, NOW, undefined, access), access).toBe(
+        invoicePayable(upgrade, paidPeriod, NOW),
+      );
+      expect(buysAgain(upgrade)).toBe(false);
+    }
+  });
+});
+
+describe('a purchase sent again with its Idempotency-Key (ADR-036)', () => {
+  const refused = { outcome: 'failed' as const, code: 'insufficient_funds' as const };
+  const unknown = { outcome: 'unknown' as const, code: null };
+
+  it('answers its invoice as it is now, never with a second charge', () => {
+    expect(purchaseReplayOf({ status: 'paid', attempts: [unknown] })).toEqual({ kind: 'paid' });
+    expect(purchaseReplayOf({ status: 'pending', attempts: [] })).toEqual({ kind: 'pending' });
+    expect(purchaseReplayOf({ status: 'open', attempts: [unknown] })).toEqual({ kind: 'unknown' });
+    expect(purchaseReplayOf({ status: 'failed', attempts: [refused] })).toEqual({
+      kind: 'failed',
+      code: 'insufficient_funds',
+    });
+  });
+
+  it('charges one the API never charged, with the key of attempt 1', () => {
+    expect(purchaseReplayOf({ status: 'open', attempts: [] })).toEqual({ kind: 'charge' });
+  });
+
+  it('answers a refusal replaced by a new purchase as refused, any other void as not payable', () => {
+    expect(purchaseReplayOf({ status: 'void', attempts: [refused] })).toEqual({
+      kind: 'failed',
+      code: 'insufficient_funds',
+    });
+    expect(purchaseReplayOf({ status: 'void', attempts: [unknown] })).toEqual({
+      kind: 'not_payable',
+    });
   });
 });
 

@@ -200,6 +200,34 @@ export interface BillingReceiptData {
   receiptUrl: string;
 }
 
+/** The receipt of a paid marketplace invoice (ADR-036, MP3); not an electronic VAT invoice. */
+export interface MarketplaceReceiptData {
+  workspaceName: string;
+  invoiceNumber: string;
+  itemName: string;
+  version: number;
+  amount: string;
+  paidOn: string;
+  /** "Thẻ Visa •••• 4242" or "Chuyển khoản". */
+  method: string;
+  /** The printable receipt in the admin. */
+  receiptUrl: string;
+  /** The item in the workspace's template library (board 18), to make a page from it. */
+  templateUrl: string;
+}
+
+/** A member asks Chủ sở hữu to buy an item, the one who buys (ADR-036, MP3, board 31). */
+export interface MarketplaceSuggestionData {
+  workspaceName: string;
+  /** Who asks, as the admin shows their name. */
+  memberName: string;
+  itemName: string;
+  /** "399.000 ₫", VAT included. */
+  price: string;
+  /** The item on the marketplace (board 31), where Chủ sở hữu buys it. */
+  itemUrl: string;
+}
+
 export type Email =
   | { template: 'lead-notification'; data: LeadNotificationData }
   | { template: 'recipient-confirmation'; data: RecipientConfirmationData }
@@ -220,7 +248,9 @@ export type Email =
   | { template: 'billing-charge-failed'; data: BillingChargeFailedData }
   | { template: 'billing-expiring-soon'; data: BillingExpiringSoonData }
   | { template: 'billing-read-only'; data: BillingReadOnlyData }
-  | { template: 'billing-receipt'; data: BillingReceiptData };
+  | { template: 'billing-receipt'; data: BillingReceiptData }
+  | { template: 'marketplace-receipt'; data: MarketplaceReceiptData }
+  | { template: 'marketplace-suggestion'; data: MarketplaceSuggestionData };
 
 export type EmailTemplate = Email['template'];
 
@@ -535,4 +565,40 @@ export function billingReadOnlyEmail(
 export function billingReceiptEmail(input: BillingReceiptData & { invoiceId: string }): KeyedEmail {
   const { invoiceId, ...data } = input;
   return { template: 'billing-receipt', idempotencyKey: `billing-receipt:${invoiceId}`, data };
+}
+
+/** Once per paid marketplace invoice, whichever way it was paid. */
+export function marketplaceReceiptEmail(
+  input: MarketplaceReceiptData & { invoiceId: string },
+): KeyedEmail {
+  const { invoiceId, ...data } = input;
+  return {
+    template: 'marketplace-receipt',
+    idempotencyKey: `marketplace-receipt:${invoiceId}`,
+    data,
+  };
+}
+
+/**
+ * The key of a member's suggestion of an item: also how the marketplace screen knows the member
+ * asked already. Ids only, no name or address.
+ */
+export function marketplaceSuggestionKey(input: {
+  workspaceId: string;
+  userId: string;
+  itemId: string;
+}): string {
+  return `marketplace-suggestion:${input.workspaceId}:${input.userId}:${input.itemId}`;
+}
+
+/** Once per member and item: asking again sends nothing. */
+export function marketplaceSuggestionEmail(
+  input: MarketplaceSuggestionData & { workspaceId: string; userId: string; itemId: string },
+): KeyedEmail {
+  const { workspaceId, userId, itemId, ...data } = input;
+  return {
+    template: 'marketplace-suggestion',
+    idempotencyKey: marketplaceSuggestionKey({ workspaceId, userId, itemId }),
+    data,
+  };
 }

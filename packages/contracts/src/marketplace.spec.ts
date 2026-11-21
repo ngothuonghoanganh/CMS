@@ -7,6 +7,9 @@ import {
   marketplaceItemDetailSchema,
   marketplaceLicenceListResponseSchema,
   marketplaceListResponseSchema,
+  marketplacePurchaseRequestSchema,
+  marketplaceQuoteSchema,
+  marketplaceSuggestionResponseSchema,
   MAX_MARKETPLACE_ITEM_VERSIONS,
   MAX_MARKETPLACE_ITEMS,
   updateMarketplaceLicenceVersionRequestSchema,
@@ -79,11 +82,18 @@ describe('marketplace item ids (ADR-036)', () => {
       'mp_spa',
       'mp-spa-',
       'mpspa-x',
-      `mp-${'a'.repeat(58)}`,
+      `mp-${'a'.repeat(48)}`,
       '64b000000000000000000001',
     ]) {
       expect(isMarketplaceItemId(id), id).toBe(false);
     }
+  });
+
+  it('are short enough for the key of an email that names them (128 for plp-mailer)', () => {
+    const longest = `mp-${'a'.repeat(47)}`;
+    expect(isMarketplaceItemId(longest)).toBe(true);
+    const key = `marketplace-suggestion:${'0'.repeat(24)}:${'1'.repeat(24)}:${longest}`;
+    expect(key.length).toBeLessThanOrEqual(128);
   });
 
   it('still read as kebab-case template ids, told apart by their prefix', () => {
@@ -272,6 +282,7 @@ describe('the answers of the marketplace screens', () => {
       withdrawn: false,
       licence: null,
       ownerName: 'Ngọc Anh',
+      suggested: false,
     };
     expect(marketplaceItemDetailSchema.parse(detail)).toEqual(detail);
     const licence = {
@@ -283,6 +294,20 @@ describe('the answers of the marketplace screens', () => {
     expect(marketplaceItemDetailSchema.parse({ ...detail, licence }).licence).toEqual(licence);
     expect(
       marketplaceItemDetailSchema.safeParse({ ...detail, licence: { ...licence, source: 'gift' } })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('"Đề xuất mua" (MP3)', () => {
+  it('answers whether the email went now or before, with the line to show', () => {
+    const sent = { alreadySuggested: false, message: 'Đã gửi đề xuất tới Ngọc Anh.' };
+    expect(marketplaceSuggestionResponseSchema.parse(sent)).toEqual(sent);
+    expect(marketplaceSuggestionResponseSchema.safeParse({ alreadySuggested: true }).success).toBe(
+      false,
+    );
+    expect(
+      marketplaceSuggestionResponseSchema.safeParse({ alreadySuggested: true, message: '' })
         .success,
     ).toBe(false);
   });
@@ -348,5 +373,49 @@ describe('the licences of a workspace (MP2)', () => {
     expect(
       marketplaceItemChangedProblemContextSchema.parse({ version: 2, price: 0, termsVersion: 3 }),
     ).toEqual({ version: 2, price: 0, termsVersion: 3 });
+  });
+});
+
+describe('buying an item (MP3)', () => {
+  it('confirms the version, the price and the terms of the quote', () => {
+    const body = {
+      itemId: 'mp-khai-truong-phong-tap',
+      version: 1,
+      expectedAmount: 399_000,
+      termsVersion: 1,
+    };
+    expect(marketplacePurchaseRequestSchema.parse(body)).toEqual(body);
+    for (const wrong of [
+      { ...body, itemId: 'nha-khoa-uu-dai' },
+      { ...body, expectedAmount: -1 },
+      { ...body, version: 0 },
+      { ...body, termsVersion: undefined },
+      { ...body, planId: 'agency' },
+    ]) {
+      expect(marketplacePurchaseRequestSchema.safeParse(wrong).success).toBe(false);
+    }
+  });
+
+  it('quotes the card without its token, and says when there is none to pay', () => {
+    const quote = marketplaceQuoteSchema.parse({
+      itemId: 'mp-khai-truong-phong-tap',
+      name: 'Khai trương phòng tập',
+      version: 1,
+      amount: 399_000,
+      termsVersion: 1,
+      owned: false,
+      paymentMethod: {
+        brand: 'visa',
+        last4: '4242',
+        expMonth: 12,
+        expYear: 2035,
+        expired: false,
+        token: 'tok_1',
+      },
+      paymentMethodRequired: false,
+      paymentsEnabled: true,
+      billingCompanyName: null,
+    });
+    expect(quote.paymentMethod).not.toHaveProperty('token');
   });
 });

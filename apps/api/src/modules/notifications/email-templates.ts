@@ -14,6 +14,8 @@ import type {
   DomainEmailData,
   Email,
   LeadNotificationData,
+  MarketplaceReceiptData,
+  MarketplaceSuggestionData,
   MemberInvitationData,
   PasswordResetData,
   RecipientConfirmationData,
@@ -418,6 +420,60 @@ function billingReceipt(data: BillingReceiptData): RenderedEmail {
   };
 }
 
+/** The receipt of a paid marketplace invoice (ADR-036, MP3); not an electronic VAT invoice. */
+function marketplaceReceipt(data: MarketplaceReceiptData): RenderedEmail {
+  const title = `Đã thanh toán ${data.amount}`;
+  const rows: Array<[string, string]> = [
+    ['Hóa đơn', data.invoiceNumber],
+    ['Nội dung', `Mẫu “${data.itemName}” · v${data.version} · Marketplace`],
+    ['Số tiền', data.amount],
+    ['Ngày thanh toán', data.paidOn],
+    ['Phương thức', data.method],
+  ];
+  const use = `Mẫu đã có trong Templates của ${data.workspaceName}, dùng được cho mọi site trong workspace. Tạo trang từ mẫu tại đây:`;
+  const note = 'Đây là biên nhận thanh toán, không phải hóa đơn điện tử.';
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: `Biên nhận ${data.invoiceNumber} · Mẫu “${data.itemName}”`,
+    text: [
+      ...rows.map(([label, value]) => `${label}: ${value}`),
+      '',
+      `Xem biên nhận: ${data.receiptUrl}`,
+      '',
+      use,
+      data.templateUrl,
+      '',
+      note,
+      footer,
+    ].join('\n'),
+    html: layout(
+      title,
+      `<table style="border-collapse:collapse;font-size:14px;line-height:1.5;margin:0 0 16px">${rows
+        .map(([label, value]) => row(label, value))
+        .join(
+          '',
+        )}</table>${button(data.receiptUrl, 'Xem biên nhận')}${paragraph(use)}${button(data.templateUrl, 'Tạo trang từ mẫu')}${smallPrint(`${note} ${footer}`)}`,
+    ),
+  };
+}
+
+/** A member asks Chủ sở hữu to buy an item (ADR-036, MP3): who, what, the price, where to buy. */
+function marketplaceSuggestion(data: MarketplaceSuggestionData): RenderedEmail {
+  const title = `${data.memberName} đề xuất mua mẫu “${data.itemName}”`;
+  const body = `${data.memberName} muốn dùng mẫu “${data.itemName}” trên Marketplace cho ${data.workspaceName}. Giá ${data.price} (đã gồm VAT), mua một lần và dùng được cho mọi site trong workspace.`;
+  const action =
+    'Chỉ Chủ sở hữu mua được mẫu trả phí. Mở mẫu để xem trước và mua nếu bạn đồng ý; nếu không, bạn không cần làm gì.';
+  const footer = ownerFooter(data.workspaceName);
+  return {
+    subject: title,
+    text: [body, '', action, data.itemUrl, '', footer].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(body)}${paragraph(action)}${button(data.itemUrl, 'Xem mẫu')}${smallPrint(footer)}`,
+    ),
+  };
+}
+
 /**
  * The subject and both parts of an email, as SMTP sends it (ADR-018). plp-mailer renders the same
  * data with its own copy of these texts (ADR-029).
@@ -464,5 +520,9 @@ export function renderEmail(email: Email): RenderedEmail {
       return billingReadOnly(email.data);
     case 'billing-receipt':
       return billingReceipt(email.data);
+    case 'marketplace-receipt':
+      return marketplaceReceipt(email.data);
+    case 'marketplace-suggestion':
+      return marketplaceSuggestion(email.data);
   }
 }

@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { endpoints, marketplaceListResponseSchema } from '@plp/contracts';
 import { expectAccessible, expectNoSidewaysScroll, SCAN_VIEWPORTS } from '../support/axe.js';
 import { joinAs } from '../support/members.js';
-import { setUpSite } from '../support/setup.js';
+import { call, setUpSite } from '../support/setup.js';
 
 /*
  * MP1 (ADR-036): browsing the marketplace, boards 30 and 31. Nothing can be received or bought
@@ -73,10 +74,22 @@ test.describe('MP1 · Marketplace', () => {
     await industries.getByRole('button', { name: 'Tất cả' }).click();
     await expect(cards).toHaveCount(4);
 
-    // Every item shares one date and one rank in MP1, so both sorts keep the catalog's order.
+    // "Được dùng nhiều" ranks by the licences of every workspace (ADR-036), which the other specs
+    // of the run grant in the same database: the order is the one the API's ranks imply, equal
+    // ranks in the catalog's order. Every item shares one date, so "recent" keeps that order.
+    const { items } = await call(
+      page.request,
+      'GET',
+      endpoints.listMarketplace.path(site.workspaceId),
+      marketplaceListResponseSchema,
+    );
+    expect(items.map((item) => item.name)).toEqual(NAMES);
+    const popular = items
+      .toSorted((a, b) => a.popularRank - b.popularRank)
+      .map((item) => item.name);
     const sort = page.getByRole('combobox', { name: 'Sắp xếp' });
     await sort.selectOption('popular');
-    await expect(cards.getByRole('heading', { level: 2 })).toHaveText(NAMES);
+    await expect(cards.getByRole('heading', { level: 2 })).toHaveText(popular);
     await sort.selectOption('recent');
     await expect(cards.getByRole('heading', { level: 2 })).toHaveText(NAMES);
 
@@ -116,7 +129,8 @@ test.describe('MP1 · Marketplace', () => {
     const priceBox = page.getByRole('complementary', { name: 'Giá' });
     await expect(priceBox).toContainText('399.000đ');
     await expect(priceBox).toContainText('Một lần · Đã gồm VAT');
-    await expect(priceBox.getByRole('button')).toHaveCount(0);
+    // The owner of the new workspace can buy (MP3); the rest of the box has no link.
+    await expect(priceBox.getByRole('button')).toHaveText(['Mua mẫu']);
     await expect(priceBox.getByRole('link')).toHaveCount(0);
 
     // The terms open in a dialog; closing it gives focus back to its button.

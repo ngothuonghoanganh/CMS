@@ -21,18 +21,15 @@ import {
   type InvoiceCounterRecord,
   type InvoiceRecord,
   type InvoiceTransferRecord,
+  type MarketplaceInvoiceRecord,
+  type PlanInvoiceRecord,
 } from './invoice.schema.js';
 
 /** Invoices of a workspace whose charge's outcome is unknown, read at once at most. */
 const UNDECIDED_MAX = 10;
 
-/**
- * A new invoice: everything but its number and the dates the repository sets. It is `open`, or
- * `pending` from the start when it waits for a transfer (`awaitingTransfer`, T3), whose details
- * the gateway gives once its number is known (`startTransfer`).
- */
-export type NewInvoice = Omit<
-  InvoiceRecord,
+/** What the repository sets on a new invoice itself. */
+type SetOnCreate =
   | '_id'
   | 'number'
   | 'status'
@@ -41,8 +38,21 @@ export type NewInvoice = Omit<
   | 'voidedAt'
   | 'createdAt'
   | 'updatedAt'
-  | 'transfer'
-> & { awaitingTransfer?: boolean };
+  | 'transfer';
+
+/**
+ * A new invoice of the plan: everything but its number and the dates the repository sets. It is
+ * `open`, or `pending` from the start when it waits for a transfer (`awaitingTransfer`, T3), whose
+ * details the gateway gives once its number is known (`startTransfer`).
+ */
+export type NewPlanInvoice = Omit<PlanInvoiceRecord, SetOnCreate> & {
+  awaitingTransfer?: boolean;
+};
+
+/** A new invoice of a marketplace item (ADR-036): `open`, paid by card only. */
+export type NewMarketplaceInvoice = Omit<MarketplaceInvoiceRecord, SetOnCreate>;
+
+export type NewInvoice = NewPlanInvoice | NewMarketplaceInvoice;
 
 /** What a charge changes besides the attempt it adds. */
 export interface InvoiceChange {
@@ -88,12 +98,9 @@ export class InvoicesRepository {
       )
       .lean<InvoiceCounterRecord>()
       .exec();
-    const { awaitingTransfer, ...fields } = invoice;
-    const record: InvoiceRecord = {
+    const set = {
       _id: newObjectId(),
       number: formatInvoiceNumber(year, counter.seq),
-      ...fields,
-      status: awaitingTransfer === true ? 'pending' : 'open',
       transfer: null,
       attempts: [],
       paidAt: null,
@@ -101,8 +108,52 @@ export class InvoicesRepository {
       createdAt: at,
       updatedAt: at,
     };
+    let record: InvoiceRecord;
+    if (invoice.kind === 'marketplace') {
+      record = { ...invoice, ...set, status: 'open' };
+    } else {
+      const { awaitingTransfer, ...fields } = invoice;
+      record = { ...fields, ...set, status: awaitingTransfer === true ? 'pending' : 'open' };
+    }
     await this.invoices.create([record], { session: tx });
     return record;
+  }
+
+  /**
+   * The purchase a request's `Idempotency-Key` made in the workspace (ADR-036); null when it made
+   * none. Unique per workspace (`INVOICES_REQUEST_KEY_INDEX`).
+   */
+  findByRequestKey(
+    ref: WorkspaceRef,
+    requestKey: string,
+    tx?: Tx,
+  ): Promise<MarketplaceInvoiceRecord | null> {
+    return this.invoices
+      .findOne({ workspaceId: ref.workspaceId, kind: 'marketplace', requestKey })
+      .session(tx ?? null)
+      .lean<MarketplaceInvoiceRecord>()
+      .exec();
+  }
+
+  /**
+   * Voids the refused purchases of an item (ADR-036), which a new purchase of it replaces: only the
+   * new one can be paid from then on. An undecided one (`open`) blocks the new purchase instead,
+   * since its charge may have gone through. How many it voided.
+   */
+  async voidRefusedPurchases(ref: WorkspaceRef, itemId: string, at: Date, tx: Tx): Promise<number> {
+    const result = await this.invoices
+      .updateMany(
+        {
+          workspaceId: ref.workspaceId,
+          kind: 'marketplace',
+          'item.itemId': itemId,
+          status: changeableFrom(['failed']),
+        },
+        { $set: { status: 'void', voidedAt: at, updatedAt: at } },
+        { session: tx },
+      )
+      .exec();
+    return result.modifiedCount;
   }
 
   findOfWorkspace(ref: WorkspaceRef, invoiceId: ObjectId, tx?: Tx): Promise<InvoiceRecord | null> {
@@ -146,6 +197,16 @@ export class InvoicesRepository {
       .session(tx ?? null)
       .exec();
     return found !== null;
+  }
+
+  /** The newest card charge of the workspace the gateway is still deciding; null for none. */
+  findPending(ref: WorkspaceRef, tx?: Tx): Promise<InvoiceRecord | null> {
+    return this.invoices
+      .findOne({ workspaceId: ref.workspaceId, status: 'pending', method: 'card' })
+      .sort(NEWEST_FIRST)
+      .session(tx ?? null)
+      .lean<InvoiceRecord>()
+      .exec();
   }
 
   /** Every invoice of the workspace whose charge may have gone through (`open`), newest first. */
@@ -240,11 +301,16 @@ export class InvoicesRepository {
   /**
    * The newest invoice of the workspace whose charge may have gone through without the API knowing
    * (ADR-035): `open` after an unknown outcome, or after a charge the API never recorded. Only
-   * "Thanh toán lại" on it, with the same key at the gateway, decides it.
+   * "Thanh toán lại" on it, with the same key at the gateway, decides it. `except` leaves out the
+   * invoice about to be charged itself.
    */
-  findUndecided(ref: WorkspaceRef, tx: Tx): Promise<InvoiceRecord | null> {
+  findUndecided(ref: WorkspaceRef, tx: Tx, except?: ObjectId): Promise<InvoiceRecord | null> {
     return this.invoices
-      .findOne({ workspaceId: ref.workspaceId, status: 'open' })
+      .findOne({
+        workspaceId: ref.workspaceId,
+        status: 'open',
+        ...(except === undefined ? {} : { _id: { $ne: except } }),
+      })
       .sort(NEWEST_FIRST)
       .session(tx)
       .lean<InvoiceRecord>()
