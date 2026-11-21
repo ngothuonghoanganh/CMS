@@ -898,6 +898,13 @@ test.describe('Design capture', () => {
       const group = page.getByRole('group', { name: 'Gia hạn bằng' });
       await expect(group).toBeVisible();
       await capture(page, 'Billing-renewal-method');
+      // On a phone the two choices stack, each as wide as the card.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await expect(group).toBeVisible();
+      await capture(page, 'Billing-renewal-method-phone');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.reload();
       await group.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ }).click();
       await expect(page.getByRole('status').filter({ hasText: 'Hóa đơn kỳ sau' })).toBeVisible();
       await closeToasts(page, 'Gia hạn bằng chuyển khoản ngân hàng');
@@ -916,10 +923,19 @@ test.describe('Design capture', () => {
       // The period ended with it unpaid: the workspace waits, in the grace.
       await setBillingClock(request, new Date(periodEnd.getTime() + MINUTE_MS));
       await page.goto(paymentsPath(workspaceId));
-      await expect(
-        page.getByRole('status').filter({ hasText: /^Chờ chuyển khoản hóa đơn HD-/ }),
-      ).toBeVisible();
+      const awaiting = page
+        .getByRole('status')
+        .filter({ hasText: /^Chờ chuyển khoản hóa đơn HD-/ });
+      await expect(awaiting).toBeVisible();
       await capture(page, 'Billing-awaiting-transfer');
+      // On a phone the banner's two actions wrap under its text, above the bank details.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await expect(awaiting).toBeVisible();
+      await expect(
+        page.getByRole('region', { name: /^Chuyển khoản hóa đơn gia hạn HD-/ }).getByRole('img'),
+      ).toBeVisible();
+      await capture(page, 'Billing-awaiting-transfer-phone');
     } finally {
       await setBillingClock(request, null);
     }

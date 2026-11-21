@@ -203,8 +203,9 @@ test.describe('T4 · renewal by bank transfer', () => {
     const readOnly = await billingSummaryOf(page.request, workspaceId);
     expect(readOnly.access).toBe('read_only');
     await page.goto(paymentsPath(workspaceId));
+    // Read-only, the banner is an alert, as on board 28.
     await expect(
-      page.getByRole('status').filter({ hasText: /^Chờ chuyển khoản hóa đơn HD-/ }),
+      page.getByRole('alert').filter({ hasText: /^Chờ chuyển khoản hóa đơn HD-/ }),
     ).toContainText('chế độ chỉ đọc');
 
     // The transfer arrives late: the plan is active again.
@@ -274,11 +275,17 @@ test.describe('T4 · renewal by bank transfer', () => {
     const number = INVOICE_NUMBER.exec(issued.Text)?.[0] ?? '';
     expect(number).not.toBe('');
 
-    const group = await chooseRenewal(page, workspaceId, CARD);
-    await expect(group.getByRole('radio', { name: CARD })).toBeChecked();
+    // By keyboard: the radio keeps the focus once the choice is saved, so the arrows go on.
+    await page.goto(paymentsPath(workspaceId));
+    const group = page.getByRole('group', { name: 'Gia hạn bằng' });
+    const byCard = group.getByRole('radio', { name: CARD });
+    await group.getByRole('radio', { name: TRANSFER }).focus();
+    await page.keyboard.press('ArrowLeft');
     await expect(
       page.getByText('Gia hạn bằng thẻ thanh toán tự động', { exact: true }),
     ).toBeVisible();
+    await expect(byCard).toBeChecked();
+    await expect(byCard).toBeFocused();
     await expect(page.getByText('hệ thống trừ thẻ đã lưu cho hóa đơn này').first()).toBeVisible();
 
     await setBillingClock(request, new Date(periodEnd.getTime() + MINUTE_MS));
