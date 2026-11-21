@@ -6,30 +6,35 @@ import {
   holdersOf,
   type MarketplaceItemDetail,
   type Membership,
+  type MethodSetupResult,
 } from '@plp/contracts';
 import { Button, ButtonLink, Callout, Card, CheckIcon } from '@plp/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
-import { marketplaceOwnedHref, templateHref } from '../shell/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { marketplaceItemHref, marketplaceOwnedHref, templateHref } from '../shell/navigation';
 import { templateQueryKeys } from '../templates/queries';
 import { ClaimDialog } from './ClaimDialog';
 import { priceText } from './marketplace-filters';
+import { PurchaseDialog } from './PurchaseDialog';
+import { SuggestPurchase } from './SuggestPurchase';
 import styles from './MarketplaceItemScreen.module.css';
 
 export interface ItemPriceBoxProps {
   workspace: Membership['workspace'];
   role: Access;
   item: MarketplaceItemDetail;
+  /** `?paymentMethod=` of the address the gateway led back to from "Đổi" or "Thêm thẻ". */
+  returned?: MethodSetupResult | null;
 }
 
 /**
  * The price box of board 31 by what the viewer can do (ADR-036): "Nhận mẫu" for a free item and
- * who may claim, the licence the workspace holds, or, for a paid item not owned, a neutral note
- * until buying comes (MP3).
+ * who may claim, the licence the workspace holds, or, for a paid item not owned, "Mua mẫu" for
+ * who pays (Chủ sở hữu) and "Đề xuất {owner} mua" for everyone else.
  */
-export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
+export function ItemPriceBox({ workspace, role, item, returned = null }: ItemPriceBoxProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [claimOpen, setClaimOpen] = useState(false);
@@ -39,6 +44,21 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
   // Claimed, "Nhận mẫu" gives way to "Tạo trang từ mẫu": focus goes there, not to the page.
   const createLink = useRef<HTMLAnchorElement>(null);
   const { licence } = item;
+  // Back from the gateway's card page, the owner is in the middle of buying: the dialog is open.
+  const buyer = can(role, 'billing.manage') && item.price > 0;
+  const [buyOpen, setBuyOpen] = useState(returned !== null && buyer && licence === null);
+  const [buyKey, setBuyKey] = useState(0);
+  const [bought, setBought] = useState(false);
+  useEffect(() => {
+    // The address the gateway led back to is not kept: a reload does not say it twice.
+    if (returned !== null) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        marketplaceItemHref(workspace.id, item.id),
+      );
+    }
+  }, [returned, workspace.id, item.id]);
   const hasNewer = licence !== null && item.version > licence.version;
 
   return (
@@ -56,6 +76,11 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
         {claimed ? (
           <Callout tone="success">
             Đã nhận “{item.name}”. Mọi site trong workspace dùng được mẫu này.
+          </Callout>
+        ) : null}
+        {bought ? (
+          <Callout tone="success">
+            Đã mua “{item.name}”. Mọi site trong workspace dùng được mẫu này.
           </Callout>
         ) : null}
         {changed === null ? null : <Callout tone="warning">{changed}</Callout>}
@@ -138,12 +163,46 @@ export function ItemPriceBox({ workspace, role, item }: ItemPriceBoxProps) {
             Chỉ {holdersOf('templates.manage')} nhận được mẫu miễn phí cho workspace.
           </p>
         )
+      ) : buyer ? (
+        <Button
+          fullWidth
+          onClick={() => {
+            setChanged(null);
+            setBuyKey((key) => key + 1);
+            setBuyOpen(true);
+          }}
+        >
+          Mua mẫu
+        </Button>
       ) : (
-        // Buying comes with the payment (MP3): until then there is no button that does nothing.
-        <p className={styles.notice}>
-          Bạn xem được toàn bộ mẫu và điều khoản ở đây. Mua mẫu chưa mở trong bản này.
-        </p>
+        <SuggestPurchase
+          workspaceId={workspace.id}
+          item={item}
+          onChanged={() => {
+            router.refresh();
+          }}
+        />
       )}
+      {/* Stays while it says what happened, after the licence took "Mua mẫu"'s place. */}
+      {buyer && (licence === null || bought || buyOpen) ? (
+        <PurchaseDialog
+          key={buyKey}
+          workspaceId={workspace.id}
+          item={item}
+          open={buyOpen}
+          onOpenChange={setBuyOpen}
+          returned={returned}
+          fallbackFocusRef={createLink}
+          onPurchased={() => {
+            setBought(true);
+            router.refresh();
+          }}
+          onChanged={(message) => {
+            setChanged(message);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

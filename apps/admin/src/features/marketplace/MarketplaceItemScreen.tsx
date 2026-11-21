@@ -5,6 +5,7 @@ import {
   DEFAULT_THEME_PRESET,
   type MarketplaceItemDetail,
   type Membership,
+  type MethodSetupResult,
   templateIndustryLabels,
 } from '@plp/contracts';
 import {
@@ -35,15 +36,22 @@ export interface MarketplaceItemScreenProps {
   workspace: Membership['workspace'];
   role: Access;
   item: MarketplaceItemDetail;
+  /** `?paymentMethod=` of the address the gateway led back to. */
+  returned?: MethodSetupResult | null;
 }
 
 /**
  * One marketplace item (board 31, ADR-036): its page in the default theme on a computer or a
  * phone, what it includes, the licence and the terms behind it, what an update and support cover,
- * and the price box, which claims a free item or shows the licence the workspace holds ("Mua mẫu"
- * comes with the payment, MP3).
+ * and the price box, which claims a free item, sells a paid one to Chủ sở hữu (members suggest it) or shows the
+ * licence the workspace holds.
  */
-export function MarketplaceItemScreen({ workspace, role, item }: MarketplaceItemScreenProps) {
+export function MarketplaceItemScreen({
+  workspace,
+  role,
+  item,
+  returned = null,
+}: MarketplaceItemScreenProps) {
   const [device, setDevice] = useState<PreviewDevice>('desktop');
   const [termsOpen, setTermsOpen] = useState(false);
 
@@ -135,7 +143,7 @@ export function MarketplaceItemScreen({ workspace, role, item }: MarketplaceItem
         </div>
 
         <aside aria-label="Giá" className={styles.aside}>
-          <ItemPriceBox workspace={workspace} role={role} item={item} />
+          <ItemPriceBox workspace={workspace} role={role} item={item} returned={returned} />
         </aside>
       </div>
 
