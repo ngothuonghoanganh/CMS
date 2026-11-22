@@ -96,6 +96,39 @@ describe('PlanBanner (ADR-035)', () => {
       expect(banner).not.toHaveTextContent('Thanh toán lỗi');
     });
 
+    it('says "Chờ chuyển khoản" for a renewal by bank transfer, then how it reopens (T4)', () => {
+      const { unmount } = renderBanner(
+        'card',
+        true,
+        workspacePlanFixture({
+          state: 'pending_payment',
+          graceDaysLeft: 4,
+          awaitingTransfer: true,
+        }),
+      );
+      const banner = screen.getByRole('status');
+      expect(banner).toHaveTextContent('Chờ chuyển khoản — còn 4 ngày trước khi chỉ đọc');
+      expect(banner).not.toHaveTextContent('Thanh toán lỗi');
+      unmount();
+
+      renderBanner(
+        'card',
+        true,
+        workspacePlanFixture({
+          state: 'pending_payment',
+          access: 'read_only',
+          awaitingTransfer: true,
+        }),
+      );
+      const readOnly = screen.getByRole('status');
+      expect(readOnly).toHaveTextContent(
+        'Workspace mở lại khi nhận được chuyển khoản theo hóa đơn gia hạn.',
+      );
+      // No payment waits for a confirmation: the transfer never came.
+      expect(readOnly).toHaveTextContent('Chưa nhận được chuyển khoản của hóa đơn gia hạn');
+      expect(readOnly).not.toHaveTextContent('Thanh toán chưa được xác nhận');
+    });
+
     it('gives the days to every role, and says who acts to one that cannot', () => {
       renderBanner('card', false, pastDue);
 

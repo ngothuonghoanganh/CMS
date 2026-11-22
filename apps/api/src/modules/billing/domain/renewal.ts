@@ -7,13 +7,14 @@ import {
   type RenewalBlocker,
   type ScheduledChange,
   type SubscriptionFacts,
+  trialEndAwaitsTransfer,
 } from '@plp/contracts';
-import { periodEndOf } from './billing-period.js';
+import { DAY_MS, periodEndOf } from './billing-period.js';
 
-/** The catalog's numbers of a subscription's life (ADR-035, T3). */
+/** The catalog's numbers of a subscription's life (ADR-035, T3 and T4). */
 export type BillingPolicy = Pick<
   PlanCatalog,
-  'graceDays' | 'expiringSoonDays' | 'trialReminderDays' | 'retryDays'
+  'graceDays' | 'expiringSoonDays' | 'trialReminderDays' | 'retryDays' | 'transferLeadDays'
 >;
 
 /** What the end of a trial or a period charges: the next period, on the plan it will have then. */
@@ -88,6 +89,54 @@ export function scheduledChangeOf(
 ): ScheduledChange | null {
   const stopped = facts.cancelAtPeriodEnd && at.getTime() >= currentEndOf(facts).getTime();
   return stopped ? null : facts.scheduledChange;
+}
+
+/**
+ * When the next period's invoice is made for a renewal by bank transfer (T4): `transferLeadDays`
+ * before the trial or period ends.
+ */
+export function transferInvoiceAtOf(
+  facts: Pick<SubscriptionFacts, 'trialEndsAt' | 'periodEnd'>,
+  policy: Pick<BillingPolicy, 'transferLeadDays'>,
+): Date {
+  return new Date(currentEndOf(facts).getTime() - policy.transferLeadDays * DAY_MS);
+}
+
+/**
+ * Whether the next period's invoice for a bank transfer is to be made at `at` (T4): the plan renews
+ * by transfer, nothing is due or paid for that period yet, and its time came. One that could not be
+ * made in time is made late: a paid period's, and a trial's whose transfer was chosen before the
+ * trial ended (`trialEndAwaitsTransfer`). Choosing the transfer once the trial is over gives no
+ * invoice and no grace (as `cardAfterTrial`).
+ */
+export function transferInvoiceDue(
+  facts: Pick<
+    SubscriptionFacts,
+    | 'trialEndsAt'
+    | 'periodEnd'
+    | 'cancelAtPeriodEnd'
+    | 'failedSince'
+    | 'openInvoiceId'
+    | 'renewalMethod'
+    | 'renewalMethodChosenAt'
+    | 'renewalInvoiceId'
+    | 'prepaid'
+  >,
+  policy: Pick<BillingPolicy, 'transferLeadDays'>,
+  at: Date,
+): boolean {
+  const time = at.getTime();
+  return (
+    facts.renewalMethod === 'transfer' &&
+    !facts.cancelAtPeriodEnd &&
+    !paymentUnderWay(facts) &&
+    facts.renewalInvoiceId === null &&
+    facts.prepaid === null &&
+    time >= transferInvoiceAtOf(facts, policy).getTime() &&
+    (facts.trialEndsAt === null ||
+      time < facts.trialEndsAt.getTime() ||
+      trialEndAwaitsTransfer(facts))
+  );
 }
 
 /**

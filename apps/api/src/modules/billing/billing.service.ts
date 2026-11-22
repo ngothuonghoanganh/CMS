@@ -10,28 +10,39 @@ import {
   type PlanChangeQuote,
   type PlanChangeQuoteQuery,
   type PlanLimitKey,
+  type SetRenewalMethodRequest,
+  type SubscriptionFacts,
+  trialEndAwaitsTransfer,
   trialEndCharges,
   type WorkspacePlan,
 } from '@plp/contracts';
 import { validationFailed } from '../../shared/errors.js';
 import { toObjectId } from '../../shared/persistence/object-id.js';
-import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { TransactionRunner, type Tx } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { BillingLogRepository } from './billing-log.repository.js';
 import { toBillingSummary, toPlanChangeQuote, toWorkspacePlan } from './billing-dto.js';
 import { BillingSchedule } from './billing-schedule.service.js';
-import { invoicePayable } from './domain/invoice-state.js';
+import { awaitsRenewalTransfer, chargeUndecided, invoicePayable } from './domain/invoice-state.js';
 import { type PlanChange, planChangeOf } from './domain/plan-change.js';
 import { currentEndOf, paymentUnderWay, scheduledChangeOf } from './domain/renewal.js';
 import { type Entitlements, EntitlementsService } from './entitlements.service.js';
 import { InvoiceCharges } from './invoice-charges.service.js';
+import type { InvoiceRecord, PlanInvoiceRecord } from './invoice.schema.js';
 import { InvoicesRepository } from './invoices.repository.js';
-import { quoteChanged, subscriptionChanged } from './payment-problems.js';
+import {
+  paymentInProgress,
+  paymentPending,
+  paymentUndecided,
+  quoteChanged,
+  subscriptionChanged,
+} from './payment-problems.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
 import { planChangeUnavailable } from './plan-problems.js';
+import { RenewalTransfers } from './renewal-transfers.service.js';
 import { SubscriptionsRepository } from './subscriptions.repository.js';
 
 /** A plan change applied (200), or charged and waiting for the gateway to decide (202). */
@@ -42,6 +53,46 @@ export interface PlanChangeOutcome {
 
 /** Limits counted at any moment, which a lower plan may leave the workspace over. */
 const STANDING_LIMITS: readonly PlanLimitKey[] = ['sites', 'members', 'customDomains'];
+
+/** The invoices the banners need: the one an ended period waits for, and the next period's. */
+interface BannerInvoices {
+  due: PlanInvoiceRecord | null;
+  renewal: PlanInvoiceRecord | null;
+}
+
+/**
+ * The ids of the invoice the period waits for and of the next period's invoice made before the end
+ * (T4). Once the end passed, the latter is what the period waits for, also before the billing job
+ * made it `openInvoiceId`.
+ */
+function bannerInvoiceIds(
+  facts: SubscriptionFacts,
+  at: Date,
+): { due: string | null; renewal: string | null } {
+  const ended = at.getTime() >= currentEndOf(facts).getTime();
+  const early = facts.renewalInvoiceId ?? facts.prepaid?.invoiceId ?? null;
+  if (ended) {
+    return {
+      due: facts.openInvoiceId ?? (facts.prepaid === null ? facts.renewalInvoiceId : null),
+      renewal: null,
+    };
+  }
+  return { due: facts.openInvoiceId, renewal: early };
+}
+
+/**
+ * The ended period waits for its renewal invoice made for a bank transfer (T4), with nothing
+ * failed: "Chờ chuyển khoản". Before the job made it `openInvoiceId`, only while the method is the
+ * transfer: a card charges it then.
+ */
+function awaitingTransferOf(facts: SubscriptionFacts, due: InvoiceRecord | null): boolean {
+  if (due === null || due.kind === 'marketplace' || facts.failedSince !== null) {
+    return false;
+  }
+  const waitedFor =
+    facts.openInvoiceId === due._id.toHexString() || facts.renewalMethod === 'transfer';
+  return waitedFor && awaitsRenewalTransfer(due);
+}
 
 /**
  * Board 28 (ADR-035): the plans, the workspace's plan and usage, and changing the plan. During the
@@ -62,6 +113,7 @@ export class BillingService {
     private readonly hooks: PlanChangeHooks,
     private readonly charges: InvoiceCharges,
     private readonly schedule: BillingSchedule,
+    private readonly renewals: RenewalTransfers,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -77,10 +129,11 @@ export class BillingService {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'pages.view');
     const entitlements = await this.entitlements.of(scope);
-    const dueId = entitlements.facts.openInvoiceId;
+    const { facts, at } = entitlements;
+    const dueId = bannerInvoiceIds(facts, at).due;
     const due =
       dueId === null ? null : await this.invoices.findOfWorkspace(scope, toObjectId(dueId));
-    return toWorkspacePlan(entitlements, due);
+    return toWorkspacePlan(entitlements, due, awaitingTransferOf(facts, due));
   }
 
   async summary(user: AuthenticatedUser, workspaceId: string): Promise<BillingSummary> {
@@ -126,9 +179,11 @@ export class BillingService {
         throw planChangeUnavailable(change.reason);
       case 'trial_change':
         await this.changeTrialPlan(scope, current, target, request);
+        await this.renewals.complete(scope);
         return { summary: await this.summaryOf(scope), pending: false };
       case 'scheduled':
         await this.scheduleChange(scope, current, target, request);
+        await this.renewals.complete(scope);
         return { summary: await this.summaryOf(scope), pending: false };
       case 'start_paid':
       case 'upgrade': {
@@ -181,6 +236,9 @@ export class BillingService {
       if (at.getTime() >= facts.periodEnd.getTime() || paymentUnderWay(facts)) {
         throw planChangeUnavailable('unpaid');
       }
+      if (facts.prepaid !== null) {
+        throw planChangeUnavailable('next_period_paid');
+      }
       await this.transactions.run(async (tx) => {
         await this.writeOrConflict(
           this.subscriptions.setScheduledChange(
@@ -200,7 +258,9 @@ export class BillingService {
           },
           tx,
         );
+        await this.reissueRenewal(scope, at, tx);
       });
+      await this.renewals.complete(scope);
     }
     return this.summaryOf(scope);
   }
@@ -217,11 +277,17 @@ export class BillingService {
     if (!facts.cancelAtPeriodEnd) {
       if (at.getTime() >= currentEndOf(facts).getTime()) {
         const expired =
-          facts.trialEndsAt !== null && !paymentUnderWay(facts) && !trialEndCharges(facts);
+          facts.trialEndsAt !== null &&
+          !paymentUnderWay(facts) &&
+          !trialEndCharges(facts) &&
+          !trialEndAwaitsTransfer(facts);
         throw planChangeUnavailable(expired ? 'payment_required' : 'unpaid');
       }
       if (facts.trialEndsAt === null && paymentUnderWay(facts)) {
         throw planChangeUnavailable('unpaid');
+      }
+      if (facts.prepaid !== null) {
+        throw planChangeUnavailable('next_period_paid');
       }
       await this.setCancel(scope, facts.version, true, at);
     }
@@ -241,8 +307,79 @@ export class BillingService {
         throw planChangeUnavailable('payment_required');
       }
       await this.setCancel(scope, facts.version, false, at);
+      await this.renewals.complete(scope);
     }
     return this.summaryOf(scope);
+  }
+
+  /**
+   * "Phương thức thanh toán" (T4): how the next period is paid. The card needs one that can pay
+   * now (422); a bank transfer whose invoice time passed gets its invoice at once. An invoice made
+   * for the transfer stays when the card is chosen back: the card pays it at the end if the
+   * transfer has not.
+   */
+  async setRenewalMethod(
+    user: AuthenticatedUser,
+    workspaceId: string,
+    request: SetRenewalMethodRequest,
+  ): Promise<BillingSummary> {
+    const scope = await this.access.scopeForWorkspace(user, workspaceId);
+    this.access.require(scope, 'billing.manage');
+    this.charges.requireEnabled();
+    const { facts, at } = await this.entitlements.of(scope);
+    if (request.method === 'card') {
+      this.charges.requireMethod(facts, at);
+    }
+    if (facts.renewalMethod !== request.method) {
+      await this.transactions.run(async (tx) => {
+        await this.writeOrConflict(
+          this.subscriptions.setRenewalMethod(
+            scope,
+            { method: request.method, fromVersion: facts.version, at },
+            tx,
+          ),
+        );
+        await this.log.record(
+          scope,
+          {
+            at,
+            actorId: scope.userId,
+            action: 'renewal_method_changed',
+            renewalMethod: request.method,
+          },
+          tx,
+        );
+        await this.renewals.issueIn(scope, { at, actorId: scope.userId }, tx);
+        await this.schedule.reschedule(scope, at, tx);
+      });
+      await this.renewals.complete(scope);
+    }
+    return this.summaryOf(scope);
+  }
+
+  /**
+   * In `tx`, after a change of what the next period is or costs, or whether there is one (T4): the
+   * unpaid transfer invoice made for it is voided and replaced. 409 `payment_in_progress` while the
+   * owner's card charge of that invoice may go through: voiding it could lose a payment. That
+   * includes a charge that holds the subscription (`lockedUntil`) and has not reached the invoice
+   * yet: the change writes the subscription too, so the two never both commit.
+   */
+  private async reissueRenewal(scope: WorkspaceScope, at: Date, tx: Tx): Promise<void> {
+    const outcome = await this.renewals.reissueIn(
+      scope,
+      { at, actorId: scope.userId, refuseWhileHeld: true },
+      tx,
+    );
+    switch (outcome.kind) {
+      case 'undecided':
+        throw outcome.invoice.status === 'open'
+          ? paymentUndecided(outcome.invoice)
+          : paymentPending(outcome.invoice);
+      case 'held':
+        throw paymentInProgress();
+      case 'done':
+        return;
+    }
   }
 
   private async setCancel(
@@ -261,6 +398,7 @@ export class BillingService {
         tx,
       );
       await this.schedule.reschedule(scope, at, tx);
+      await this.reissueRenewal(scope, at, tx);
     });
   }
 
@@ -301,13 +439,46 @@ export class BillingService {
       target.id !== current.plan.id
         ? await this.impactsOf(scope, current.plan, target)
         : null;
+    // Paying now ends the trial its transfer invoice was made for.
+    const voids =
+      change.mode === 'scheduled' ||
+      change.mode === 'trial_change' ||
+      change.mode === 'upgrade' ||
+      change.mode === 'start_paid'
+        ? await this.renewalInvoiceVoided(scope, current.facts, current.at)
+        : null;
     return toPlanChangeQuote(
       change,
       { planId: target.id, cycle: choice.cycle },
       current.facts.paymentMethod,
       current.at,
       impacts,
+      voids,
     );
+  }
+
+  /**
+   * The unpaid transfer invoice of the next period that a change confirmed now voids (T4); null
+   * when there is none, or once the end passed (the period waits for it then).
+   */
+  private async renewalInvoiceVoided(
+    scope: WorkspaceScope,
+    facts: SubscriptionFacts,
+    at: Date,
+  ): Promise<{ invoiceId: string; invoiceNumber: string } | null> {
+    const id = bannerInvoiceIds(facts, at).renewal;
+    if (id === null || facts.prepaid !== null) {
+      return null;
+    }
+    const invoice = await this.invoices.findOfWorkspace(scope, toObjectId(id));
+    if (
+      invoice === null ||
+      chargeUndecided(invoice) ||
+      !(invoice.status === 'pending' || invoice.status === 'failed')
+    ) {
+      return null;
+    }
+    return { invoiceId: invoice._id.toHexString(), invoiceNumber: invoice.number };
   }
 
   /**
@@ -363,6 +534,7 @@ export class BillingService {
         tx,
       );
       await this.hooks.run(scope, { from: current.plan, to: target, at, by: scope.userId }, tx);
+      await this.reissueRenewal(scope, at, tx);
     });
   }
 
@@ -403,6 +575,7 @@ export class BillingService {
         },
         tx,
       );
+      await this.reissueRenewal(scope, at, tx);
     });
   }
 
@@ -420,21 +593,37 @@ export class BillingService {
       this.entitlements.usageOf(scope, month),
     ]);
     const { facts, at } = entitlements;
-    const due =
-      facts.openInvoiceId === null
-        ? null
-        : await this.invoices.findOfWorkspace(scope, toObjectId(facts.openInvoiceId));
-    if (due?.kind === 'marketplace') {
-      throw new Error(
-        `Workspace ${scope.workspaceId.toHexString()} waits for a marketplace invoice; only a plan's invoice is waited for (ADR-036)`,
-      );
-    }
+    const { due, renewal } = await this.bannerInvoices(scope, facts, at);
     return toBillingSummary(entitlements, {
       usage,
       month,
       policy: this.catalog,
       planOf: (planId) => planOf(this.catalog, planId),
       due: due === null ? null : { invoice: due, payable: invoicePayable(due, facts, at) },
+      renewalInvoice:
+        renewal === null ? null : { invoice: renewal, payable: invoicePayable(renewal, facts, at) },
+      awaitingTransfer: awaitingTransferOf(facts, due),
     });
+  }
+
+  /** The plan's invoices the banners name (`bannerInvoiceIds`), read together. */
+  private async bannerInvoices(
+    scope: WorkspaceScope,
+    facts: SubscriptionFacts,
+    at: Date,
+  ): Promise<BannerInvoices> {
+    const ids = bannerInvoiceIds(facts, at);
+    const find = (id: string | null) =>
+      id === null ? Promise.resolve(null) : this.invoices.findOfWorkspace(scope, toObjectId(id));
+    const [due, renewal] = await Promise.all([find(ids.due), find(ids.renewal)]);
+    const planInvoice = (invoice: InvoiceRecord | null | undefined): PlanInvoiceRecord | null => {
+      if (invoice?.kind === 'marketplace') {
+        throw new Error(
+          `Workspace ${scope.workspaceId.toHexString()} waits for a marketplace invoice; only a plan's invoice is waited for (ADR-036)`,
+        );
+      }
+      return invoice ?? null;
+    };
+    return { due: planInvoice(due), renewal: planInvoice(renewal) };
   }
 }

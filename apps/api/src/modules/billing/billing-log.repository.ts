@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import type { RenewalMethod } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
@@ -20,6 +21,7 @@ export interface BillingLogEntry {
   invoiceId?: ObjectId | null;
   amount?: number | null;
   itemId?: string | null;
+  renewalMethod?: RenewalMethod | null;
 }
 
 /** `billing_log` of the master DB (ADR-035): written in the transaction of the change it records. */
@@ -40,6 +42,7 @@ export class BillingLogRepository {
           invoiceId: entry.invoiceId ?? null,
           amount: entry.amount ?? null,
           itemId: entry.itemId ?? null,
+          renewalMethod: entry.renewalMethod ?? null,
         },
       ],
       { session: tx },

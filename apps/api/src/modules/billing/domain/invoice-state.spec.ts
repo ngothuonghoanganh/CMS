@@ -13,6 +13,7 @@ import {
   marketplaceInvoicePayable,
   payableOf,
   purchaseReplayOf,
+  failedSinceOf,
   nextAttemptNumber,
   purposeOf,
   periodPaidAt,
@@ -363,6 +364,23 @@ describe('the period a payment gives (ADR-035, T2 and T3)', () => {
       start: lateYear,
       end: vn('2029-02-28T11:00:00.000'),
     });
+  });
+
+  it('counts a refusal of a renewal by transfer from the end it renews, any other from the refusal', () => {
+    const end = vn('2026-11-30T10:00:00.000');
+    const byTransfer = { ...renewal, periodStart: end, transferRenewal: true };
+    const afterGrace = vn('2026-12-10T10:00:00.000');
+    // A card tried in place of the transfer, in the grace or once read-only: the grace stays.
+    expect(failedSinceOf(byTransfer, vn('2026-12-03T10:00:00.000'))).toEqual(end);
+    expect(failedSinceOf(byTransfer, afterGrace)).toEqual(end);
+    expect(failedSinceOf({ ...byTransfer, endsTrial: true }, afterGrace)).toEqual(end);
+    // The job's own charge at the end, before it, or any other invoice: the refusal.
+    expect(failedSinceOf(byTransfer, end)).toEqual(end);
+    const early = vn('2026-11-28T10:00:00.000');
+    expect(failedSinceOf(byTransfer, early)).toEqual(early);
+    expect(failedSinceOf({ ...renewal, periodStart: end }, afterGrace)).toEqual(afterGrace);
+    const from = { planId: 'agency', cycle: 'monthly' as const };
+    expect(failedSinceOf({ ...byTransfer, from, endsTrial: true }, afterGrace)).toEqual(afterGrace);
   });
 
   it('starts a plan paid now from the payment, early or late, and never moves an upgrade', () => {

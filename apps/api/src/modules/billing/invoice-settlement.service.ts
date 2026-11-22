@@ -1,10 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ChargeOutcome, InvoiceStatus, PaymentDeclineCode, PlanCatalog } from '@plp/contracts';
-import type { ObjectId } from '../../shared/persistence/object-id.js';
+import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import { BillingLogRepository } from './billing-log.repository.js';
 import { BillingSchedule } from './billing-schedule.service.js';
-import { periodPaidAt, purposeOf, statusAfterCharge } from './domain/invoice-state.js';
+import {
+  failedSinceOf,
+  periodPaidAt,
+  purposeOf,
+  statusAfterCharge,
+} from './domain/invoice-state.js';
 import type {
   InvoiceRecord,
   MarketplaceInvoiceRecord,
@@ -14,6 +19,7 @@ import { type InvoiceChange, InvoicesRepository } from './invoices.repository.js
 import { MarketplacePurchaseHooks } from './marketplace-purchase-hooks.js';
 import { PlanChangeHooks } from './plan-change-hooks.js';
 import { InjectPlanCatalog, planOf } from './plan-catalog.js';
+import { RenewalTransfers } from './renewal-transfers.service.js';
 import { type PaidPeriod, SubscriptionsRepository } from './subscriptions.repository.js';
 
 /** The `billing_log` entry of each kind of payment. */
@@ -62,8 +68,10 @@ export interface RecordedCharge {
  * or the licence of a marketplace item (ADR-036, `MarketplacePurchaseHooks`), which never changes
  * the plan. The period paid for starts when it is paid when it would have ended by then
  * (`periodPaidAt`). A refused charge of the invoice the subscription waits for starts its grace
- * and retries (T3); a marketplace item's never does. The billing job's next time follows. Nothing
- * here leaves the database, so a transaction that runs again does it again safely.
+ * and retries (T3); a marketplace item's never does. The next period's transfer invoice paid
+ * before the current period ends holds that period as paid until then (T4, `prepaid`); a paid
+ * upgrade voids and replaces an unpaid one, a plan paid now voids it. The billing job's next time
+ * follows. Nothing here leaves the database, so a transaction that runs again does it again safely.
  */
 @Injectable()
 export class InvoiceSettlement {
@@ -77,6 +85,7 @@ export class InvoiceSettlement {
     private readonly hooks: PlanChangeHooks,
     private readonly purchases: MarketplacePurchaseHooks,
     private readonly schedule: BillingSchedule,
+    private readonly renewals: RenewalTransfers,
   ) {}
 
   /**
@@ -128,7 +137,11 @@ export class InvoiceSettlement {
       // A renewal follows the period that ended where the invoice's own period was to start.
       applied = await this.applyPaid(after, { at: report.at, follows: invoice.periodStart }, tx);
     } else if (after.status === 'failed') {
-      await this.subscriptions.recordFailure(ref, { invoiceId: after._id, at: report.at }, tx);
+      await this.subscriptions.recordFailure(
+        ref,
+        { invoiceId: after._id, since: failedSinceOf(after, report.at), at: report.at },
+        tx,
+      );
     }
     await this.schedule.reschedule(ref, report.at, tx);
     return { invoice: after, recorded: true, applied };
@@ -170,6 +183,9 @@ export class InvoiceSettlement {
     if (purpose === 'marketplace') {
       throw new Error(`Invoice ${invoice._id.toHexString()} of the plan has a marketplace purpose`);
     }
+    if ((purpose === 'renewal' || purpose === 'trial_end') && at.getTime() < follows.getTime()) {
+      return this.prepay(invoice, facts.version, at, tx);
+    }
     let applied: boolean;
     switch (purpose) {
       case 'start_paid':
@@ -202,6 +218,28 @@ export class InvoiceSettlement {
       this.reportUnapplied(invoice, 'the subscription moved on before it was paid');
       return false;
     }
+    const renewal = { at, actorId: invoice.createdBy };
+    if (purpose === 'upgrade') {
+      // The next period costs more now: its unpaid transfer invoice is replaced (T4).
+      const reissued = await this.renewals.reissueIn(ref, renewal, tx);
+      if (reissued.kind === 'undecided') {
+        this.logger.error(
+          {
+            workspaceId: ref.workspaceId.toHexString(),
+            invoiceId: reissued.invoice._id.toHexString(),
+            number: reissued.invoice.number,
+          },
+          'An upgrade was paid while a card charge of the next period’s transfer invoice was undecided: that invoice keeps the old amount',
+        );
+      }
+    } else if (
+      (purpose === 'start_paid' || purpose === 'restart') &&
+      facts.renewalInvoiceId !== null &&
+      facts.renewalInvoiceId !== invoice._id.toHexString()
+    ) {
+      // The trial it ended had its transfer invoice made before its end (T4): nothing to pay now.
+      await this.renewals.voidIn(ref, toObjectId(facts.renewalInvoiceId), renewal, tx);
+    }
     const before = { planId: facts.planId, cycle: facts.cycle };
     const after = { planId: invoice.planId, cycle: invoice.cycle };
     const paid = { invoiceId: invoice._id, amount: invoice.amount };
@@ -228,6 +266,55 @@ export class InvoiceSettlement {
     if (from.id !== to.id) {
       await this.hooks.run(ref, { from, to, at, by: invoice.createdBy }, tx);
     }
+    return true;
+  }
+
+  /**
+   * The next period's transfer invoice paid before the trial or period it follows ended (T4): no
+   * day is lost, so the period stays as invoiced and is held as paid (`prepaid`); the billing job
+   * starts it at that end, with the scheduled change applied then. When the subscription no longer
+   * waits for this invoice, the payment stays recorded and is refunded outside the system.
+   */
+  private async prepay(
+    invoice: PlanInvoiceRecord,
+    fromVersion: number,
+    at: Date,
+    tx: Tx,
+  ): Promise<boolean> {
+    const ref = { workspaceId: invoice.workspaceId };
+    const prepaid = await this.subscriptions.prepay(
+      ref,
+      {
+        prepaid: {
+          invoiceId: invoice._id.toHexString(),
+          planId: invoice.planId,
+          cycle: invoice.cycle,
+          periodStart: invoice.periodStart,
+          periodEnd: invoice.periodEnd,
+        },
+        fromVersion,
+        at,
+      },
+      tx,
+    );
+    if (!prepaid) {
+      this.reportUnapplied(invoice, 'the subscription no longer waits for it');
+      return false;
+    }
+    const facts = await this.subscriptions.find(ref, tx);
+    await this.log.record(
+      ref,
+      {
+        at,
+        actorId: invoice.createdBy,
+        action: 'renewal_prepaid',
+        from: facts === null ? null : { planId: facts.planId, cycle: facts.cycle },
+        to: { planId: invoice.planId, cycle: invoice.cycle },
+        invoiceId: invoice._id,
+        amount: invoice.amount,
+      },
+      tx,
+    );
     return true;
   }
 

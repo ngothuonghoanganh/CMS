@@ -66,6 +66,10 @@ describe('planBanner', () => {
           planName: 'Agency',
           cycle: 'monthly',
           amount: 599_000,
+          method: 'card' as const,
+          invoiceAt: null,
+          invoice: null,
+          paid: false,
           autoRenews: true,
           blocker: null,
         },
@@ -81,6 +85,10 @@ describe('planBanner', () => {
       planName: 'Agency',
       cycle: 'monthly' as const,
       amount: 599_000,
+      method: 'card' as const,
+      invoiceAt: null,
+      invoice: null,
+      paid: false,
       autoRenews: false,
     };
     expect(
@@ -186,6 +194,10 @@ describe('planBanner', () => {
       planName: 'Agency',
       cycle: 'monthly' as const,
       amount: 599_000,
+      method: 'card' as const,
+      invoiceAt: null,
+      invoice: null,
+      paid: false,
       autoRenews: true,
       blocker: null,
     };
@@ -310,6 +322,10 @@ describe('periodLine', () => {
       planName: 'Agency',
       cycle: 'monthly' as const,
       amount: 599_000,
+      method: 'card' as const,
+      invoiceAt: null,
+      invoice: null,
+      paid: false,
     };
     const active = { state: 'active' as const };
     expect(
@@ -414,7 +430,8 @@ describe('graceNotice', () => {
     state: 'past_due' | 'pending_payment' | 'active' | 'trial_expired',
     graceDaysLeft: number | null,
     paymentWaiting = false,
-  ) => ({ state, graceDaysLeft, paymentWaiting });
+    awaitingTransfer = false,
+  ) => ({ state, graceDaysLeft, paymentWaiting, awaitingTransfer });
 
   it('gives the days to read-only that the server counted', () => {
     expect(graceNotice(plan('past_due', 3))?.title).toBe(
@@ -428,6 +445,13 @@ describe('graceNotice', () => {
   it('says a failed period whose transfer or charge waits for its answer is waiting', () => {
     const notice = graceNotice(plan('past_due', 7, true));
     expect(notice?.title).toBe('Đang chờ xác nhận thanh toán — còn 7 ngày trước khi chỉ đọc');
+    expect(notice?.detail).not.toContain('Thanh toán lại');
+  });
+
+  it('says "Chờ chuyển khoản" for a renewal waiting for its transfer, not a failed payment (T4)', () => {
+    const notice = graceNotice(plan('pending_payment', 5, false, true));
+    expect(notice?.title).toBe('Chờ chuyển khoản — còn 5 ngày trước khi chỉ đọc');
+    expect(notice?.detail).toContain('Chuyển khoản theo hóa đơn gia hạn');
     expect(notice?.detail).not.toContain('Thanh toán lại');
   });
 
@@ -554,5 +578,12 @@ describe('readOnlyReason', () => {
     expect(readOnlyReason('trial_expired')).toBe('Thời gian dùng thử đã hết.');
     expect(readOnlyReason('canceled')).toBe('Gói đã hủy.');
     expect(readOnlyReason('past_due')).toContain('ân hạn');
+  });
+
+  it('says a renewal transfer never came, not that a payment waits for its confirmation (T4)', () => {
+    expect(readOnlyReason('pending_payment', true)).toBe(
+      'Chưa nhận được chuyển khoản của hóa đơn gia hạn và đã hết thời gian ân hạn.',
+    );
+    expect(readOnlyReason('pending_payment')).toContain('chưa được xác nhận');
   });
 });

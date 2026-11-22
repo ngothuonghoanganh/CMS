@@ -11,8 +11,9 @@ const BATCH = 500;
 
 /**
  * Before the API serves (ADR-035, Consequences): every plan a subscription uses must be in the
- * catalog, or startup fails; and every workspace without a subscription, created before plans
- * existed, gets a fresh trial. Safe to run again and on several instances at once.
+ * catalog, or startup fails; every workspace without a subscription, created before plans
+ * existed, gets a fresh trial; and every subscription stored before T4 gets the card as its
+ * renewal method. Safe to run again and on several instances at once.
  */
 @Injectable()
 export class SubscriptionBackfill implements OnApplicationBootstrap {
@@ -30,6 +31,10 @@ export class SubscriptionBackfill implements OnApplicationBootstrap {
     const given = await this.run();
     if (given > 0) {
       this.logger.log({ given }, 'Gave a trial to the workspaces without a subscription');
+    }
+    const carded = await this.subscriptions.backfillRenewalMethod();
+    if (carded > 0) {
+      this.logger.log({ carded }, 'Gave the card as renewal method to subscriptions before T4');
     }
   }
 

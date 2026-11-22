@@ -3,6 +3,7 @@
 import type { Invoice, InvoiceTransfer } from '@plp/contracts';
 import { Badge, Button, ButtonLink, Callout, useToast } from '@plp/ui';
 import { formatVnd } from '../../lib/format';
+import { cx } from '../shell/cx';
 import { paymentsMessage } from './payment-problem';
 import styles from './Payments.module.css';
 
@@ -51,6 +52,9 @@ function CopyRow({ label, value, copy = value, mono = false }: CopyRowProps) {
   );
 }
 
+/** The card of the bank details: the target of "Xem thông tin chuyển khoản" (T4). */
+export const TRANSFER_DETAILS_ID = 'chuyen-khoan';
+
 function TransferDetails({ invoice, transfer }: { invoice: Invoice; transfer: InvoiceTransfer }) {
   return (
     <div className={styles.transferBody}>
@@ -89,9 +93,14 @@ export interface TransferInstructionsProps {
   error: unknown;
   loading: boolean;
   onRetry: () => void;
-  /** Pays the same invoice with the saved card instead. */
+  /**
+   * Pays the same invoice with the saved card instead; null for none, or when the banner above
+   * (a renewal's, T4) carries that button.
+   */
   onPayWithCard: (() => void) | null;
   payingWithCard: boolean;
+  /** The card's heading when it is not "Chuyển khoản hóa đơn …" (a renewal invoice, T4). */
+  title?: string;
 }
 
 /**
@@ -107,13 +116,20 @@ export function TransferInstructions({
   onRetry,
   onPayWithCard,
   payingWithCard,
+  title,
 }: TransferInstructionsProps) {
   const transfer = detail?.transfer ?? null;
   return (
-    <section aria-labelledby="transfer-title" className={styles.card}>
+    <section
+      id={TRANSFER_DETAILS_ID}
+      aria-labelledby="transfer-title"
+      // Focusable so "Xem thông tin chuyển khoản" can land the keyboard and screen readers here.
+      tabIndex={-1}
+      className={cx(styles.card, styles.focusTarget)}
+    >
       <div className={styles.cardHead}>
         <h2 id="transfer-title" className={styles.cardTitle}>
-          Chuyển khoản hóa đơn {invoiceNumber}
+          {title ?? `Chuyển khoản hóa đơn ${invoiceNumber}`}
         </h2>
         <Badge tone="warning" dot>
           Đang chờ xác nhận
@@ -151,6 +167,12 @@ export function TransferInstructions({
             </p>
           )}
         </>
+      ) : detail !== undefined && !loading && error == null ? (
+        // The gateway had not answered when the invoice was made: the background job asks again.
+        <p className={styles.fine} role="status">
+          Thông tin chuyển khoản của hóa đơn {invoiceNumber} đang được chuẩn bị. Hệ thống gửi email
+          cho Chủ sở hữu khi sẵn sàng; bạn cũng có thể tải lại trang sau ít phút.
+        </p>
       ) : error !== null && error !== undefined ? (
         <Callout
           tone="danger"

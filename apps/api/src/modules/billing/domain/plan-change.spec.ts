@@ -30,6 +30,7 @@ const trial: Facts = {
   cancelAtPeriodEnd: false,
   failedSince: null,
   openInvoiceId: null,
+  prepaid: null,
 };
 const paid: Facts = { ...trial, trialEndsAt: null, periodEnd: at(30) };
 
@@ -149,5 +150,28 @@ describe('planChangeOf in a paid period', () => {
   it('changes nothing for the plan and cycle it has', () => {
     expect(choose(paid, AGENCY)).toEqual({ mode: 'unchanged' });
     expect(choose(paid, AGENCY, { payNow: true })).toEqual({ mode: 'unchanged' });
+  });
+});
+
+describe('planChangeOf once the next period was paid before it starts (T4)', () => {
+  const PREPAID = {
+    invoiceId: 'inv',
+    planId: 'basic',
+    cycle: 'monthly' as const,
+    periodStart: at(30),
+    periodEnd: at(60),
+  };
+
+  it('changes nothing until that period starts: it was paid for the plan it has', () => {
+    const prepaid = { ...paid, prepaid: PREPAID };
+    const unavailable = { mode: 'unavailable', reason: 'next_period_paid' };
+    expect(choose(prepaid, BUSINESS)).toEqual(unavailable);
+    expect(choose(prepaid, BASIC)).toEqual(unavailable);
+    expect(choose(prepaid, AGENCY, { cycle: 'yearly' })).toEqual(unavailable);
+    expect(choose(prepaid, AGENCY)).toEqual({ mode: 'unchanged' });
+    expect(choose(prepaid, AGENCY, { payNow: true })).toEqual({ mode: 'unchanged' });
+    const trialPaid = { ...trial, prepaid: { ...PREPAID, periodStart: at(14) } };
+    expect(choose(trialPaid, BASIC)).toEqual(unavailable);
+    expect(choose(trialPaid, AGENCY, { payNow: true })).toEqual(unavailable);
   });
 });

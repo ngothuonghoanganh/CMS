@@ -2,6 +2,7 @@
 
 import type { PaymentMethodResponse } from '@plp/contracts';
 import { Badge, Button, Callout } from '@plp/ui';
+import type { ReactNode } from 'react';
 import { cx } from '../shell/cx';
 import { cardExpiryNote, cardLabel } from './payment-presentation';
 import { paymentsMessage } from './payment-problem';
@@ -18,6 +19,8 @@ export interface PaymentMethodCardProps {
   declined: boolean;
   /** Where the gateway leads back to: this screen, or board 28's dialog. */
   returnTo?: 'payments' | 'plan';
+  /** Under the card: how the plan renews (ADR-035, T4 "Gia hạn bằng"). */
+  children?: ReactNode;
 }
 
 /**
@@ -29,6 +32,7 @@ export function PaymentMethodCard({
   method,
   declined,
   returnTo = 'payments',
+  children,
 }: PaymentMethodCardProps) {
   const setup = useMethodSetup(workspaceId, returnTo);
   const card = method.paymentMethod;
@@ -80,9 +84,10 @@ export function PaymentMethodCard({
           {paymentsMessage(setup.error)}
         </Callout>
       )}
+      {children}
       <p className={styles.fine}>
-        Thẻ quốc tế tự thanh toán mỗi kỳ. Chuyển khoản dùng để trả từng hóa đơn, không tự gia hạn.
-        Thông tin thẻ do cổng thanh toán lưu, Payload không lưu số thẻ.
+        Phương thức được hỗ trợ: thẻ quốc tế (tự thanh toán mỗi kỳ) và chuyển khoản ngân hàng (hóa
+        đơn gửi trước ngày cuối kỳ). Thông tin thẻ do cổng thanh toán lưu, Payload không lưu số thẻ.
       </p>
     </section>
   );

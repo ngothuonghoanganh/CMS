@@ -35,6 +35,29 @@ export function awaitsTransfer(invoice: {
   return invoice.status === 'pending' && invoice.method === 'transfer';
 }
 
+/**
+ * The invoice of a renewal by bank transfer (T4), made before its period, still waiting for the
+ * transfer: nothing failed, and no card was tried since.
+ */
+export function awaitsRenewalTransfer(invoice: {
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+  transferRenewal?: boolean;
+}): boolean {
+  return invoice.transferRenewal === true && awaitsTransfer(invoice);
+}
+
+/**
+ * Whether a card charge of the invoice is being decided (`pending` by card) or may have gone
+ * through (`open`): nothing may void it, since the money may be taken.
+ */
+export function chargeUndecided(invoice: {
+  status: InvoiceStatus;
+  method: InvoicePaymentMethod;
+}): boolean {
+  return invoice.status === 'open' || (invoice.status === 'pending' && invoice.method === 'card');
+}
+
 /** The statuses a charge of this invoice may record its outcome from. */
 export function chargeableStatusesOf(invoice: {
   status: InvoiceStatus;
@@ -181,6 +204,27 @@ export function periodPaidAt(
   return startsWhenPaid(invoice) || ended
     ? { start: at, end: periodEndOf(at, invoice.cycle) }
     : null;
+}
+
+/**
+ * When a refused charge of the invoice the subscription waits for starts its grace and retries
+ * (`failedSince`, T3): the refusal. The invoice of a renewal by bank transfer (T4) was waited for
+ * in the grace from the end it renews, with nothing failed: a card tried in its place days later
+ * counts from that end, so the refusal neither moves the grace nor gives a read-only workspace its
+ * full access back, and only the retries still ahead of it are made.
+ */
+export function failedSinceOf(
+  invoice: Pick<PlanInvoicePurpose, 'kind' | 'from' | 'endsTrial' | 'periodStart'> & {
+    transferRenewal?: boolean;
+  },
+  at: Date,
+): Date {
+  const purpose = purposeOf(invoice);
+  const renewsByTransfer =
+    invoice.transferRenewal === true && (purpose === 'renewal' || purpose === 'trial_end');
+  return renewsByTransfer && invoice.periodStart.getTime() < at.getTime()
+    ? invoice.periodStart
+    : at;
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   planIdSchema,
   planSchema,
   planUsageSchema,
+  renewalMethodSchema,
   scheduledChangeSchema,
   subscriptionStateSchema,
   testClockSchema,
@@ -27,25 +28,6 @@ export const renewalBlockerSchema = z.enum(renewalBlockers);
 export type RenewalBlocker = z.infer<typeof renewalBlockerSchema>;
 
 /**
- * The next charge of the plan: at the end of the trial or of the period, for the plan and cycle the
- * workspace will have then (a scheduled change applied).
- */
-export const subscriptionRenewalSchema = z.object({
-  /** When the next period starts and is charged ("gia hạn tự động 01/12"). */
-  at: isoDateTimeSchema,
-  planId: planIdSchema,
-  planName: z.string(),
-  cycle: billingCycleSchema,
-  /** What it charges, VAT included. */
-  amount: vndAmountSchema,
-  /** The saved card can pay it then: the job charges it at `at`. */
-  autoRenews: z.boolean(),
-  /** Why it cannot: no card, or the card expires before `at`; null when it can. */
-  blocker: renewalBlockerSchema.nullable(),
-});
-export type SubscriptionRenewal = z.infer<typeof subscriptionRenewalSchema>;
-
-/**
  * The invoice the subscription waits for (banners of boards 28 and 29): the renewal charged at the
  * end of a period or trial, failed and retried, or a bank transfer waiting for its confirmation.
  * Without the card, which only the owner sees on board 29. Always an invoice of the plan, with its
@@ -60,6 +42,41 @@ export const dueInvoiceSchema = invoiceSummarySchema.omit({ card: true }).extend
   item: z.null(),
 });
 export type DueInvoice = z.infer<typeof dueInvoiceSchema>;
+
+/**
+ * The next period of the plan: at the end of the trial or of the period, for the plan and cycle the
+ * workspace will have then (a scheduled change applied), charged to the card at that end, or paid
+ * by bank transfer of an invoice made before it (T4).
+ */
+export const subscriptionRenewalSchema = z.object({
+  /** When the next period starts and is charged ("gia hạn tự động 01/12"); a transfer's due day. */
+  at: isoDateTimeSchema,
+  planId: planIdSchema,
+  planName: z.string(),
+  cycle: billingCycleSchema,
+  /** What it costs, VAT included. */
+  amount: vndAmountSchema,
+  /** The saved card will pay it then: the job charges it at `at`. False for a transfer. */
+  autoRenews: z.boolean(),
+  /** Why the card cannot: none saved, or it expires before `at`; null otherwise (and for a transfer). */
+  blocker: renewalBlockerSchema.nullable(),
+  /** How it is paid (T4): the subscription's `renewalMethod`. */
+  method: renewalMethodSchema,
+  /**
+   * When its invoice was made, or will be for a transfer (`transferLeadDays` before `at`, or now
+   * when that passed); null for a card with no invoice made before `at`.
+   */
+  invoiceAt: isoDateTimeSchema.nullable(),
+  /**
+   * The invoice made for it before `at` (T4): waiting for the transfer (its details on
+   * `getInvoice` and board 29), or paid (`paid`). A card charges it at `at` when the method went
+   * back to `card`. Null before it is made.
+   */
+  invoice: dueInvoiceSchema.nullable(),
+  /** The next period is paid already: it starts at `at` with no charge (T4). */
+  paid: z.boolean(),
+});
+export type SubscriptionRenewal = z.infer<typeof subscriptionRenewalSchema>;
 
 /** Board 28 "Gói & mức dùng" (`billing.view`): the plan with its limits and features, and usage. */
 export const billingSummarySchema = z.object({
@@ -87,6 +104,13 @@ export const billingSummarySchema = z.object({
   renewal: subscriptionRenewalSchema.nullable(),
   /** The invoice the subscription waits for; null when nothing is due. */
   dueInvoice: dueInvoiceSchema.nullable(),
+  /** How the next period is paid (T4, "Phương thức thanh toán" of board 29). */
+  renewalMethod: renewalMethodSchema,
+  /**
+   * The ended period waits for its renewal invoice made for a bank transfer (T4): nothing failed
+   * and nothing is retried. Banner "Chờ chuyển khoản" with `dueInvoice` and `graceEndsAt`.
+   */
+  awaitingTransfer: z.boolean(),
   /** The first failed charge of the unpaid period; the grace counts from it. */
   failedSince: isoDateTimeSchema.nullable(),
   /**

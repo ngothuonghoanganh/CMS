@@ -2,10 +2,17 @@ import {
   type ChargeOutcome,
   type InvoiceStatus,
   type SubscriptionFacts,
+  trialEndAwaitsTransfer,
   trialEndCharges,
 } from '@plp/contracts';
 import { DAY_MS } from './billing-period.js';
-import { type BillingPolicy, currentEndOf, paymentUnderWay, renewalBlockerOf } from './renewal.js';
+import {
+  type BillingPolicy,
+  currentEndOf,
+  paymentUnderWay,
+  renewalBlockerOf,
+  transferInvoiceAtOf,
+} from './renewal.js';
 
 /*
  * What the subscription's job does next, and when (ADR-035, T3): the timeline that follows from
@@ -25,12 +32,26 @@ export type AgendaKind =
   | 'renewal'
   | 'retry'
   | 'settle'
-  | 'read_only_notice';
+  | 'read_only_notice'
+  | 'transfer_invoice';
 
 export interface AgendaItem {
   kind: AgendaKind;
   at: Date;
+  /**
+   * For work still owed once its time passed (`OUTSTANDING_KINDS`): when it stops being owed. The
+   * transfer invoice of a trial whose transfer was chosen once it was over is owed until it ended,
+   * so never.
+   */
+  until?: Date;
 }
+
+/**
+ * Work that is on the timeline only while it is not done (T4): the transfer invoice to make or to
+ * complete with the gateway's details. A write that finds its time passed wakes the job at once
+ * (`outstandingAt`), where any other past time was done by the run it woke.
+ */
+export const OUTSTANDING_KINDS: readonly AgendaKind[] = ['transfer_invoice'];
 
 /** An unpaid invoice, as far as the timeline needs it. */
 export interface AgendaInvoice {
@@ -49,12 +70,21 @@ export interface AgendaInput {
     | 'failedSince'
     | 'paymentMethod'
     | 'cardAfterTrial'
+    | 'renewalMethod'
+    | 'renewalMethodChosenAt'
+    | 'renewalInvoiceId'
+    | 'prepaid'
   >;
   policy: BillingPolicy;
   /** The invoice the subscription waits for (`openInvoiceId`); null without one. */
   due: AgendaInvoice | null;
   /** The workspace's other invoices whose charge has an unknown outcome (`open`). */
   undecided: readonly AgendaInvoice[];
+  /**
+   * When the invoice of a renewal by transfer that still lacks the gateway's details was made
+   * (T4): the early one, or the one the ended period waits for. Null when none lacks them.
+   */
+  transferDetailsLacking?: Date | null;
 }
 
 /** When the job charges again after the first failure of a period, in order. */
@@ -145,6 +175,10 @@ export function graceEndOf(
  * - After "Hủy gói": only the read-only notice at the end.
  * - An unpaid period: the retries of a failed charge, asking the gateway again about an unknown
  *   outcome, and the read-only notice when the grace ends.
+ * - Renewed by bank transfer (T4): the next period's invoice `transferLeadDays` before the end,
+ *   instead of the trial's reminder and "Sắp hết hạn" (its email replaces them), and the end,
+ *   which waits for the transfer, or starts the period paid before it. Getting the gateway's
+ *   details for that invoice again while it lacks them.
  */
 export function billingAgendaOf(input: AgendaInput): AgendaItem[] {
   const { facts, policy, due } = input;
@@ -155,16 +189,34 @@ export function billingAgendaOf(input: AgendaInput): AgendaItem[] {
   if (facts.cancelAtPeriodEnd) {
     at('read_only_notice', end);
   } else if (!paymentUnderWay(facts)) {
+    const byCard = facts.renewalMethod === 'card' && facts.prepaid === null;
+    // The next period's invoice made before the end, waiting or paid (T4).
+    const early = facts.renewalInvoiceId !== null || facts.prepaid !== null;
+    // A trial whose transfer was chosen before it ended waits for it, its invoice made late or not.
+    const awaited = trialEndAwaitsTransfer(facts);
+    if (facts.renewalMethod === 'transfer' && !early) {
+      items.push({
+        kind: 'transfer_invoice',
+        at: transferInvoiceAtOf(facts, policy),
+        ...(facts.trialEndsAt === null || awaited ? {} : { until: end }),
+      });
+    }
     if (facts.trialEndsAt !== null) {
-      at('trial_reminder', new Date(end.getTime() - policy.trialReminderDays * DAY_MS));
-      // Without a card the trial's end is read-only at once (`trial_expired`).
-      at(trialEndCharges(facts) ? 'trial_end' : 'read_only_notice', end);
+      if (byCard) {
+        at('trial_reminder', new Date(end.getTime() - policy.trialReminderDays * DAY_MS));
+      }
+      // Without a card, an invoice made before it or a transfer chosen in time, the trial's end is
+      // read-only at once.
+      at(trialEndCharges(facts) || early || awaited ? 'trial_end' : 'read_only_notice', end);
     } else {
-      if (renewalBlockerOf(facts.paymentMethod, end) !== null) {
+      if (byCard && renewalBlockerOf(facts.paymentMethod, end) !== null) {
         at('expiring_notice', new Date(end.getTime() - policy.expiringSoonDays * DAY_MS));
       }
       at('renewal', end);
     }
+  }
+  if (input.transferDetailsLacking != null) {
+    at('transfer_invoice', input.transferDetailsLacking);
   }
   if (paymentUnderWay(facts)) {
     at('read_only_notice', graceEndOf(facts, policy));
@@ -182,6 +234,21 @@ export function billingAgendaOf(input: AgendaInput): AgendaItem[] {
     at('settle', settleAtOf(invoice));
   }
   return items;
+}
+
+/**
+ * `now` when work still owed is past its time (`OUTSTANDING_KINDS`), so a write that finds it
+ * wakes the job at once; null otherwise.
+ */
+export function outstandingAt(items: readonly AgendaItem[], now: Date): Date | null {
+  const time = now.getTime();
+  const owed = items.some(
+    (item) =>
+      OUTSTANDING_KINDS.includes(item.kind) &&
+      item.at.getTime() <= time &&
+      (item.until === undefined || time < item.until.getTime()),
+  );
+  return owed ? now : null;
 }
 
 /** The earliest time after `now` the job has something to do; null when it has nothing. */

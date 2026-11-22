@@ -398,3 +398,21 @@
     text-align: center;
   }
 }
+
+/* Landing target of "Xem thông tin chuyển khoản": focus moves here without a ring on the card. */
+.focusTarget:focus {
+  outline: none;
+}
+
+.focusTarget:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+/* "Gia hạn bằng" under the saved card (T4). */
+.renewal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}

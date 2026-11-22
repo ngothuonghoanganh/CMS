@@ -10,6 +10,7 @@ import type {
   BillingExpiringSoonData,
   BillingReadOnlyData,
   BillingReceiptData,
+  BillingTransferDueData,
   BillingTrialEndingData,
   DomainEmailData,
   Email,
@@ -420,6 +421,63 @@ function billingReceipt(data: BillingReceiptData): RenderedEmail {
   };
 }
 
+/**
+ * The next period's invoice to pay by bank transfer (ADR-035, T4): when it is made, and on its due
+ * day if unpaid. The bank details are written out; the QR code is on board 29, since many mail
+ * clients block images.
+ */
+function billingTransferDue(data: BillingTransferDueData): RenderedEmail {
+  const issued = !data.dueToday;
+  const title = issued
+    ? `Hóa đơn kỳ mới của ${data.workspaceName}: chuyển khoản trước ${data.dueOn}`
+    : `Hôm nay là hạn chuyển khoản gói của ${data.workspaceName}`;
+  const what = issued
+    ? `Gói ${data.planName} của ${data.workspaceName} gia hạn bằng chuyển khoản. Hóa đơn ${data.invoiceNumber} · ${data.amount} cho kỳ ${data.period} (theo ${data.cycle}). Hạn chuyển khoản: ${data.dueOn}. Chuyển khoản trước hạn thì kỳ mới bắt đầu đúng ngày ${data.dueOn}, không mất ngày nào.`
+    : `Hệ thống chưa nhận được chuyển khoản cho hóa đơn ${data.invoiceNumber} · ${data.amount} (Gói ${data.planName}, kỳ ${data.period}), hạn hôm nay ${data.dueOn}.`;
+  const replaced =
+    data.replacesInvoiceNumber === null
+      ? null
+      : `Hóa đơn này thay hóa đơn ${data.replacesInvoiceNumber} sau khi gói thay đổi. Đừng chuyển khoản cho hóa đơn ${data.replacesInvoiceNumber} nữa.`;
+  const rows: Array<[string, string]> = [
+    ['Ngân hàng', data.bankName],
+    ['Số tài khoản', data.accountNumber],
+    ['Tên tài khoản', data.accountName],
+    ['Số tiền', data.amount],
+    ['Nội dung', data.content],
+  ];
+  const content = 'Ghi đúng nội dung chuyển khoản để hệ thống tự xác nhận.';
+  const grace = issued
+    ? `Nếu tới hạn chưa nhận được tiền, workspace vẫn dùng bình thường tới ${data.graceEndsOn}, sau đó chuyển sang chỉ đọc cho tới khi được thanh toán. Trang live và form vẫn chạy.`
+    : `Workspace vẫn dùng bình thường tới ${data.graceEndsOn}, sau đó chuyển sang chỉ đọc cho tới khi được thanh toán. Trang live và form vẫn chạy.`;
+  const card = 'Mã QR có ở "Thanh toán & hóa đơn", cùng với cách thanh toán bằng thẻ thay thế.';
+  const footer = ownerFooter(data.workspaceName);
+  const intro = [what, replaced].filter((line): line is string => line !== null);
+  return {
+    subject: title,
+    text: [
+      ...intro,
+      '',
+      ...rows.map(([label, value]) => `${label}: ${value}`),
+      content,
+      '',
+      grace,
+      '',
+      card,
+      `Thanh toán: ${data.paymentsUrl}`,
+      '',
+      footer,
+    ].join('\n'),
+    html: layout(
+      title,
+      `${intro.map(paragraph).join('')}<table style="border-collapse:collapse;font-size:14px;line-height:1.5;margin:0 0 16px">${rows
+        .map(([label, value]) => row(label, value))
+        .join(
+          '',
+        )}</table>${paragraph(content)}${paragraph(grace)}${button(data.paymentsUrl, 'Xem mã QR và thanh toán')}${smallPrint(`${card} ${footer}`)}`,
+    ),
+  };
+}
+
 /** The receipt of a paid marketplace invoice (ADR-036, MP3); not an electronic VAT invoice. */
 function marketplaceReceipt(data: MarketplaceReceiptData): RenderedEmail {
   const title = `Đã thanh toán ${data.amount}`;
@@ -520,6 +578,8 @@ export function renderEmail(email: Email): RenderedEmail {
       return billingReadOnly(email.data);
     case 'billing-receipt':
       return billingReceipt(email.data);
+    case 'billing-transfer-due':
+      return billingTransferDue(email.data);
     case 'marketplace-receipt':
       return marketplaceReceipt(email.data);
     case 'marketplace-suggestion':

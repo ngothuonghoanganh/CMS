@@ -4,7 +4,13 @@ import { endpoints, meResponseSchema } from '@plp/contracts';
 import { fillAiBrief, openAiAssistant } from '../support/ai.js';
 import { animationsSettled } from '../support/axe.js';
 import { type Board, seedBoard } from '../support/board.js';
-import { billingSummaryOf, dateOf, MINUTE_MS, setBillingClock } from '../support/billing-clock.js';
+import {
+  billingSummaryOf,
+  dateOf,
+  DAY_MS,
+  MINUTE_MS,
+  setBillingClock,
+} from '../support/billing-clock.js';
 import { Editor } from '../support/editor.js';
 import {
   seedLicence,
@@ -869,6 +875,67 @@ test.describe('Design capture', () => {
       await expect(page.getByText(/^Gói sẽ dừng vào/)).toBeVisible();
       await closeToasts(page, 'Đã hủy gói');
       await capture(page, 'Plan-cancel-scheduled');
+    } finally {
+      await setBillingClock(request, null);
+    }
+  });
+
+  // T4 (ADR-035): the renewal by bank transfer, on a workspace of its own whose clock is moved.
+  test('28 and 29 with the renewal by bank transfer: the choice, the early invoice, the wait', async ({
+    page,
+    request,
+  }) => {
+    try {
+      const { site } = await setUpSite(page.request);
+      const workspaceId = site.workspaceId;
+      await addCardViaGateway(page, workspaceId, CARD_OK);
+      const trial = await billingSummaryOf(page.request, workspaceId);
+      await setBillingClock(request, new Date(dateOf(trial.trialEndsAt).getTime() + MINUTE_MS));
+      const periodEnd = dateOf((await billingSummaryOf(page.request, workspaceId)).periodEnd);
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(paymentsPath(workspaceId));
+      const group = page.getByRole('group', { name: 'Gia hạn bằng' });
+      await expect(group).toBeVisible();
+      await capture(page, 'Billing-renewal-method');
+      // On a phone the two choices stack, each as wide as the card.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await expect(group).toBeVisible();
+      await capture(page, 'Billing-renewal-method-phone');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.reload();
+      await group.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ }).click();
+      await expect(page.getByRole('status').filter({ hasText: 'Hóa đơn kỳ sau' })).toBeVisible();
+      await closeToasts(page, 'Gia hạn bằng chuyển khoản ngân hàng');
+      await page.goto(`/workspaces/${workspaceId}/billing`);
+      await expect(page.getByText(/chuyển khoản 599\.000 ₫, hóa đơn gửi/)).toBeVisible();
+      await capture(page, 'Plan-transfer-renewal');
+
+      // From the lead day the invoice exists, with its bank details and QR.
+      await setBillingClock(request, new Date(periodEnd.getTime() - 7 * DAY_MS + MINUTE_MS));
+      await page.goto(paymentsPath(workspaceId));
+      await expect(
+        page.getByRole('region', { name: /^Chuyển khoản hóa đơn gia hạn HD-/ }).getByRole('img'),
+      ).toBeVisible();
+      await capture(page, 'Billing-renewal-invoice');
+
+      // The period ended with it unpaid: the workspace waits, in the grace.
+      await setBillingClock(request, new Date(periodEnd.getTime() + MINUTE_MS));
+      await page.goto(paymentsPath(workspaceId));
+      const awaiting = page
+        .getByRole('status')
+        .filter({ hasText: /^Chờ chuyển khoản hóa đơn HD-/ });
+      await expect(awaiting).toBeVisible();
+      await capture(page, 'Billing-awaiting-transfer');
+      // On a phone the banner's two actions wrap under its text, above the bank details.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await expect(awaiting).toBeVisible();
+      await expect(
+        page.getByRole('region', { name: /^Chuyển khoản hóa đơn gia hạn HD-/ }).getByRole('img'),
+      ).toBeVisible();
+      await capture(page, 'Billing-awaiting-transfer-phone');
     } finally {
       await setBillingClock(request, null);
     }

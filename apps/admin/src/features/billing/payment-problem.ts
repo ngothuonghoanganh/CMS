@@ -82,6 +82,8 @@ export function paymentProblemOf(error: unknown): PaymentProblem | null {
 export const unavailableReasonText: Record<PlanChangeUnavailableReason, string> = {
   payment_required: 'Thời gian dùng thử đã hết. Chọn "Thanh toán ngay" để dùng tiếp gói bạn chọn.',
   unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi đổi gói.',
+  next_period_paid:
+    'Kỳ sau đã được thanh toán cho gói hiện tại. Bạn đổi được gói từ ngày kỳ đó bắt đầu.',
 };
 
 /**
@@ -144,15 +146,19 @@ const ACTION_UNAVAILABLE_TEXT: Record<PlanAction, Record<PlanChangeUnavailableRe
   cancel: {
     unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này trước khi hủy gói.',
     payment_required: 'Gói đã dừng nên không cần hủy. Chọn gói mới khi muốn dùng tiếp.',
+    next_period_paid: 'Kỳ sau đã được thanh toán. Bạn hủy được gói từ ngày kỳ đó bắt đầu.',
   },
   keep: {
     unpaid: 'Kỳ hiện tại chưa được thanh toán. Thanh toán kỳ này để dùng tiếp gói.',
     payment_required: 'Gói đã dừng. Chọn gói mới để dùng tiếp.',
+    next_period_paid: 'Kỳ sau đã được thanh toán, gói tiếp tục bình thường.',
   },
   drop_schedule: {
     unpaid:
       'Kỳ này chưa được thanh toán, và hóa đơn gia hạn đã tính theo gói đã lên lịch. Thanh toán hóa đơn đó trước.',
     payment_required: 'Gói đã dừng. Chọn gói mới để dùng tiếp.',
+    next_period_paid:
+      'Kỳ sau đã được thanh toán theo gói đã lên lịch, nên lịch đó không bỏ được nữa.',
   },
 };
 

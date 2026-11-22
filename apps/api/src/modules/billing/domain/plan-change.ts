@@ -46,6 +46,7 @@ export interface PlanChoiceInput {
     | 'cancelAtPeriodEnd'
     | 'failedSince'
     | 'openInvoiceId'
+    | 'prepaid'
   >;
   /** The plan the subscription is on, and the one chosen with its cycle. */
   current: Plan;
@@ -68,10 +69,18 @@ export interface PlanChoiceInput {
  * - In a paid period: a higher price in the same cycle applies at once for the difference of the
  *   days left (`upgrade`). An unpaid period comes first (`unpaid`); a lower or equal price, or
  *   another cycle, is scheduled for the period's end, which charges it (`scheduled`, T3).
+ * - Once the next period was paid before the current one ended (T4), nothing changes until it
+ *   starts (`next_period_paid`): it was paid for the plan and cycle it has.
  */
 export function planChangeOf(input: PlanChoiceInput): PlanChange {
   const { facts, current, target, cycle, payNow, now } = input;
   const same = facts.planId === target.id && facts.cycle === cycle;
+  if (facts.prepaid !== null) {
+    // Paying now during a trial whose first period is paid would pay it twice.
+    return same && (!payNow || facts.trialEndsAt === null)
+      ? { mode: 'unchanged' }
+      : { mode: 'unavailable', reason: 'next_period_paid' };
+  }
   const startPaid = (): PlanChange => ({
     mode: 'start_paid',
     amount: target.prices[cycle],

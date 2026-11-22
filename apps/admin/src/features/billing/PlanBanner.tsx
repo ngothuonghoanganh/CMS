@@ -19,8 +19,9 @@ export interface PlanBannerProps {
  * On every workspace screen (the full-screen ones included), one banner at most, by what matters
  * most (ADR-035, T3):
  * - the plan has lapsed: the workspace may be read, live pages and lead forms keep working;
- * - an unpaid period is inside its grace: "Thanh toán lỗi — còn N ngày trước khi chỉ đọc", or
- *   "Đang chờ xác nhận thanh toán" while its payment waits for an answer;
+ * - an unpaid period is inside its grace: "Thanh toán lỗi — còn N ngày trước khi chỉ đọc",
+ *   "Đang chờ xác nhận thanh toán" while its payment waits for an answer, or "Chờ chuyển khoản"
+ *   for a plan renewed by bank transfer (T4: nothing failed);
  * - nothing otherwise.
  * Board 28 says what to do in both. The days are the server's, for every member (T3).
  */
@@ -44,11 +45,15 @@ export function PlanBanner({ variant = 'card' }: PlanBannerProps) {
         title="Workspace đang ở chế độ chỉ đọc"
         action={link}
       >
-        {readOnlyReason(frame.plan.state)} Trang live và form vẫn chạy.{' '}
+        {readOnlyReason(frame.plan.state, frame.plan.awaitingTransfer)} Trang live và form vẫn chạy.{' '}
         {variant === 'strip' ? 'Thay đổi ở đây chưa lưu được. ' : null}
-        {frame.canViewBilling
-          ? 'Chọn gói để sửa và xuất bản lại.'
-          : 'Chủ sở hữu workspace cần chọn gói để mở lại việc chỉnh sửa.'}
+        {frame.plan.awaitingTransfer
+          ? frame.canViewBilling
+            ? 'Workspace mở lại khi nhận được chuyển khoản theo hóa đơn gia hạn.'
+            : 'Chủ sở hữu workspace cần chuyển khoản hóa đơn gia hạn để mở lại việc chỉnh sửa.'
+          : frame.canViewBilling
+            ? 'Chọn gói để sửa và xuất bản lại.'
+            : 'Chủ sở hữu workspace cần chọn gói để mở lại việc chỉnh sửa.'}
       </Callout>
     );
     return variant === 'strip' ? callout : <div className={styles.banner}>{callout}</div>;

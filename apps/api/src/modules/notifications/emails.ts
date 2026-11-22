@@ -185,6 +185,36 @@ export interface BillingReadOnlyData {
   billingUrl: string;
 }
 
+/**
+ * The invoice of the next period, renewed by bank transfer (T4): when it is made, before the
+ * period ends, and on the day it is due (the period's end) if still unpaid (`dueToday`).
+ */
+export interface BillingTransferDueData {
+  workspaceName: string;
+  planName: string;
+  /** "tháng" or "năm". */
+  cycle: string;
+  /** What it pays for: "01/12/2026 – 01/01/2027". */
+  period: string;
+  invoiceNumber: string;
+  amount: string;
+  /** Sent on the due day, the transfer still not received; false when the invoice is made. */
+  dueToday: boolean;
+  /** When the transfer is due: the end of the current period, "01/12/2026". */
+  dueOn: string;
+  /** The last day of full access if it is still unpaid then; read-only after. */
+  graceEndsOn: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  /** "Nội dung chuyển khoản", which matches the transfer to the invoice: "PLP HD-2026-000123". */
+  content: string;
+  /** The invoice this one replaces after a plan change, not to be paid any more; null otherwise. */
+  replacesInvoiceNumber: string | null;
+  /** Board 29: the QR code, the transfer's details and paying by card instead. */
+  paymentsUrl: string;
+}
+
 /** The receipt of a paid invoice (not an electronic VAT invoice, §6). */
 export interface BillingReceiptData {
   workspaceName: string;
@@ -249,6 +279,7 @@ export type Email =
   | { template: 'billing-expiring-soon'; data: BillingExpiringSoonData }
   | { template: 'billing-read-only'; data: BillingReadOnlyData }
   | { template: 'billing-receipt'; data: BillingReceiptData }
+  | { template: 'billing-transfer-due'; data: BillingTransferDueData }
   | { template: 'marketplace-receipt'; data: MarketplaceReceiptData }
   | { template: 'marketplace-suggestion'; data: MarketplaceSuggestionData };
 
@@ -565,6 +596,21 @@ export function billingReadOnlyEmail(
 export function billingReceiptEmail(input: BillingReceiptData & { invoiceId: string }): KeyedEmail {
   const { invoiceId, ...data } = input;
   return { template: 'billing-receipt', idempotencyKey: `billing-receipt:${invoiceId}`, data };
+}
+
+/** When a renewal's transfer invoice is told of: made (`issued`), or due today unpaid (`due`). */
+export type TransferDueStage = 'issued' | 'due';
+
+/** Once per invoice and stage: when it is made, and on the day it is due. */
+export function billingTransferDueEmail(
+  input: Omit<BillingTransferDueData, 'dueToday'> & { invoiceId: string; stage: TransferDueStage },
+): KeyedEmail {
+  const { invoiceId, stage, ...rest } = input;
+  return {
+    template: 'billing-transfer-due',
+    idempotencyKey: `billing-transfer-due:${invoiceId}:${stage}`,
+    data: { ...rest, dueToday: stage === 'due' },
+  };
 }
 
 /** Once per paid marketplace invoice, whichever way it was paid. */

@@ -16,6 +16,7 @@ const CATALOG: PlanCatalog = {
   expiringSoonDays: 7,
   trialReminderDays: 3,
   retryDays: [2, 5],
+  transferLeadDays: 7,
   plans: [
     {
       id: 'basic',
@@ -54,6 +55,10 @@ function paid(overrides: Partial<SubscriptionFacts> = {}): SubscriptionFacts {
     failedSince: null,
     paymentMethod: { token: 'tok_1', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030 },
     cardAfterTrial: false,
+    renewalMethod: 'card',
+    renewalMethodChosenAt: null,
+    renewalInvoiceId: null,
+    prepaid: null,
     billingInfo: null,
     nextActionAt: at(30),
     lockedUntil: null,
@@ -139,6 +144,22 @@ describe('the plan catalog', () => {
       'retryDays.2',
     ]);
     expect(issuesOf({ ...CATALOG, graceDays: 0, retryDays: [] })).toEqual([]);
+  });
+
+  it('makes the early transfer invoice within the period it renews (T4)', () => {
+    expect(issuesOf({ ...CATALOG, transferLeadDays: 13 })).toEqual([]);
+    // Not before the trial or the shortest month started.
+    expect(issuesOf({ ...CATALOG, transferLeadDays: 14 })).toEqual(['transferLeadDays']);
+    expect(
+      issuesOf({ ...CATALOG, trial: { planId: 'agency', days: 60 }, transferLeadDays: 28 }),
+    ).toEqual(['transferLeadDays']);
+    expect(
+      issuesOf({ ...CATALOG, trial: { planId: 'agency', days: 60 }, transferLeadDays: 27 }),
+    ).toEqual([]);
+    expect(issuesOf({ ...CATALOG, transferLeadDays: 0 })).toEqual(['transferLeadDays']);
+    expect(issuesOf({ ...CATALOG, transferLeadDays: 2.5 })).toEqual(['transferLeadDays']);
+    const { transferLeadDays: _lead, ...without } = CATALOG;
+    expect(issuesOf(without)).toEqual(['transferLeadDays']);
   });
 });
 
@@ -345,6 +366,104 @@ describe('the state of a subscription (ADR-035)', () => {
       expect(subscriptionStatusOf(failed, { ...CATALOG, graceDays: 0 }, at(30)).access).toBe(
         'read_only',
       );
+    });
+  });
+
+  describe('renewed by bank transfer (T4)', () => {
+    const PREPAID = {
+      invoiceId: INVOICE,
+      planId: 'basic',
+      cycle: 'monthly' as const,
+      periodStart: at(30),
+      periodEnd: at(60),
+    };
+
+    it('is `active`, never `expiring_soon`, without a card in its last days', () => {
+      const transfer = paid({ renewalMethod: 'transfer', paymentMethod: null });
+      expect(statusAt(transfer, at(25)).state).toBe('active');
+      expect(statusAt({ ...transfer, renewalInvoiceId: INVOICE }, at(29)).state).toBe('active');
+      // Back to the card without one: "Sắp hết hạn" again, though the invoice was made.
+      expect(
+        statusAt({ ...transfer, renewalMethod: 'card', renewalInvoiceId: INVOICE }, at(25)).state,
+      ).toBe('expiring_soon');
+    });
+
+    it('waits for the transfer at its end, `pending_payment` with the grace from the end', () => {
+      // Before the job made it `openInvoiceId`, and after; before the job made it at all.
+      for (const facts of [
+        paid({ renewalMethod: 'transfer', renewalInvoiceId: INVOICE }),
+        paid({ renewalMethod: 'transfer', openInvoiceId: INVOICE }),
+        paid({ renewalMethod: 'transfer' }),
+      ]) {
+        expect(statusAt(facts, at(30))).toMatchObject({
+          state: 'pending_payment',
+          access: 'full',
+          graceEndsAt: at(37),
+          graceDaysLeft: 7,
+        });
+        expect(statusAt(facts, at(37))).toMatchObject({
+          state: 'pending_payment',
+          access: 'read_only',
+        });
+      }
+    });
+
+    it('charges the card at the end of an invoice made for a transfer when the method went back', () => {
+      const back = paid({ renewalMethod: 'card', renewalInvoiceId: INVOICE });
+      expect(statusAt(back, at(30))).toMatchObject({ state: 'past_due', access: 'full' });
+    });
+
+    it('stays `active` past the end of a period whose next one was paid before it', () => {
+      const prepaid = paid({ renewalMethod: 'transfer', prepaid: PREPAID, paymentMethod: null });
+      expect(statusAt(prepaid, at(29)).state).toBe('active');
+      expect(statusAt(prepaid, at(30))).toMatchObject({
+        state: 'active',
+        access: 'full',
+        graceEndsAt: null,
+      });
+    });
+
+    it('ends a trial with an invoice for its transfer in the grace, not `trial_expired`', () => {
+      const transfer = trial({ renewalMethod: 'transfer', renewalInvoiceId: INVOICE });
+      expect(statusAt(transfer, at(13)).state).toBe('trialing');
+      expect(statusAt(transfer, at(14))).toMatchObject({
+        state: 'pending_payment',
+        access: 'full',
+        graceEndsAt: at(21),
+      });
+      expect(statusAt(transfer, at(21)).access).toBe('read_only');
+    });
+
+    it('expires a trial whose transfer was chosen after it ended, and never charges its card', () => {
+      const late = trial({
+        renewalMethod: 'transfer',
+        renewalMethodChosenAt: at(15),
+        paymentMethod: paid().paymentMethod,
+      });
+      expect(statusAt(late, at(15))).toMatchObject({ state: 'trial_expired', access: 'read_only' });
+    });
+
+    it('gives a trial whose transfer was chosen in time the grace, though its invoice came late', () => {
+      const chosen = trial({ renewalMethod: 'transfer', renewalMethodChosenAt: at(12) });
+      expect(statusAt(chosen, at(13)).state).toBe('trialing');
+      expect(statusAt(chosen, at(14))).toMatchObject({
+        state: 'pending_payment',
+        access: 'full',
+        graceEndsAt: at(21),
+      });
+      expect(statusAt({ ...chosen, openInvoiceId: INVOICE }, at(20)).access).toBe('full');
+      expect(statusAt(chosen, at(21)).access).toBe('read_only');
+      // Back to the card with none saved: expired, as any trial with no way to pay.
+      expect(statusAt({ ...chosen, renewalMethod: 'card' }, at(14)).state).toBe('trial_expired');
+    });
+
+    it('keeps a trial paid before its end `trialing`, then `active` past it', () => {
+      const prepaid = trial({
+        renewalMethod: 'transfer',
+        prepaid: { ...PREPAID, periodStart: at(14) },
+      });
+      expect(statusAt(prepaid, at(13))).toMatchObject({ state: 'trialing', trialDaysLeft: 1 });
+      expect(statusAt(prepaid, at(14))).toMatchObject({ state: 'active', access: 'full' });
     });
   });
 });

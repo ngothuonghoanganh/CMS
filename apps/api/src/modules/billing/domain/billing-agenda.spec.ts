@@ -7,6 +7,7 @@ import {
   graceEndOf,
   nextActionAfter,
   nextRetryOf,
+  outstandingAt,
   retryTimesOf,
   settleAtOf,
 } from './billing-agenda.js';
@@ -16,8 +17,14 @@ const MINUTE = 60_000;
 const START = new Date('2026-11-01T03:00:00.000Z');
 const at = (days: number, ms = 0) => new Date(START.getTime() + days * DAY + ms);
 
-/** The temporary numbers of ADR-035 (T1, T3). */
-const POLICY = { graceDays: 7, expiringSoonDays: 7, trialReminderDays: 3, retryDays: [2, 5] };
+/** The temporary numbers of ADR-035 (T1, T3, T4). */
+const POLICY = {
+  graceDays: 7,
+  expiringSoonDays: 7,
+  trialReminderDays: 3,
+  retryDays: [2, 5],
+  transferLeadDays: 7,
+};
 const CARD = { token: 'tok_1', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030 };
 
 type Facts = Parameters<typeof billingAgendaOf>[0]['facts'];
@@ -31,6 +38,10 @@ const paid: Facts = {
   failedSince: null,
   paymentMethod: CARD,
   cardAfterTrial: false,
+  renewalMethod: 'card',
+  renewalMethodChosenAt: null,
+  renewalInvoiceId: null,
+  prepaid: null,
 };
 const trial: Facts = { ...paid, trialEndsAt: at(14), periodEnd: at(14), paymentMethod: null };
 
@@ -38,11 +49,15 @@ function invoice(overrides: Partial<AgendaInvoice> = {}): AgendaInvoice {
   return { status: 'failed', createdAt: at(30), attempts: [], ...overrides };
 }
 
-function agenda(facts: Facts, due: AgendaInvoice | null = null, undecided: AgendaInvoice[] = []) {
-  return billingAgendaOf({ facts, policy: POLICY, due, undecided }).map((item) => [
-    item.kind,
-    item.at,
-  ]);
+function agenda(
+  facts: Facts,
+  due: AgendaInvoice | null = null,
+  undecided: AgendaInvoice[] = [],
+  transferDetailsLacking: Date | null = null,
+) {
+  return billingAgendaOf({ facts, policy: POLICY, due, undecided, transferDetailsLacking }).map(
+    (item) => [item.kind, item.at],
+  );
 }
 
 describe('the billing job’s timeline (ADR-035, T3)', () => {
@@ -120,6 +135,99 @@ describe('the billing job’s timeline (ADR-035, T3)', () => {
       ['settle', at(30, 5_000 + 15 * MINUTE)],
       ['settle', at(10, 15 * MINUTE)],
     ]);
+  });
+});
+
+describe('the billing job’s timeline renewed by bank transfer (T4)', () => {
+  const transfer: Facts = { ...paid, renewalMethod: 'transfer', paymentMethod: null };
+  const PREPAID = {
+    invoiceId: 'inv',
+    planId: 'basic',
+    cycle: 'monthly' as const,
+    periodStart: at(30),
+    periodEnd: at(60),
+  };
+
+  it('makes the next period’s invoice 7 days before the end, instead of "Sắp hết hạn"', () => {
+    expect(agenda(transfer)).toEqual([
+      ['transfer_invoice', at(23)],
+      ['renewal', at(30)],
+    ]);
+    // A card saved meanwhile is not charged: the transfer is the method.
+    expect(agenda({ ...transfer, paymentMethod: CARD })).toEqual(agenda(transfer));
+  });
+
+  it('then only has the end, waiting for its transfer or starting the period paid before it', () => {
+    expect(agenda({ ...transfer, renewalInvoiceId: 'inv' })).toEqual([['renewal', at(30)]]);
+    expect(agenda({ ...transfer, prepaid: PREPAID })).toEqual([['renewal', at(30)]]);
+  });
+
+  it('owes the invoice of a trial until it is made, and never reminds of the trial', () => {
+    const trialing: Facts = { ...trial, renewalMethod: 'transfer', renewalMethodChosenAt: at(2) };
+    const items = billingAgendaOf({ facts: trialing, policy: POLICY, due: null, undecided: [] });
+    // Chosen while the trial ran: made late if it could not be in time, and the end waits for it.
+    expect(items).toEqual([
+      { kind: 'transfer_invoice', at: at(7) },
+      { kind: 'trial_end', at: at(14) },
+    ]);
+    // Chosen once the trial was over: nothing is owed, and the trial's end is read-only.
+    const late: Facts = { ...trialing, renewalMethodChosenAt: at(15) };
+    expect(billingAgendaOf({ facts: late, policy: POLICY, due: null, undecided: [] })).toEqual([
+      { kind: 'transfer_invoice', at: at(7), until: at(14) },
+      { kind: 'read_only_notice', at: at(14) },
+    ]);
+    expect(agenda({ ...trialing, renewalInvoiceId: 'inv' })).toEqual([['trial_end', at(14)]]);
+    expect(
+      agenda({ ...trialing, prepaid: { ...PREPAID, periodStart: at(14), periodEnd: at(44) } }),
+    ).toEqual([['trial_end', at(14)]]);
+  });
+
+  it('charges at the end the card the method went back to, after its reminders', () => {
+    const back: Facts = { ...paid, renewalInvoiceId: 'inv', paymentMethod: null };
+    expect(agenda(back)).toEqual([
+      ['expiring_notice', at(23)],
+      ['renewal', at(30)],
+    ]);
+    expect(agenda({ ...trial, paymentMethod: CARD, renewalInvoiceId: 'inv' })).toEqual([
+      ['trial_reminder', at(11)],
+      ['trial_end', at(14)],
+    ]);
+  });
+
+  it('waits for the transfer after the end in the grace, without a retry', () => {
+    const waiting: Facts = { ...transfer, openInvoiceId: 'inv' };
+    expect(agenda(waiting, invoice({ status: 'pending' }))).toEqual([['read_only_notice', at(37)]]);
+  });
+
+  it('asks the gateway again for the transfer details of an invoice that lacks them', () => {
+    expect(agenda({ ...transfer, renewalInvoiceId: 'inv' }, null, [], at(23))).toEqual([
+      ['renewal', at(30)],
+      ['transfer_invoice', at(23)],
+    ]);
+  });
+
+  it('wakes the job at once for an invoice still owed past its time, a trial’s too', () => {
+    const owed = billingAgendaOf({ facts: transfer, policy: POLICY, due: null, undecided: [] });
+    expect(outstandingAt(owed, at(22))).toBeNull();
+    expect(outstandingAt(owed, at(25))).toEqual(at(25));
+    expect(outstandingAt(owed, at(31))).toEqual(at(31));
+    const trialOf = (renewalMethodChosenAt: Date) =>
+      billingAgendaOf({
+        facts: { ...trial, renewalMethod: 'transfer', renewalMethodChosenAt },
+        policy: POLICY,
+        due: null,
+        undecided: [],
+      });
+    expect(outstandingAt(trialOf(at(2)), at(10))).toEqual(at(10));
+    expect(outstandingAt(trialOf(at(2)), at(15))).toEqual(at(15));
+    expect(outstandingAt(trialOf(at(15)), at(15))).toBeNull();
+    // Past times of other work were done by the run they woke.
+    expect(
+      outstandingAt(
+        billingAgendaOf({ facts: paid, policy: POLICY, due: null, undecided: [] }),
+        at(31),
+      ),
+    ).toBeNull();
   });
 });
 

@@ -24,6 +24,9 @@ export const billingCycleLabels: Record<BillingCycle, string> = {
   yearly: 'năm',
 };
 
+/** The fewest days a period has: a month that ends in a February of 28 days. */
+export const SHORTEST_PERIOD_DAYS = 28;
+
 /** An amount in đồng (VND), VAT included: whole đồng only. */
 export const vndAmountSchema = z.number().int().nonnegative().max(1_000_000_000);
 
@@ -109,6 +112,11 @@ export const planCatalogSchema = z
      * order; none after the last, when only the owner pays (ADR-035).
      */
     retryDays: z.array(z.number().int().min(1).max(60)).max(5),
+    /**
+     * With renewal by bank transfer (T4), the next period's invoice is made this many days before
+     * the period or trial ends, so the owner can pay it before then.
+     */
+    transferLeadDays: z.number().int().min(1).max(30),
     plans: z.array(planSchema).min(1).max(10),
   })
   .superRefine((catalog, context) => {
@@ -161,6 +169,17 @@ export const planCatalogSchema = z
         code: 'custom',
         message: 'Nhắc trước khi hết dùng thử phải ít ngày hơn thời gian dùng thử',
         path: ['trialReminderDays'],
+      });
+    }
+    // The early invoice belongs to the period it renews: never before that period started.
+    if (
+      catalog.transferLeadDays >= catalog.trial.days ||
+      catalog.transferLeadDays >= SHORTEST_PERIOD_DAYS
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: `Hóa đơn chuyển khoản phải có sau khi kỳ bắt đầu: ít ngày hơn thời gian dùng thử và kỳ ngắn nhất (${SHORTEST_PERIOD_DAYS} ngày)`,
+        path: ['transferLeadDays'],
       });
     }
     catalog.retryDays.forEach((day, index) => {
@@ -270,6 +289,37 @@ export const scheduledChangeSchema = z.strictObject({
 });
 export type ScheduledChange = z.infer<typeof scheduledChangeSchema>;
 
+/**
+ * How the next period is paid (ADR-035, T4): the saved card, charged at the period's end, or a bank
+ * transfer of an invoice made `transferLeadDays` before it.
+ */
+export const renewalMethods = ['card', 'transfer'] as const;
+export const renewalMethodSchema = z.enum(renewalMethods);
+export type RenewalMethod = z.infer<typeof renewalMethodSchema>;
+
+/** "Phương thức thanh toán" of board 29. */
+export const renewalMethodLabels: Record<RenewalMethod, string> = {
+  card: 'Thẻ thanh toán tự động',
+  transfer: 'Chuyển khoản ngân hàng',
+};
+
+/**
+ * The next period, paid before the current one (or the trial) ended (T4): it starts at that end,
+ * when the billing job moves the subscription to it without a charge.
+ */
+export const prepaidPeriodSchema = z.strictObject({
+  invoiceId: idSchema,
+  planId: planIdSchema,
+  cycle: billingCycleSchema,
+  periodStart: z.date(),
+  periodEnd: z.date(),
+});
+export type PrepaidPeriod = z.infer<typeof prepaidPeriodSchema>;
+
+/** `PUT /workspaces/:id/billing/renewal-method` (`billing.manage`, T4). */
+export const setRenewalMethodRequestSchema = z.strictObject({ method: renewalMethodSchema });
+export type SetRenewalMethodRequest = z.infer<typeof setRenewalMethodRequestSchema>;
+
 /** What the master's `subscriptions` stores for a workspace (ADR-035). */
 export const subscriptionFactsSchema = z.strictObject({
   planId: planIdSchema,
@@ -283,6 +333,20 @@ export const subscriptionFactsSchema = z.strictObject({
   scheduledChange: scheduledChangeSchema.nullable(),
   /** An invoice waiting for its payment (a charge, or a transfer to confirm). */
   openInvoiceId: idSchema.nullable(),
+  /** How the next period is paid (T4). */
+  renewalMethod: renewalMethodSchema,
+  /**
+   * When the owner last chose `renewalMethod` (T4); null while it is the default. A trial whose
+   * transfer was chosen before it ended waits for its invoice in the grace (`trialEndAwaitsTransfer`).
+   */
+  renewalMethodChosenAt: z.date().nullable(),
+  /**
+   * The next period's invoice, made before the trial or period ended for a bank transfer (T4):
+   * until it is paid (`prepaid`), voided by a plan change, or the end makes it `openInvoiceId`.
+   */
+  renewalInvoiceId: idSchema.nullable(),
+  /** The next period, paid before the current one ended (T4); it starts at that end. */
+  prepaid: prepaidPeriodSchema.nullable(),
   /** The first failed charge of the period not paid yet; the grace counts from it. */
   failedSince: z.date().nullable(),
   paymentMethod: paymentMethodSchema.nullable(),
@@ -331,12 +395,33 @@ export function cardValidAt(
 
 /**
  * Whether the end of the trial charges the saved card (ADR-035, T3): only a card saved while the
- * trial ran. One saved after a trial that ended without a card is not charged for it.
+ * trial ran. One saved after a trial that ended without a card is not charged for it, nor is any
+ * card of a trial renewed by bank transfer (T4).
  */
 export function trialEndCharges(
-  facts: Pick<SubscriptionFacts, 'cardAfterTrial'> & { paymentMethod: object | null },
+  facts: Pick<SubscriptionFacts, 'cardAfterTrial' | 'renewalMethod'> & {
+    paymentMethod: object | null;
+  },
 ): boolean {
-  return facts.paymentMethod !== null && !facts.cardAfterTrial;
+  return facts.paymentMethod !== null && !facts.cardAfterTrial && facts.renewalMethod === 'card';
+}
+
+/**
+ * Whether the end of the trial waits for a bank transfer (T4): the owner chose the transfer before
+ * the trial ended. Its invoice is made before the end, or after it when it could not be in time
+ * (a card charge still being decided, the job or the gateway down), and the trial ends in the
+ * grace either way, never `trial_expired`. A transfer chosen once the trial was over opens no
+ * grace, like a card saved then (`trialEndCharges`): only paying does.
+ */
+export function trialEndAwaitsTransfer(
+  facts: Pick<SubscriptionFacts, 'trialEndsAt' | 'renewalMethod' | 'renewalMethodChosenAt'>,
+): boolean {
+  return (
+    facts.trialEndsAt !== null &&
+    facts.renewalMethod === 'transfer' &&
+    facts.renewalMethodChosenAt !== null &&
+    facts.renewalMethodChosenAt.getTime() < facts.trialEndsAt.getTime()
+  );
 }
 
 /**
@@ -353,6 +438,11 @@ export function trialEndCharges(
  *   without a failure (a transfer to confirm) is `pending_payment`. Either keeps full access for
  *   `graceDays` from `failedSince`, or from the end of the period when no charge has failed yet,
  *   so a renewal job that never ran still ends in read-only.
+ * - Renewed by bank transfer (T4): the invoice made before the end waits for the transfer, so the
+ *   end of an unpaid period or trial is `pending_payment` with the grace, never `trial_expired`
+ *   when the transfer was chosen before the trial ended (`trialEndAwaitsTransfer`), and a period
+ *   renewed so is never `expiring_soon`. A next period paid before the end (`prepaid`) is `active`
+ *   past it, until the job moves the subscription to it.
  */
 export function subscriptionStatusOf(
   facts: Pick<
@@ -363,6 +453,10 @@ export function subscriptionStatusOf(
     | 'openInvoiceId'
     | 'failedSince'
     | 'cardAfterTrial'
+    | 'renewalMethod'
+    | 'renewalMethodChosenAt'
+    | 'renewalInvoiceId'
+    | 'prepaid'
   > & { paymentMethod: Pick<PaymentMethod, 'expMonth' | 'expYear'> | null },
   policy: SubscriptionPolicy,
   now: Date,
@@ -375,13 +469,15 @@ export function subscriptionStatusOf(
     graceEndsAt: null,
     graceDaysLeft: null,
   });
+  // Past the end of a plan renewed by transfer, the period waits for that transfer, nothing failed:
+  // the invoice made before the end, or the one made late (T4).
+  const waiting = facts.openInvoiceId !== null || facts.renewalMethod === 'transfer';
   const unpaid = (endedAt: Date): SubscriptionStatus => {
     const since = facts.failedSince ?? endedAt;
     const graceEndsAt = new Date(since.getTime() + policy.graceDays * DAY_MS);
     const inGrace = at < graceEndsAt.getTime();
     return {
-      state:
-        facts.failedSince === null && facts.openInvoiceId !== null ? 'pending_payment' : 'past_due',
+      state: facts.failedSince === null && waiting ? 'pending_payment' : 'past_due',
       access: inGrace ? 'full' : 'read_only',
       trialDaysLeft: null,
       graceEndsAt,
@@ -389,8 +485,13 @@ export function subscriptionStatusOf(
     };
   };
   const paymentUnderWay = facts.failedSince !== null || facts.openInvoiceId !== null;
-  // A card saved during the trial is charged at its end (ADR-035), by a job that runs after it.
-  const charged = paymentUnderWay || trialEndCharges(facts);
+  // A card saved during the trial is charged at its end (ADR-035), by a job that runs after it;
+  // an invoice made before it for the trial's end, or a transfer chosen before it, is paid then (T4).
+  const charged =
+    paymentUnderWay ||
+    trialEndCharges(facts) ||
+    facts.renewalInvoiceId !== null ||
+    trialEndAwaitsTransfer(facts);
 
   if (facts.trialEndsAt !== null) {
     const trialEnd = facts.trialEndsAt.getTime();
@@ -403,10 +504,16 @@ export function subscriptionStatusOf(
     if (facts.cancelAtPeriodEnd) {
       return status('canceled', 'read_only');
     }
+    if (facts.prepaid !== null) {
+      return status('active', 'full');
+    }
     return charged ? unpaid(facts.trialEndsAt) : status('trial_expired', 'read_only');
   }
   if (at >= facts.periodEnd.getTime()) {
-    return facts.cancelAtPeriodEnd ? status('canceled', 'read_only') : unpaid(facts.periodEnd);
+    if (facts.cancelAtPeriodEnd) {
+      return status('canceled', 'read_only');
+    }
+    return facts.prepaid === null ? unpaid(facts.periodEnd) : status('active', 'full');
   }
   if (paymentUnderWay) {
     return unpaid(facts.periodEnd);
@@ -414,7 +521,10 @@ export function subscriptionStatusOf(
   if (facts.cancelAtPeriodEnd) {
     return status('cancel_scheduled', 'full');
   }
-  const renews = facts.paymentMethod !== null && cardValidAt(facts.paymentMethod, facts.periodEnd);
+  const renews =
+    facts.prepaid !== null ||
+    facts.renewalMethod === 'transfer' ||
+    (facts.paymentMethod !== null && cardValidAt(facts.paymentMethod, facts.periodEnd));
   if (!renews && facts.periodEnd.getTime() - at <= policy.expiringSoonDays * DAY_MS) {
     return status('expiring_soon', 'full');
   }
@@ -461,6 +571,11 @@ export const workspacePlanSchema = z.object({
    * gateway that has not replied. The banners say it is waiting, not that it failed.
    */
   paymentWaiting: z.boolean(),
+  /**
+   * The ended period waits for its renewal invoice made for a bank transfer (T4): nothing failed
+   * and nothing is retried; the banners say "Chờ chuyển khoản" until the grace ends.
+   */
+  awaitingTransfer: z.boolean(),
 });
 export type WorkspacePlan = z.infer<typeof workspacePlanSchema>;
 

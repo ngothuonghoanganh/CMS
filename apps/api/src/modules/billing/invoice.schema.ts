@@ -105,6 +105,19 @@ export interface PlanInvoiceRecord extends InvoiceRecordBase {
   createdBy: Types.ObjectId | null;
   item: null;
   requestKey: null;
+  /**
+   * Made before its period for a renewal by bank transfer (T4): due at its `periodStart`, and
+   * waited for without a failure once that passed. Missing on invoices stored before T4: false.
+   */
+  transferRenewal?: boolean;
+  /** The early transfer invoice this one replaced after a plan change (T4); null otherwise. */
+  replaces?: InvoiceReplacedRecord | null;
+}
+
+/** An early transfer invoice that a plan change voided (T4), as its replacement names it. */
+export interface InvoiceReplacedRecord {
+  invoiceId: Types.ObjectId;
+  number: string;
 }
 
 /**
@@ -179,6 +192,14 @@ const transferSchema = new Schema<InvoiceTransferRecord>(
   { _id: false },
 );
 
+const replacedSchema = new Schema<InvoiceReplacedRecord>(
+  {
+    invoiceId: { type: Schema.Types.ObjectId, required: true },
+    number: { type: String, required: true },
+  },
+  { _id: false },
+);
+
 const cardSchema = new Schema(
   {
     brand: { type: String, required: true },
@@ -223,6 +244,8 @@ export const invoiceSchema = new Schema<InvoiceRecord>(
     from: { type: choiceSchema, default: null },
     endsTrial: { type: Boolean, required: true },
     transfer: { type: transferSchema, default: null },
+    transferRenewal: { type: Boolean, default: false },
+    replaces: { type: replacedSchema, default: null },
     createdBy: { type: Schema.Types.ObjectId, default: null },
     paidAt: { type: Date, default: null },
     voidedAt: { type: Date, default: null },

@@ -26,6 +26,11 @@ export function newTrial(
     failedSince: null,
     paymentMethod: null,
     cardAfterTrial: false,
+    // The card until the owner chooses a bank transfer (T4).
+    renewalMethod: 'card',
+    renewalMethodChosenAt: null,
+    renewalInvoiceId: null,
+    prepaid: null,
     billingInfo: null,
     nextActionAt: new Date(trialEndsAt.getTime() - catalog.trialReminderDays * DAY_MS),
     lockedUntil: null,

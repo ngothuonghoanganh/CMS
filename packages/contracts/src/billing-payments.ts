@@ -400,9 +400,15 @@ export type PlanChangeMode = z.infer<typeof planChangeModeSchema>;
 /**
  * - `payment_required`: the trial is over, or the plan was canceled; only paying now (`payNow`)
  *   chooses a plan;
- * - `unpaid`: the period ended or its payment is due; its invoice is paid first.
+ * - `unpaid`: the period ended or its payment is due; its invoice is paid first;
+ * - `next_period_paid` (T4): the next period was paid before the current one ended; the plan
+ *   changes, or stops, once that period has started.
  */
-export const planChangeUnavailableReasons = ['payment_required', 'unpaid'] as const;
+export const planChangeUnavailableReasons = [
+  'payment_required',
+  'unpaid',
+  'next_period_paid',
+] as const;
 export const planChangeUnavailableReasonSchema = z.enum(planChangeUnavailableReasons);
 export type PlanChangeUnavailableReason = z.infer<typeof planChangeUnavailableReasonSchema>;
 
@@ -462,6 +468,14 @@ export const planChangeQuoteSchema = z.object({
   nextAmount: vndAmountSchema.nullable(),
   /** For a change to another plan that applies later or now for free (`scheduled`, `trial_change`). */
   impacts: planChangeImpactsSchema.nullable(),
+  /**
+   * The unpaid invoice made for the next period's bank transfer (T4) that confirming voids: its
+   * transfer details stop working, and a new invoice is made at once when the plan still renews
+   * (an upgrade voids it once paid). Null when there is none.
+   */
+  renewalInvoiceVoided: z
+    .object({ invoiceId: idSchema, invoiceNumber: invoiceNumberSchema })
+    .nullable(),
 });
 export type PlanChangeQuote = z.infer<typeof planChangeQuoteSchema>;
 

@@ -4,6 +4,7 @@ import { notFound } from '../../shared/errors.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
+import type { WorkspaceRef } from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { BillingClock } from './billing-clock.js';
@@ -95,17 +96,19 @@ export class InvoiceTransfers {
   }
 
   /**
-   * Gives the details to an invoice made waiting for a transfer (a plan paid now by transfer),
-   * once it has its number. Null when it has them already or no longer waits.
+   * Gives the details to an invoice made waiting for a transfer (a plan paid now by transfer, a
+   * renewal by transfer of T4), once it has its number; again to one a refused card dropped them
+   * from. Null when it has them already or no longer waits.
    */
-  async fill(scope: WorkspaceScope, invoice: InvoiceRecord): Promise<InvoiceRecord | null> {
-    const transfer = await this.instructionsFor(scope, invoice, this.clock.now());
+  async fill(ref: WorkspaceRef, invoice: InvoiceRecord): Promise<InvoiceRecord | null> {
+    const transfer = await this.instructionsFor(ref, invoice, this.clock.now());
     return this.transactions.run((tx) => this.invoices.startTransfer(invoice._id, transfer, tx));
   }
 
   /**
    * In the transaction that starts the transfer: the subscription waits for the invoice, the
    * `billing_log` says who started it, and the job's next time follows (no retry of the card).
+   * The next period's invoice made before the end (T4) is not waited for before that end.
    */
   async recordStarted(
     scope: WorkspaceScope,
@@ -117,7 +120,8 @@ export class InvoiceTransfers {
     if (facts === null) {
       throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no subscription (ADR-035)`);
     }
-    if (facts.openInvoiceId !== invoice._id.toHexString()) {
+    const id = invoice._id.toHexString();
+    if (facts.openInvoiceId !== id && facts.renewalInvoiceId !== id) {
       await this.subscriptions.waitFor(
         scope,
         { invoiceId: invoice._id, fromVersion: facts.version, at },
@@ -152,14 +156,14 @@ export class InvoiceTransfers {
 
   /** What the gateway gives for the invoice's transfer; its page leads back to board 29. */
   private async instructionsFor(
-    scope: WorkspaceScope,
+    ref: WorkspaceRef,
     invoice: Pick<InvoiceRecord, '_id' | 'number' | 'amount'>,
     at: Date,
   ): Promise<InvoiceTransferRecord> {
-    const workspaceId = scope.workspaceId.toHexString();
+    const workspaceId = ref.workspaceId.toHexString();
     const returnUrl = new URL(
       `/workspaces/${encodeURIComponent(workspaceId)}/billing/payments`,
-      await this.links.originOf(scope.workspaceId),
+      await this.links.originOf(ref.workspaceId),
     );
     returnUrl.searchParams.set(TRANSFER_RESULT_PARAM, TRANSFER_RECEIVED);
     const instructions = await this.gateway.startTransfer({

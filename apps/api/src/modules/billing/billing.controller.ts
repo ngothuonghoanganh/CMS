@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+} from '@nestjs/common';
 import {
   type BillingSummary,
   type ChangePlanRequest,
@@ -7,6 +18,8 @@ import {
   type PlanChangeQuote,
   type PlanChangeQuoteQuery,
   planChangeQuoteQuerySchema,
+  type SetRenewalMethodRequest,
+  setRenewalMethodRequestSchema,
   type WorkspacePlan,
 } from '@plp/contracts';
 import type { Response } from 'express';
@@ -81,6 +94,16 @@ export class BillingController {
     @Param('workspaceId') workspaceId: string,
   ): Promise<BillingSummary> {
     return this.billing.cancel(user, workspaceId);
+  }
+
+  /** "Phương thức thanh toán" (T4): the card, or a bank transfer, for the next period. */
+  @Put('workspaces/:workspaceId/billing/renewal-method')
+  setRenewalMethod(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId') workspaceId: string,
+    @Body(new ZodPipe(setRenewalMethodRequestSchema)) body: SetRenewalMethodRequest,
+  ): Promise<BillingSummary> {
+    return this.billing.setRenewalMethod(user, workspaceId, body);
   }
 
   /** "Giữ lại gói" (T3). */

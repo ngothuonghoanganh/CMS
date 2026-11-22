@@ -284,6 +284,46 @@ export class InvoicesRepository {
   }
 
   /**
+   * Voids the early invoice of a renewal by transfer (T4) that a plan change replaces: waiting for
+   * its transfer, or refused when the owner tried a card. Never one whose card charge is being
+   * decided or may have gone through. Null when it was paid or decided meanwhile.
+   */
+  voidRenewalTransfer(invoiceId: ObjectId, at: Date, tx: Tx): Promise<PlanInvoiceRecord | null> {
+    return this.invoices
+      .findOneAndUpdate(
+        {
+          _id: invoiceId,
+          transferRenewal: true,
+          $or: [
+            { status: changeableFrom(['pending']), method: 'transfer' },
+            { status: changeableFrom(['failed']) },
+          ],
+        },
+        { $set: { status: 'void', voidedAt: at, updatedAt: at } },
+        { returnDocument: 'after', session: tx },
+      )
+      .lean<PlanInvoiceRecord>()
+      .exec();
+  }
+
+  /**
+   * The early invoice of a renewal by transfer, unpaid at the end, is charged to the card instead
+   * (T4: the method went back to the card): `open` again, as any invoice of the job before its
+   * charge, so a charge never recorded is asked about with its key. Null when it was paid or
+   * decided meanwhile.
+   */
+  reopenForCard(invoiceId: ObjectId, at: Date, tx: Tx): Promise<PlanInvoiceRecord | null> {
+    return this.invoices
+      .findOneAndUpdate(
+        { _id: invoiceId, status: changeableFrom(['pending']), method: 'transfer' },
+        { $set: { status: 'open', method: 'card', transfer: null, updatedAt: at } },
+        { returnDocument: 'after', session: tx },
+      )
+      .lean<PlanInvoiceRecord>()
+      .exec();
+  }
+
+  /**
    * Voids an invoice whose charge's outcome the gateway still cannot tell once what it paid for is
    * over (T3): it is never charged again. Null when it was decided meanwhile.
    */

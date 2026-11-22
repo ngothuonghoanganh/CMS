@@ -4,10 +4,11 @@ import type { BillingSummary } from '@plp/contracts';
 import { ConfirmDialog } from '@plp/ui';
 import { formatDate } from '../../lib/format';
 import { planActionMessage } from './payment-problem';
+import { pendingRenewalInvoice, voidedInvoiceNotice } from './renewal-presentation';
 import styles from './Billing.module.css';
 
 export interface CancelPlanDialogProps {
-  summary: Pick<BillingSummary, 'plan' | 'periodEnd' | 'state' | 'trialEndsAt'>;
+  summary: Pick<BillingSummary, 'plan' | 'periodEnd' | 'state' | 'trialEndsAt' | 'renewal'>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pending: boolean;
@@ -30,6 +31,8 @@ export function CancelPlanDialog({
 }: CancelPlanDialogProps) {
   const trial = summary.state === 'trialing';
   const end = formatDate(summary.periodEnd);
+  // Canceling voids the early renewal invoice of a bank transfer; nothing replaces it (T4).
+  const voided = pendingRenewalInvoice(summary);
   return (
     <ConfirmDialog
       open={open}
@@ -53,6 +56,7 @@ export function CancelPlanDialog({
         <li>Không dữ liệu nào bị xóa.</li>
         <li>{trial ? 'Không tính phí.' : 'Phần còn lại của kỳ này không được hoàn tiền.'}</li>
         <li>Bạn giữ lại gói được trước {end}, và chọn gói mới được sau đó.</li>
+        {voided === null ? null : <li>{voidedInvoiceNotice(voided, false)}</li>}
       </ul>
     </ConfirmDialog>
   );

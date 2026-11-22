@@ -1,4 +1,9 @@
-import { type BillingCycle, billingCycles } from '@plp/contracts';
+import {
+  type BillingCycle,
+  billingCycles,
+  type RenewalMethod,
+  renewalMethods,
+} from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 
 export const SUBSCRIPTION_MODEL = 'Subscription';
@@ -33,6 +38,17 @@ export interface SubscriptionRecord {
    * trial's end. Missing on subscriptions stored before T3, read as false.
    */
   cardAfterTrial?: boolean;
+  /** How the next period is paid (T4). Missing on subscriptions stored before T4, read as card. */
+  renewalMethod?: RenewalMethod;
+  /** When the owner last chose it (T4); missing or null while it is the default. */
+  renewalMethodChosenAt?: Date | null;
+  /**
+   * The next period's invoice, made before the end for a bank transfer (T4). Missing before T4,
+   * read as null.
+   */
+  renewalInvoiceId?: Types.ObjectId | null;
+  /** The next period, paid before the current one ended (T4); missing before T4, read as null. */
+  prepaid?: PrepaidPeriodRecord | null;
   billingInfo: { companyName: string; taxCode: string; address: string; email: string } | null;
   nextActionAt: Date | null;
   lockedUntil: Date | null;
@@ -47,6 +63,26 @@ export interface SubscriptionRecord {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/** A next period paid before the current one ended (T4): it starts at `periodStart`. */
+export interface PrepaidPeriodRecord {
+  invoiceId: Types.ObjectId;
+  planId: string;
+  cycle: BillingCycle;
+  periodStart: Date;
+  periodEnd: Date;
+}
+
+const prepaidSchema = new Schema<PrepaidPeriodRecord>(
+  {
+    invoiceId: { type: Schema.Types.ObjectId, required: true },
+    planId: { type: String, required: true },
+    cycle: { type: String, enum: billingCycles, required: true },
+    periodStart: { type: Date, required: true },
+    periodEnd: { type: Date, required: true },
+  },
+  { _id: false },
+);
 
 const planChangeSchema = new Schema(
   {
@@ -91,6 +127,10 @@ export const subscriptionSchema = new Schema<SubscriptionRecord>(
     failedSince: { type: Date, default: null },
     paymentMethod: { type: paymentMethodSchema, default: null },
     cardAfterTrial: { type: Boolean, default: false },
+    renewalMethod: { type: String, enum: renewalMethods, default: 'card' },
+    renewalMethodChosenAt: { type: Date, default: null },
+    renewalInvoiceId: { type: Schema.Types.ObjectId, default: null },
+    prepaid: { type: prepaidSchema, default: null },
     billingInfo: { type: billingInfoSchema, default: null },
     nextActionAt: { type: Date, default: null },
     lockedUntil: { type: Date, default: null },

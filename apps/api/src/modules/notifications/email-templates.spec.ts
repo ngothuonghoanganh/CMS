@@ -11,6 +11,7 @@ import {
   billingExpiringSoonEmail,
   billingReadOnlyEmail,
   billingReceiptEmail,
+  billingTransferDueEmail,
   billingTrialEndingEmail,
   domainActiveEmail,
   domainLostEmail,
@@ -446,6 +447,56 @@ describe('the emails of the plan (ADR-035, T3)', () => {
     expect(readOnly.subject).toBe('Mây <Xanh> đã chuyển sang chế độ chỉ đọc');
     expect(readOnly.text).toContain('Thời gian dùng thử đã hết. Trang live và form vẫn chạy');
     expect(readOnly.text).toContain('Không dữ liệu nào bị xóa.');
+  });
+
+  it('give the next period’s invoice to pay by transfer, then remind on its due day (T4)', () => {
+    const base = {
+      ...workspace,
+      invoiceId: ID,
+      planName: 'Agency',
+      cycle: 'tháng',
+      period: '01/12/2026 – 01/01/2027',
+      invoiceNumber: 'HD-2026-000124',
+      amount: '599.000 ₫',
+      dueOn: '01/12/2026',
+      graceEndsOn: '08/12/2026',
+      bankName: 'Ngân hàng thử',
+      accountNumber: '0000000000',
+      accountName: 'PAYLOAD LANDING PAGE',
+      content: 'PLP HD-2026-000124',
+      replacesInvoiceNumber: null,
+      paymentsUrl,
+    };
+    const issued = renderEmail(billingTransferDueEmail({ ...base, stage: 'issued' }));
+    expect(issued.subject).toBe('Hóa đơn kỳ mới của Mây <Xanh>: chuyển khoản trước 01/12/2026');
+    expect(issued.text).toContain(
+      'Hóa đơn HD-2026-000124 · 599.000 ₫ cho kỳ 01/12/2026 – 01/01/2027 (theo tháng). Hạn chuyển khoản: 01/12/2026.',
+    );
+    expect(issued.text).toContain('không mất ngày nào');
+    expect(issued.text).toContain('Số tài khoản: 0000000000');
+    expect(issued.text).toContain('Nội dung: PLP HD-2026-000124');
+    expect(issued.text).toContain('workspace vẫn dùng bình thường tới 08/12/2026');
+    expect(issued.text).not.toContain('thay hóa đơn');
+    expect(issued.html).toContain(`href="${paymentsUrl}"`);
+    expect(issued.html).toContain('Mây &lt;Xanh&gt;');
+
+    const replacing = renderEmail(
+      billingTransferDueEmail({
+        ...base,
+        stage: 'issued',
+        replacesInvoiceNumber: 'HD-2026-000123',
+      }),
+    );
+    expect(replacing.text).toContain(
+      'Hóa đơn này thay hóa đơn HD-2026-000123 sau khi gói thay đổi. Đừng chuyển khoản cho hóa đơn HD-2026-000123 nữa.',
+    );
+
+    const due = renderEmail(billingTransferDueEmail({ ...base, stage: 'due' }));
+    expect(due.subject).toBe('Hôm nay là hạn chuyển khoản gói của Mây <Xanh>');
+    expect(due.text).toContain(
+      'Hệ thống chưa nhận được chuyển khoản cho hóa đơn HD-2026-000124 · 599.000 ₫ (Gói Agency, kỳ 01/12/2026 – 01/01/2027), hạn hôm nay 01/12/2026.',
+    );
+    expect(due.text).toContain('Workspace vẫn dùng bình thường tới 08/12/2026');
   });
 
   it('give the receipt of a paid invoice, which is not an electronic invoice', () => {

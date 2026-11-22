@@ -23,6 +23,11 @@ export interface InvoiceHistoryProps {
   onLoadMore: () => void;
   /** The invoice being charged now, if any. */
   payingId: string | null;
+  /**
+   * A card is saved. Without one, a transfer still waiting offers no card payment here, as the
+   * banner above it leads to "Thêm thẻ" instead.
+   */
+  cardSaved?: boolean;
   onPay: (invoiceId: string) => void;
 }
 
@@ -54,6 +59,7 @@ export function InvoiceHistory({
   loadingMore,
   onLoadMore,
   payingId,
+  cardSaved = true,
   onPay,
 }: InvoiceHistoryProps) {
   return (
@@ -98,10 +104,10 @@ export function InvoiceHistory({
                 const status = invoiceStatusView(invoice.status, invoice.method);
                 const note = failureNote(invoice);
                 // A transfer still waiting was never paid: the card pays it instead, not again.
-                const payLabel =
-                  invoice.status === 'pending' && invoice.method === 'transfer'
-                    ? 'Thanh toán bằng thẻ'
-                    : 'Thanh toán lại';
+                const awaitsTransfer =
+                  invoice.status === 'pending' && invoice.method === 'transfer';
+                const payLabel = awaitsTransfer ? 'Thanh toán bằng thẻ' : 'Thanh toán lại';
+                const payable = invoice.payable && (cardSaved || !awaitsTransfer);
                 return (
                   <tr key={invoice.id} className={styles.row} role="row">
                     <td className={cx(styles.cellDate, styles.nowrap)} role="cell">
@@ -132,7 +138,7 @@ export function InvoiceHistory({
                         >
                           Tải hóa đơn
                         </ButtonLink>
-                      ) : invoice.payable ? (
+                      ) : payable ? (
                         <Button
                           variant="secondary"
                           size="sm"
